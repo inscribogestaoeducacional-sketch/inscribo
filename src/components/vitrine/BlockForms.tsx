@@ -161,6 +161,32 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
           <Field label="Texto" counter={{ value: config.body || '', max: 2000 }} hint="Deixe uma linha em branco pra separar parágrafos.">
             <TextArea rows={6} value={config.body || ''} maxLength={2000} onChange={e => onChange({ body: e.target.value })} />
           </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+            <Field label="Tamanho do título">
+              <Segmented value={config.title_size || 'md'} onChange={v => onChange({ title_size: v })}
+                options={[{ value: 'sm', label: 'P' }, { value: 'md', label: 'M' }, { value: 'lg', label: 'G' }]} />
+            </Field>
+            <Field label="Peso do título">
+              <Segmented value={config.title_weight || 'bold'} onChange={v => onChange({ title_weight: v })}
+                options={[{ value: 'regular', label: 'Normal' }, { value: 'semibold', label: 'Médio' }, { value: 'bold', label: 'Negrito' }]} />
+            </Field>
+            <Field label="Cor do título">
+              <Segmented value={config.title_color || 'text'} onChange={v => onChange({ title_color: v })}
+                options={[{ value: 'text', label: 'Cor do texto' }, { value: 'primary', label: 'Cor principal' }]} />
+            </Field>
+            <Field label="Tamanho do texto">
+              <Segmented value={config.body_size || 'md'} onChange={v => onChange({ body_size: v })}
+                options={[{ value: 'sm', label: 'P' }, { value: 'md', label: 'M' }, { value: 'lg', label: 'G' }]} />
+            </Field>
+            <Field label="Alinhamento">
+              <Segmented value={config.align || 'left'} onChange={v => onChange({ align: v })}
+                options={[{ value: 'left', label: 'Esquerda' }, { value: 'center', label: 'Centro' }]} />
+            </Field>
+            <Field label="Fundo">
+              <Segmented value={config.surface || 'card'} onChange={v => onChange({ surface: v })}
+                options={[{ value: 'card', label: 'Cartão' }, { value: 'plain', label: 'Sem fundo' }]} />
+            </Field>
+          </div>
         </Grid>
       )
 
@@ -212,7 +238,7 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
 }
 
 function LinkForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {
-  const style: LinkStyle = config.style === 'card' || config.style === 'featured' ? config.style : 'button'
+  const style: LinkStyle = ['icon', 'card', 'featured'].includes(config.style) ? config.style : 'button'
   const net = detectSocial(normalizeUrl(config.url || ''))
   const netInfo = net ? SOCIAL[net] : null
 
@@ -239,25 +265,33 @@ function LinkForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' |
             dangerouslySetInnerHTML={{ __html: netInfo.svg.replace('<svg ', '<svg width="15" height="15" ') }} />
           <span style={{ lineHeight: 1.5 }}>
             <strong>{netInfo.label} reconhecido.</strong>{' '}
-            {style === 'button'
-              ? 'Com outros links de rede social logo antes ou depois, eles aparecem juntos numa fileira de ícones redondos.'
-              : 'Como cartão, aparece com a cor e o ícone da rede.'}
+            {style === 'icon'
+              ? 'Aparece como bolinha. Outros links marcados como “Ícone” logo antes ou depois ficam juntos na mesma fileira.'
+              : style === 'button'
+                ? 'Pode aparecer como botão ou como ícone (bolinha) — escolha abaixo.'
+                : 'Como cartão, aparece com a cor e o ícone da rede.'}
           </span>
         </div>
       )}
-      <Field label={netInfo && style === 'button' ? 'Nome (aparece ao passar o mouse e pra leitores de tela)' : 'Texto do botão'} counter={{ value: config.label || '', max: 80 }}>
+      <Field label={netInfo && style === 'icon' ? 'Nome (aparece ao passar o mouse e pra leitores de tela)' : 'Texto do botão'} counter={{ value: config.label || '', max: 80 }}>
         <TextInput value={config.label || ''} maxLength={80} placeholder="Ex.: Nosso Instagram" onChange={e => onChange({ label: e.target.value })} />
       </Field>
       <Field label="Aparência">
         <Segmented value={style} onChange={v => onChange({ style: v })}
-          options={[{ value: 'button', label: 'Botão' }, { value: 'card', label: 'Cartão' }, { value: 'featured', label: 'Destaque' }]} />
+          options={[
+            { value: 'button', label: 'Botão' },
+            // Ícone só pra rede reconhecida (link comum não tem ícone próprio).
+            ...(netInfo || style === 'icon' ? [{ value: 'icon' as LinkStyle, label: 'Ícone' }] : []),
+            { value: 'card', label: 'Cartão' }, { value: 'featured', label: 'Destaque' },
+          ]} />
+        {style === 'icon' && !netInfo && <Warn>Esse link não é de uma rede social reconhecida: aparece como botão.</Warn>}
       </Field>
-      {style !== 'button' && (
+      {(style === 'card' || style === 'featured') && (
         <Field label="Descrição (opcional)" counter={{ value: config.description || '', max: 120 }} hint="Uma frase curta embaixo do título do cartão.">
           <TextInput value={config.description || ''} maxLength={120} placeholder="Ex.: Fotos do dia a dia da escola" onChange={e => onChange({ description: e.target.value || undefined })} />
         </Field>
       )}
-      <Field label={style === 'button' ? 'Miniatura (opcional)' : 'Imagem do cartão (opcional)'}
+      {!(style === 'icon' && netInfo) && <Field label={style === 'button' || style === 'icon' ? 'Miniatura (opcional)' : 'Imagem do cartão (opcional)'}
         hint={style === 'button' ? 'Aparece à esquerda do texto do botão.'
           : style === 'card' ? 'Quadrada, à esquerda. Sem imagem, aparece o ícone do link.'
           : 'Grande, em cima do título (proporção 16:9, ex.: 1200 × 675 px).'}>
@@ -265,7 +299,7 @@ function LinkForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' |
           maxWidth={style === 'featured' ? IMAGE_WIDTH.large : IMAGE_WIDTH.small}
           emptyLabel={style === 'button' ? 'Enviar miniatura' : 'Enviar imagem'} onError={ctx.onError}
           onChange={url => onChange({ thumbnail_url: url || undefined })} />
-      </Field>
+      </Field>}
     </Grid>
   )
 }

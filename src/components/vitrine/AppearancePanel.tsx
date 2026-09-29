@@ -119,6 +119,35 @@ function ButtonSample({ style, theme }: { style: ButtonStyle; theme: VitrineThem
   )
 }
 
+// A logo tem transparência? Lê os pixels numa miniatura (o Storage do
+// Supabase libera CORS). true/false; null = não deu pra saber (sem aviso).
+function useHasTransparency(url: string | null): boolean | null {
+  const [result, setResult] = React.useState<boolean | null>(null)
+  useEffect(() => {
+    setResult(null)
+    if (!url) return
+    let alive = true
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas')
+        c.width = 48; c.height = 48
+        const ctx = c.getContext('2d')!
+        ctx.drawImage(img, 0, 0, 48, 48)
+        const px = ctx.getImageData(0, 0, 48, 48).data
+        let transparent = false
+        for (let i = 3; i < px.length; i += 4) if (px[i] < 250) { transparent = true; break }
+        if (alive) setResult(transparent)
+      } catch { if (alive) setResult(null) }
+    }
+    img.onerror = () => { if (alive) setResult(null) }
+    img.src = url
+    return () => { alive = false }
+  }, [url])
+  return result
+}
+
 export default function AppearancePanel({ page, institution, institutionId, onChange, onError }: Props) {
   const theme = readTheme(page.theme)
   const setTheme = (patch: Partial<VitrineTheme>) => onChange({ theme: { ...theme, ...patch } })
@@ -127,6 +156,7 @@ export default function AppearancePanel({ page, institution, institutionId, onCh
     : PRIMARY_SWATCHES
   const pair = currentFontPair(theme)
   const bgType = theme.bg_type || 'solid'
+  const logoTransparent = useHasTransparency(theme.logo_shape === 'none' ? page.logo_url : null)
 
   // Fontes de amostra dos pares: carrega uma vez, só quando a aba abre.
   useEffect(() => {
@@ -174,10 +204,13 @@ export default function AppearancePanel({ page, institution, institutionId, onCh
               emptyLabel="Enviar capa" onError={onError} onChange={url => onChange({ cover_url: url })} />
           </Field>
         </div>
-        <Field label="Formato da logo">
+        <Field label="Formato da logo" hint={theme.logo_shape === 'none' ? 'Sem moldura, a logo aparece solta e um pouco maior — ideal pra PNG com fundo transparente.' : undefined}>
           <Segmented value={theme.logo_shape || 'circle'} onChange={v => setTheme({ logo_shape: v })}
-            options={[{ value: 'circle', label: 'Redonda' }, { value: 'rounded', label: 'Quadrada arredondada' }]} />
+            options={[{ value: 'circle', label: 'Redonda' }, { value: 'rounded', label: 'Quadrada arredondada' }, { value: 'none', label: 'Sem moldura' }]} />
         </Field>
+        {theme.logo_shape === 'none' && logoTransparent === false && (
+          <Warn>Essa logo tem fundo (não é transparente): sem moldura, o retângulo do fundo vai aparecer na página. Use um PNG com fundo transparente ou volte pra moldura.</Warn>
+        )}
         <Field label="Nome na página" counter={{ value: page.title || '', max: 80 }}>
           <TextInput value={page.title || ''} maxLength={80} placeholder={institution.name} onChange={e => onChange({ title: e.target.value })} />
         </Field>

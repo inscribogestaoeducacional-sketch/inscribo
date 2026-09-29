@@ -21,6 +21,7 @@ export interface VitrinePage {
   cover_url: string | null
   theme: Record<string, unknown> | null
   seo_description: string | null
+  social_links?: unknown   // [{network, handle}] — fileira de redes do topo
   institution_name: string | null
 }
 
@@ -135,8 +136,9 @@ interface Theme {
   bgType: 'solid' | 'gradient' | 'image'; bgTo: string; bgAngle: number
   bgImage: string | null; bgOverlay: number; bgOverlayTone: 'dark' | 'light'
   shadow: 'none' | 'soft' | 'strong'; spacing: 'compact' | 'normal' | 'relaxed'
-  cardStyle: 'flat' | 'bordered' | 'elevated'; logoShape: 'circle' | 'rounded'
+  cardStyle: 'flat' | 'bordered' | 'elevated'; logoShape: 'circle' | 'rounded' | 'none'
   animation: 'none' | 'subtle' | 'lively'
+  socialStyle: 'brand' | 'theme' | 'plain'
 }
 
 // Página sem as chaves novas (criada antes da Fase 5) sai igual a antes:
@@ -173,8 +175,9 @@ function readTheme(t: Record<string, unknown> | null): Theme {
     shadow:        oneOf('shadow', ['none', 'soft', 'strong'] as const, 'none'),
     spacing:       oneOf('spacing', ['compact', 'normal', 'relaxed'] as const, 'normal'),
     cardStyle:     oneOf('card_style', ['flat', 'bordered', 'elevated'] as const, 'bordered'),
-    logoShape:     oneOf('logo_shape', ['circle', 'rounded'] as const, 'circle'),
+    logoShape:     oneOf('logo_shape', ['circle', 'rounded', 'none'] as const, 'circle'),
     animation:     oneOf('animation', ['none', 'subtle', 'lively'] as const, 'none'),
+    socialStyle:   oneOf('social_style', ['brand', 'theme', 'plain'] as const, 'brand'),
   }
 }
 
@@ -203,7 +206,7 @@ const ICON = {
 // Reconhecidas pela URL do bloco de link (nada disso fica no banco). Ícones:
 // Simple Icons 16.33 (CC0, domínio público); o do LinkedIn é um "in"
 // geométrico próprio — a marca pediu a retirada do Simple Icons.
-export type SocialNet = 'instagram' | 'facebook' | 'tiktok' | 'youtube' | 'linkedin' | 'x'
+export type SocialNet = 'instagram' | 'facebook' | 'whatsapp' | 'tiktok' | 'youtube' | 'linkedin' | 'x' | 'threads' | 'telegram'
 
 export const SOCIAL: Record<SocialNet, { label: string; hosts: string[]; bg: string; svg: string }> = {
   instagram: {
@@ -236,6 +239,21 @@ export const SOCIAL: Record<SocialNet, { label: string; hosts: string[]; bg: str
     bg: "#000000",
     svg: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z\"/></svg>",
   },
+  whatsapp: {
+    label: "WhatsApp", hosts: ["wa.me","whatsapp.com"],
+    bg: "#25D366",
+    svg: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z\"/></svg>",
+  },
+  threads: {
+    label: "Threads", hosts: ["threads.net","threads.com"],
+    bg: "#000000",
+    svg: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M18.263 11.097c-.03-3.486-1.92-5.586-5.111-5.586-2.13 0-3.922.963-4.863 2.499l2.062 1.438c.535-.843 1.272-1.543 2.628-1.543 1.528 0 2.318.85 2.544 2.431a15 15 0 0 0-2.236-.173c-4.125 0-6.068 1.867-6.068 4.336s1.943 3.99 4.804 3.99c3.139 0 5.013-2.115 5.781-4.735.798.361 1.348 1.204 1.348 2.47 0 3.387-3.907 5.232-7.22 5.232-4.885 0-8.077-3.207-8.077-8.424 0-6.392 4.223-10.487 9.9-10.487 3.808 0 5.69 1.671 6.97 3.914l2.108-1.475C21.44 2.078 18.331 0 13.663 0 6.227 0 1.168 5.277 1.168 12.934c0 7 4.953 11.066 10.856 11.066 4.878 0 9.809-2.846 9.809-7.716 0-2.545-1.46-4.231-3.569-5.187m-6.33 4.855c-1.077 0-2.026-.512-2.026-1.453 0-1.483 1.822-1.934 3.606-1.934.678 0 1.34.045 1.927.173-.422 1.927-1.671 3.215-3.508 3.214Z\"/></svg>",
+  },
+  telegram: {
+    label: "Telegram", hosts: ["t.me","telegram.me"],
+    bg: "#26A5E4",
+    svg: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z\"/></svg>",
+  },
 }
 
 // Rede social de uma URL (host exato ou subdomínio: m.facebook.com,
@@ -243,11 +261,66 @@ export const SOCIAL: Record<SocialNet, { label: string; hosts: string[]; bg: str
 export function detectSocial(url: unknown): SocialNet | null {
   if (typeof url !== 'string') return null
   let host: string
-  try { host = new URL(url).hostname.toLowerCase().replace(/^www./, '') } catch { return null }
+  try { host = new URL(url).hostname.toLowerCase().replace(/^www\./, '') } catch { return null }
   for (const [k, n] of Object.entries(SOCIAL) as [SocialNet, (typeof SOCIAL)[SocialNet]][]) {
     if (n.hosts.some(h => host === h || host.endsWith('.' + h))) return k
   }
   return null
+}
+
+// ── Redes sociais do topo (vitrine_pages.social_links) ──────────────────────
+// A escola digita só o perfil; o link é montado aqui. Mesmas regras de
+// formato do banco (vitrine_pages_validate).
+export const TOP_NETWORKS: SocialNet[] = ['instagram', 'facebook', 'whatsapp', 'tiktok', 'youtube', 'linkedin', 'x', 'threads', 'telegram']
+const HANDLE_RE = /^[A-Za-z0-9._-]{1,60}(\/[A-Za-z0-9._-]{1,60})?$/
+
+export function socialUrl(net: SocialNet, handle: string): string | null {
+  const h = String(handle || '')
+  if (net === 'whatsapp') {
+    if (!/^[0-9]{10,13}$/.test(h)) return null
+    return `https://wa.me/${h.length <= 11 ? '55' + h : h}`
+  }
+  if (!HANDLE_RE.test(h)) return null
+  switch (net) {
+    case 'instagram': return `https://instagram.com/${h}`
+    case 'facebook':  return `https://facebook.com/${h}`
+    case 'tiktok':    return `https://tiktok.com/@${h}`
+    // Canal antigo ("channel/UC…", "c/nome") vai como está; o resto é @nome.
+    case 'youtube':   return /^(channel|c|user)\//.test(h) ? `https://youtube.com/${h}` : `https://youtube.com/@${h}`
+    // Escola costuma ser página de empresa; perfil pessoal com "in/nome".
+    case 'linkedin':  return /^(in|company|school)\//.test(h) ? `https://linkedin.com/${h}` : `https://linkedin.com/company/${h}`
+    case 'x':         return `https://x.com/${h}`
+    case 'threads':   return `https://threads.net/@${h}`
+    case 'telegram':  return `https://t.me/${h}`
+  }
+  return null
+}
+
+// O que a escola digitou → perfil: aceita "@perfil", "perfil" ou a URL
+// colada da própria rede (tira domínio, @, barras e parâmetros).
+export function normalizeHandle(net: SocialNet, raw: string): string {
+  let s = String(raw || '').trim()
+  if (net === 'whatsapp') {
+    const d = s.replace(/\D/g, '')
+    return d.startsWith('55') && d.length >= 12 ? d.slice(2) : d
+  }
+  if (/^(https?:\/\/)?([a-z0-9-]+\.)*[a-z0-9-]+\.[a-z]{2,}\//i.test(s)) {
+    try { s = new URL(/^https?:/i.test(s) ? s : `https://${s}`).pathname } catch { /* segue como texto */ }
+  }
+  s = s.split(/[?#]/)[0].replace(/^\/+|\/+$/g, '').replace(/^@/, '')
+  if (net === 'tiktok' || net === 'threads') s = s.replace(/^@/, '')
+  if (net === 'youtube' && s.startsWith('@')) s = s.slice(1)
+  return s.replace(/\/@/, '/').slice(0, 121)
+}
+
+function topSocialRow(links: unknown): string {
+  const items = (Array.isArray(links) ? links : [])
+    .map((l: any) => ({ net: l?.network as SocialNet, url: SOCIAL[l?.network as SocialNet] ? socialUrl(l.network, l.handle) : null }))
+    .filter(x => x.url)
+  if (!items.length) return ''
+  return `<nav class="social top" aria-label="Redes sociais">` + items.map(({ net, url }) =>
+    `<a href="${esc(url)}" data-s="${net}" target="_blank" rel="noopener noreferrer" aria-label="${SOCIAL[net].label}" title="${SOCIAL[net].label}" `
+    + `style="--brand:${SOCIAL[net].bg}">${SOCIAL[net].svg}</a>`).join('') + `</nav>`
 }
 
 // ── Blocos ──────────────────────────────────────────────────────────────────
@@ -269,11 +342,13 @@ function domainOf(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, '') } catch { return '' }
 }
 
-// Link de rede social que entra na fileira de ícones: estilo botão (padrão)
-// e URL reconhecida. Cartão/destaque escolhidos pela escola continuam cartão.
+// Link que a escola marcou como "Ícone" e cuja URL é de rede reconhecida.
+// Ícones em sequência dividem a mesma fileira. Botão continua botão
+// (nada de conversão automática); ícone com URL que não é de rede cai pra
+// botão.
 function socialOf(b: VitrineBlock): SocialNet | null {
   if (b.type !== 'link' || !isHttpUrl(b.config?.url)) return null
-  if ((b.config?.style || 'button') !== 'button') return null
+  if (b.config?.style !== 'icon') return null
   return detectSocial(b.config.url)
 }
 
@@ -281,7 +356,7 @@ function socialRow(items: VitrineBlock[]): string {
   return `<nav class="social" aria-label="Redes sociais">` + items.map(b => {
     const net = SOCIAL[socialOf(b)!]
     return `<a href="${esc(b.config.url)}" data-b="${esc(b.id)}" target="_blank" rel="noopener noreferrer" `
-      + `aria-label="${esc(b.config.label || net.label)}" title="${esc(b.config.label || net.label)}" style="background:${net.bg}">${net.svg}</a>`
+      + `aria-label="${esc(b.config.label || net.label)}" title="${esc(b.config.label || net.label)}" style="--brand:${net.bg}">${net.svg}</a>`
   }).join('') + `</nav>`
 }
 
@@ -299,15 +374,16 @@ function linkCard(b: VitrineBlock, featured: boolean, loading: 'eager' | 'lazy')
     + `<span class="limg">${img}</span>${body}${featured ? '' : '<span class="larrow" aria-hidden="true">→</span>'}</a>`
 }
 
-// Monta os blocos na ordem; 2+ links de rede social EM SEQUÊNCIA viram uma
-// fileira de ícones (cada ícone conta clique no próprio bloco).
+// Monta os blocos na ordem; links marcados como "Ícone" em sequência dividem
+// uma fileira (um sozinho vira fileira de um). Cada ícone conta clique no
+// próprio bloco.
 function renderBlocks(blocks: VitrineBlock[], preview: boolean): string {
   const out: string[] = []
   for (let i = 0; i < blocks.length; i++) {
     if (socialOf(blocks[i])) {
       let j = i
       while (j + 1 < blocks.length && socialOf(blocks[j + 1])) j++
-      if (j > i) { out.push(socialRow(blocks.slice(i, j + 1))); i = j; continue }
+      out.push(socialRow(blocks.slice(i, j + 1))); i = j; continue
     }
     // Imagem grande nos 2 primeiros blocos (banner/destaque no topo) é o que
     // o celular mostra primeiro: carrega na hora; o resto fica "lazy".
@@ -350,7 +426,19 @@ function renderBlock(b: VitrineBlock, preview = false, eager = false): string {
     }
     case 'text': {
       if (!c.body) return ''
-      return `<section class="card text">${c.title ? `<h2>${esc(c.title)}</h2>` : ''}${paragraphs(c.body)}</section>`
+      // Estilo por classe (listas fechadas, validadas no banco): tamanho,
+      // peso e cor do título, tamanho do texto, alinhamento, com/sem cartão.
+      const pick = (v: unknown, list: string[], def: string) => (list.includes(v as string) ? v as string : def)
+      const cls = [
+        'text',
+        pick(c.surface, ['card', 'plain'], 'card') === 'card' ? 'card' : 'plain',
+        `ts-${pick(c.title_size, ['sm', 'md', 'lg'], 'md')}`,
+        `tw-${pick(c.title_weight, ['regular', 'semibold', 'bold'], 'bold')}`,
+        `bs-${pick(c.body_size, ['sm', 'md', 'lg'], 'md')}`,
+        pick(c.align, ['left', 'center'], 'left') === 'center' ? 'center' : '',
+        pick(c.title_color, ['text', 'primary'], 'text') === 'primary' ? 'tc-primary' : '',
+      ].filter(Boolean).join(' ')
+      return `<section class="${cls}">${c.title ? `<h2>${esc(c.title)}</h2>` : ''}${paragraphs(c.body)}</section>`
     }
     case 'gallery': {
       const imgs = (Array.isArray(c.images) ? c.images : []).filter((i: any) => isHttpUrl(i?.url))
@@ -491,8 +579,12 @@ h1,h2{font-family:'${t.heading}','${t.body}',-apple-system,BlinkMacSystemFont,'S
 @media(min-width:600px){.cover{width:100%;margin:16px 0 0;border-radius:${rCard}}}
 header{text-align:center;padding-top:24px}
 .has-cover header{padding-top:0}
-.logo{width:96px;height:96px;border-radius:${t.logoShape === 'rounded' ? '24px' : '50%'};object-fit:contain;padding:8px;background:${logoPlate};border:4px solid ${logoRing};box-shadow:0 2px 12px rgba(0,0,0,.08)}
-.has-cover .logo{margin-top:-48px}
+${t.logoShape === 'none'
+  // Sem moldura: a imagem "flutua" (PNG transparente), maior e sem placa.
+  ? `.logo{display:block;margin:0 auto;width:auto;height:auto;max-width:220px;max-height:112px;object-fit:contain}
+.has-cover .logo{margin-top:-40px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.18))}`
+  : `.logo{width:96px;height:96px;border-radius:${t.logoShape === 'rounded' ? '24px' : '50%'};object-fit:contain;padding:8px;background:${logoPlate};border:4px solid ${logoRing};box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.has-cover .logo{margin-top:-48px}`}
 h1{font-size:${t.heading === 'DM Serif Display' || t.heading === 'Playfair Display' ? 28 : 24}px;line-height:1.25;margin:12px 0 4px;font-weight:${t.headingWeight};text-wrap:balance}
 .bio{margin:0 auto;max-width:44ch;color:${muted};font-size:15px}
 main{display:flex;flex-direction:column;gap:${gap}px;margin-top:${gap * 2}px}
@@ -513,10 +605,27 @@ ${t.buttonStyle === 'minimal' ? '.btn.cta .lb{text-align:center}' : ''}
 .card h2 .ic svg{width:20px;height:20px}
 .card p{margin:0 0 8px}.card p:last-child{margin-bottom:0}
 .text p{white-space:normal}
+.text.plain{padding:4px 2px}
+.text.plain p{margin:0 0 8px}.text.plain p:last-child{margin-bottom:0}
+.text.center{text-align:center}
+.text.center h2{justify-content:center}
+.text.ts-sm h2{font-size:14px}.text.ts-md h2{font-size:16px}.text.ts-lg h2{font-size:22px;line-height:1.25}
+.text.tw-regular h2{font-weight:400}.text.tw-semibold h2{font-weight:600}.text.tw-bold h2{font-weight:${t.headingWeight}}
+.text.tc-primary h2{color:${t.primary}}
+.text.bs-sm p{font-size:14px}.text.bs-md p{font-size:15px}.text.bs-lg p{font-size:17px;line-height:1.6}
+.text h2{margin:0 0 8px}
 .social{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;padding:4px 0}
-.social a{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;${darkText ? '' : 'box-shadow:0 0 0 2px rgba(255,255,255,.22);'}transition:transform .15s ease}
-.social a svg{width:24px;height:24px}
+.social a{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .15s ease;${
+  // Estilo das bolinhas (theme.social_style): cor de cada marca, cor da
+  // escola, ou só o ícone na cor do texto (sem bolinha).
+  t.socialStyle === 'plain'
+    ? `background:none;color:${t.text};width:44px;height:44px`
+    : t.socialStyle === 'theme'
+      ? `background:${t.primary};color:${onPrimary}`
+      : `background:var(--brand);color:#fff;${darkText ? '' : 'box-shadow:0 0 0 2px rgba(255,255,255,.22);'}`}}
+.social a svg{width:${t.socialStyle === 'plain' ? 30 : 24}px;height:${t.socialStyle === 'plain' ? 30 : 24}px}
 .social a:hover{transform:translateY(-${lift || 1}px) scale(1.05)}
+.social.top{margin-top:14px;gap:${t.socialStyle === 'plain' ? 14 : 10}px}
 .social a:focus-visible{outline:3px solid ${t.primary};outline-offset:3px}
 .lcard,.lfeat{${card}border-radius:${rCard};color:${t.text};text-decoration:none;transition:transform .15s ease,box-shadow .15s ease}
 .lcard:hover,.lfeat:hover{transform:translateY(-${lift || 1}px)}
@@ -535,9 +644,8 @@ ${t.buttonStyle === 'minimal' ? '.btn.cta .lb{text-align:center}' : ''}
 .ldesc{font-size:14px;color:${muted};line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ldom{font-size:12px;color:${muted};opacity:.85}
 .larrow{flex:none;color:${t.primary};font-size:18px}
-.banner{display:block;margin:0 -16px;padding:0}
-.banner img{display:block;width:100%;object-fit:cover;background:${surface}}
-@media(min-width:600px){.banner{margin:0}.banner img{border-radius:${rCard}}}
+.banner{display:block;margin:0;padding:0}
+.banner img{display:block;width:100%;object-fit:cover;background:${surface};border-radius:${rCard};box-shadow:${sh}}
 a.banner:focus-visible{outline:3px solid ${t.primary};outline-offset:3px}
 .gallery.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .gallery.grid figure:only-child{grid-column:1/-1}
@@ -597,9 +705,9 @@ var V;try{V=localStorage.getItem('aion_vitrine_vid');if(!V){V=uuid();localStorag
 var q=new URLSearchParams(location.search),ref=null;
 try{if(document.referrer){var h=new URL(document.referrer).hostname;if(h!==location.hostname)ref=h}}catch(e){}
 var ua=navigator.userAgent,dev=/iPad|Tablet/i.test(ua)?'tablet':(/Mobi|Android|iPhone/i.test(ua)?'mobile':'desktop');
-function send(b,ev){try{fetch(U+'/rest/v1/rpc/vitrine_track',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json',apikey:K,Authorization:'Bearer '+K},body:JSON.stringify({p_page_id:P,p_block_id:b,p_event:ev,p_visitor_id:V,p_referrer_host:ref,p_utm_source:q.get('utm_source'),p_utm_medium:q.get('utm_medium'),p_utm_campaign:q.get('utm_campaign'),p_device:dev})}).catch(function(){})}catch(e){}}
+function send(b,ev,tg){try{var d={p_page_id:P,p_block_id:b,p_event:ev,p_visitor_id:V,p_referrer_host:ref,p_utm_source:q.get('utm_source'),p_utm_medium:q.get('utm_medium'),p_utm_campaign:q.get('utm_campaign'),p_device:dev};if(tg)d.p_target=tg;fetch(U+'/rest/v1/rpc/vitrine_track',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json',apikey:K,Authorization:'Bearer '+K},body:JSON.stringify(d)}).catch(function(){})}catch(e){}}
 send(null,'view');
-document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[data-b]');if(a)send(a.getAttribute('data-b'),'click')},true);
+document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[data-b],a[data-s]');if(!a)return;var s=a.getAttribute('data-s');if(s)send(null,'click','social:'+s);else send(a.getAttribute('data-b'),'click')},true);
 try{var p=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()),o={};p.forEach(function(x){o[x.type]=x.value});
 var dow=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(o.weekday),min=parseInt(o.hour,10)*60+parseInt(o.minute,10);
 function m(s){var t=String(s||'').split(':');return parseInt(t[0],10)*60+parseInt(t[1],10)}
@@ -667,6 +775,7 @@ ${cover ? `<img class="cover" src="${esc(cover)}" alt="">` : ''}
 ${logo ? `<img class="logo" src="${esc(logo)}" alt="Logo ${esc(name)}">` : ''}
 <h1>${esc(name)}</h1>
 ${p.bio ? `<p class="bio">${esc(p.bio)}</p>` : ''}
+${topSocialRow(p.social_links)}
 </header>
 <main>
 ${blocks}

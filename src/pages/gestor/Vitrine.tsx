@@ -27,12 +27,13 @@ import { supabase } from '../../lib/supabase'
 import {
   type BlockType, type VitrineBlockRow, type VitrinePageRow,
   BLOCK_TYPES, BLOCK_ORDER, VITRINE_MAX_BLOCKS, defaultConfig, validateBlock, buildPreviewData,
-  blockImageUrls, removeVitrineImage, publicUrl, VITRINE_SITE_URL,
+  blockImageUrls, removeVitrineImage, publicUrl, VITRINE_SITE_URL, readTheme,
 } from '../../lib/vitrine'
 import { renderVitrinePage } from '../../../api/_lib/vitrineRender'
 import BlockList, { type EditorBlock, BLOCK_ICONS } from '../../components/vitrine/BlockList'
 import AppearancePanel from '../../components/vitrine/AppearancePanel'
 import SettingsPanel from '../../components/vitrine/SettingsPanel'
+import SocialLinksEditor from '../../components/vitrine/SocialLinksEditor'
 
 type Tab = 'blocks' | 'appearance' | 'settings'
 type PageSaveState = 'saved' | 'dirty' | 'saving' | 'error'
@@ -41,7 +42,7 @@ interface InstitutionInfo { name: string; logo_url: string | null; primary_color
 interface SavedBlock { type: BlockType; config: Record<string, any> }
 
 const SAVE_DELAY = 800
-const PAGE_FIELDS = ['title', 'bio', 'logo_url', 'cover_url', 'theme', 'seo_description'] as const
+const PAGE_FIELDS = ['title', 'bio', 'logo_url', 'cover_url', 'theme', 'seo_description', 'social_links'] as const
 
 let tempSeq = 0
 const tempKey = () => `novo-${Date.now()}-${++tempSeq}`
@@ -501,6 +502,9 @@ export default function Vitrine() {
 
           {tab === 'blocks' && (
             <>
+              <SocialLinksEditor links={page.social_links || []} theme={readTheme(page.theme)} schoolPhone={schoolPhone}
+                onChange={social_links => updatePage({ social_links })}
+                onThemeChange={patch => updatePage({ theme: { ...readTheme(page.theme), ...patch } })} />
               {blocks.length === 0 ? (
                 <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '40px 24px', textAlign: 'center' }}>
                   <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>

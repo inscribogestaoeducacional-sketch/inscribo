@@ -21,7 +21,7 @@ export const VITRINE_BUCKET = 'vitrine-media'
 export const VITRINE_MAX_BLOCKS = 50
 
 export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll' | 'banner'
-export type LinkStyle = 'button' | 'card' | 'featured'
+export type LinkStyle = 'button' | 'icon' | 'card' | 'featured'
 export type BannerAspect = '3:1' | '16:9'
 
 // Tamanho recomendado de cada formato de banner (mostrado no upload).
@@ -51,8 +51,9 @@ export interface VitrineTheme {
   shadow?: 'none' | 'soft' | 'strong'
   spacing?: 'compact' | 'normal' | 'relaxed'
   card_style?: 'flat' | 'bordered' | 'elevated'
-  logo_shape?: 'circle' | 'rounded'
+  logo_shape?: 'circle' | 'rounded' | 'none'
   animation?: 'none' | 'subtle' | 'lively'
+  social_style?: 'brand' | 'theme' | 'plain'
   template?: string
 }
 
@@ -68,8 +69,13 @@ export interface VitrinePageRow {
   cover_url: string | null
   theme: Partial<VitrineTheme>
   seo_description: string | null
+  social_links: SocialLink[]
   updated_at: string
 }
+
+// Rede social do topo: a escola digita só o perfil (ou o número, no
+// WhatsApp); a página monta o link (socialUrl).
+export interface SocialLink { network: SocialNet; handle: string }
 
 export interface VitrineBlockRow {
   id: string
@@ -84,7 +90,8 @@ export interface VitrineBlockRow {
 
 // Pares de fonte: definidos no renderizador (uma fonte só da verdade pra
 // página pública e editor).
-export { FONT_PAIRS, fontsHref, SOCIAL, detectSocial, type SocialNet } from '../../api/_lib/vitrineRender'
+export { FONT_PAIRS, fontsHref, SOCIAL, detectSocial, TOP_NETWORKS, socialUrl, normalizeHandle, type SocialNet } from '../../api/_lib/vitrineRender'
+import type { SocialNet } from '../../api/_lib/vitrineRender'
 
 // Padrões = aparência da página antes da Fase 5 (o renderizador usa os
 // mesmos quando a chave não existe). font_pair fica sem padrão de propósito:
@@ -184,7 +191,7 @@ export function validateBlock(type: BlockType, c: Record<string, any>): string |
   switch (type) {
     case 'link':
       if (!isHttpUrl(c.url)) return 'Informe um link válido (ex.: https://instagram.com/suaescola).'
-      if (c.style !== undefined && !['button', 'card', 'featured'].includes(c.style)) return 'Estilo do link inválido.'
+      if (c.style !== undefined && !['button', 'icon', 'card', 'featured'].includes(c.style)) return 'Estilo do link inválido.'
       if (String(c.description || '').length > 120) return 'A descrição pode ter no máximo 120 caracteres.'
       return null
     case 'banner':
@@ -211,6 +218,12 @@ export function validateBlock(type: BlockType, c: Record<string, any>): string |
     case 'text':
       if (!String(c.body || '').trim() || String(c.body).length > 2000) return 'Escreva o texto (até 2000 caracteres).'
       if (String(c.title || '').length > 100) return 'O título pode ter no máximo 100 caracteres.'
+      if ((c.title_size !== undefined && !['sm', 'md', 'lg'].includes(c.title_size))
+       || (c.title_weight !== undefined && !['regular', 'semibold', 'bold'].includes(c.title_weight))
+       || (c.title_color !== undefined && !['text', 'primary'].includes(c.title_color))
+       || (c.body_size !== undefined && !['sm', 'md', 'lg'].includes(c.body_size))
+       || (c.align !== undefined && !['left', 'center'].includes(c.align))
+       || (c.surface !== undefined && !['card', 'plain'].includes(c.surface))) return 'Opção de estilo do texto inválida.'
       return null
     case 'gallery': {
       const imgs = Array.isArray(c.images) ? c.images : []
@@ -309,6 +322,7 @@ export function buildPreviewData(
       id: page.id, slug: page.slug, title: page.title, bio: page.bio,
       logo_url: page.logo_url, cover_url: page.cover_url, theme: page.theme as Record<string, unknown>,
       seo_description: page.seo_description, institution_name: ctx.institutionName,
+      social_links: page.social_links,
     },
     blocks: out,
   }
