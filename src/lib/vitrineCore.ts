@@ -161,11 +161,40 @@ export function blockSummary(type: BlockType, c: Record<string, any>): string {
   switch (type) {
     case 'link': case 'whatsapp': case 'enroll': return c.label || BLOCK_TYPES[type].label
     case 'text':    return c.title || (c.body ? String(c.body).slice(0, 60) : 'Texto')
-    case 'gallery': return `${(c.images || []).length} imagem(ns)`
+    case 'gallery': return c.images?.[0]?.caption || 'Galeria de fotos'
     case 'video':   return c.title || (c.video_id ? `${c.provider === 'vimeo' ? 'Vimeo' : 'YouTube'} · ${c.video_id}` : 'Vídeo')
     case 'map':     return c.address || 'Endereço'
     case 'hours':   return 'Horário de atendimento'
     case 'banner':  return c.alt || (c.image_url ? `Banner ${c.aspect === '16:9' ? '16:9' : '3:1'}` : 'Banner')
+  }
+}
+
+// Segunda linha do cartão do bloco na lista (resumo do conteúdo).
+const DAY_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+export function blockDetail(type: BlockType, c: Record<string, any>): string {
+  const clip = (s: unknown, n = 60) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t }
+  const host = (u: unknown) => { try { return new URL(String(u)).hostname.replace(/^www\./, '') } catch { return '' } }
+  switch (type) {
+    case 'link': {
+      const style = c.style === 'icon' ? 'Ícone' : c.style === 'card' ? 'Cartão' : c.style === 'featured' ? 'Destaque' : 'Botão'
+      return [style, host(c.url)].filter(Boolean).join(' · ')
+    }
+    case 'whatsapp': return clip(c.message) || 'Sem mensagem'
+    case 'enroll':   return c.mode === 'link' ? `Link · ${host(c.url) || 'sem link'}` : `WhatsApp · ${clip(c.message, 48)}`
+    case 'banner':   return [c.aspect === '16:9' ? 'Destaque 16:9' : 'Faixa 3:1', c.link_url ? host(c.link_url) : 'sem link'].join(' · ')
+    case 'text':     return clip(c.body) || 'Sem texto'
+    case 'gallery':  return `${(c.images || []).length} foto(s) · ${c.layout === 'carousel' ? 'carrossel' : 'grade'}`
+    case 'video':    return c.video_id ? `${c.provider === 'vimeo' ? 'Vimeo' : 'YouTube'} · ${c.video_id}` : 'Sem vídeo'
+    case 'map':      return clip(c.address) || 'Sem endereço'
+    case 'hours': {
+      const open = (Array.isArray(c.days) ? c.days : []).filter((d: any) => !d.closed)
+      if (!open.length) return 'Todos os dias fechado'
+      const first = open.sort((a: any, b: any) => ((a.dow + 6) % 7) - ((b.dow + 6) % 7))
+      const same = first.every((d: any) => d.open === first[0].open && d.close === first[0].close)
+      return same
+        ? `${DAY_SHORT[first[0].dow]}–${DAY_SHORT[first[first.length - 1].dow]} · ${first[0].open}–${first[0].close}`
+        : `${open.length} dia(s) com horário`
+    }
   }
 }
 

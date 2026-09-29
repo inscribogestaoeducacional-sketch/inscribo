@@ -20,17 +20,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Store, Plus, Check, ExternalLink, Loader2, Eye, EyeOff, X, AlertCircle, AlertTriangle, Smartphone, Copy, Play,
+  Monitor, LayoutList, Palette, SlidersHorizontal, Globe, Layers, MousePointerClick, Users,
 } from 'lucide-react'
 import { arrayMove } from '@dnd-kit/sortable'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import {
   type BlockType, type VitrineBlockRow, type VitrinePageRow,
-  BLOCK_TYPES, BLOCK_ORDER, VITRINE_MAX_BLOCKS, defaultConfig, validateBlock, buildPreviewData,
+  BLOCK_TYPES, VITRINE_MAX_BLOCKS, defaultConfig, validateBlock, buildPreviewData,
   blockImageUrls, removeVitrineImage, publicUrl, VITRINE_SITE_URL, readTheme,
 } from '../../lib/vitrine'
 import { renderVitrinePage } from '../../../api/_lib/vitrineRender'
 import BlockList, { type EditorBlock, BLOCK_ICONS } from '../../components/vitrine/BlockList'
+import BlockGallery from '../../components/vitrine/BlockGallery'
+import { KpiCard } from '../../components/transmissoes/ui'
 import AppearancePanel from '../../components/vitrine/AppearancePanel'
 import SettingsPanel from '../../components/vitrine/SettingsPanel'
 import SocialLinksEditor from '../../components/vitrine/SocialLinksEditor'
@@ -76,6 +79,9 @@ export default function Vitrine() {
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null)
   const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1180)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [device, setDevice] = useState<'mobile' | 'desktop'>('mobile')
+  // Indicadores dos últimos 7 dias (vitrine_stats; o painel completo é a Fase 4).
+  const [stats7, setStats7] = useState<{ views: number; visitors: number; clicks: number } | null>(null)
 
   // Espelhos pra código assíncrono (timers/filas) ler o estado mais novo.
   const pageRef = useRef<VitrinePageRow | null>(null)
@@ -137,6 +143,24 @@ export default function Vitrine() {
     })()
     return () => { cancelled = true }
   }, [institutionId])
+
+  // Visitas e cliques dos últimos 7 dias (RLS: só a própria escola). Sem
+  // dado ainda = 0; erro = indicador some (não trava o editor).
+  useEffect(() => {
+    if (!institutionId || loading) return
+    const end = new Date(), start = new Date(end.getTime() - 7 * 86400000)
+    supabase.rpc('vitrine_stats', { p_institution_id: institutionId, p_start: start.toISOString(), p_end: end.toISOString() })
+      .then(({ data, error }) => {
+        if (error) { setStats7(null); return }
+        const rows = (data || []) as { block_id: string | null; event_type: string; events: number; visitors: number }[]
+        const views = rows.filter(r => r.event_type === 'view')
+        setStats7({
+          views: views.reduce((s, r) => s + Number(r.events), 0),
+          visitors: views.reduce((s, r) => s + Number(r.visitors), 0),
+          clicks: rows.filter(r => r.event_type === 'click').reduce((s, r) => s + Number(r.events), 0),
+        })
+      })
+  }, [institutionId, loading])
 
   // Aviso ao sair com alteração pendente.
   const pending = pageState === 'dirty' || pageState === 'saving' || blocks.some(b => b.state === 'dirty' || b.state === 'saving')
@@ -394,20 +418,56 @@ export default function Vitrine() {
     )
   }
 
-  const phoneFrame = (height: number | string) => (
-    <div style={{ width: 390, maxWidth: '100%', height, borderRadius: 36, border: '10px solid #1e293b', overflow: 'hidden', background: '#fff', boxShadow: '0 20px 48px rgba(15,23,42,.18)' }}>
-      <iframe title="Prévia da página" srcDoc={previewHtml} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-        style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
+  const iframe = (style: React.CSSProperties) => (
+    <iframe title="Prévia da página" srcDoc={previewHtml} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+      style={{ border: 0, display: 'block', background: '#fff', ...style }} />
+  )
+  // Celular: moldura com "ilha" no topo. Computador: janela de navegador com
+  // a página em 1150 px de largura, reduzida pra caber no painel.
+  const phoneFrame = (height: number | string) => device === 'mobile' ? (
+    <div style={{ position: 'relative', width: 390, maxWidth: '100%', height, borderRadius: 44, padding: 10, background: 'linear-gradient(160deg,#1e293b,#0f172a)', boxShadow: '0 24px 60px rgba(15,23,42,.22), 0 4px 12px rgba(0,168,150,.10)' }}>
+      <div style={{ width: '100%', height: '100%', borderRadius: 34, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
+        {/* Barra de status com a "ilha" — a página começa abaixo dela, como no aparelho. */}
+        <div aria-hidden="true" style={{ flex: 'none', height: 38, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 22px', background: '#fff', fontSize: 12, fontWeight: 700, color: '#0f172a', position: 'relative' }}>
+          <span>9:41</span>
+          <span style={{ position: 'absolute', left: '50%', top: 8, transform: 'translateX(-50%)', width: 92, height: 24, borderRadius: 999, background: '#0b1120' }} />
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ display: 'flex', alignItems: 'flex-end', gap: 1.5, height: 10 }}>{[4, 6, 8, 10].map(h => <span key={h} style={{ width: 3, height: h, borderRadius: 1, background: '#0f172a' }} />)}</span>
+            <span style={{ width: 20, height: 10, borderRadius: 3, border: '1.5px solid #0f172a', padding: 1, display: 'flex' }}><span style={{ flex: 1, borderRadius: 1, background: '#0f172a' }} /></span>
+          </span>
+        </div>
+        {iframe({ width: '100%', flex: 1, minHeight: 0 })}
+      </div>
+    </div>
+  ) : (
+    <div style={{ width: 460, maxWidth: '100%', borderRadius: 12, overflow: 'hidden', background: '#fff', border: '1px solid #E2E8F0', boxShadow: '0 24px 60px rgba(15,23,42,.18)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', background: '#F1F5F9', borderBottom: '1px solid #E2E8F0' }}>
+        {['#F87171', '#FBBF24', '#34D399'].map(c => <span key={c} aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: c }} />)}
+        <span style={{ flex: 1, marginLeft: 8, padding: '3px 10px', borderRadius: 6, background: '#fff', fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {publicUrl(page.slug).replace(/^https:\/\//, '')}
+        </span>
+      </div>
+      <div style={{ width: 460, height: 520, overflow: 'hidden' }}>
+        {iframe({ width: 1150, height: 1300, transform: 'scale(0.4)', transformOrigin: 'top left' })}
+      </div>
     </div>
   )
 
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
+      {/* Hover dos cartões de bloco e botões do editor (mesma transição e
+          sombra com tom teal do app — index.css --transition/--shadow-md). */}
+      <style>{`
+        .vit-card{transition:all .18s cubic-bezier(0.4,0,0.2,1)}
+        .vit-card:hover{border-color:#CBD5E1;box-shadow:0 4px 16px rgba(0,168,150,0.10),0 2px 4px rgba(0,0,0,0.04)}
+        .vit-upload:focus-visible,.vit-pick:focus-visible{outline:3px solid #99F6E4;outline-offset:2px}
+        @media (prefers-reduced-motion: reduce){.vit-card,[role=tabpanel],[role=dialog]{transition:none!important;animation:none!important}}
+      `}</style>
       {toast && (
         <div role="status" style={{
           position: 'fixed', bottom: 24, right: 24, zIndex: 9999, maxWidth: 420,
           background: toast.error ? '#991B1B' : '#1e2d6b', color: 'white', fontSize: 13, fontWeight: 500,
-          padding: '12px 18px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', gap: 8, alignItems: 'flex-start',
+          padding: '12px 18px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', gap: 8, alignItems: 'flex-start', animation: 'slideInRight 0.2s ease',
         }}>
           {toast.error ? <AlertCircle size={15} style={{ flex: 'none', marginTop: 1 }} /> : <Check size={15} style={{ flex: 'none', marginTop: 1 }} />} {toast.msg}
         </div>
@@ -470,6 +530,22 @@ export default function Vitrine() {
         </div>
       </div>
 
+      {/* ── Indicadores (mesmo KpiCard das Transmissões) ────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+        <KpiCard label="Página" value={page.is_published ? 'Publicada' : 'Rascunho'}
+          hint={page.is_published ? 'Visível pra quem tem o link' : 'Só você vê — publique quando estiver pronta'}
+          icon={<Globe size={16} color={page.is_published ? '#15803D' : '#64748b'} />} bg={page.is_published ? '#DCFCE7' : '#F1F5F9'} />
+        <KpiCard label="Blocos na página" value={String(blocks.filter(b => b.id && b.is_visible).length)}
+          hint={blocks.some(b => !b.is_visible) ? `${blocks.filter(b => !b.is_visible).length} oculto(s)` : 'Todos visíveis'}
+          icon={<Layers size={16} color="#00A896" />} bg="#E6F7F5" />
+        <KpiCard label="Visitas · 7 dias" value={stats7 ? stats7.views.toLocaleString('pt-BR') : '—'}
+          hint={stats7 ? `${stats7.visitors.toLocaleString('pt-BR')} pessoa(s)` : undefined}
+          icon={<Users size={16} color="#0284C7" />} bg="#E0F2FE" />
+        <KpiCard label="Cliques · 7 dias" value={stats7 ? stats7.clicks.toLocaleString('pt-BR') : '—'}
+          hint={stats7 && stats7.views ? `${Math.round((stats7.clicks / stats7.views) * 100)}% das visitas` : 'Botões, links e redes'}
+          icon={<MousePointerClick size={16} color="#7C3AED" />} bg="#EDE9FE" />
+      </div>
+
       {pageError && (
         <div role="alert" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', gap: 8 }}>
           <AlertCircle size={15} style={{ flex: 'none', marginTop: 1 }} /> {pageError}
@@ -486,20 +562,23 @@ export default function Vitrine() {
       <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}>
         {/* ── Editor ──────────────────────────────────────────────────────── */}
         <div style={{ flex: 1, minWidth: 0, maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div role="tablist" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, width: 'fit-content' }}>
+          <div role="tablist" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, width: 'fit-content', flexWrap: 'wrap' }}>
             {([
-              { key: 'blocks' as const, label: `Blocos (${blocks.length})` },
-              { key: 'appearance' as const, label: 'Aparência' },
-              { key: 'settings' as const, label: 'Configurações' },
+              { key: 'blocks' as const, label: `Blocos (${blocks.length})`, Icon: LayoutList },
+              { key: 'appearance' as const, label: 'Aparência', Icon: Palette },
+              { key: 'settings' as const, label: 'Configurações', Icon: SlidersHorizontal },
             ]).map(t => (
               <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)} style={{
-                padding: '6px 18px', borderRadius: 7, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '7px 16px', borderRadius: 7, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
                 background: tab === t.key ? '#fff' : 'transparent', color: tab === t.key ? '#1e2d6b' : '#64748b',
                 boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
-              }}>{t.label}</button>
+              }}><t.Icon size={14} color={tab === t.key ? '#00A896' : '#94a3b8'} /> {t.label}</button>
             ))}
           </div>
 
+          {/* Troca de aba com a entrada suave do app (slideUp). */}
+          <div key={tab} role="tabpanel" style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'slideUp 0.2s ease' }}>
           {tab === 'blocks' && (
             <>
               <SocialLinksEditor links={page.social_links || []} theme={readTheme(page.theme)} schoolPhone={schoolPhone}
@@ -571,16 +650,25 @@ export default function Vitrine() {
                 if (savedPageRef.current) savedPageRef.current = { ...savedPageRef.current, slug }
               }} />
           )}
+          </div>
         </div>
 
         {/* ── Prévia ──────────────────────────────────────────────────────── */}
         {wide && (
           <aside style={{ position: 'sticky', top: 0, flex: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 26 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Prévia no celular</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 30 }}>
+              <div role="radiogroup" aria-label="Tamanho da prévia" style={{ display: 'flex', gap: 2, background: '#F1F5F9', borderRadius: 999, padding: 3 }}>
+                {([{ v: 'mobile' as const, label: 'Celular', Icon: Smartphone }, { v: 'desktop' as const, label: 'Computador', Icon: Monitor }]).map(({ v, label, Icon }) => (
+                  <button key={v} type="button" role="radio" aria-checked={device === v} onClick={() => setDevice(v)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
+                      background: device === v ? '#fff' : 'transparent', color: device === v ? '#1e2d6b' : '#64748b', boxShadow: device === v ? '0 1px 3px rgba(0,0,0,.10)' : 'none' }}>
+                    <Icon size={13} /> {label}
+                  </button>
+                ))}
+              </div>
               {hasAnimation && (
                 <button type="button" onClick={playAnimation}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#0F766E', cursor: 'pointer' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 999, border: '1px solid #CCFBF1', background: '#F0FDFA', fontSize: 12, fontWeight: 600, color: '#0F766E', cursor: 'pointer' }}>
                   <Play size={12} /> Ver animação
                 </button>
               )}
@@ -592,27 +680,8 @@ export default function Vitrine() {
 
       {/* ── Escolha do tipo de bloco ─────────────────────────────────────── */}
       {showPicker && (
-        <Modal title="Adicionar bloco" onClose={() => setShowPicker(false)}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
-            {BLOCK_ORDER.map(t => {
-              const meta = BLOCK_TYPES[t]
-              const Icon = BLOCK_ICONS[t]
-              return (
-                <button key={t} type="button" onClick={() => addBlock(t)}
-                  style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: 14, borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', textAlign: 'left' }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = meta.color)}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = '#e2e8f0')}>
-                  <span style={{ width: 36, height: 36, borderRadius: 10, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-                    <Icon size={17} color={meta.color} />
-                  </span>
-                  <span>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{meta.label}</span>
-                    <span style={{ display: 'block', fontSize: 12, color: '#64748b', lineHeight: 1.4, marginTop: 2 }}>{meta.description}</span>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+        <Modal title="Adicionar bloco" onClose={() => setShowPicker(false)} wide>
+          <BlockGallery onPick={t => addBlock(t)} />
         </Modal>
       )}
 
@@ -651,7 +720,7 @@ export default function Vitrine() {
   )
 }
 
-function Modal({ title, children, onClose, narrow }: { title: string; children: React.ReactNode; onClose: () => void; narrow?: boolean }) {
+function Modal({ title, children, onClose, narrow, wide }: { title: string; children: React.ReactNode; onClose: () => void; narrow?: boolean; wide?: boolean }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', h)
@@ -661,7 +730,7 @@ function Modal({ title, children, onClose, narrow }: { title: string; children: 
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div role="dialog" aria-modal="true" aria-label={title}
-        style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: narrow ? 440 : 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
+        style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: narrow ? 440 : wide ? 860 : 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'slideUp 0.2s ease' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>{title}</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', padding: 4, borderRadius: 6 }}><X size={18} /></button>
