@@ -78,6 +78,9 @@ export interface VitrinePageRow {
   theme: Partial<VitrineTheme>
   seo_description: string | null
   social_links: SocialLink[]
+  floating_block_id: string | null   // bloco de WhatsApp que vira botão flutuante
+  show_share: boolean
+  social_position: 'top' | 'bottom'
   updated_at: string
 }
 
@@ -488,6 +491,7 @@ export function buildPreviewData(
       logo_url: page.logo_url, cover_url: page.cover_url, theme: page.theme as Record<string, unknown>,
       seo_description: page.seo_description, institution_name: ctx.institutionName,
       social_links: page.social_links,
+      floating_block_id: page.floating_block_id, show_share: page.show_share, social_position: page.social_position,
     },
     blocks: out,
   }

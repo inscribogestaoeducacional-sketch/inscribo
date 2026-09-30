@@ -27,7 +27,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import {
   type BlockType, type VitrineBlockRow, type VitrinePageRow,
-  BLOCK_TYPES, VITRINE_MAX_BLOCKS, defaultConfig, validateBlock, buildPreviewData,
+  BLOCK_TYPES, blockSummary, VITRINE_MAX_BLOCKS, defaultConfig, validateBlock, buildPreviewData,
   blockImageUrls, removeVitrineImage, publicUrl, VITRINE_SITE_URL, readTheme,
 } from '../../lib/vitrine'
 import { renderVitrinePage } from '../../../api/_lib/vitrineRender'
@@ -46,7 +46,7 @@ interface InstitutionInfo { name: string; logo_url: string | null; primary_color
 interface SavedBlock { type: BlockType; config: Record<string, any> }
 
 const SAVE_DELAY = 800
-const PAGE_FIELDS = ['title', 'bio', 'logo_url', 'cover_url', 'theme', 'seo_description', 'social_links'] as const
+const PAGE_FIELDS = ['title', 'bio', 'logo_url', 'cover_url', 'theme', 'seo_description', 'social_links', 'floating_block_id', 'show_share', 'social_position'] as const
 
 let tempSeq = 0
 const tempKey = () => `novo-${Date.now()}-${++tempSeq}`
@@ -334,6 +334,9 @@ export default function Vitrine() {
       showToast(`Não foi possível excluir: ${error.message}`, true)
       return
     }
+    // O banco zera o flutuante que usava este bloco (ON DELETE SET NULL); o
+    // editor acompanha, senão o próximo salvamento da página seria recusado.
+    if (pageRef.current?.floating_block_id === b.id) updatePage({ floating_block_id: null })
     const saved = savedBlocksRef.current.get(b.key)
     savedBlocksRef.current.delete(b.key)
     if (saved) blockImageUrls(saved.type, saved.config).forEach(u => removeVitrineImage(institutionId, u))
@@ -589,7 +592,8 @@ export default function Vitrine() {
             <>
               <SocialLinksEditor links={page.social_links || []} theme={readTheme(page.theme)} schoolPhone={schoolPhone}
                 onChange={social_links => updatePage({ social_links })}
-                onThemeChange={patch => updatePage({ theme: { ...readTheme(page.theme), ...patch } })} />
+                onThemeChange={patch => updatePage({ theme: { ...readTheme(page.theme), ...patch } })}
+                position={page.social_position === 'bottom' ? 'bottom' : 'top'} onPositionChange={social_position => updatePage({ social_position })} />
               {blocks.length === 0 ? (
                 <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: '48px 28px', textAlign: 'center', boxShadow: DS.shadowSm }}>
                   <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
@@ -651,6 +655,8 @@ export default function Vitrine() {
 
           {tab === 'settings' && (
             <SettingsPanel page={page} onChange={updatePage} onToast={msg => showToast(msg)}
+              floatingOptions={blocks.filter(b => b.id && (b.type === 'whatsapp' || (b.type === 'enroll' && b.config.mode === 'whatsapp')))
+                .map(b => ({ id: b.id!, label: `${BLOCK_TYPES[b.type].label}: ${blockSummary(b.type, b.config)}${b.is_visible ? '' : ' (oculto)'}` }))}
               onSlugSaved={slug => {
                 setPage(p => (p ? { ...p, slug } : p))
                 if (savedPageRef.current) savedPageRef.current = { ...savedPageRef.current, slug }

@@ -31,6 +31,8 @@ interface Props {
   schoolPhone: string | null
   onChange: (links: SocialLink[]) => void
   onThemeChange: (patch: Partial<VitrineTheme>) => void
+  position: 'top' | 'bottom'
+  onPositionChange: (p: 'top' | 'bottom') => void
 }
 
 function Icon({ net, size = 30 }: { net: SocialNet; size?: number }) {
@@ -40,7 +42,7 @@ function Icon({ net, size = 30 }: { net: SocialNet; size?: number }) {
   )
 }
 
-export default function SocialLinksEditor({ links, theme, schoolPhone, onChange, onThemeChange }: Props) {
+export default function SocialLinksEditor({ links, theme, schoolPhone, onChange, onThemeChange, position, onPositionChange }: Props) {
   // Linhas = redes salvas + padrões ainda vazios (na ordem padrão) + extras
   // que a escola abriu nesta sessão.
   const [rows, setRows] = useState<Row[]>(() => {
@@ -147,6 +149,13 @@ export default function SocialLinksEditor({ links, theme, schoolPhone, onChange,
         <Segmented value={theme.social_style || 'brand'} onChange={v => onThemeChange({ social_style: v })}
           options={[{ value: 'brand', label: 'Cores das redes' }, { value: 'theme', label: 'Cor da escola' }, { value: 'plain', label: 'Só o ícone' }]} />
         <p style={{ ...hintStyle, fontSize: 12 }}>Vale também pros links marcados como “Ícone” na lista de blocos.</p>
+      </div>
+
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+        <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Posição</span>
+        <Segmented value={position} onChange={onPositionChange}
+          options={[{ value: 'top', label: 'No topo, abaixo do nome' }, { value: 'bottom', label: 'No rodapé' }]} />
+        <p style={{ ...hintStyle, fontSize: 12 }}>No topo, as redes são a primeira coisa que a pessoa vê; no rodapé, os botões da escola (WhatsApp, matrícula) ganham o destaque.</p>
       </div>
     </section>
   )

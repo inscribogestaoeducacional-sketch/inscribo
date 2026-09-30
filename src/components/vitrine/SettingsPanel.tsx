@@ -8,16 +8,18 @@ import { supabase } from '../../lib/supabase'
 import {
   type VitrinePageRow, type SlugStatus, SLUG_RE, SLUG_STATUS_MSG, VITRINE_SITE_URL, publicUrl, slugify,
 } from '../../lib/vitrine'
-import { Field, TextArea, cardStyle, hintStyle, inputStyle, sectionTitleStyle } from './ui'
+import { Field, TextArea, Toggle, cardStyle, hintStyle, inputStyle, sectionTitleStyle } from './ui'
 
 interface Props {
   page: VitrinePageRow
   onChange: (patch: Partial<VitrinePageRow>) => void
   onSlugSaved: (slug: string) => void
   onToast: (msg: string) => void
+  // Blocos salvos que podem virar WhatsApp flutuante (WhatsApp ou matrícula pelo WhatsApp).
+  floatingOptions: { id: string; label: string }[]
 }
 
-export default function SettingsPanel({ page, onChange, onSlugSaved, onToast }: Props) {
+export default function SettingsPanel({ page, onChange, onSlugSaved, onToast, floatingOptions }: Props) {
   const [draft, setDraft] = useState(page.slug)
   const [status, setStatus] = useState<SlugStatus | 'checking' | null>(null)
   const [saving, setSaving] = useState(false)
@@ -127,6 +129,26 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast }: 
           <TextArea rows={3} value={page.seo_description || ''} maxLength={200}
             onChange={e => onChange({ seo_description: e.target.value || null })} />
         </Field>
+      </section>
+
+      <section style={{ ...cardStyle, padding: 24 }}>
+        <h3 style={{ ...sectionTitleStyle, margin: '0 0 16px' }}>Botões da página</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <Field label="WhatsApp flutuante"
+            hint={floatingOptions.length
+              ? 'Botão verde fixo no canto da tela, à mão enquanto a pessoa rola. Usa a mesma mensagem e o mesmo gatilho do Captação do bloco escolhido, e o clique conta nesse bloco. Some enquanto o próprio bloco está na tela.'
+              : 'Crie um bloco de WhatsApp (ou de matrícula pelo WhatsApp) na aba Blocos para usar como botão flutuante.'}>
+            <select value={page.floating_block_id || ''} disabled={!floatingOptions.length}
+              onChange={e => onChange({ floating_block_id: e.target.value || null })}
+              style={{ ...inputStyle, cursor: floatingOptions.length ? 'pointer' : 'not-allowed' }}>
+              <option value="">Sem botão flutuante</option>
+              {floatingOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </Field>
+          <Toggle checked={page.show_share !== false} onChange={v => onChange({ show_share: v })}
+            label="Botão de compartilhar"
+            description="Ícone no canto de cima: no celular abre o menu de compartilhar (WhatsApp, Instagram…); no computador copia o link. Quem chegar por ele aparece como “compartilhar” nas estatísticas." />
+        </div>
       </section>
     </div>
   )
