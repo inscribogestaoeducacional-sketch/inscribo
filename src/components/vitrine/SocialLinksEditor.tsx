@@ -10,7 +10,7 @@ import {
   type SocialLink, type SocialNet, type VitrineTheme,
   SOCIAL, TOP_NETWORKS, socialUrl, normalizeHandle,
 } from '../../lib/vitrine'
-import { Segmented, cardStyle, hintStyle, inputStyle } from './ui'
+import { Segmented, cardStyle, hintStyle, inputStyle, sectionTitleStyle } from './ui'
 
 // Já aparecem prontas pra preencher; as demais entram por "+ adicionar".
 const DEFAULT_NETS: SocialNet[] = ['instagram', 'facebook', 'whatsapp', 'tiktok', 'youtube']
@@ -72,9 +72,9 @@ export default function SocialLinksEditor({ links, theme, schoolPhone, onChange,
   const schoolDigits = normalizeHandle('whatsapp', schoolPhone || '')
 
   return (
-    <section style={{ ...cardStyle, padding: 20 }} aria-labelledby="vit-social-title">
+    <section style={{ ...cardStyle, padding: 24 }} aria-labelledby="vit-social-title">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-        <h3 id="vit-social-title" style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Redes sociais</h3>
+        <h3 id="vit-social-title" style={sectionTitleStyle}>Redes sociais</h3>
         <span style={{ fontSize: 12, color: filled ? '#16A34A' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
           {filled ? <><Check size={12} /> {filled} na página</> : 'Nenhuma preenchida'}
         </span>
@@ -91,7 +91,7 @@ export default function SocialLinksEditor({ links, theme, schoolPhone, onChange,
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Icon net={p.network} />
                 <label htmlFor={id} style={{ width: 78, fontSize: 13, fontWeight: 600, color: '#1e293b', flex: 'none' }}>{SOCIAL[p.network].label}</label>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', border: `1.5px solid ${p.invalid ? '#FCA5A5' : '#E2E8F0'}`, borderRadius: 9, background: '#FAFAFA', overflow: 'hidden' }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', border: `1.5px solid ${p.invalid ? '#FCA5A5' : '#E2E8F0'}`, borderRadius: 12, background: '#FAFAFA', overflow: 'hidden' }}>
                   <span style={{ padding: '0 0 0 10px', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>{PREFIX[p.network]}</span>
                   <input id={id} value={p.value} placeholder={PLACEHOLDER[p.network] || 'nomedaescola'}
                     inputMode={p.network === 'whatsapp' ? 'numeric' : 'text'} autoComplete="off" spellCheck={false}

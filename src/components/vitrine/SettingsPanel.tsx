@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase'
 import {
   type VitrinePageRow, type SlugStatus, SLUG_RE, SLUG_STATUS_MSG, VITRINE_SITE_URL, publicUrl, slugify,
 } from '../../lib/vitrine'
-import { Field, TextArea, cardStyle, hintStyle, inputStyle } from './ui'
+import { Field, TextArea, cardStyle, hintStyle, inputStyle, sectionTitleStyle } from './ui'
 
 interface Props {
   page: VitrinePageRow
@@ -66,12 +66,12 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast }: 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <section style={{ ...cardStyle, padding: 20 }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Endereço da página</h3>
+      <section style={{ ...cardStyle, padding: 24 }}>
+        <h3 style={{ ...sectionTitleStyle, margin: '0 0 6px' }}>Endereço da página</h3>
         <p style={{ ...hintStyle, margin: '0 0 14px', fontSize: 12 }}>É o link que vai na bio do Instagram, no Google e onde mais a escola divulgar.</p>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 260px', display: 'flex', alignItems: 'center', border: '1.5px solid #E2E8F0', borderRadius: 9, background: '#FAFAFA', overflow: 'hidden' }}>
+          <div style={{ flex: '1 1 260px', display: 'flex', alignItems: 'center', border: '1.5px solid #E2E8F0', borderRadius: 12, background: '#FAFAFA', overflow: 'hidden' }}>
             <span style={{ padding: '9px 0 9px 12px', fontSize: 13, color: '#94a3b8', whiteSpace: 'nowrap' }}>{host}/</span>
             <input value={draft} aria-label="Endereço da página" maxLength={40}
               onChange={e => setDraft(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
@@ -79,7 +79,7 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast }: 
               style={{ ...inputStyle, border: 'none', background: 'transparent', paddingLeft: 0, flex: 1, minWidth: 80 }} />
           </div>
           <button type="button" onClick={saveSlug} disabled={!canSave}
-            style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: canSave ? '#00A896' : '#E2E8F0', color: canSave ? '#fff' : '#94a3b8', fontSize: 13, fontWeight: 600, cursor: canSave ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 6 }}>
+            style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: canSave ? '#00A896' : '#E2E8F0', color: canSave ? '#fff' : '#94a3b8', fontSize: 13, fontWeight: 600, cursor: canSave ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 6 }}>
             {saving && <Loader2 size={14} className="animate-spin" />} Salvar endereço
           </button>
         </div>
@@ -101,18 +101,18 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast }: 
         )}
       </section>
 
-      <section style={{ ...cardStyle, padding: 20 }}>
-        <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Link da página</h3>
+      <section style={{ ...cardStyle, padding: 24 }}>
+        <h3 style={{ ...sectionTitleStyle, margin: '0 0 16px' }}>Link da página</h3>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <code style={{ flex: '1 1 240px', padding: '9px 12px', borderRadius: 9, background: '#f1f5f9', fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <code style={{ flex: '1 1 240px', padding: '10px 14px', borderRadius: 12, background: '#f1f5f9', fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {publicUrl(page.slug)}
           </code>
           <button type="button" onClick={copy}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 9, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
             {copied ? <><Check size={14} color="#16A34A" /> Copiado</> : <><Copy size={14} /> Copiar</>}
           </button>
           <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 9, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', textDecoration: 'none' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)', fontSize: 13, fontWeight: 600, color: '#475569', textDecoration: 'none' }}>
             <ExternalLink size={14} /> Abrir
           </a>
         </div>
@@ -120,8 +120,8 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast }: 
         {page.is_published && <p style={{ ...hintStyle, fontSize: 12 }}>Alterações aparecem na página publicada em até 1 minuto.</p>}
       </section>
 
-      <section style={{ ...cardStyle, padding: 20 }}>
-        <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Compartilhamento</h3>
+      <section style={{ ...cardStyle, padding: 24 }}>
+        <h3 style={{ ...sectionTitleStyle, margin: '0 0 16px' }}>Compartilhamento</h3>
         <Field label="Texto da prévia do link" counter={{ value: page.seo_description || '', max: 200 }}
           hint="Aparece embaixo do título quando o link é enviado no WhatsApp ou no Facebook, e no Google. Em branco, usa a descrição curta da aparência.">
           <TextArea rows={3} value={page.seo_description || ''} maxLength={200}

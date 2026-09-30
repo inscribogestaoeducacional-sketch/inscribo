@@ -37,6 +37,7 @@ import { KpiCard } from '../../components/transmissoes/ui'
 import AppearancePanel from '../../components/vitrine/AppearancePanel'
 import SettingsPanel from '../../components/vitrine/SettingsPanel'
 import SocialLinksEditor from '../../components/vitrine/SocialLinksEditor'
+import { DS } from '../../components/vitrine/ui'
 
 type Tab = 'blocks' | 'appearance' | 'settings'
 type PageSaveState = 'saved' | 'dirty' | 'saving' | 'error'
@@ -411,7 +412,7 @@ export default function Vitrine() {
   if (loadError || !page) {
     return (
       <div style={{ padding: 24, background: '#f8f9fb', minHeight: '100%' }}>
-        <div style={{ maxWidth: 520, margin: '48px auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 28, textAlign: 'center' }}>
+        <div style={{ maxWidth: 520, margin: '48px auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, textAlign: 'center', boxShadow: DS.shadowSm }}>
           <AlertCircle size={28} color="#dc2626" />
           <p style={{ margin: '10px 0 4px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Não foi possível abrir a Vitrine</p>
           <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>{loadError}</p>
@@ -442,7 +443,7 @@ export default function Vitrine() {
       </div>
     </div>
   ) : (
-    <div style={{ width: 460, maxWidth: '100%', borderRadius: 12, overflow: 'hidden', background: '#fff', border: '1px solid #E2E8F0', boxShadow: '0 24px 60px rgba(15,23,42,.18)' }}>
+    <div style={{ width: 460, maxWidth: '100%', borderRadius: 12, overflow: 'hidden', background: '#fff', border: '1px solid #E2E8F0', boxShadow: DS.shadowXl }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', background: '#F1F5F9', borderBottom: '1px solid #E2E8F0' }}>
         {['#F87171', '#FBBF24', '#34D399'].map(c => <span key={c} aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: c }} />)}
         <span style={{ flex: 1, marginLeft: 8, padding: '3px 10px', borderRadius: 6, background: '#fff', fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -460,8 +461,11 @@ export default function Vitrine() {
       {/* Hover dos cartões de bloco e botões do editor (mesma transição e
           sombra com tom teal do app — index.css --transition/--shadow-md). */}
       <style>{`
-        .vit-card{transition:all .18s cubic-bezier(0.4,0,0.2,1)}
+        .vit-card{transition:all .18s cubic-bezier(0.4,0,0.2,1);box-shadow:0 1px 3px rgba(0,168,150,0.06),0 1px 2px rgba(0,0,0,0.04)}
         .vit-card:hover{border-color:#CBD5E1;box-shadow:0 4px 16px rgba(0,168,150,0.10),0 2px 4px rgba(0,0,0,0.04)}
+        .vit-card.open{border-color:#CBD5E1;box-shadow:0 8px 24px rgba(0,168,150,0.12),0 4px 8px rgba(0,0,0,0.04)}
+        .vit-btn{transition:all .18s cubic-bezier(0.4,0,0.2,1)}
+        .vit-btn:hover:not(:disabled){box-shadow:0 4px 16px rgba(0,168,150,0.10),0 2px 4px rgba(0,0,0,0.04);transform:translateY(-1px)}
         .vit-upload:focus-visible,.vit-pick:focus-visible{outline:3px solid #99F6E4;outline-offset:2px}
         @media (prefers-reduced-motion: reduce){.vit-card,[role=tabpanel],[role=dialog]{transition:none!important;animation:none!important}}
       `}</style>
@@ -469,7 +473,7 @@ export default function Vitrine() {
         <div role="status" style={{
           position: 'fixed', bottom: 24, right: 24, zIndex: 9999, maxWidth: 420,
           background: toast.error ? '#991B1B' : '#1e2d6b', color: 'white', fontSize: 13, fontWeight: 500,
-          padding: '12px 18px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', gap: 8, alignItems: 'flex-start', animation: 'slideInRight 0.2s ease',
+          padding: '14px 18px', borderRadius: 12, boxShadow: '0 12px 32px rgba(15,23,42,0.22), 0 4px 8px rgba(0,0,0,0.06)', display: 'flex', gap: 8, alignItems: 'flex-start', animation: 'slideInRight 0.2s ease',
         }}>
           {toast.error ? <AlertCircle size={15} style={{ flex: 'none', marginTop: 1 }} /> : <Check size={15} style={{ flex: 'none', marginTop: 1 }} />} {toast.msg}
         </div>
@@ -479,7 +483,7 @@ export default function Vitrine() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: '#E6F7F5', boxShadow: DS.shadowSm, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Store size={18} color="#00A896" />
             </div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Vitrine</h1>
@@ -510,19 +514,19 @@ export default function Vitrine() {
           </span>
           {!wide && (
             <button type="button" onClick={() => setPreviewOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
+              className="vit-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, boxShadow: DS.shadowSm, color: '#475569', cursor: 'pointer' }}>
               <Smartphone size={15} /> Prévia
             </button>
           )}
           {page.is_published && (
             <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', textDecoration: 'none' }}>
+              className="vit-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, boxShadow: DS.shadowSm, color: '#475569', textDecoration: 'none' }}>
               <ExternalLink size={15} /> Ver página
             </a>
           )}
           <button type="button" onClick={togglePublish} disabled={publishing}
             style={{
-              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: publishing ? 'wait' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: publishing ? 'wait' : 'pointer', boxShadow: DS.shadowMd,
               border: page.is_published ? '1px solid #e2e8f0' : 'none',
               background: page.is_published ? '#fff' : '#00A896', color: page.is_published ? '#475569' : '#fff',
             }}>
@@ -549,12 +553,12 @@ export default function Vitrine() {
       </div>
 
       {pageError && (
-        <div role="alert" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', gap: 8 }}>
+        <div role="alert" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', borderRadius: 12, padding: '12px 16px', fontSize: 13, lineHeight: 1.5, display: 'flex', gap: 10 }}>
           <AlertCircle size={15} style={{ flex: 'none', marginTop: 1 }} /> {pageError}
         </div>
       )}
       {incomplete > 0 && (
-        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', gap: 8 }}>
+        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', borderRadius: 12, padding: '12px 16px', fontSize: 13, lineHeight: 1.5, display: 'flex', gap: 10 }}>
           <AlertTriangle size={15} style={{ flex: 'none', marginTop: 1 }} />
           {incomplete === 1 ? '1 bloco tem campos a corrigir e ainda não foi salvo.' : `${incomplete} blocos têm campos a corrigir e ainda não foram salvos.`}
           {' '}Blocos não salvos não aparecem na página publicada.
@@ -564,7 +568,7 @@ export default function Vitrine() {
       <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}>
         {/* ── Editor ──────────────────────────────────────────────────────── */}
         <div style={{ flex: 1, minWidth: 0, maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div role="tablist" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, width: 'fit-content', flexWrap: 'wrap' }}>
+          <div role="tablist" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 12, padding: 4, width: 'fit-content', flexWrap: 'wrap' }}>
             {([
               { key: 'blocks' as const, label: `Blocos (${blocks.length})`, Icon: LayoutList },
               { key: 'appearance' as const, label: 'Aparência', Icon: Palette },
@@ -572,9 +576,9 @@ export default function Vitrine() {
             ]).map(t => (
               <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)} style={{
                 display: 'flex', alignItems: 'center', gap: 7,
-                padding: '7px 16px', borderRadius: 7, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
+                padding: '8px 18px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
                 background: tab === t.key ? '#fff' : 'transparent', color: tab === t.key ? '#1e2d6b' : '#64748b',
-                boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+                boxShadow: tab === t.key ? DS.shadowMd : 'none',
               }}><t.Icon size={14} color={tab === t.key ? '#00A896' : '#94a3b8'} /> {t.label}</button>
             ))}
           </div>
@@ -587,11 +591,11 @@ export default function Vitrine() {
                 onChange={social_links => updatePage({ social_links })}
                 onThemeChange={patch => updatePage({ theme: { ...readTheme(page.theme), ...patch } })} />
               {blocks.length === 0 ? (
-                <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '40px 24px', textAlign: 'center' }}>
+                <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: '48px 28px', textAlign: 'center', boxShadow: DS.shadowSm }}>
                   <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                     <Store size={24} color="#00A896" />
                   </div>
-                  <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Monte a página da escola</p>
+                  <p style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: DS.navy, letterSpacing: '-0.01em' }}>Monte a página da escola</p>
                   <p style={{ margin: '0 0 20px', fontSize: 13, color: '#64748b', maxWidth: 440, marginInline: 'auto', lineHeight: 1.6 }}>
                     Adicione os botões e informações que as famílias precisam: WhatsApp, matrícula, redes sociais, endereço e horário.
                   </p>
@@ -600,13 +604,13 @@ export default function Vitrine() {
                       const Icon = BLOCK_ICONS[t]
                       return (
                         <button key={t} type="button" onClick={() => addBlock(t)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}>
+                          className="vit-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', boxShadow: DS.shadowSm, fontSize: 13, fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}>
                           <Icon size={15} color={BLOCK_TYPES[t].color} /> {BLOCK_TYPES[t].label}
                         </button>
                       )
                     })}
                     <button type="button" onClick={() => setShowPicker(true)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: 'none', background: '#00A896', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
+                      className="vit-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: 'none', background: '#00A896', boxShadow: DS.shadowMd, fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
                       <Plus size={15} /> Outros blocos
                     </button>
                   </div>
@@ -633,7 +637,7 @@ export default function Vitrine() {
               )}
               {blocks.length > 0 && (
                 <button type="button" onClick={() => setShowPicker(true)} disabled={blocks.length >= VITRINE_MAX_BLOCKS}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '12px', borderRadius: 14, border: '1.5px dashed #94d8cf', background: '#F0FDFA', color: '#0F766E', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '14px', borderRadius: 16, border: '1.5px dashed #94d8cf', background: '#F0FDFA', color: '#0F766E', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                   <Plus size={15} /> Adicionar bloco
                 </button>
               )}
@@ -700,9 +704,9 @@ export default function Vitrine() {
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
             <button type="button" onClick={() => setDeleteTarget(null)}
-              style={{ padding: '9px 16px', borderRadius: 9, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Cancelar</button>
+              style={{ padding: '10px 18px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Cancelar</button>
             <button type="button" onClick={confirmDelete}
-              style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: '#dc2626', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>Excluir</button>
+              style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: '#dc2626', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(220,38,38,0.18)' }}>Excluir</button>
           </div>
         </Modal>
       )}
@@ -732,9 +736,9 @@ function Modal({ title, children, onClose, narrow, wide }: { title: string; chil
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div role="dialog" aria-modal="true" aria-label={title}
-        style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: narrow ? 440 : wide ? 860 : 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'slideUp 0.2s ease' }}>
+        style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: narrow ? 440 : wide ? 860 : 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'slideUp 0.2s ease' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>{title}</h2>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: DS.navy, letterSpacing: '-0.01em' }}>{title}</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', padding: 4, borderRadius: 6 }}><X size={18} /></button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>{children}</div>

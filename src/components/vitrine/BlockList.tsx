@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { type BlockType, BLOCK_TYPES, blockSummary, blockDetail } from '../../lib/vitrine'
 import BlockForm, { type BlockFormContext } from './BlockForms'
+import { DS } from './ui'
 
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'invalid' | 'error'
 
@@ -60,13 +61,13 @@ export default function BlockList(props: ListProps) {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveKey(null)}>
       <SortableContext items={props.blocks.map(b => b.key)} strategy={verticalListSortingStrategy}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {props.blocks.map(b => <BlockItem key={b.key} block={b} open={props.openKey === b.key} {...props} />)}
         </div>
       </SortableContext>
       <DragOverlay dropAnimation={{ duration: 180, easing: 'cubic-bezier(0.4,0,0.2,1)' }}>
         {active && (
-          <div style={{ ...cardShell(active), boxShadow: '0 18px 40px rgba(15,23,42,.22), 0 4px 10px rgba(0,168,150,.12)', transform: 'rotate(-1deg)', cursor: 'grabbing' }}>
+          <div style={{ ...cardShell(active), boxShadow: DS.shadowXl, transform: 'rotate(-1deg)', cursor: 'grabbing' }}>
             <Header b={active} open={false} ghost />
           </div>
         )}
@@ -85,7 +86,7 @@ function StateBadge({ b }: { b: EditorBlock }) {
 }
 
 const cardShell = (b: EditorBlock): React.CSSProperties => ({
-  background: '#fff', borderRadius: 14, position: 'relative', overflow: 'hidden',
+  background: '#fff', borderRadius: DS.r.lg, position: 'relative', overflow: 'hidden',
   // Borda em propriedades separadas: o arraste troca estilo/cor sem misturar
   // com o atalho "border" (o React avisa que isso quebra estilo).
   borderWidth: 1, borderStyle: 'solid',
@@ -104,29 +105,29 @@ function Header({ b, open, ghost, dragHandle, onToggleOpen, onToggleVisible }: {
     ? b.config.mode === 'whatsapp'
     : b.type === 'whatsapp' && b.config.phone_source !== 'custom' && b.config.track_capture !== false)
   const iconBtn: React.CSSProperties = {
-    width: 30, height: 30, borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff',
+    width: 32, height: 32, borderRadius: DS.r.sm, border: '1px solid #E2E8F0', background: '#fff',
     cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', transition: T,
   }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px 11px 16px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px 14px 18px' }}>
       {/* faixa na cor do tipo */}
       <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: meta.color, opacity: b.is_visible ? 1 : 0.4 }} />
       {dragHandle ?? <span style={{ ...iconBtn, border: 'none', color: '#94a3b8' }}><GripVertical size={16} /></span>}
       <button type="button" onClick={onToggleOpen} aria-expanded={open} tabIndex={ghost ? -1 : undefined}
         style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ width: 38, height: 38, borderRadius: 11, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+        <span style={{ width: 40, height: 40, borderRadius: DS.r.md, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
           <Icon size={17} color={meta.color} />
         </span>
         <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             {meta.label}
             {!b.is_visible && <span style={{ color: '#64748b', textTransform: 'none', letterSpacing: 0 }}>· oculto</span>}
             {tracking && <span title="Gatilho ativo no Captação" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#DB2777', textTransform: 'none', letterSpacing: 0 }}><Megaphone size={11} /> Captação</span>}
           </span>
-          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: DS.navy, letterSpacing: '-0.01em', lineHeight: 1.35, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {blockSummary(b.type, b.config)}
           </span>
-          <span style={{ display: 'block', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
+          <span style={{ display: 'block', fontSize: 12.5, color: DS.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
             {blockDetail(b.type, b.config)}
           </span>
         </span>
@@ -147,7 +148,7 @@ function BlockItem({ block: b, open, onToggleOpen, onChange, onToggleVisible, on
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: b.key })
 
   return (
-    <div ref={setNodeRef} className="vit-card" style={{
+    <div ref={setNodeRef} className={open ? 'vit-card open' : 'vit-card'} style={{
       ...cardShell(b),
       transform: CSS.Transform.toString(transform), transition,
       // Lugar de origem enquanto o bloco "flutua" (DragOverlay).
@@ -157,14 +158,14 @@ function BlockItem({ block: b, open, onToggleOpen, onChange, onToggleVisible, on
         onToggleOpen={() => onToggleOpen(b.key)} onToggleVisible={() => onToggleVisible(b.key)}
         dragHandle={
           <button ref={setActivatorNodeRef} {...attributes} {...listeners} type="button" aria-label="Arrastar para reordenar"
-            style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', touchAction: 'none' }}>
+            style={{ width: 32, height: 32, borderRadius: DS.r.sm, border: 'none', background: 'transparent', cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', touchAction: 'none' }}>
             <GripVertical size={16} />
           </button>
         } />
 
       {open && (
-        <div style={{ padding: '4px 16px 16px 20px', borderTop: '1px solid #F1F5F9', animation: 'slideUp 0.2s ease' }}>
-          <div style={{ paddingTop: 14 }}>
+        <div style={{ padding: '4px 20px 20px 22px', borderTop: '1px solid #F1F5F9', animation: 'slideUp 0.2s ease' }}>
+          <div style={{ paddingTop: 18 }}>
             <BlockForm type={b.type} config={b.config} ctx={formCtx(b)} onChange={patch => onChange(b.key, patch)} />
           </div>
           {b.error && (
@@ -172,13 +173,13 @@ function BlockItem({ block: b, open, onToggleOpen, onChange, onToggleVisible, on
               <AlertCircle size={14} style={{ flex: 'none', marginTop: 1 }} /> {b.error}
             </p>
           )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid #F1F5F9', justifyContent: 'flex-end' }}>
             <button type="button" onClick={() => onDuplicate(b.key)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#475569', cursor: 'pointer', transition: T }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: DS.r.sm, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer', transition: T }}>
               <Copy size={13} /> Duplicar
             </button>
             <button type="button" onClick={() => onDelete(b.key)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #FECACA', background: '#fff', fontSize: 12, fontWeight: 600, color: '#dc2626', cursor: 'pointer', transition: T }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: DS.r.sm, border: '1px solid #FECACA', background: '#fff', fontSize: 13, fontWeight: 600, color: '#dc2626', cursor: 'pointer', transition: T }}>
               <Trash2 size={13} /> Excluir
             </button>
           </div>

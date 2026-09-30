@@ -9,6 +9,7 @@ import { DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, close
 import { SortableContext, useSortable, verticalListSortingStrategy, sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ChevronDown, Copy, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { DS } from './ui'
 
 let keySeq = 0
 const newKey = () => `it-${++keySeq}`
@@ -75,7 +76,7 @@ export default function ItemListEditor<T>({
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={keys} strategy={verticalListSortingStrategy}>
-          <div role="list" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div role="list" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {items.map((item, i) => (
               <Item key={keys[i]} id={keys[i]} label={itemLabel(item, i)} thumb={thumb?.(item)} noun={noun}
                 open={!collapsible || openKey === keys[i]} collapsible={collapsible}
@@ -89,7 +90,7 @@ export default function ItemListEditor<T>({
       </DndContext>
       {items.length < max && (addSlot ?? (newItem && (
         <button type="button" onClick={add}
-          style={{ marginTop: 8, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 10, borderRadius: 10,
+          style={{ marginTop: 10, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 12, borderRadius: DS.r.md,
             border: '1.5px dashed #94d8cf', background: '#F0FDFA', color: '#0F766E', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: T }}>
           <Plus size={14} /> {addLabel || `Adicionar ${noun}`}
         </button>
@@ -107,8 +108,8 @@ function Item({ id, label, thumb, noun, open, collapsible, onToggle, onRemove, o
   return (
     <div role="listitem" ref={setNodeRef} style={{
       transform: CSS.Transform.toString(transform), transition, position: 'relative', zIndex: isDragging ? 5 : undefined,
-      background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12,
-      boxShadow: isDragging ? '0 12px 28px rgba(15,23,42,.16)' : 'none',
+      background: '#fff', border: '1px solid #E2E8F0', borderRadius: DS.r.md,
+      boxShadow: isDragging ? DS.shadowLg : DS.shadowSm,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8 }}>
         <button ref={setActivatorNodeRef} {...attributes} {...listeners} type="button" aria-label={`Arrastar ${noun}`}

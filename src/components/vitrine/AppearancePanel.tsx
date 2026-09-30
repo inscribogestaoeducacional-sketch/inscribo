@@ -8,7 +8,7 @@ import {
   type VitrinePageRow, type VitrineTheme, type ButtonStyle,
   FONT_PAIRS, HEX_RE, IMAGE_WIDTH, contrastRatio, currentFontPair, readTheme,
 } from '../../lib/vitrine'
-import { Field, TextInput, TextArea, Segmented, ImagePicker, cardStyle, hintStyle } from './ui'
+import { Field, TextInput, TextArea, Segmented, ImagePicker, cardStyle, hintStyle, sectionTitleStyle } from './ui'
 
 interface Props {
   page: VitrinePageRow
@@ -43,8 +43,8 @@ const SAMPLE_FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Inter:wght@4
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section style={{ ...cardStyle, padding: 20 }}>
-      <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>{title}</h3>
+    <section style={{ ...cardStyle, padding: 24 }}>
+      <h3 style={{ ...sectionTitleStyle, margin: '0 0 18px' }}>{title}</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>{children}</div>
     </section>
   )
@@ -93,7 +93,7 @@ function Choice({ selected, onClick, children, label }: { selected: boolean; onC
     <button type="button" role="radio" aria-checked={selected} aria-label={label} onClick={onClick}
       style={{
         textAlign: 'left', padding: 12, borderRadius: 12, cursor: 'pointer', background: '#fff', minWidth: 0,
-        border: selected ? '2px solid #00A896' : '1px solid #e2e8f0', boxShadow: selected ? '0 0 0 3px #CCFBF1' : 'none',
+        border: selected ? '2px solid #00A896' : '1px solid #e2e8f0', boxShadow: selected ? '0 0 0 3px #CCFBF1' : '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)',
       }}>
       {children}
     </button>

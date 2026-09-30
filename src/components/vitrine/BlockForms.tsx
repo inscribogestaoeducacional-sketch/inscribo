@@ -42,7 +42,7 @@ function fmtPhone(p: string | null) {
 }
 
 function Grid({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>{children}</div>
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>{children}</div>
 }
 
 function Warn({ children }: { children: React.ReactNode }) {

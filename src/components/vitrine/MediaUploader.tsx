@@ -44,7 +44,7 @@ export default function MediaUploader({
   const circle = shape === 'circle'
   const box: React.CSSProperties = circle
     ? { width: height, height, borderRadius: '50%', flex: 'none' }
-    : aspect ? { width: '100%', aspectRatio: String(aspect), borderRadius: 14 } : { width: '100%', height, borderRadius: 14 }
+    : aspect ? { width: '100%', aspectRatio: String(aspect), borderRadius: 16 } : { width: '100%', height, borderRadius: 16 }
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

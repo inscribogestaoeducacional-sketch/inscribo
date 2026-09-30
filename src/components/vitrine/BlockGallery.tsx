@@ -15,6 +15,7 @@ const GROUPS: { title: string; hint: string; types: BlockType[] }[] = [
 ]
 
 const T = 'all 0.18s cubic-bezier(0.4,0,0.2,1)'
+const SH_SM = '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)'   // --shadow-sm do Áion
 
 // Miniatura de cada tipo (80 × 52), nas cores do próprio tipo.
 function Mini({ type }: { type: BlockType }) {
@@ -69,22 +70,22 @@ function Mini({ type }: { type: BlockType }) {
 
 export default function BlockGallery({ onPick }: { onPick: (type: BlockType) => void }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {GROUPS.map(g => (
         <section key={g.title} aria-labelledby={`bg-${g.title}`}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
             <h3 id={`bg-${g.title}`} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1e2d6b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{g.title}</h3>
             <span style={{ fontSize: 12, color: '#94a3b8' }}>{g.hint}</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
             {g.types.map(t => {
               const meta = BLOCK_TYPES[t]
               const Icon = BLOCK_ICONS[t]
               return (
                 <button key={t} type="button" onClick={() => onPick(t)} className="vit-pick"
-                  style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 10, borderRadius: 14, border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: T }}
+                  style={{ display: 'flex', gap: 14, alignItems: 'center', padding: 12, borderRadius: 16, border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: T, boxShadow: SH_SM }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = meta.color; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,168,150,0.10), 0 2px 4px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}>
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = SH_SM; e.currentTarget.style.transform = 'none' }}>
                   <span aria-hidden="true" style={{ display: 'contents' }}><Mini type={t} /></span>
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#1e293b' }}>

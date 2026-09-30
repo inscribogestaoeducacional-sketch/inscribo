@@ -4,17 +4,39 @@
 import React, { useId } from 'react'
 import MediaUploader from './MediaUploader'
 
+// Tokens do design system do Áion (src/index.css): as mesmas sombras em
+// duas camadas com tom teal, a escala de raios 8/12/16/20 e a transição do
+// resto do painel. Todo o editor da Vitrine usa estes valores.
+export const DS = {
+  shadowSm: '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)',
+  shadowMd: '0 4px 16px rgba(0,168,150,0.10), 0 2px 4px rgba(0,0,0,0.04)',
+  shadowLg: '0 8px 24px rgba(0,168,150,0.12), 0 4px 8px rgba(0,0,0,0.04)',
+  // Janelas e a moldura da prévia: a "lg" um degrau mais funda.
+  shadowXl: '0 24px 48px rgba(15,23,42,0.14), 0 8px 16px rgba(0,168,150,0.08)',
+  focusRing: '0 0 0 3px rgba(0,168,150,0.14)',
+  r: { sm: 8, md: 12, lg: 16, xl: 20 },
+  ease: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
+  navy: '#1A2B4A', text: '#1e293b', muted: '#64748B', faint: '#94A3B8', border: '#E2E8F0',
+} as const
+
 export const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 600, color: '#475569',
-  marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em',
+  marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em',
 }
 export const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '9px 12px', borderRadius: 9,
-  border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none',
-  background: '#FAFAFA', boxSizing: 'border-box', color: '#1e293b', fontFamily: 'inherit',
+  width: '100%', padding: '10px 14px', borderRadius: DS.r.md,
+  border: `1.5px solid ${DS.border}`, fontSize: 14, outline: 'none', lineHeight: 1.4,
+  background: '#FAFAFA', boxSizing: 'border-box', color: DS.text, fontFamily: 'inherit',
+  transition: 'border-color .18s cubic-bezier(0.4,0,0.2,1), box-shadow .18s cubic-bezier(0.4,0,0.2,1), background-color .18s cubic-bezier(0.4,0,0.2,1)',
 }
-export const hintStyle: React.CSSProperties = { margin: '4px 0 0', fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }
-export const cardStyle: React.CSSProperties = { background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0' }
+export const hintStyle: React.CSSProperties = { margin: '6px 0 0', fontSize: 12, color: DS.faint, lineHeight: 1.55 }
+export const cardStyle: React.CSSProperties = { background: '#fff', borderRadius: DS.r.xl, border: `1px solid ${DS.border}`, boxShadow: DS.shadowSm }
+// Título de seção dentro de um painel (Identidade, Fundo, Endereço...).
+export const sectionTitleStyle: React.CSSProperties = { margin: 0, fontSize: 15, fontWeight: 700, color: DS.navy, letterSpacing: '-0.01em' }
+
+// Foco dos campos: borda teal + anel suave (padrão dos formulários do Áion).
+const focusOn = (el: HTMLElement) => { el.style.borderColor = '#00A896'; el.style.boxShadow = DS.focusRing; el.style.background = '#fff' }
+const focusOff = (el: HTMLElement) => { el.style.borderColor = DS.border; el.style.boxShadow = 'none'; el.style.background = '#FAFAFA' }
 
 // O rótulo aponta pro campo (htmlFor/id) quando o filho é um input/textarea/
 // select — leitor de tela anuncia o nome do campo e o clique no rótulo foca.
@@ -46,14 +68,14 @@ export function Field({ label, hint, children, counter }: {
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} style={{ ...inputStyle, ...(props.style || {}) }}
-    onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; props.onFocus?.(e) }}
-    onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; props.onBlur?.(e) }} />
+    onFocus={e => { focusOn(e.currentTarget); props.onFocus?.(e) }}
+    onBlur={e => { focusOff(e.currentTarget); props.onBlur?.(e) }} />
 }
 
 export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5, ...(props.style || {}) }}
-    onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; props.onFocus?.(e) }}
-    onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; props.onBlur?.(e) }} />
+  return <textarea {...props} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.55, ...(props.style || {}) }}
+    onFocus={e => { focusOn(e.currentTarget); props.onFocus?.(e) }}
+    onBlur={e => { focusOff(e.currentTarget); props.onBlur?.(e) }} />
 }
 
 export function Toggle({ checked, onChange, label, description, disabled }: {
@@ -65,14 +87,14 @@ export function Toggle({ checked, onChange, label, description, disabled }: {
         onClick={() => onChange(!checked)}
         style={{
           flex: 'none', width: 36, height: 20, borderRadius: 999, border: 'none', padding: 2, marginTop: 1,
-          background: checked ? '#00A896' : '#CBD5E1', cursor: 'inherit', transition: 'background .15s',
+          background: checked ? '#00A896' : '#CBD5E1', cursor: 'inherit', transition: DS.ease,
           display: 'flex', justifyContent: checked ? 'flex-end' : 'flex-start',
         }}>
         <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.2)' }} />
       </button>
       <span>
-        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{label}</span>
-        {description && <span style={{ display: 'block', fontSize: 12, color: '#64748b', lineHeight: 1.5, marginTop: 2 }}>{description}</span>}
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: DS.text }}>{label}</span>
+        {description && <span style={{ display: 'block', fontSize: 12, color: DS.muted, lineHeight: 1.55, marginTop: 2 }}>{description}</span>}
       </span>
     </label>
   )
@@ -82,15 +104,15 @@ export function Segmented<T extends string | number>({ value, options, onChange 
   value: T; options: { value: T; label: string }[]; onChange: (v: T) => void
 }) {
   return (
-    <div role="radiogroup" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, flexWrap: 'wrap' }}>
+    <div role="radiogroup" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: DS.r.md, padding: 4, flexWrap: 'wrap' }}>
       {options.map(o => {
         const sel = o.value === value
         return (
           <button key={String(o.value)} type="button" role="radio" aria-checked={sel} onClick={() => onChange(o.value)}
             style={{
-              flex: '1 1 auto', padding: '6px 12px', borderRadius: 7, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              background: sel ? '#fff' : 'transparent', color: sel ? '#1e2d6b' : '#64748b',
-              boxShadow: sel ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+              flex: '1 1 auto', padding: '8px 12px', borderRadius: DS.r.sm, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              background: sel ? '#fff' : 'transparent', color: sel ? DS.navy : DS.muted,
+              boxShadow: sel ? DS.shadowMd : 'none', transition: DS.ease,
             }}>
             {o.label}
           </button>
