@@ -448,6 +448,14 @@ export default function Vitrine() {
     wasBusy.current = busy
   }, [busy]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Um bloco novo com problema tira o "Salvo agora" na hora: o aviso de
+  // incompleto não pode esperar a confirmação anterior sumir.
+  const prevIncomplete = useRef(incomplete)
+  useEffect(() => {
+    if (incomplete > prevIncomplete.current) setJustSaved(false)
+    prevIncomplete.current = incomplete
+  }, [incomplete])
+
   // Clique num bloco da prévia abre a edição dele (postMessage do iframe
   // isolado; só aceita mensagem do próprio iframe e id de bloco existente).
   useEffect(() => {
