@@ -22,6 +22,9 @@ export interface VitrinePage {
   theme: Record<string, unknown> | null
   seo_description: string | null
   social_links?: unknown   // [{network, handle}] — fileira de redes do topo
+  floating_block_id?: string | null   // bloco de WhatsApp que vira botão flutuante
+  show_share?: boolean                // botão "compartilhar" (ausente = ligado)
+  social_position?: 'top' | 'bottom'  // fileira de redes no topo ou no rodapé
   institution_name: string | null
 }
 
@@ -201,6 +204,7 @@ const ICON = {
   clock:    '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 7v5l3 2"/></svg>',
   school:   '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 9l10-5 10 5-10 5L2 9zm4 2.2V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-4.8"/></svg>',
   pdf:      '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5zm0 0v5h5M9 13h6M9 17h4"/></svg>',
+  share:    '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12M7 8l5-5 5 5M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>',
   contact:  '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm10-2v6m3-3h-6"/></svg>',
 }
 
@@ -469,6 +473,20 @@ if(!a||e.defaultPrevented||e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.alt
 var f=document.createElement('iframe');f.src='https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&playsinline=1&rel=0';f.title=a.getAttribute('aria-label')||'Vídeo';
 f.allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';f.allowFullscreen=true;
 var d=document.createElement('div');d.className='frame';d.appendChild(f);a.parentNode.replaceChild(d,a)});`
+
+// WhatsApp flutuante: some enquanto o bloco de origem está na tela (evita
+// dois botões iguais lado a lado) e volta ao rolar.
+const FAB_SCRIPT = `(function(){var f=document.querySelector('.fab');if(!f||!('IntersectionObserver' in window))return;
+var src=document.querySelector('main [data-b="'+f.getAttribute('data-b')+'"]');if(!src)return;
+new IntersectionObserver(function(es){es.forEach(function(x){f.classList.toggle('off',x.isIntersecting)})},{threshold:0.4}).observe(src)})();`
+
+// Compartilhar: menu nativo do celular; sem ele (computador), copia o link e
+// avisa. Cancelar o menu não é erro.
+const SHARE_SCRIPT = `(function(){var b=document.querySelector('.share'),t=document.querySelector('.toast');if(!b)return;b.hidden=false;var tm;
+function say(m){if(!t)return;t.textContent=m;t.hidden=false;t.classList.add('in');clearTimeout(tm);tm=setTimeout(function(){t.classList.remove('in');setTimeout(function(){t.hidden=true},250)},2200)}
+b.addEventListener('click',function(){var u=b.getAttribute('data-url'),ti=b.getAttribute('data-title');
+if(navigator.share){navigator.share({title:ti,url:u}).catch(function(){});return}
+if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(function(){say('Link copiado')},function(){say(u)})}else say(u)})})();`
 
 // Mapa com várias unidades: mostra os botões "Ver no mapa" e troca o mapa.
 const MAP_SCRIPT = `document.querySelectorAll('.map.multi').forEach(function(s){var f=s.querySelector('iframe');
@@ -1001,6 +1019,25 @@ a.banner:focus-visible{outline:3px solid ${accent};outline-offset:3px}
 html.cnt b[data-v]:not(.go){opacity:0;animation:cntsafe 0s 3s forwards}
 @keyframes cntsafe{to{opacity:1}}
 footer{margin-top:40px;text-align:center;font-size:12px;color:${muted}}
+.social.bottom{margin-top:36px}
+.wrap{position:relative}
+.share{position:absolute;top:14px;right:16px;z-index:2;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.7);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;
+background:rgba(255,255,255,.88);color:#1A2B4A;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:${SH.sm};transition:transform .18s ${ease},box-shadow .18s ${ease}}
+.share[hidden]{display:none}
+.share svg{width:18px;height:18px}
+.share:hover{transform:translateY(-1px);box-shadow:${SH.md}}
+.share:focus-visible{outline:3px solid ${accent};outline-offset:3px}
+.has-fab .wrap{padding-bottom:104px}
+.fab{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));z-index:20;width:58px;height:58px;border-radius:50%;background:#25D366;color:#fff;display:flex;align-items:center;justify-content:center;
+box-shadow:0 8px 24px rgba(37,211,102,.38),0 2px 6px rgba(0,0,0,.16);transition:transform .25s ${ease},opacity .25s ${ease},box-shadow .18s ${ease};animation:fabin .4s ${ease} .6s backwards}
+.fab svg{width:30px;height:30px}
+.fab:hover{transform:translateY(-2px) scale(1.04);box-shadow:0 12px 28px rgba(37,211,102,.45),0 4px 8px rgba(0,0,0,.16)}
+.fab:focus-visible{outline:3px solid #25D366;outline-offset:4px}
+.fab.off{opacity:0;transform:scale(.7);pointer-events:none}
+@keyframes fabin{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+@media(min-width:600px){.fab{right:max(28px,calc(50vw - 330px))}}
+.toast{position:fixed;left:50%;bottom:calc(max(18px,env(safe-area-inset-bottom)) + 76px);transform:translate(-50%,8px);z-index:30;max-width:calc(100% - 32px);padding:10px 16px;border-radius:12px;background:#1A2B4A;color:#fff;font-size:14px;font-weight:600;box-shadow:0 12px 32px rgba(15,23,42,.24);opacity:0;transition:opacity .25s ${ease},transform .25s ${ease};overflow-wrap:anywhere}
+.toast.in{opacity:1;transform:translate(-50%,0)}
 footer .made{display:inline-flex;align-items:center;gap:4px;padding:6px 14px;border-radius:999px;border:1px solid ${edge}}
 footer a{color:${t.text};text-decoration:none;font-weight:700}
 ${t.animation !== 'none' ? `
@@ -1040,7 +1077,7 @@ try{if(document.referrer){var h=new URL(document.referrer).hostname;if(h!==locat
 var ua=navigator.userAgent,dev=/iPad|Tablet/i.test(ua)?'tablet':(/Mobi|Android|iPhone/i.test(ua)?'mobile':'desktop');
 function send(b,ev,tg){try{var d={p_page_id:P,p_block_id:b,p_event:ev,p_visitor_id:V,p_referrer_host:ref,p_utm_source:q.get('utm_source'),p_utm_medium:q.get('utm_medium'),p_utm_campaign:q.get('utm_campaign'),p_device:dev};if(tg)d.p_target=tg;fetch(U+'/rest/v1/rpc/vitrine_track',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json',apikey:K,Authorization:'Bearer '+K},body:JSON.stringify(d)}).catch(function(){})}catch(e){}}
 send(null,'view');
-document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[data-b],a[data-s]');if(!a)return;var s=a.getAttribute('data-s');if(s)send(null,'click','social:'+s);else send(a.getAttribute('data-b'),'click')},true);
+document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[data-b],a[data-s],button[data-t]');if(!a)return;var s=a.getAttribute('data-s'),tg=a.getAttribute('data-t');if(tg)send(null,'click',tg);else if(s)send(null,'click','social:'+s);else send(a.getAttribute('data-b'),'click')},true);
 })();`
 }
 
@@ -1093,6 +1130,27 @@ export function renderVitrinePage(data: VitrinePublicData, opts: RenderOptions):
   const base = opts.preview ? '<base target="_blank">' : ''
   const themeColor = t.bgType === 'image' && t.bgOverlayTone === 'dark' ? '#000000' : t.background
 
+  // WhatsApp flutuante: reusa um bloco de WhatsApp (ou matrícula por
+  // WhatsApp) que ESTÁ na página — mesma mensagem, mesmo gatilho do
+  // Captação, clique contado no mesmo bloco. Bloco oculto ou sem número =
+  // sem flutuante.
+  const fb = p.floating_block_id ? (data.blocks || []).find(b => b.id === p.floating_block_id) : null
+  const fbHref = fb && (fb.type === 'whatsapp' || (fb.type === 'enroll' && fb.config?.mode === 'whatsapp'))
+    ? waMeLink(fb.config.phone, fb.config.message) : null
+  const fab = fb && fbHref
+    ? `<a class="fab" href="${esc(fbHref)}" data-b="${esc(fb.id)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(fb.config.label || 'Conversar no WhatsApp')}" title="${esc(fb.config.label || 'Conversar no WhatsApp')}">${ICON.whatsapp}</a>`
+    : ''
+  // Compartilhar: menu do celular (Web Share) ou copia o link. O link leva
+  // utm_source=compartilhar (a visita chega marcada no painel). Sem JS o
+  // botão não faria nada: fica escondido até o script ligar (na prévia,
+  // aparece pra escola ver).
+  const shareUrl = `${url}?utm_source=compartilhar&utm_medium=vitrine`
+  const share = p.show_share !== false
+    ? `<button type="button" class="share" data-t="share" data-url="${esc(shareUrl)}" data-title="${esc(name)}" aria-label="Compartilhar esta página"${opts.preview ? '' : ' hidden'}>${ICON.share}</button>`
+    : ''
+  const socialRow = topSocialRow(p.social_links)
+  const socialBottom = p.social_position === 'bottom'
+
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -1124,26 +1182,32 @@ ${animate ? ANIM_HEAD : ''}
 ${counting ? COUNT_HEAD : ''}
 ${jsonLd}
 </head>
-<body class="${cover ? 'has-cover' : ''}">
+<body class="${[cover ? 'has-cover' : '', fab ? 'has-fab' : ''].filter(Boolean).join(' ')}">
 ${t.bgType !== 'solid' ? '<div class="bgl" aria-hidden="true"></div>' : ''}
 <div class="wrap">
+${share}
 ${cover ? `<img class="cover" src="${esc(cover)}" alt="">` : ''}
 <header>
 ${logo ? `<img class="logo" src="${esc(logo)}" alt="Logo ${esc(name)}">` : ''}
 <h1>${esc(name)}</h1>
 ${p.bio ? `<p class="bio">${esc(p.bio)}</p>` : ''}
-${topSocialRow(p.social_links)}
+${socialBottom ? '' : socialRow}
 </header>
 <main>
 ${blocks}
 </main>
+${socialBottom && socialRow ? socialRow.replace('class="social top"', 'class="social bottom"') : ''}
 <footer><span class="made">Página criada com <a href="${esc(opts.siteUrl)}/?utm_source=vitrine&amp;utm_medium=rodape" target="_blank" rel="noopener">Áion Edu</a></span></footer>
 </div>
+${fab}
+${share ? '<div class="toast" role="status" aria-live="polite" hidden></div>' : ''}
 ${animate ? `<script>${animScript(t.animation === 'lively' ? 70 : 40)}</script>` : ''}
 ${videoScript}
 ${hoursJs}
 ${mapJs}
 ${counting ? `<script>${COUNT_SCRIPT}</script>` : ''}
+${fab && !opts.preview ? `<script>${FAB_SCRIPT}</script>` : ''}
+${share && !opts.preview ? `<script>${SHARE_SCRIPT}</script>` : ''}
 ${script}
 </body>
 </html>`
