@@ -577,3 +577,64 @@ export function scheduleLabel(from: string | null | undefined, until: string | n
   if (st === 'future') return until ? `De ${fmtWhen(from!)} até ${fmtWhen(until)}` : `A partir de ${fmtWhen(from!)}`
   return until ? `No ar até ${fmtWhen(until)}` : null
 }
+
+// ── Modelos prontos (Entrega 2) ─────────────────────────────────────────────
+// Um modelo é um visual completo (tema) + blocos sugeridos pra página vazia.
+// Trocar de modelo muda SÓ o visual: blocos, textos e imagens ficam. Todos
+// partem da cor principal atual da escola; o tema final sempre passa na
+// validação do banco (chaves e listas de 20260929090000/20260929110000).
+export type TemplateKey = 'essencial' | 'vibrante' | 'institucional' | 'matriculas'
+export interface TemplateInfo { key: TemplateKey; name: string; description: string; starter: BlockType[] }
+export const TEMPLATES: TemplateInfo[] = [
+  { key: 'essencial', name: 'Essencial', description: 'Claro e limpo, com a cor da escola nos botões. Combina com tudo.', starter: ['whatsapp', 'enroll', 'map', 'hours'] },
+  { key: 'vibrante', name: 'Vibrante', description: 'Fundo em degradê na cor da escola, botões de vidro e letras arredondadas.', starter: ['enroll', 'whatsapp', 'faq', 'map'] },
+  { key: 'institucional', name: 'Institucional', description: 'Sóbrio e elegante, com título clássico. Bom pra escolas tradicionais.', starter: ['text', 'contact', 'map', 'hours'] },
+  { key: 'matriculas', name: 'Matrículas', description: 'Tudo leva pro botão de matrícula, que pulsa. Ideal em época de campanha.', starter: ['enroll', 'whatsapp', 'faq', 'hours'] },
+]
+
+function hexMix(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16)
+  const ch = (s: number) => Math.round(((pa >> s) & 255) * t + ((pb >> s) & 255) * (1 - t))
+  return '#' + [16, 8, 0].map(s => ch(s).toString(16).padStart(2, '0')).join('').toUpperCase()
+}
+
+// Tema do modelo a partir do tema atual (só a cor principal e o formato da
+// logo são aproveitados — o resto é do modelo).
+export function templateTheme(key: TemplateKey, current: Partial<VitrineTheme> | null | undefined): VitrineTheme {
+  const cur = readTheme(current)
+  const primary = HEX_RE.test(cur.primary) ? cur.primary.toUpperCase() : '#00A896'
+  const keep = { logo_shape: cur.logo_shape || 'circle', template: key } as const
+  switch (key) {
+    case 'essencial':
+      return { ...keep, primary, background: '#FFFFFF', text: '#111827', button_style: 'filled', radius: 16, font_pair: 'inter',
+        bg_type: 'solid', shadow: 'soft', spacing: 'normal', card_style: 'bordered', animation: 'subtle', social_style: 'brand' }
+    case 'vibrante': {
+      // Degradê escurecido até o branco do texto ter contraste (≥ 4,5:1 nas
+      // duas pontas), mesmo com cor principal clara (ex.: amarelo).
+      let from = hexMix(primary, '#000000', 0.9), to = hexMix(primary, '#000000', 0.62)
+      for (let t = 0.9; t > 0.3 && contrastRatio('#FFFFFF', from) < 4.5; t -= 0.05) from = hexMix(primary, '#000000', t)
+      for (let t = 0.62; t > 0.2 && contrastRatio('#FFFFFF', to) < 4.5; t -= 0.05) to = hexMix(primary, '#000000', t)
+      return { ...keep, primary: '#FFFFFF', background: from, text: '#FFFFFF', button_style: 'glass', radius: 999, font_pair: 'fredoka-nunito',
+        bg_type: 'gradient', bg_gradient_to: to, bg_gradient_angle: 135, shadow: 'strong', spacing: 'relaxed', card_style: 'flat', animation: 'lively', social_style: 'theme' }
+    }
+    case 'institucional': {
+      // Cor principal escurecida o bastante pro texto branco do botão.
+      let p = primary
+      for (let t = 1; t > 0.3 && contrastRatio('#FFFFFF', p) < 4.5; t -= 0.05) p = hexMix(primary, '#000000', t)
+      return { ...keep, primary: p, background: '#F8FAFC', text: '#1E293B', button_style: 'outline', radius: 8, font_pair: 'merriweather-dmsans',
+        bg_type: 'solid', shadow: 'none', spacing: 'normal', card_style: 'elevated', animation: 'none', social_style: 'plain' }
+    }
+    case 'matriculas':
+      return { ...keep, primary, background: hexMix(primary, '#FFFFFF', 0.08), text: '#111827', button_style: 'filled', radius: 999, font_pair: 'poppins',
+        bg_type: 'solid', shadow: 'strong', spacing: 'relaxed', card_style: 'elevated', animation: 'lively', social_style: 'theme' }
+  }
+}
+
+// Config inicial dos blocos sugeridos de um modelo (matrícula pulsa no
+// modelo Matrículas). Blocos que precisam de conteúdo da escola (ex.: FAQ,
+// "Sobre") entram incompletos — o editor mostra o que falta preencher.
+export function templateStarterConfig(key: TemplateKey, type: BlockType, ctx: { address?: string | null; placeName?: string | null }): Record<string, any> {
+  const c = defaultConfig(type, ctx)
+  if (type === 'enroll' && (key === 'matriculas' || key === 'vibrante')) c.effect = 'pulse'
+  return c
+}

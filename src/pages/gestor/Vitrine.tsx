@@ -20,7 +20,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Store, Plus, Check, ExternalLink, Loader2, Eye, EyeOff, X, AlertCircle, AlertTriangle, Smartphone, Copy, Play,
-  Monitor, LayoutList, Palette, SlidersHorizontal, Globe, Layers, MousePointerClick, Users, Share2, BarChart3,
+  Monitor, LayoutList, Palette, SlidersHorizontal, Globe, Layers, MousePointerClick, Users, Share2, BarChart3, LayoutTemplate,
 } from 'lucide-react'
 import { arrayMove } from '@dnd-kit/sortable'
 import { useAuth } from '../../contexts/AuthContext'
@@ -29,11 +29,13 @@ import {
   type BlockType, type VitrineBlockRow, type VitrinePageRow,
   BLOCK_TYPES, blockSummary, scheduleState, fmtWhen, VITRINE_MAX_BLOCKS, defaultConfig, validateBlock, buildPreviewData,
   blockImageUrls, removeVitrineImage, publicUrl, VITRINE_SITE_URL, readTheme,
+  type TemplateKey, TEMPLATES, templateTheme, templateStarterConfig,
 } from '../../lib/vitrine'
 import { renderVitrinePage } from '../../../api/_lib/vitrineRender'
 import BlockList, { type EditorBlock, BLOCK_ICONS } from '../../components/vitrine/BlockList'
 import BlockGallery from '../../components/vitrine/BlockGallery'
 import BlockEditor from '../../components/vitrine/BlockEditor'
+import TemplatePicker from '../../components/vitrine/TemplatePicker'
 import { KpiCard } from '../../components/transmissoes/ui'
 import AppearancePanel from '../../components/vitrine/AppearancePanel'
 import SettingsPanel from '../../components/vitrine/SettingsPanel'
@@ -90,7 +92,7 @@ export default function Vitrine() {
   const [scheduleDraft, setScheduleDraft] = useState<{ key: string; from: string | null; until: string | null } | null>(null)
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
-  const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null)
+  const [toast, setToast] = useState<{ msg: string; error?: boolean; action?: { label: string; onClick: () => void } } | null>(null)
   const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1180)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [device, setDevice] = useState<'mobile' | 'desktop'>('mobile')
@@ -110,9 +112,9 @@ export default function Vitrine() {
   useEffect(() => { pageRef.current = page }, [page])
   useEffect(() => { blocksRef.current = blocks }, [blocks])
 
-  const showToast = useCallback((msg: string, error = false) => {
-    setToast({ msg, error })
-    setTimeout(() => setToast(t => (t?.msg === msg ? null : t)), error ? 6000 : 3500)
+  const showToast = useCallback((msg: string, error = false, action?: { label: string; onClick: () => void }) => {
+    setToast({ msg, error, action })
+    setTimeout(() => setToast(t => (t?.msg === msg ? null : t)), error ? 6000 : action ? 8000 : 3500)
   }, [])
 
   useEffect(() => {
@@ -304,6 +306,31 @@ export default function Vitrine() {
     setPickerAt(undefined)
     setTab('blocks')
     if (!invalid) enqueueBlock(nb.key, 0)
+  }
+
+  // Modelo pronto: troca só o tema (Desfazer volta o anterior). Na página
+  // vazia, pode criar os blocos sugeridos do modelo de uma vez.
+  function applyTemplate(key: TemplateKey, withStarter: boolean) {
+    if (!page) return
+    const prevTheme = page.theme
+    updatePage({ theme: templateTheme(key, page.theme) as any })
+    let added = 0
+    if (withStarter) {
+      const tpl = TEMPLATES.find(t => t.key === key)!
+      const nbs: EditorBlock[] = tpl.starter.map(type => {
+        const cfg = templateStarterConfig(key, type, { address: institution.address, placeName: institution.name })
+        const invalid = validateBlock(type, cfg)
+        return { key: tempKey(), id: null, type, config: cfg, is_visible: true, capture_trigger_id: null, state: invalid ? 'invalid' : 'dirty', error: null }
+      })
+      const next = [...blocksRef.current, ...nbs]
+      blocksRef.current = next
+      setBlocks(next)
+      nbs.filter(b => b.state !== 'invalid').forEach((b, i) => enqueueBlock(b.key, i * 150))
+      added = nbs.length
+    }
+    const name = TEMPLATES.find(t => t.key === key)!.name
+    showToast(added ? `Modelo ${name} aplicado, com ${added} blocos sugeridos.` : `Modelo ${name} aplicado.`, false,
+      { label: 'Desfazer', onClick: () => updatePage({ theme: prevTheme }) })
   }
 
   function duplicateBlock(key: string) {
@@ -642,7 +669,13 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
           background: toast.error ? '#991B1B' : '#1e2d6b', color: 'white', fontSize: 13, fontWeight: 500,
           padding: '14px 18px', borderRadius: 12, boxShadow: '0 12px 32px rgba(15,23,42,0.22), 0 4px 8px rgba(0,0,0,0.06)', display: 'flex', gap: 8, alignItems: 'flex-start', animation: 'slideInRight 0.2s ease',
         }}>
-          {toast.error ? <AlertCircle size={15} style={{ flex: 'none', marginTop: 1 }} /> : <Check size={15} style={{ flex: 'none', marginTop: 1 }} />} {toast.msg}
+          {toast.error ? <AlertCircle size={15} style={{ flex: 'none', marginTop: 1 }} /> : <Check size={15} style={{ flex: 'none', marginTop: 1 }} />} <span style={{ flex: 1 }}>{toast.msg}</span>
+          {toast.action && (
+            <button type="button" onClick={() => { toast.action!.onClick(); setToast(null) }}
+              style={{ flex: 'none', marginLeft: 8, padding: '2px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              {toast.action.label}
+            </button>
+          )}
         </div>
       )}
 
@@ -791,6 +824,12 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                         <Plus size={15} /> Outros blocos
                       </button>
                     </div>
+                    <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+                      <button type="button" onClick={() => goTab('appearance')} className="vit-ghost"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 600, color: '#00A896', cursor: 'pointer' }}>
+                        <LayoutTemplate size={15} /> Ou comece com um modelo pronto
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <BlockList blocks={blocks} flashKey={flashKey} enterKey={null}
@@ -807,6 +846,9 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                 position={page.social_position === 'bottom' ? 'bottom' : 'top'} onPositionChange={social_position => updatePage({ social_position })} />
             )}
 
+            {tab === 'appearance' && (
+              <TemplatePicker page={page} blocks={blocks} schoolPhone={schoolPhone} institutionName={institution.name} onApply={applyTemplate} />
+            )}
             {tab === 'appearance' && (
               <AppearancePanel page={page} institution={institution} institutionId={institutionId}
                 onChange={updatePage} onError={msg => showToast(msg, true)} />
