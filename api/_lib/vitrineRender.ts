@@ -326,6 +326,59 @@ function topSocialRow(links: unknown): string {
 // ── Blocos ──────────────────────────────────────────────────────────────────
 
 const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+const DAY_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const WEEK = [1, 2, 3, 4, 5, 6, 0]   // semana começando na segunda
+
+interface HoursDay { dow: number; open?: string; close?: string; closed: boolean }
+
+// Dias seguidos (seg→dom) com o mesmo horário viram um grupo: [[1..5],[6,0]].
+function groupDays(days: HoursDay[]): number[][] {
+  const out: number[][] = []
+  const key = (d: HoursDay) => (d.closed ? 'x' : `${d.open}-${d.close}`)
+  for (const dow of WEEK) {
+    const d = days.find(x => x.dow === dow)
+    if (!d) continue
+    const last = out[out.length - 1]
+    const prev = last && days.find(x => x.dow === last[last.length - 1])
+    if (last && prev && key(prev) === key(d) && WEEK.indexOf(last[last.length - 1]) === WEEK.indexOf(dow) - 1) last.push(dow)
+    else out.push([dow])
+  }
+  return out
+}
+
+// Dia da semana e minuto do dia no horário de Brasília (a escola atende em
+// horário local; o servidor e o celular podem estar em outro fuso).
+function spNow(date: Date): { dow: number; min: number } {
+  try {
+    const o: Record<string, string> = {}
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(date).forEach(p => { o[p.type] = p.value })
+    return { dow: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(o.weekday), min: parseInt(o.hour, 10) * 60 + parseInt(o.minute, 10) }
+  } catch { return { dow: date.getDay(), min: date.getHours() * 60 + date.getMinutes() } }
+}
+
+// Situação agora + frase curta. AUTOCONTIDA de propósito: vai como texto
+// (toString) pro script da página, que refaz a conta no navegador — mesma
+// regra nos dois lados.
+function hoursStatus(days: { dow: number; open?: string; close?: string; closed: boolean }[], dow: number, min: number): { open: boolean; text: string } {
+  const names = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
+  const m = (s?: string) => { const t = String(s || '').split(':'); return parseInt(t[0], 10) * 60 + parseInt(t[1], 10) }
+  const get = (d: number) => { for (let i = 0; i < days.length; i++) if (days[i].dow === d && !days[i].closed) return days[i]; return null }
+  const t = get(dow)
+  if (t && min >= m(t.open) && min < m(t.close)) return { open: true, text: 'Aberto agora · fecha às ' + t.close }
+  if (t && min < m(t.open)) return { open: false, text: 'Fechado agora · abre hoje às ' + t.open }
+  for (let k = 1; k <= 7; k++) {
+    const d = (dow + k) % 7, n = get(d)
+    if (n) return { open: false, text: 'Fechado agora · abre ' + (k === 1 ? 'amanhã' : names[d]) + ' às ' + n.open }
+  }
+  return { open: false, text: 'Fechado' }
+}
+
+// 1234567.5 → "1.234.567,5" (sem depender do Intl do servidor).
+function fmtNum(v: number, dec: number): string {
+  const [i, f] = v.toFixed(dec).split('.')
+  return i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (f ? ',' + f : '')
+}
 
 function button(blockId: string, href: string, label: string, icon: string, cls = ''): string {
   return `<a class="btn ${cls}" href="${esc(href)}" data-b="${esc(blockId)}" target="_blank" rel="noopener noreferrer">`
@@ -547,22 +600,59 @@ function renderBlock(b: VitrineBlock, preview = false, eager = false): string {
         + `<a class="link-inline" href="https://www.google.com/maps/search/?api=1&amp;query=${q}" data-b="${esc(b.id)}" target="_blank" rel="noopener noreferrer">Como chegar →</a></section>`
     }
     case 'hours': {
-      const days = (Array.isArray(c.days) ? c.days : [])
-        .filter((d: any) => /^[0-6]$/.test(String(d?.dow)))
-      if (!days.length && !c.note) return ''
-      const order = [1, 2, 3, 4, 5, 6, 0]
-      const rows = order.map(dow => {
-        const d = days.find((x: any) => Number(x.dow) === dow)
-        if (!d) return ''
-        const val = d.closed ? 'Fechado'
-          : (/^\d{2}:\d{2}$/.test(d.open) && /^\d{2}:\d{2}$/.test(d.close) ? `${esc(d.open)} – ${esc(d.close)}` : '')
-        return val ? `<tr data-dow="${dow}"><th>${DAYS[dow]}</th><td>${val}</td></tr>` : ''
+      const HHMM = /^\d{2}:\d{2}$/
+      const data: HoursDay[] = (Array.isArray(c.days) ? c.days : [])
+        .filter((d: any) => /^[0-6]$/.test(String(d?.dow)) && (d.closed || (HHMM.test(d.open) && HHMM.test(d.close))))
+        .map((d: any) => ({ dow: Number(d.dow), open: d.open, close: d.close, closed: !!d.closed }))
+      if (!data.length && !c.note) return ''
+      const layout = c.layout === 'compact' || c.layout === 'today' ? c.layout : 'table'
+      // Linhas: um dia por linha (tabela) ou dias seguidos com o mesmo
+      // horário juntos ("Seg a Sex"). data-dow lista os dias da linha (o
+      // script marca a de hoje).
+      const groups = layout === 'table'
+        ? WEEK.filter(dow => data.some(d => d.dow === dow)).map(dow => [dow])
+        : groupDays(data)
+      const val = (d: HoursDay) => (d.closed ? 'Fechado' : `${esc(d.open)} – ${esc(d.close)}`)
+      const { dow: today, min } = spNow(new Date())
+      const rows = groups.map(g => {
+        const d = data.find(x => x.dow === g[0])!
+        const name = g.length === 1 ? DAYS[g[0]] : `${DAY_SHORT[g[0]]} a ${DAY_SHORT[g[g.length - 1]]}`
+        return `<tr data-dow="${g.join(' ')}"${g.includes(today) ? ' class="today"' : ''}><th>${name}</th><td>${val(d)}</td></tr>`
       }).join('')
-      const data = days.map((d: any) => ({ dow: Number(d.dow), open: d.open, close: d.close, closed: !!d.closed }))
-      return `<section class="card hours" data-hours="${esc(JSON.stringify(data))}">`
-        + `<h2><span class="ic">${ICON.clock}</span>Horário de atendimento <span class="now" hidden></span></h2>`
-        + (rows ? `<table>${rows}</table>` : '')
-        + (c.note ? `<p class="note">${esc(c.note)}</p>` : '') + '</section>'
+      // "Aberto agora": calculado já na renderização (prévia, sem JS) e
+      // refeito no navegador (a página fica até ~10 min no cache).
+      const st = data.length ? hoursStatus(data, today, min) : null
+      const badge = st && layout !== 'today' ? `<span class="now ${st.open ? 'open' : 'closed'}">${st.open ? 'Aberto agora' : 'Fechado agora'}</span>` : ''
+      const table = rows ? `<table>${rows}</table>` : ''
+      const body = layout === 'today' && st
+        ? `<p class="htoday ${st.open ? 'open' : 'closed'}"><span class="dot" aria-hidden="true"></span><span class="ht">${esc(st.text)}</span></p>`
+          + `<details class="hweek"><summary>Ver horários da semana</summary>${table}</details>`
+        : table
+      return `<section class="card hours ${layout}" data-hours="${esc(JSON.stringify(data))}">`
+        + `<h2><span class="ic">${ICON.clock}</span>Horário de atendimento ${badge}</h2>`
+        + body + (c.note ? `<p class="note">${esc(c.note)}</p>` : '') + '</section>'
+    }
+    case 'stats': {
+      const items = (Array.isArray(c.items) ? c.items : [])
+        .filter((i: any) => typeof i?.value === 'number' && Number.isFinite(i.value) && i.value >= 0 && i?.label)
+      if (!items.length) return ''
+      const n = items.length
+      const cols = n === 1 ? 1 : n === 2 || n === 4 ? 2 : 3
+      const animate = c.animate !== false
+      // Tamanho do número: o maior que cabe na coluna (em 390 px de tela)
+      // pro valor mais comprido do bloco — dígito ≈ 0,6em, prefixo/sufixo
+      // em 0,62 do tamanho.
+      const units = Math.max(...items.map((i: any) =>
+        fmtNum(i.value, Number.isInteger(i.value) ? 0 : 1).length + 0.62 * (String(i.prefix || '').length + String(i.suffix || '').length)))
+      const avail = { 1: 300, 2: 140, 3: 88 }[cols]!
+      const fs = Math.max(16, Math.min({ 1: 40, 2: 32, 3: 26 }[cols]!, Math.floor(avail / (units * 0.6))))
+      const cells = items.map((i: any) => {
+        const dec = Number.isInteger(i.value) ? 0 : 1
+        return `<div class="stat"><span class="sv">${i.prefix ? `<span class="sa">${esc(i.prefix)}</span>` : ''}`
+          + `<b${animate ? ` data-v="${i.value}" data-d="${dec}"` : ''}>${fmtNum(i.value, dec)}</b>`
+          + `${i.suffix ? `<span class="sa">${esc(i.suffix)}</span>` : ''}</span><span class="sl">${esc(i.label)}</span></div>`
+      }).join('')
+      return `<section class="card stats">${c.title ? `<h2>${esc(c.title)}</h2>` : ''}<div class="sgrid c${cols}" style="--fs:${fs}px">${cells}</div></section>`
     }
     default:
       return ''
@@ -820,6 +910,24 @@ a.banner:focus-visible{outline:3px solid ${accent};outline-offset:3px}
 .hours .note{font-size:13px;color:${muted};margin-top:10px}
 .now{margin-left:auto;flex:none;white-space:nowrap;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;background:${border}}
 .now.open{background:#D1FAE5;color:#047857}.now.closed{background:#FFE4E6;color:#BE123C}
+.htoday{display:flex;align-items:center;gap:10px;margin:2px 0 4px;font-size:17px;font-weight:600;line-height:1.35}
+.htoday .dot{flex:none;width:10px;height:10px;border-radius:50%;background:#F43F5E;box-shadow:0 0 0 4px rgba(244,63,94,.18)}
+.htoday.open .dot{background:#10B981;box-shadow:0 0 0 4px rgba(16,185,129,.2)}
+.hweek{margin-top:10px;border-top:1px solid ${border}}
+.hweek summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:12px 0 2px;font-size:14px;font-weight:600;color:${muted}}
+.hweek summary::-webkit-details-marker{display:none}
+.hweek summary::after{content:'';width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translate(-2px,-2px);transition:transform .2s ${ease}}
+.hweek[open] summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+.hweek summary:focus-visible{outline:3px solid ${accent};outline-offset:2px;border-radius:4px}
+.hweek table{margin-top:6px}
+.sgrid{display:grid;gap:10px}
+.sgrid.c2{grid-template-columns:repeat(2,minmax(0,1fr))}.sgrid.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.stat{text-align:center;padding:14px 6px 12px;border-radius:${rInner};background:${accentSoft}}
+.sv{display:flex;align-items:baseline;justify-content:center;font-family:'${t.heading}','${t.body}',sans-serif;font-weight:${t.headingWeight === 400 ? 400 : 700};font-size:var(--fs,32px);line-height:1.1;letter-spacing:-.02em;color:${accent};font-variant-numeric:tabular-nums;white-space:nowrap}
+.sv .sa{font-size:.62em;white-space:pre}
+.sl{display:block;margin-top:6px;font-size:13px;line-height:1.35;color:${muted}}
+html.cnt b[data-v]:not(.go){opacity:0;animation:cntsafe 0s 3s forwards}
+@keyframes cntsafe{to{opacity:1}}
 footer{margin-top:40px;text-align:center;font-size:12px;color:${muted}}
 footer .made{display:inline-flex;align-items:center;gap:4px;padding:6px 14px;border-radius:999px;border:1px solid ${edge}}
 footer a{color:${t.text};text-decoration:none;font-weight:700}
@@ -861,15 +969,31 @@ var ua=navigator.userAgent,dev=/iPad|Tablet/i.test(ua)?'tablet':(/Mobi|Android|i
 function send(b,ev,tg){try{var d={p_page_id:P,p_block_id:b,p_event:ev,p_visitor_id:V,p_referrer_host:ref,p_utm_source:q.get('utm_source'),p_utm_medium:q.get('utm_medium'),p_utm_campaign:q.get('utm_campaign'),p_device:dev};if(tg)d.p_target=tg;fetch(U+'/rest/v1/rpc/vitrine_track',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json',apikey:K,Authorization:'Bearer '+K},body:JSON.stringify(d)}).catch(function(){})}catch(e){}}
 send(null,'view');
 document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[data-b],a[data-s]');if(!a)return;var s=a.getAttribute('data-s');if(s)send(null,'click','social:'+s);else send(a.getAttribute('data-b'),'click')},true);
-try{var p=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()),o={};p.forEach(function(x){o[x.type]=x.value});
-var dow=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(o.weekday),min=parseInt(o.hour,10)*60+parseInt(o.minute,10);
-function m(s){var t=String(s||'').split(':');return parseInt(t[0],10)*60+parseInt(t[1],10)}
-document.querySelectorAll('[data-hours]').forEach(function(s){var d=JSON.parse(s.getAttribute('data-hours')||'[]'),t=null;d.forEach(function(x){if(x.dow===dow)t=x});
-var row=s.querySelector('tr[data-dow="'+dow+'"]');if(row)row.className='today';
-var b=s.querySelector('.now');if(!b||!t)return;var open=!t.closed&&min>=m(t.open)&&min<m(t.close);
-b.textContent=open?'Aberto agora':'Fechado agora';b.className='now '+(open?'open':'closed');b.hidden=false})}catch(e){}
 })();`
 }
+
+// Horário: refaz "aberto agora", a linha de hoje e a frase do layout "Hoje"
+// no relógio do visitante (a página renderizada pode ter até ~10 min).
+// Usa as mesmas spNow/hoursStatus da renderização (autocontidas).
+function hoursScript(): string {
+  return `(function(){try{var S=(${spNow.toString()})(new Date()),H=(${hoursStatus.toString()});
+document.querySelectorAll('[data-hours]').forEach(function(s){var d=JSON.parse(s.getAttribute('data-hours')||'[]');if(!d.length)return;var st=H(d,S.dow,S.min);
+s.querySelectorAll('tr[data-dow]').forEach(function(r){r.className=(' '+r.getAttribute('data-dow')+' ').indexOf(' '+S.dow+' ')>=0?'today':''});
+var b=s.querySelector('.now');if(b){b.textContent=st.open?'Aberto agora':'Fechado agora';b.className='now '+(st.open?'open':'closed')}
+var p=s.querySelector('.htoday');if(p){p.className='htoday '+(st.open?'open':'closed');p.querySelector('.ht').textContent=st.text}})}catch(e){}})();`
+}
+
+// Contador dos números: começa em 0 e sobe até o valor quando o bloco entra
+// na tela (1,4 s, desacelerando). O HTML já traz o valor final (sem JS, ou
+// pra quem pediu menos movimento, nada muda). Trava no CSS (cntsafe): se o
+// script falhar, o número aparece em 3 s.
+const COUNT_HEAD = `<script>try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window)document.documentElement.classList.add('cnt')}catch(e){}</script>`
+const COUNT_SCRIPT = `(function(){var h=document.documentElement;if(!h.classList.contains('cnt'))return;
+function f(v,d){var s=v.toFixed(d).split('.');return s[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.')+(s[1]?','+s[1]:'')}
+function run(b){var v=parseFloat(b.getAttribute('data-v')),d=+b.getAttribute('data-d')||0,t0=null;b.textContent=f(0,d);b.classList.add('go');
+function step(t){if(t0===null)t0=t;var k=Math.min(1,(t-t0)/1400),e=1-Math.pow(1-k,3);b.textContent=f(v*e,d);if(k<1)requestAnimationFrame(step);else b.textContent=f(v,d)}requestAnimationFrame(step)}
+var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){run(x.target);io.unobserve(x.target)}})},{rootMargin:'0px 0px -10% 0px'});
+document.querySelectorAll('b[data-v]').forEach(function(b){io.observe(b)})})();`
 
 export function renderVitrinePage(data: VitrinePublicData, opts: RenderOptions): string {
   const p = data.page
@@ -884,6 +1008,9 @@ export function renderVitrinePage(data: VitrinePublicData, opts: RenderOptions):
   const script = !opts.preview && opts.supabaseUrl && opts.anonKey
     ? `<script>${trackingScript(p.id, opts.supabaseUrl, opts.anonKey)}</script>` : ''
   const videoScript = !opts.preview && blocks.includes('data-yt=') ? `<script>${VIDEO_SCRIPT}</script>` : ''
+  const hoursJs = !opts.preview && blocks.includes('data-hours=') ? `<script>${hoursScript()}</script>` : ''
+  // Contador: página pública; na prévia só com "Ver animação".
+  const counting = blocks.includes(' data-v="') && (!opts.preview || !!opts.animatePreview)
   const jsonLd = opts.preview ? '' : faqJsonLd(data.blocks || [])
   // Animação: página pública sempre; prévia do editor só quando pedida
   // ("Ver animação") — senão repetiria a cada tecla digitada.
@@ -921,6 +1048,7 @@ ${t.bgType === 'image' && t.bgImage ? `<link rel="preload" as="image" href="${es
 <link rel="stylesheet" href="${esc(fontsHref(t.heading, t.body))}">
 <style>${css(t)}</style>
 ${animate ? ANIM_HEAD : ''}
+${counting ? COUNT_HEAD : ''}
 ${jsonLd}
 </head>
 <body class="${cover ? 'has-cover' : ''}">
@@ -940,6 +1068,8 @@ ${blocks}
 </div>
 ${animate ? `<script>${animScript(t.animation === 'lively' ? 70 : 40)}</script>` : ''}
 ${videoScript}
+${hoursJs}
+${counting ? `<script>${COUNT_SCRIPT}</script>` : ''}
 ${script}
 </body>
 </html>`
