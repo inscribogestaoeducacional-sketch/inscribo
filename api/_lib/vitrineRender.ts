@@ -200,6 +200,19 @@ const ICON = {
   pin:      '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   clock:    '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 7v5l3 2"/></svg>',
   school:   '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 9l10-5 10 5-10 5L2 9zm4 2.2V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-4.8"/></svg>',
+  pdf:      '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5zm0 0v5h5M9 13h6M9 17h4"/></svg>',
+  contact:  '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm10-2v6m3-3h-6"/></svg>',
+}
+
+// Dados da página que alguns blocos precisam (link do vCard).
+interface BlockCtx { siteUrl: string; slug: string }
+
+// "1234567" bytes → "1,2 MB"
+function fmtSize(n: unknown): string {
+  const b = Number(n)
+  if (!Number.isFinite(b) || b <= 0) return ''
+  if (b < 1024 * 1024) return `${Math.max(1, Math.round(b / 1024))} KB`
+  return `${(b / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
 }
 
 // ── Redes sociais ───────────────────────────────────────────────────────────
@@ -457,10 +470,15 @@ var f=document.createElement('iframe');f.src='https://www.youtube-nocookie.com/e
 f.allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';f.allowFullscreen=true;
 var d=document.createElement('div');d.className='frame';d.appendChild(f);a.parentNode.replaceChild(d,a)});`
 
+// Mapa com várias unidades: mostra os botões "Ver no mapa" e troca o mapa.
+const MAP_SCRIPT = `document.querySelectorAll('.map.multi').forEach(function(s){var f=s.querySelector('iframe');
+s.querySelectorAll('.unit').forEach(function(li){var bt=li.querySelector('.see');if(!bt)return;bt.hidden=false;
+bt.addEventListener('click',function(){f.src=li.getAttribute('data-embed');s.querySelectorAll('.unit').forEach(function(o){o.classList.toggle('on',o===li);o.querySelector('.see').setAttribute('aria-pressed',o===li?'true':'false')})})})});`
+
 // Monta os blocos na ordem; links marcados como "Ícone" em sequência dividem
 // uma fileira (um sozinho vira fileira de um). Cada ícone conta clique no
 // próprio bloco.
-function renderBlocks(blocks: VitrineBlock[], preview: boolean): string {
+function renderBlocks(blocks: VitrineBlock[], preview: boolean, ctx: BlockCtx): string {
   const out: string[] = []
   for (let i = 0; i < blocks.length; i++) {
     if (socialOf(blocks[i])) {
@@ -470,13 +488,13 @@ function renderBlocks(blocks: VitrineBlock[], preview: boolean): string {
     }
     // Imagem grande nos 2 primeiros blocos (banner/destaque no topo) é o que
     // o celular mostra primeiro: carrega na hora; o resto fica "lazy".
-    const html = renderBlock(blocks[i], preview, out.length < 2)
+    const html = renderBlock(blocks[i], preview, out.length < 2, ctx)
     if (html) out.push(html)
   }
   return out.join('\n')
 }
 
-function renderBlock(b: VitrineBlock, preview = false, eager = false): string {
+function renderBlock(b: VitrineBlock, preview = false, eager = false, ctx: BlockCtx = { siteUrl: '', slug: '' }): string {
   const c = b.config || {}
   const loading = eager ? 'eager' : 'lazy'
   switch (b.type) {
@@ -592,12 +610,52 @@ function renderBlock(b: VitrineBlock, preview = false, eager = false): string {
       // "Nome da escola, endereço": o Google acha o lugar cadastrado e o pino
       // cai na escola. Só o endereço cai onde o Google estima o número da rua
       // (no Ágape, ~110 m ao lado). place_name vazio = só endereço.
-      const place = typeof c.place_name === 'string' ? c.place_name.trim() : ''
-      const q = encodeURIComponent(place ? `${place}, ${addr}` : addr)
-      return `<section class="card map"><h2><span class="ic">${ICON.pin}</span>${esc(c.label || 'Onde estamos')}</h2>`
-        + `<p>${esc(addr)}</p>`
-        + `<div class="frame map-frame"><iframe src="https://www.google.com/maps?q=${q}&amp;output=embed" title="Mapa" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`
-        + `<a class="link-inline" href="https://www.google.com/maps/search/?api=1&amp;query=${q}" data-b="${esc(b.id)}" target="_blank" rel="noopener noreferrer">Como chegar →</a></section>`
+      const query = (place: unknown, a: string) => {
+        const p = typeof place === 'string' ? place.trim() : ''
+        return encodeURIComponent(p ? `${p}, ${a}` : a)
+      }
+      const q = query(c.place_name, addr)
+      const embed = (qq: string) => `https://www.google.com/maps?q=${qq}&amp;output=embed`
+      const route = (qq: string) => `https://www.google.com/maps/search/?api=1&amp;query=${qq}`
+      const head = `<h2><span class="ic">${ICON.pin}</span>${esc(c.label || 'Onde estamos')}</h2>`
+      const frame = `<div class="frame map-frame"><iframe src="${embed(q)}" title="Mapa" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`
+      const units = (Array.isArray(c.units) ? c.units : [])
+        .filter((u: any) => u?.name && String(u?.address || '').trim().length >= 5)
+      if (!units.length) {
+        return `<section class="card map">${head}<p>${esc(addr)}</p>${frame}`
+          + `<a class="link-inline" href="${route(q)}" data-b="${esc(b.id)}" target="_blank" rel="noopener noreferrer">Como chegar →</a></section>`
+      }
+      // Várias unidades: um mapa só (o da unidade escolhida) e a lista com
+      // endereço + "Como chegar" de cada uma. "Ver no mapa" troca o mapa
+      // (script da página); sem JS, a lista e os links continuam valendo.
+      const all = [{ name: c.unit_name || 'Unidade principal', address: addr, q }]
+        .concat(units.map((u: any) => ({ name: u.name, address: String(u.address).trim(), q: query(u.place_name, String(u.address).trim()) })))
+      const rows = all.map((u, i) => `<li class="unit${i === 0 ? ' on' : ''}" data-embed="${embed(u.q)}">`
+        + `<span class="ub"><b>${esc(u.name)}</b><span>${esc(u.address)}</span></span>`
+        + `<span class="ua"><button type="button" class="see" hidden aria-pressed="${i === 0}">Ver no mapa</button>`
+        + `<a class="link-inline" href="${route(u.q)}" data-b="${esc(b.id)}" target="_blank" rel="noopener noreferrer" aria-label="Como chegar: ${esc(u.name)}">Como chegar →</a></span></li>`).join('')
+      return `<section class="card map multi">${head}${frame}<ul class="units">${rows}</ul></section>`
+    }
+    case 'pdf': {
+      if (!isHttpUrl(c.file_url)) return ''
+      const meta = ['PDF', fmtSize(c.file_size)].filter(Boolean).join(' · ')
+      if (c.style === 'card') {
+        return `<a class="lcard pdf" href="${esc(c.file_url)}" data-b="${esc(b.id)}" target="_blank" rel="noopener noreferrer">`
+          + `<span class="limg"><span class="lph">${ICON.pdf}</span></span>`
+          + `<span class="lbody"><span class="ltitle">${esc(c.label)}</span>`
+          + (c.description ? `<span class="ldesc">${esc(c.description)}</span>` : '')
+          + `<span class="ldom">${esc(meta)}</span></span><span class="larrow" aria-hidden="true">↓</span></a>`
+      }
+      return button(b.id, c.file_url, c.label, ICON.pdf)
+    }
+    case 'contact': {
+      if (!c.label || !ctx.slug) return ''
+      // O .vcf é gerado na hora (api/public?route=vcard) com os dados do bloco.
+      // Na página, caminho relativo (mesma origem: o "download" vale); na
+      // prévia (iframe srcdoc, sem origem), o endereço completo.
+      const href = `${preview ? ctx.siteUrl : ''}/api/public?route=vcard&amp;slug=${encodeURIComponent(ctx.slug)}&amp;b=${encodeURIComponent(b.id)}`
+      return `<a class="btn" href="${href}" data-b="${esc(b.id)}" download>`
+        + `<span class="ic">${ICON.contact}</span><span class="lb">${esc(c.label)}</span><span class="ic"></span></a>`
     }
     case 'hours': {
       const HHMM = /^\d{2}:\d{2}$/
@@ -857,6 +915,20 @@ a.banner:focus-visible{outline:3px solid ${accent};outline-offset:3px}
 .card .frame{border-radius:${rInner};box-shadow:none;border:1px solid ${edge}}
 .map-frame{aspect-ratio:4/3;margin:12px 0 14px}
 .map>p{color:${muted};font-size:14px}
+.map.multi .map-frame{margin:4px 0 6px}
+.units{list-style:none;margin:0;padding:0}
+.unit{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid ${border}}
+.unit:first-child{border-top:0}
+.unit .ub{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.unit .ub b{font-size:15px;line-height:1.3;display:flex;align-items:center;gap:6px}
+.unit.on .ub b::before{content:'';width:8px;height:8px;border-radius:50%;background:${accent};flex:none}
+.unit .ub span{font-size:13px;line-height:1.4;color:${muted}}
+.unit .ua{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.unit .link-inline{padding:6px 12px;font-size:13px}
+.see{font:inherit;font-size:13px;font-weight:600;color:${muted};background:none;border:0;padding:2px 4px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.see[aria-pressed="true"]{color:${accent};text-decoration:none;cursor:default}
+.see:focus-visible{outline:3px solid ${accent};outline-offset:2px;border-radius:4px}
+.lcard.pdf .lph{background:${accentSoft};color:${accent}}
 .video .vdesc{margin:10px 2px 0;font-size:14px;color:${muted}}
 .vlite{display:block;color:inherit}
 .vlite img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -1004,11 +1076,12 @@ export function renderVitrinePage(data: VitrinePublicData, opts: RenderOptions):
   const cover = isHttpUrl(p.cover_url) ? p.cover_url : null
   const logo = isHttpUrl(p.logo_url) ? p.logo_url : null
   const ogImage = cover || logo
-  const blocks = renderBlocks(data.blocks || [], !!opts.preview)
+  const blocks = renderBlocks(data.blocks || [], !!opts.preview, { siteUrl: opts.siteUrl, slug: p.slug })
   const script = !opts.preview && opts.supabaseUrl && opts.anonKey
     ? `<script>${trackingScript(p.id, opts.supabaseUrl, opts.anonKey)}</script>` : ''
   const videoScript = !opts.preview && blocks.includes('data-yt=') ? `<script>${VIDEO_SCRIPT}</script>` : ''
   const hoursJs = !opts.preview && blocks.includes('data-hours=') ? `<script>${hoursScript()}</script>` : ''
+  const mapJs = !opts.preview && blocks.includes('class="card map multi"') ? `<script>${MAP_SCRIPT}</script>` : ''
   // Contador: página pública; na prévia só com "Ver animação".
   const counting = blocks.includes(' data-v="') && (!opts.preview || !!opts.animatePreview)
   const jsonLd = opts.preview ? '' : faqJsonLd(data.blocks || [])
@@ -1069,6 +1142,7 @@ ${blocks}
 ${animate ? `<script>${animScript(t.animation === 'lively' ? 70 : 40)}</script>` : ''}
 ${videoScript}
 ${hoursJs}
+${mapJs}
 ${counting ? `<script>${COUNT_SCRIPT}</script>` : ''}
 ${script}
 </body>
