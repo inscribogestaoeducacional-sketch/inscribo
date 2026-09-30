@@ -54,8 +54,8 @@ export default function MediaUploader({
         onDrop={e => { e.preventDefault(); setOver(false); send(e.dataTransfer.files?.[0]) }}
         style={{ ...box, position: 'relative', overflow: 'hidden', transition: T,
           border: over ? '2px dashed #00A896' : value ? '1px solid #E2E8F0' : '1.5px dashed #CBD5E1',
-          background: over ? '#F0FDFA' : value ? '#F8FAFC' : '#FAFAFA',
-          boxShadow: over ? '0 0 0 4px #CCFBF1' : 'none' }}>
+          background: over ? '#F0FDFB' : value ? '#F8FAFC' : '#FAFAFA',
+          boxShadow: over ? '0 0 0 4px #D1FAE5' : 'none' }}>
         <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
           aria-label={value ? `Trocar: ${label}` : `Enviar: ${label}`}
           className="vit-upload"
@@ -75,7 +75,7 @@ export default function MediaUploader({
                 </>}
         </button>
         {busy && (
-          <div aria-live="polite" style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#0F766E' }}>
+          <div aria-live="polite" style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#007A6E' }}>
             <Loader2 size={16} className="animate-spin" /> {circle ? '' : 'Enviando…'}
           </div>
         )}

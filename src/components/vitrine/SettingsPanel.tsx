@@ -91,7 +91,7 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast, fl
 
         <div style={{ minHeight: 20, marginTop: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }} aria-live="polite">
           {status === 'checking' && <span style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="animate-spin" /> Verificando…</span>}
-          {status === 'ok' && <span style={{ color: '#16A34A', display: 'flex', alignItems: 'center', gap: 6 }}><Check size={13} /> Disponível. Ao salvar, o endereço atual continua funcionando e leva pro novo.</span>}
+          {status === 'ok' && <span style={{ color: '#059669', display: 'flex', alignItems: 'center', gap: 6 }}><Check size={13} /> Disponível. Ao salvar, o endereço atual continua funcionando e leva pro novo.</span>}
           {status && status !== 'ok' && status !== 'checking' && <span style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} /> {SLUG_STATUS_MSG[status]}</span>}
           {saveError && <span style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} /> {saveError}</span>}
         </div>
@@ -114,7 +114,7 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast, fl
           </code>
           <button type="button" onClick={copy}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
-            {copied ? <><Check size={14} color="#16A34A" /> Copiado</> : <><Copy size={14} /> Copiar</>}
+            {copied ? <><Check size={14} color="#059669" /> Copiado</> : <><Copy size={14} /> Copiar</>}
           </button>
           <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer"
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', boxShadow: '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)', fontSize: 13, fontWeight: 600, color: '#475569', textDecoration: 'none' }}>

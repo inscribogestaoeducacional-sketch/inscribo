@@ -153,22 +153,25 @@ export function currentFontPair(th: VitrineTheme): string | null {
 export const MSG_INFO = 'Olá! Vim pela página da escola e gostaria de mais informações.'
 export const MSG_ENROLL = 'Olá! Vim pela página da escola e quero fazer a matrícula.'
 
+// Cores: uma família da paleta do painel por categoria da galeria de blocos
+// (Contato = verde, matrícula = teal de ação, Links = azul, Conteúdo = roxo,
+// Confiança = âmbar, Informações = azul-claro).
 export const BLOCK_TYPES: Record<BlockType, { label: string; description: string; color: string; bg: string }> = {
-  whatsapp: { label: 'WhatsApp',             description: 'Botão que abre uma conversa com a escola', color: '#16A34A', bg: '#DCFCE7' },
+  whatsapp: { label: 'WhatsApp',             description: 'Botão que abre uma conversa com a escola', color: '#059669', bg: '#D1FAE5' },
   enroll:   { label: 'Botão de matrícula',   description: 'Destaque pra matrícula: link ou WhatsApp',  color: '#00A896', bg: '#E6F7F5' },
-  link:     { label: 'Link',                 description: 'Site, Instagram, formulário, qualquer link', color: '#3B82F6', bg: '#DBEAFE' },
+  link:     { label: 'Link',                 description: 'Site, Instagram, formulário, qualquer link', color: '#1D4ED8', bg: '#DBEAFE' },
   text:     { label: 'Texto / Sobre',        description: 'Um parágrafo sobre a escola',                color: '#7C3AED', bg: '#EDE9FE' },
-  gallery:  { label: 'Galeria de imagens',   description: 'Até 12 fotos em grade ou carrossel',         color: '#DB2777', bg: '#FCE7F3' },
-  video:    { label: 'Vídeo',                description: 'Vídeo do YouTube ou do Vimeo',               color: '#DC2626', bg: '#FEE2E2' },
-  map:      { label: 'Mapa / Endereço',      description: 'Endereço com mapa e "Como chegar"',          color: '#D97706', bg: '#FEF3C7' },
+  gallery:  { label: 'Galeria de imagens',   description: 'Até 12 fotos em grade ou carrossel',         color: '#7C3AED', bg: '#EDE9FE' },
+  video:    { label: 'Vídeo',                description: 'Vídeo do YouTube ou do Vimeo',               color: '#7C3AED', bg: '#EDE9FE' },
+  map:      { label: 'Mapa / Endereço',      description: 'Endereço com mapa e "Como chegar"',          color: '#0284C7', bg: '#E0F2FE' },
   hours:    { label: 'Horário de atendimento', description: 'Dias e horários, com "Aberto agora"',      color: '#0284C7', bg: '#E0F2FE' },
-  banner:   { label: 'Banner',               description: 'Imagem em largura total, com link opcional', color: '#EA580C', bg: '#FFEDD5' },
-  faq:      { label: 'Perguntas frequentes', description: 'Dúvidas dos pais, com resposta ao tocar',    color: '#0D9488', bg: '#CCFBF1' },
-  testimonials: { label: 'Depoimentos',      description: 'O que as famílias dizem, com nota',          color: '#CA8A04', bg: '#FEF9C3' },
-  team:     { label: 'Equipe',               description: 'Direção e professores, com foto e cargo',    color: '#4F46E5', bg: '#E0E7FF' },
-  stats:    { label: 'Números',              description: 'Alunos, anos de história, aprovações…',      color: '#0891B2', bg: '#CFFAFE' },
-  pdf:      { label: 'Arquivo PDF',          description: 'Cardápio, calendário, lista de material',    color: '#E11D48', bg: '#FFE4E6' },
-  contact:  { label: 'Salvar contato',       description: 'Botão que salva a escola na agenda do celular', color: '#0D9488', bg: '#CCFBF1' },
+  banner:   { label: 'Banner',               description: 'Imagem em largura total, com link opcional', color: '#1D4ED8', bg: '#DBEAFE' },
+  faq:      { label: 'Perguntas frequentes', description: 'Dúvidas dos pais, com resposta ao tocar',    color: '#D97706', bg: '#FEF3C7' },
+  testimonials: { label: 'Depoimentos',      description: 'O que as famílias dizem, com nota',          color: '#D97706', bg: '#FEF3C7' },
+  team:     { label: 'Equipe',               description: 'Direção e professores, com foto e cargo',    color: '#D97706', bg: '#FEF3C7' },
+  stats:    { label: 'Números',              description: 'Alunos, anos de história, aprovações…',      color: '#D97706', bg: '#FEF3C7' },
+  pdf:      { label: 'Arquivo PDF',          description: 'Cardápio, calendário, lista de material',    color: '#1D4ED8', bg: '#DBEAFE' },
+  contact:  { label: 'Salvar contato',       description: 'Botão que salva a escola na agenda do celular', color: '#059669', bg: '#D1FAE5' },
 }
 
 export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'banner', 'text', 'gallery', 'video', 'faq', 'testimonials', 'team', 'stats', 'pdf', 'contact', 'map', 'hours']

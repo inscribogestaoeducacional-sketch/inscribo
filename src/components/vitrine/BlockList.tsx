@@ -1,18 +1,19 @@
-// Lista reordenável de blocos da Vitrine (@dnd-kit, mesmo padrão do editor de
-// perguntas em GestorSurveys). Cada item abre o formulário do seu tipo.
-// Visual premium (etapa 3): faixa na cor do tipo, resumo em 2 linhas,
-// elevação no hover (classe vit-card, estilos em Vitrine.tsx) e o bloco
-// "flutuando" durante o arraste (DragOverlay com o mesmo cabeçalho).
+// Lista de blocos da Vitrine: uma linha por bloco (clicar abre a edição no
+// lugar da lista — ver BlockEditor), reordenável pela alça (@dnd-kit, com o
+// bloco "levantando" no DragOverlay) e com "+" entre dois blocos pra inserir
+// ali. A situação de cada bloco vira etiqueta (incompleto, oculto, agenda,
+// Captação, efeito) em vez de faixa de aviso. Estilos de hover/animação: no
+// <style> de Vitrine.tsx (classes vit-*).
 import React, { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  GripVertical, ChevronDown, Eye, EyeOff, Copy, Trash2, Loader2, Check, AlertCircle,
+  GripVertical, Eye, EyeOff, Loader2, AlertCircle, Plus, Sparkles, EyeOff as Hidden,
   MessageCircle, GraduationCap, Link2, Type, Images, PlayCircle, MapPin, Clock, Megaphone, RectangleHorizontal, CalendarClock, HelpCircle, Quote, Users, BarChart3, FileText, UserPlus, type LucideIcon,
 } from 'lucide-react'
-import { type BlockType, BLOCK_TYPES, blockSummary, blockDetail, effectApplies, scheduleLabel, scheduleState } from '../../lib/vitrine'
-import BlockForm, { type BlockFormContext, EffectField } from './BlockForms'
+import { type BlockType, BLOCK_TYPES, blockSummary, blockDetail, scheduleLabel, scheduleState, EFFECTS } from '../../lib/vitrine'
 import { DS } from './ui'
 
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'invalid' | 'error'
@@ -36,17 +37,46 @@ export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   faq: HelpCircle, testimonials: Quote, team: Users, stats: BarChart3, pdf: FileText, contact: UserPlus,
 }
 
+// Etiquetas: cores de estado do painel (âmbar = atenção, vermelho = erro,
+// rosa = Captação, teal = recurso ligado, cinza = neutro).
+const TAG = {
+  warn:  { color: '#D97706', background: '#FEF3C7' },
+  error: { color: '#DC2626', background: '#FEF2F2' },
+  cap:   { color: '#DB2777', background: '#FCE7F3' },
+  on:    { color: '#00A896', background: '#E6F7F5' },
+  muted: { color: '#64748B', background: '#F1F5F9' },
+}
+function Tag({ tone, icon: Icon, children, title }: { tone: keyof typeof TAG; icon: LucideIcon; children: React.ReactNode; title?: string }) {
+  return (
+    <span title={title} style={{ ...TAG[tone], display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+      <Icon size={11} /> {children}
+    </span>
+  )
+}
+
+export function blockTags(b: EditorBlock): React.ReactNode[] {
+  const out: React.ReactNode[] = []
+  if (b.state === 'error') out.push(<Tag key="e" tone="error" icon={AlertCircle} title={b.error || undefined}>Erro ao salvar</Tag>)
+  else if (b.state === 'invalid') out.push(<Tag key="i" tone="warn" icon={AlertCircle} title={b.error || undefined}>{b.id ? 'Não salvo' : 'Incompleto'}</Tag>)
+  if (!b.is_visible) out.push(<Tag key="h" tone="muted" icon={Hidden}>Oculto</Tag>)
+  const sched = scheduleLabel(b.visible_from, b.visible_until)
+  if (sched) out.push(<Tag key="s" tone={scheduleState(b.visible_from, b.visible_until) === 'expired' ? 'error' : 'warn'} icon={CalendarClock}>{sched}</Tag>)
+  const tracking = !!b.capture_trigger_id && (b.type === 'enroll' ? b.config.mode === 'whatsapp'
+    : b.type === 'whatsapp' && b.config.phone_source !== 'custom' && b.config.track_capture !== false)
+  if (tracking) out.push(<Tag key="c" tone="cap" icon={Megaphone} title="Gatilho ativo no Captação">Captação</Tag>)
+  const fx = EFFECTS.find(e => e.value === b.config.effect && e.value !== 'none')
+  if (fx) out.push(<Tag key="f" tone="on" icon={Sparkles}>{fx.label}</Tag>)
+  return out
+}
+
 interface ListProps {
   blocks: EditorBlock[]
-  openKey: string | null
-  onToggleOpen: (key: string) => void
+  flashKey: string | null            // bloco que acabou de voltar da edição / entrar
+  enterKey: string | null            // bloco recém-adicionado (animação de entrada)
+  onSelect: (key: string) => void
   onReorder: (fromKey: string, toKey: string) => void
-  onChange: (key: string, patch: Record<string, any>) => void
   onToggleVisible: (key: string) => void
-  onSchedule: (key: string) => void
-  onDuplicate: (key: string) => void
-  onDelete: (key: string) => void
-  formCtx: (b: EditorBlock) => BlockFormContext
+  onInsertAt: (index: number) => void
 }
 
 export default function BlockList(props: ListProps) {
@@ -64,144 +94,101 @@ export default function BlockList(props: ListProps) {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveKey(null)}>
       <SortableContext items={props.blocks.map(b => b.key)} strategy={verticalListSortingStrategy}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {props.blocks.map(b => <BlockItem key={b.key} block={b} open={props.openKey === b.key} {...props} />)}
+        <div role="list" aria-label="Blocos da página" style={{ display: 'flex', flexDirection: 'column' }}>
+          {props.blocks.map((b, i) => (
+            <React.Fragment key={b.key}>
+              {i > 0 && (
+                <div className="vit-gap">
+                  <button type="button" onClick={() => props.onInsertAt(i)} aria-label={`Inserir bloco aqui (posição ${i + 1})`} title="Inserir bloco aqui">
+                    <Plus size={13} />
+                  </button>
+                </div>
+              )}
+              <BlockItem block={b} {...props} />
+            </React.Fragment>
+          ))}
         </div>
       </SortableContext>
-      <DragOverlay dropAnimation={{ duration: 180, easing: 'cubic-bezier(0.4,0,0.2,1)' }}>
+      {/* No body: um ancestral com transform (animação da área) viraria a
+          referência do position:fixed do bloco levantado e deslocaria a medida. */}
+      {createPortal(<DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.4,0,0.2,1)' }}>
         {active && (
-          <div style={{ ...cardShell(active), boxShadow: DS.shadowXl, transform: 'rotate(-1deg)', cursor: 'grabbing' }}>
-            <Header b={active} open={false} ghost />
+          // O dnd-kit mede o elemento de fora: a inclinação/ampliação fica num
+          // filho, senão a medida sai inflada e o bloco "cai" no lugar errado.
+          <div>
+            <div className="vit-card vit-lifted" style={cardShell(active)}>
+              <Row b={active} ghost />
+            </div>
           </div>
         )}
-      </DragOverlay>
+      </DragOverlay>, document.body)}
     </DndContext>
   )
 }
 
-function StateBadge({ b }: { b: EditorBlock }) {
-  const base: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', padding: '3px 8px', borderRadius: 999 }
-  if (b.state === 'saving') return <span style={{ ...base, color: '#64748b', background: '#F1F5F9' }}><Loader2 size={12} className="animate-spin" /> Salvando</span>
-  if (b.state === 'dirty') return <span style={{ ...base, color: '#94a3b8', background: '#F8FAFC' }}>Editando…</span>
-  if (b.state === 'invalid') return <span style={{ ...base, color: '#B45309', background: '#FFFBEB' }}><AlertCircle size={12} /> {b.id ? 'Não salvo' : 'Incompleto'}</span>
-  if (b.state === 'error') return <span style={{ ...base, color: '#dc2626', background: '#FEF2F2' }}><AlertCircle size={12} /> Erro ao salvar</span>
-  return <span style={{ ...base, color: '#15803D', background: '#F0FDF4' }}><Check size={12} /> Salvo</span>
-}
-
 const cardShell = (b: EditorBlock): React.CSSProperties => ({
-  background: '#fff', borderRadius: DS.r.lg, position: 'relative', overflow: 'hidden',
+  background: '#fff', borderRadius: DS.r.lg, position: 'relative',
   // Borda em propriedades separadas: o arraste troca estilo/cor sem misturar
   // com o atalho "border" (o React avisa que isso quebra estilo).
   borderWidth: 1, borderStyle: 'solid',
-  borderColor: b.state === 'invalid' || b.state === 'error' ? '#FCD34D' : '#E2E8F0',
-  opacity: b.is_visible ? 1 : 0.72,
+  borderColor: b.state === 'invalid' ? '#FDE68A' : b.state === 'error' ? '#FECACA' : '#E2E8F0',
 })
 
-// Cabeçalho do cartão (também usado no bloco "flutuante" do arraste).
-function Header({ b, open, ghost, dragHandle, onToggleOpen, onToggleVisible, onSchedule }: {
-  b: EditorBlock; open: boolean; ghost?: boolean
-  dragHandle?: React.ReactNode; onToggleOpen?: () => void; onToggleVisible?: () => void; onSchedule?: () => void
+// Conteúdo da linha (também usado no bloco "levantado" do arraste).
+function Row({ b, ghost, dragHandle, onToggleVisible }: {
+  b: EditorBlock; ghost?: boolean; dragHandle?: React.ReactNode; onToggleVisible?: () => void
 }) {
   const meta = BLOCK_TYPES[b.type]
   const Icon = BLOCK_ICONS[b.type]
-  const tracking = !!b.capture_trigger_id && (b.type === 'enroll'
-    ? b.config.mode === 'whatsapp'
-    : b.type === 'whatsapp' && b.config.phone_source !== 'custom' && b.config.track_capture !== false)
-  const sched = scheduleLabel(b.visible_from, b.visible_until)
-  const schedState = scheduleState(b.visible_from, b.visible_until)
-  const iconBtn: React.CSSProperties = {
-    width: 32, height: 32, borderRadius: DS.r.sm, border: '1px solid #E2E8F0', background: '#fff',
-    cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', transition: T,
-  }
+  const tags = blockTags(b)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px 14px 18px' }}>
-      {/* faixa na cor do tipo */}
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: meta.color, opacity: b.is_visible ? 1 : 0.4 }} />
-      {dragHandle ?? <span style={{ ...iconBtn, border: 'none', color: '#94a3b8' }}><GripVertical size={16} /></span>}
-      <button type="button" onClick={onToggleOpen} aria-expanded={open} tabIndex={ghost ? -1 : undefined}
-        style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ width: 40, height: 40, borderRadius: DS.r.md, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-          <Icon size={17} color={meta.color} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px 12px 6px', opacity: b.is_visible ? 1 : 0.62, transition: DS.ease }}>
+      {dragHandle ?? <span className="vit-grip" style={{ width: 24, display: 'flex', justifyContent: 'center', color: '#94A3B8' }}><GripVertical size={16} /></span>}
+      <span style={{ width: 40, height: 40, borderRadius: DS.r.md, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+        <Icon size={18} color={meta.color} />
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 600, color: '#1e2d6b', letterSpacing: '-0.01em', lineHeight: 1.35 }}>
+          <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{blockSummary(b.type, b.config)}</span>
+          {b.state === 'saving' && <Loader2 size={13} color="#94A3B8" className="animate-spin" aria-label="Salvando" />}
         </span>
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            {meta.label}
-            {!b.is_visible && <span style={{ color: '#64748b', textTransform: 'none', letterSpacing: 0 }}>· oculto</span>}
-            {sched && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, textTransform: 'none', letterSpacing: 0, fontWeight: 600,
-              color: schedState === 'expired' ? '#BE123C' : schedState === 'future' ? '#B45309' : '#0F766E' }}><CalendarClock size={11} /> {sched}</span>}
-            {tracking && <span title="Gatilho ativo no Captação" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#DB2777', textTransform: 'none', letterSpacing: 0 }}><Megaphone size={11} /> Captação</span>}
-          </span>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: DS.navy, letterSpacing: '-0.01em', lineHeight: 1.35, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {blockSummary(b.type, b.config)}
-          </span>
-          <span style={{ display: 'block', fontSize: 12.5, color: DS.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
-            {blockDetail(b.type, b.config)}
-          </span>
+        <span style={{ display: 'block', fontSize: 12.5, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
+          {meta.label} · {blockDetail(b.type, b.config)}
         </span>
-        <StateBadge b={b} />
-        <ChevronDown size={16} color="#94a3b8" style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: T }} />
-      </button>
-      <button type="button" onClick={onSchedule} tabIndex={ghost ? -1 : undefined} disabled={!b.id}
-        style={{ ...iconBtn, ...(sched ? { color: '#0F766E', border: '1px solid #99F6E4', background: '#F0FDFA' } : {}), ...(!b.id ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}
-        title={b.id ? 'Agendar quando o bloco aparece' : 'Salve o bloco para poder agendar'} aria-label="Agendar bloco">
-        <CalendarClock size={14} />
-      </button>
-      <button type="button" style={iconBtn} onClick={onToggleVisible} tabIndex={ghost ? -1 : undefined}
-        title={b.is_visible ? 'Ocultar da página' : 'Mostrar na página'} aria-label={b.is_visible ? 'Ocultar bloco' : 'Mostrar bloco'}>
-        {b.is_visible ? <Eye size={14} /> : <EyeOff size={14} />}
+      </span>
+      {tags.length > 0 && <span className="vit-tags" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '46%' }}>{tags}</span>}
+      <button type="button" className="vit-icon" onClick={e => { e.stopPropagation(); onToggleVisible?.() }} tabIndex={ghost ? -1 : undefined}
+        title={b.is_visible ? 'Ocultar da página' : 'Mostrar na página'} aria-label={b.is_visible ? 'Ocultar bloco' : 'Mostrar bloco'}
+        style={{ width: 32, height: 32, borderRadius: DS.r.sm, border: 'none', background: 'transparent', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', cursor: 'pointer' }}>
+        {b.is_visible ? <Eye size={16} /> : <EyeOff size={16} />}
       </button>
     </div>
   )
 }
 
-const T = 'all 0.18s cubic-bezier(0.4,0,0.2,1)'
-
-function BlockItem({ block: b, open, onToggleOpen, onChange, onToggleVisible, onSchedule, onDuplicate, onDelete, formCtx }: ListProps & { block: EditorBlock; open: boolean }) {
+function BlockItem({ block: b, flashKey, enterKey, onSelect, onToggleVisible }: ListProps & { block: EditorBlock }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: b.key })
-
+  const cls = ['vit-card', flashKey === b.key ? 'vit-flash' : '', enterKey === b.key ? 'vit-enter' : ''].filter(Boolean).join(' ')
   return (
-    <div ref={setNodeRef} className={open ? 'vit-card open' : 'vit-card'} style={{
-      ...cardShell(b),
+    <div ref={setNodeRef} role="listitem" className={cls} style={{
+      ...cardShell(b), cursor: 'pointer',
       transform: CSS.Transform.toString(transform), transition,
       // Lugar de origem enquanto o bloco "flutua" (DragOverlay).
-      ...(isDragging ? { opacity: 0.35, borderStyle: 'dashed', borderColor: '#94d8cf', background: '#F0FDFA' } : {}),
-    }}>
-      <Header b={b} open={open}
-        onToggleOpen={() => onToggleOpen(b.key)} onToggleVisible={() => onToggleVisible(b.key)} onSchedule={() => onSchedule(b.key)}
-        dragHandle={
-          <button ref={setActivatorNodeRef} {...attributes} {...listeners} type="button" aria-label="Arrastar para reordenar"
-            style={{ width: 32, height: 32, borderRadius: DS.r.sm, border: 'none', background: 'transparent', cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', touchAction: 'none' }}>
-            <GripVertical size={16} />
-          </button>
-        } />
-
-      {open && (
-        <div style={{ padding: '4px 20px 20px 22px', borderTop: '1px solid #F1F5F9', animation: 'slideUp 0.2s ease' }}>
-          <div style={{ paddingTop: 18 }}>
-            <BlockForm type={b.type} config={b.config} ctx={formCtx(b)} onChange={patch => onChange(b.key, patch)} />
-            {effectApplies(b.type, b.config) && (
-              <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #F1F5F9' }}>
-                <EffectField value={b.config.effect || 'none'} onChange={v => onChange(b.key, { effect: v === 'none' ? undefined : v })} />
-              </div>
-            )}
-          </div>
-          {b.error && (
-            <p role="alert" style={{ margin: '12px 0 0', fontSize: 12, color: b.state === 'error' ? '#dc2626' : '#B45309', display: 'flex', gap: 6, alignItems: 'flex-start', lineHeight: 1.5 }}>
-              <AlertCircle size={14} style={{ flex: 'none', marginTop: 1 }} /> {b.error}
-            </p>
-          )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid #F1F5F9', justifyContent: 'flex-end' }}>
-            <button type="button" onClick={() => onDuplicate(b.key)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: DS.r.sm, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer', transition: T }}>
-              <Copy size={13} /> Duplicar
+      ...(isDragging ? { opacity: 0.4, borderStyle: 'dashed', borderColor: '#94A3B8', background: '#F8FAFC', boxShadow: 'none' } : {}),
+    }}
+      onClick={() => onSelect(b.key)}>
+      <div role="button" tabIndex={0} aria-label={`Editar ${BLOCK_TYPES[b.type].label}: ${blockSummary(b.type, b.config)}`}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(b.key) } }}
+        style={{ outline: 'none', borderRadius: DS.r.lg }} className="vit-card-focus">
+        <Row b={b} onToggleVisible={() => onToggleVisible(b.key)}
+          dragHandle={
+            <button ref={setActivatorNodeRef} {...attributes} {...listeners} type="button" aria-label="Arrastar para reordenar" className="vit-grip"
+              onClick={e => e.stopPropagation()}
+              style={{ width: 24, height: 36, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'grab', color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', touchAction: 'none' }}>
+              <GripVertical size={16} />
             </button>
-            <button type="button" onClick={() => onDelete(b.key)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: DS.r.sm, border: '1px solid #FECACA', background: '#fff', fontSize: 13, fontWeight: 600, color: '#dc2626', cursor: 'pointer', transition: T }}>
-              <Trash2 size={13} /> Excluir
-            </button>
-          </div>
-        </div>
-      )}
+          } />
+      </div>
     </div>
   )
 }

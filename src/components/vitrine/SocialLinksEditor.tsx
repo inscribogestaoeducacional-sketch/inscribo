@@ -77,7 +77,7 @@ export default function SocialLinksEditor({ links, theme, schoolPhone, onChange,
     <section style={{ ...cardStyle, padding: 24 }} aria-labelledby="vit-social-title">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
         <h3 id="vit-social-title" style={sectionTitleStyle}>Redes sociais</h3>
-        <span style={{ fontSize: 12, color: filled ? '#16A34A' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ fontSize: 12, color: filled ? '#059669' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
           {filled ? <><Check size={12} /> {filled} na página</> : 'Nenhuma preenchida'}
         </span>
       </div>
@@ -145,14 +145,14 @@ export default function SocialLinksEditor({ links, theme, schoolPhone, onChange,
       )}
 
       <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
-        <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Estilo dos ícones</span>
+        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Estilo dos ícones</span>
         <Segmented value={theme.social_style || 'brand'} onChange={v => onThemeChange({ social_style: v })}
           options={[{ value: 'brand', label: 'Cores das redes' }, { value: 'theme', label: 'Cor da escola' }, { value: 'plain', label: 'Só o ícone' }]} />
         <p style={{ ...hintStyle, fontSize: 12 }}>Vale também pros links marcados como “Ícone” na lista de blocos.</p>
       </div>
 
       <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
-        <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Posição</span>
+        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Posição</span>
         <Segmented value={position} onChange={onPositionChange}
           options={[{ value: 'top', label: 'No topo, abaixo do nome' }, { value: 'bottom', label: 'No rodapé' }]} />
         <p style={{ ...hintStyle, fontSize: 12 }}>No topo, as redes são a primeira coisa que a pessoa vê; no rodapé, os botões da escola (WhatsApp, matrícula) ganham o destaque.</p>

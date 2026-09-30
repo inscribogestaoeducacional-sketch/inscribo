@@ -18,9 +18,9 @@ interface Props {
   onError: (msg: string) => void
 }
 
-const PRIMARY_SWATCHES = ['#00A896', '#3B82F6', '#1A2B4A', '#7C3AED', '#DB2777', '#DC2626', '#F59E0B', '#16A34A']
-const BG_SWATCHES = ['#FFFFFF', '#F8FAFC', '#FFF7ED', '#F0FDFA', '#EFF6FF', '#F8F5EE', '#0F172A', '#111827']
-const TEXT_SWATCHES = ['#111827', '#1E293B', '#1A2B4A', '#FFFFFF', '#F8FAFC']
+const PRIMARY_SWATCHES = ['#00A896', '#3B82F6', '#1e2d6b', '#7C3AED', '#DB2777', '#DC2626', '#F59E0B', '#059669']
+const BG_SWATCHES = ['#FFFFFF', '#F8FAFC', '#FFF7ED', '#F0FDFB', '#EFF6FF', '#F8F5EE', '#0F172A', '#111827']
+const TEXT_SWATCHES = ['#111827', '#1E293B', '#1e2d6b', '#FFFFFF', '#F8FAFC']
 // Ícones do mesmo desenho (os caracteres ↘ ↗ saíam menores que ↓ → ↑).
 const ANGLES: { value: 0 | 45 | 90 | 135 | 180; label: React.ReactNode; aria: string }[] = [
   { value: 180, label: <ArrowDown size={16} />, aria: 'De cima para baixo' },
@@ -108,7 +108,7 @@ function Choice({ selected, onClick, children, label }: { selected: boolean; onC
     <button type="button" role="radio" aria-checked={selected} aria-label={label} onClick={onClick}
       style={{
         textAlign: 'left', padding: 12, borderRadius: 12, cursor: 'pointer', background: '#fff', minWidth: 0,
-        border: selected ? '2px solid #00A896' : '1px solid #e2e8f0', boxShadow: selected ? '0 0 0 3px #CCFBF1' : '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)',
+        border: selected ? '2px solid #00A896' : '1px solid #e2e8f0', boxShadow: selected ? '0 0 0 3px #D1FAE5' : '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)',
       }}>
       {children}
     </button>
@@ -176,7 +176,7 @@ function CoverVideoField({ institutionId, value, hasCoverImage, onChange, onErro
         ) : (
           <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
             style={{ width: '100%', height: 72, borderRadius: 16, cursor: busy ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13, fontWeight: 600,
-              border: over ? '2px dashed #00A896' : '1.5px dashed #CBD5E1', background: over ? '#F0FDFA' : '#FAFAFA', color: over ? '#0F766E' : '#64748b', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)' }}>
+              border: over ? '2px dashed #00A896' : '1.5px dashed #CBD5E1', background: over ? '#F0FDFB' : '#FAFAFA', color: over ? '#007A6E' : '#64748b', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)' }}>
             <Film size={17} /> {busy ? 'Enviando o vídeo…' : over ? 'Solte o vídeo aqui' : 'Clique ou arraste um vídeo MP4'}
           </button>
         )}
@@ -349,7 +349,7 @@ export default function AppearancePanel({ page, institution, institutionId, onCh
             <Choice key={key} selected={pair === key} onClick={() => setTheme({ font_pair: key })} label={`${p.label}: ${p.heading} e ${p.body}`}>
               <span style={{ display: 'block', fontFamily: `'${p.heading}'`, fontWeight: p.heading === 'DM Serif Display' ? 400 : 700, fontSize: 18, color: '#1e293b', lineHeight: 1.2 }}>Aa Escola</span>
               <span style={{ display: 'block', fontFamily: `'${p.body}'`, fontSize: 12, color: '#475569', marginTop: 2 }}>Matrículas abertas</span>
-              <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 6 }}>{p.label}</span>
+              <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94a3b8', marginTop: 6 }}>{p.label}</span>
             </Choice>
           ))}
         </div>

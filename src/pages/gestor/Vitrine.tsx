@@ -20,7 +20,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Store, Plus, Check, ExternalLink, Loader2, Eye, EyeOff, X, AlertCircle, AlertTriangle, Smartphone, Copy, Play,
-  Monitor, LayoutList, Palette, SlidersHorizontal, Globe, Layers, MousePointerClick, Users,
+  Monitor, LayoutList, Palette, SlidersHorizontal, Globe, Layers, MousePointerClick, Users, Share2, BarChart3,
 } from 'lucide-react'
 import { arrayMove } from '@dnd-kit/sortable'
 import { useAuth } from '../../contexts/AuthContext'
@@ -33,6 +33,7 @@ import {
 import { renderVitrinePage } from '../../../api/_lib/vitrineRender'
 import BlockList, { type EditorBlock, BLOCK_ICONS } from '../../components/vitrine/BlockList'
 import BlockGallery from '../../components/vitrine/BlockGallery'
+import BlockEditor from '../../components/vitrine/BlockEditor'
 import { KpiCard } from '../../components/transmissoes/ui'
 import AppearancePanel from '../../components/vitrine/AppearancePanel'
 import SettingsPanel from '../../components/vitrine/SettingsPanel'
@@ -40,7 +41,7 @@ import SocialLinksEditor from '../../components/vitrine/SocialLinksEditor'
 import { DS } from '../../components/vitrine/ui'
 import ScheduleFields, { scheduleError } from '../../components/vitrine/ScheduleFields'
 
-type Tab = 'blocks' | 'appearance' | 'settings'
+type Tab = 'blocks' | 'social' | 'appearance' | 'settings' | 'stats'
 type PageSaveState = 'saved' | 'dirty' | 'saving' | 'error'
 
 interface InstitutionInfo { name: string; logo_url: string | null; primary_color: string | null; address: string | null }
@@ -75,7 +76,16 @@ export default function Vitrine() {
 
   const [tab, setTab] = useState<Tab>('blocks')
   const [openKey, setOpenKey] = useState<string | null>(null)
-  const [showPicker, setShowPicker] = useState(false)
+  // Adicionar bloco: undefined = fechado; null = no fim; número = posição.
+  const [pickerAt, setPickerAt] = useState<number | null | undefined>(undefined)
+  const showPicker = pickerAt !== undefined
+  const setShowPicker = (open: boolean) => setPickerAt(open ? null : undefined)
+  // Microinterações da lista: destaque ao voltar da edição / bloco novo.
+  const [flashKey, setFlashKey] = useState<string | null>(null)
+  const [justSaved, setJustSaved] = useState(false)
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const headerRef = useRef<HTMLDivElement | null>(null)
+  const [headerH, setHeaderH] = useState(120)
   const [deleteTarget, setDeleteTarget] = useState<EditorBlock | null>(null)
   const [scheduleDraft, setScheduleDraft] = useState<{ key: string; from: string | null; until: string | null } | null>(null)
   const [scheduleSaving, setScheduleSaving] = useState(false)
@@ -287,11 +297,11 @@ export default function Vitrine() {
     // aviso antes de digitar); cópia mostra (ex.: banner duplicado sem imagem).
     const nb: EditorBlock = { key: tempKey(), id: null, type, config: cfg, is_visible: true, capture_trigger_id: null, state: invalid ? 'invalid' : 'dirty', error: config ? invalid : null }
     const next = [...blocks]
-    next.splice(at ?? next.length, 0, nb)
+    next.splice(at ?? pickerAt ?? next.length, 0, nb)
     blocksRef.current = next
     setBlocks(next)
     setOpenKey(nb.key)
-    setShowPicker(false)
+    setPickerAt(undefined)
     setTab('blocks')
     if (!invalid) enqueueBlock(nb.key, 0)
   }
@@ -345,7 +355,7 @@ export default function Vitrine() {
     const next = blocks.filter(x => x.key !== b.key)
     blocksRef.current = next
     setBlocks(next)
-    if (openKey === b.key) setOpenKey(null)
+    if (openKey === b.key) setOpenKey(null)   // volta pra lista
     if (!b.id) return // ainda não salvo (se estiver sendo criado, o flush apaga)
     const { error } = await supabase.from('vitrine_blocks').delete().eq('id', b.id)
     if (error) {
@@ -424,6 +434,52 @@ export default function Vitrine() {
   const anySaving = pageState === 'saving' || blocks.some(b => b.state === 'saving')
   const anyDirty = pageState === 'dirty' || blocks.some(b => b.state === 'dirty')
 
+  // ── Microinterações e prévia ligada ─────────────────────────────────────────
+  // "Salvo agora": quando tudo que estava pendente termina de salvar.
+  const busy = anySaving || anyDirty
+  const wasBusy = useRef(false)
+  useEffect(() => {
+    if (wasBusy.current && !busy && pageState !== 'error' && !blocks.some(b => b.state === 'error')) {
+      setJustSaved(true)
+      const t = setTimeout(() => setJustSaved(false), 2500)
+      wasBusy.current = busy
+      return () => clearTimeout(t)
+    }
+    wasBusy.current = busy
+  }, [busy]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clique num bloco da prévia abre a edição dele (postMessage do iframe
+  // isolado; só aceita mensagem do próprio iframe e id de bloco existente).
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return
+      const id = (e.data as any)?.vitrinePick
+      if (typeof id !== 'string') return
+      const b = blocksRef.current.find(x => (x.id || x.key) === id)
+      if (!b) return
+      setTab('blocks'); setOpenKey(b.key); setPreviewOpen(false)
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [])
+
+  // Altura do cabeçalho fixo (a prévia gruda logo abaixo dele).
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setHeaderH(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  })
+
+  function openBlock(key: string) { setOpenKey(key) }
+  function backToList() {
+    const k = openKey
+    setOpenKey(null)
+    if (k) { setFlashKey(k); setTimeout(() => setFlashKey(f => (f === k ? null : f)), 1200) }
+  }
+  function goTab(t: Tab) { setTab(t); if (t !== 'blocks') setOpenKey(null) }
+
   // ── Render ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -447,20 +503,47 @@ export default function Vitrine() {
   // Situação da página, contando a agenda (Configurações → Agendamento).
   const pageSched = scheduleState(page.publish_at, page.unpublish_at)
   const pageStatus = !page.is_published
-    ? { label: 'Rascunho', hint: 'Só você vê — publique quando estiver pronta', bg: '#F1F5F9', color: '#475569' }
+    ? { label: 'Rascunho', hint: 'Só você vê — publique quando estiver pronta', bg: '#F1F5F9', color: '#64748B' }
     : pageSched === 'future'
-      ? { label: 'Agendada', hint: `Entra no ar em ${fmtWhen(page.publish_at!)}`, bg: '#FEF3C7', color: '#B45309' }
+      ? { label: 'Agendada', hint: `Entra no ar em ${fmtWhen(page.publish_at!)}`, bg: '#FEF3C7', color: '#D97706' }
       : pageSched === 'expired'
-        ? { label: 'Fora do ar', hint: `Saiu do ar em ${fmtWhen(page.unpublish_at!)} (agendamento)`, bg: '#FFE4E6', color: '#BE123C' }
-        : { label: 'Publicada', hint: page.unpublish_at ? `No ar até ${fmtWhen(page.unpublish_at)}` : 'Visível pra quem tem o link', bg: '#DCFCE7', color: '#15803D' }
+        ? { label: 'Fora do ar', hint: `Saiu do ar em ${fmtWhen(page.unpublish_at!)} (agendamento)`, bg: '#FEF2F2', color: '#DC2626' }
+        : { label: 'Publicada', hint: page.unpublish_at ? `No ar até ${fmtWhen(page.unpublish_at)}` : 'Visível pra quem tem o link', bg: '#D1FAE5', color: '#059669' }
+
+  // Selo de salvamento (centro do cabeçalho): erro > salvando > "Salvo agora"
+  // (2,5 s logo depois de salvar) > incompleto > "Tudo salvo".
+  const firstProblem = blocks.find(b => b.state === 'error') || blocks.find(b => b.state === 'invalid')
+  const blockError = blocks.some(b => b.state === 'error')
+  const save = pageState === 'error' || blockError
+    ? { tone: 'error', text: pageState === 'error' ? 'Erro ao salvar a aparência' : 'Erro ao salvar um bloco', click: !!firstProblem }
+    : busy ? { tone: 'saving', text: 'Salvando…', click: false }
+    : justSaved ? { tone: 'saved', text: 'Salvo agora', click: false }
+    : incomplete > 0 ? { tone: 'warn', text: incomplete === 1 ? '1 bloco incompleto' : `${incomplete} blocos incompletos`, click: true }
+    : { tone: 'idle', text: 'Tudo salvo', click: false }
+  const SAVE_TONE: Record<string, React.CSSProperties> = {
+    error: { background: '#FEF2F2', color: '#DC2626' }, saving: { background: '#E6F7F5', color: '#00A896' },
+    warn: { background: '#FEF3C7', color: '#D97706' }, saved: { background: '#D1FAE5', color: '#059669' }, idle: { background: '#F1F5F9', color: '#64748B' },
+  }
+
+  const editing = tab === 'blocks' && openKey ? blocks.find(b => b.key === openKey) || null : null
+  const selectedPreviewId = editing ? (editing.id || editing.key) : null
+  // Prévia: o HTML da página + destaque do bloco em edição + clique pra editar.
+  const previewDoc = previewHtml + `<style>
+[data-pb]{cursor:pointer;outline:2px solid transparent;outline-offset:4px;border-radius:14px;transition:outline-color .2s ease}
+[data-pb]:hover{outline-color:rgba(0,168,150,.45)}
+${selectedPreviewId ? `[data-pb="${selectedPreviewId.replace(/[^a-zA-Z0-9-]/g, '')}"]{outline:2px solid #00A896!important;position:relative}
+[data-pb="${selectedPreviewId.replace(/[^a-zA-Z0-9-]/g, '')}"]::before{content:'Editando';position:absolute;top:-11px;right:10px;z-index:5;font:700 10px/1 -apple-system,'Segoe UI',sans-serif;letter-spacing:.02em;background:#00A896;color:#fff;padding:4px 8px;border-radius:999px}` : ''}
+</style><script>(function(){document.addEventListener('click',function(e){var el=e.target&&e.target.closest&&e.target.closest('[data-pb]');if(!el)return;e.preventDefault();e.stopPropagation();parent.postMessage({vitrinePick:el.getAttribute('data-pb')},'*')},true);
+${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreviewId.replace(/[^a-zA-Z0-9-]/g, '')}"]');if(s){var r=s.getBoundingClientRect(),se=document.scrollingElement||document.documentElement;se.scrollTop+=r.top-(innerHeight-r.height)/2}` : ''}})();</script>`
+
   const iframe = (style: React.CSSProperties) => (
-    <iframe title="Prévia da página" srcDoc={previewHtml} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+    <iframe ref={iframeRef} title="Prévia da página" srcDoc={previewDoc} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
       style={{ border: 0, display: 'block', background: '#fff', ...style }} />
   )
   // Celular: moldura com "ilha" no topo. Computador: janela de navegador com
   // a página em 1150 px de largura, reduzida pra caber no painel.
   const phoneFrame = (height: number | string) => device === 'mobile' ? (
-    <div style={{ position: 'relative', width: 390, maxWidth: '100%', height, borderRadius: 44, padding: 10, background: 'linear-gradient(160deg,#1e293b,#0f172a)', boxShadow: '0 24px 60px rgba(15,23,42,.22), 0 4px 12px rgba(0,168,150,.10)' }}>
+    <div className="vit-device" style={{ position: 'relative', width: 380, maxWidth: '100%', height, borderRadius: 44, padding: 10, background: 'linear-gradient(160deg,#1e293b,#0f172a)', boxShadow: '0 24px 48px rgba(15,23,42,.18), 0 8px 16px rgba(0,168,150,.08)' }}>
       <div style={{ width: '100%', height: '100%', borderRadius: 34, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
         {/* Barra de status com a "ilha" — a página começa abaixo dela, como no aparelho. */}
         <div aria-hidden="true" style={{ flex: 'none', height: 38, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 22px', background: '#fff', fontSize: 12, fontWeight: 700, color: '#0f172a', position: 'relative' }}>
@@ -475,7 +558,7 @@ export default function Vitrine() {
       </div>
     </div>
   ) : (
-    <div style={{ width: 460, maxWidth: '100%', borderRadius: 12, overflow: 'hidden', background: '#fff', border: '1px solid #E2E8F0', boxShadow: DS.shadowXl }}>
+    <div className="vit-device" style={{ width: 460, maxWidth: '100%', borderRadius: 12, overflow: 'hidden', background: '#fff', border: '1px solid #E2E8F0', boxShadow: DS.shadowXl }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', background: '#F1F5F9', borderBottom: '1px solid #E2E8F0' }}>
         {['#F87171', '#FBBF24', '#34D399'].map(c => <span key={c} aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: c }} />)}
         <span style={{ flex: 1, marginLeft: 8, padding: '3px 10px', borderRadius: 6, background: '#fff', fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -488,18 +571,62 @@ export default function Vitrine() {
     </div>
   )
 
+  const NAV: { key: Tab; label: string; Icon: React.ElementType; count?: number; soon?: boolean }[] = [
+    { key: 'blocks', label: 'Blocos', Icon: LayoutList, count: blocks.length },
+    { key: 'social', label: 'Redes sociais', Icon: Share2, count: (page.social_links || []).length || undefined },
+    { key: 'appearance', label: 'Aparência', Icon: Palette },
+    { key: 'settings', label: 'Configurações', Icon: SlidersHorizontal },
+    { key: 'stats', label: 'Desempenho', Icon: BarChart3 },
+  ]
+  const btn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, boxShadow: DS.shadowSm, color: '#1e293b', cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }
+  const viewKey = tab === 'blocks' ? (editing ? `edit:${editing.key}` : 'list') : tab
+  const viewAnim = tab === 'blocks' ? (editing ? 'vitInRight' : 'vitInLeft') : 'vitRise'
+
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
-      {/* Hover dos cartões de bloco e botões do editor (mesma transição e
-          sombra com tom teal do app — index.css --transition/--shadow-md). */}
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#f8f9fb' }}>
+      {/* Movimento do editor: mesma transição do app (index.css --transition),
+          sombras com tom teal (--shadow-sm/md/lg). Menos movimento = parado. */}
       <style>{`
-        .vit-card{transition:all .18s cubic-bezier(0.4,0,0.2,1);box-shadow:0 1px 3px rgba(0,168,150,0.06),0 1px 2px rgba(0,0,0,0.04)}
-        .vit-card:hover{border-color:#CBD5E1;box-shadow:0 4px 16px rgba(0,168,150,0.10),0 2px 4px rgba(0,0,0,0.04)}
-        .vit-card.open{border-color:#CBD5E1;box-shadow:0 8px 24px rgba(0,168,150,0.12),0 4px 8px rgba(0,0,0,0.04)}
+        @keyframes vitInRight{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+        @keyframes vitInLeft{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+        @keyframes vitRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+        @keyframes vitEnter{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:none}}
+        @keyframes vitFlash{0%,100%{box-shadow:0 1px 3px rgba(0,168,150,0.06),0 1px 2px rgba(0,0,0,0.04)}30%{box-shadow:0 0 0 4px rgba(0,168,150,0.20),0 4px 16px rgba(0,168,150,0.10)}}
+        @keyframes vitBlink{50%{opacity:.3}}
+        @keyframes vitPop{from{transform:scale(0)}to{transform:scale(1)}}
+        .vit-view{animation:var(--vit-anim) .28s cubic-bezier(0.4,0,0.2,1) backwards}
+        .vit-group{animation:vitRise .32s cubic-bezier(0.4,0,0.2,1) backwards}
+        .vit-card{transition:box-shadow .18s cubic-bezier(0.4,0,0.2,1),transform .18s cubic-bezier(0.4,0,0.2,1),border-color .18s cubic-bezier(0.4,0,0.2,1);box-shadow:0 1px 3px rgba(0,168,150,0.06),0 1px 2px rgba(0,0,0,0.04)}
+        .vit-card:hover{border-color:#CBD5E1!important;box-shadow:0 4px 16px rgba(0,168,150,0.10),0 2px 4px rgba(0,0,0,0.04);transform:translateY(-1px)}
+        .vit-card .vit-grip{opacity:0;transition:opacity .15s ease}
+        .vit-card:hover .vit-grip,.vit-card:focus-within .vit-grip{opacity:1}
+        .vit-card-focus:focus-visible{box-shadow:0 0 0 3px rgba(0,168,150,0.25)}
+        .vit-card.vit-flash{animation:vitFlash 1.1s cubic-bezier(0.4,0,0.2,1)}
+        .vit-card.vit-enter{animation:vitEnter .4s cubic-bezier(.34,1.56,.64,1)}
+        .vit-lifted{box-shadow:0 24px 48px rgba(15,23,42,0.14),0 8px 16px rgba(0,168,150,0.08)!important;transform:rotate(-1.2deg) scale(1.02);cursor:grabbing}
+        .vit-icon{transition:background .15s ease,color .15s ease}
+        .vit-icon:hover{background:#F1F5F9!important;color:#1e293b!important}
+        .vit-gap{position:relative;height:12px;display:flex;align-items:center}
+        .vit-gap::before{content:'';position:absolute;left:18px;right:18px;height:2px;border-radius:2px;background:#00A896;opacity:0;transform:scaleX(.4);transition:all .2s cubic-bezier(0.4,0,0.2,1)}
+        .vit-gap:hover::before{opacity:.35;transform:none}
+        .vit-gap button{position:absolute;left:50%;z-index:2;width:24px;height:24px;border-radius:50%;border:1px solid #00A896;background:#fff;color:#00A896;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transform:translateX(-50%) scale(.6);transition:all .18s cubic-bezier(0.4,0,0.2,1)}
+        .vit-gap:hover button,.vit-gap button:focus-visible{opacity:1;transform:translateX(-50%) scale(1)}
         .vit-btn{transition:all .18s cubic-bezier(0.4,0,0.2,1)}
         .vit-btn:hover:not(:disabled){box-shadow:0 4px 16px rgba(0,168,150,0.10),0 2px 4px rgba(0,0,0,0.04);transform:translateY(-1px)}
-        .vit-upload:focus-visible,.vit-pick:focus-visible{outline:3px solid #99F6E4;outline-offset:2px}
-        @media (prefers-reduced-motion: reduce){.vit-card,[role=tabpanel],[role=dialog]{transition:none!important;animation:none!important}}
+        .vit-btn:active:not(:disabled){transform:scale(.98)}
+        .vit-ghost{transition:background .15s ease,color .15s ease}
+        .vit-ghost:hover{background:#F1F5F9!important;color:#1e293b!important}
+        .vit-nav{transition:background .18s ease,color .18s ease,box-shadow .18s ease}
+        .vit-nav:hover:not([aria-selected="true"]){color:#1e293b!important}
+        .vit-save{transition:background .25s ease,color .25s ease}
+        .vit-save .vit-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+        .vit-save[data-tone="saving"] .vit-dot{animation:vitBlink .8s ease infinite}
+        .vit-save[data-tone="saved"] svg{animation:vitPop .35s cubic-bezier(.34,1.56,.64,1)}
+        .vit-footbar{background:linear-gradient(to top,#f8f9fb 72%,rgba(248,249,251,0))}
+        .vit-device{transition:width .3s cubic-bezier(0.4,0,0.2,1)}
+        .vit-upload:focus-visible,.vit-pick:focus-visible{outline:3px solid #D1FAE5;outline-offset:2px}
+        @media (max-width:760px){.vit-tags{display:none!important}}
+        @media (prefers-reduced-motion: reduce){.vit-view,.vit-group,.vit-card,.vit-lifted,.vit-save *,.vit-gap *,[role=dialog]{transition:none!important;animation:none!important}}
       `}</style>
       {toast && (
         <div role="status" style={{
@@ -511,222 +638,243 @@ export default function Vitrine() {
         </div>
       )}
 
-      {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: '#E6F7F5', boxShadow: DS.shadowSm, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Store size={18} color="#00A896" />
+      {/* ── Cabeçalho fixo: identidade · salvamento · ação principal; e a
+          navegação entre as áreas (abas em pílula, padrão do painel) ────── */}
+      <div ref={headerRef} style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(248,249,251,0.92)', backdropFilter: 'saturate(180%) blur(8px)', WebkitBackdropFilter: 'saturate(180%) blur(8px)', borderBottom: '1px solid #E2E8F0', padding: '18px 24px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0, flex: '1 1 320px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Store size={18} color="#00A896" />
+              </div>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Vitrine</h1>
+              <span title={pageStatus.hint} style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: pageStatus.bg, color: pageStatus.color, transition: 'all .25s ease' }}>{pageStatus.label}</span>
             </div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Vitrine</h1>
-            <span style={{
-              fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.04em',
-              background: pageStatus.bg, color: pageStatus.color,
-            }}>{pageStatus.label}</span>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748b', paddingLeft: 46, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer" style={{ color: '#00A896', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {publicUrl(page.slug).replace(/^https:\/\//, '')}
+              </a>
+              <button type="button" title="Copiar link" aria-label="Copiar link" className="vit-ghost"
+                onClick={() => navigator.clipboard.writeText(publicUrl(page.slug)).then(() => showToast('Link copiado.'), () => {})}
+                style={{ background: 'none', border: 'none', padding: 4, borderRadius: 6, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+                <Copy size={13} />
+              </button>
+            </p>
           </div>
-          <p style={{ margin: 0, fontSize: 13, color: '#64748b', paddingLeft: 46 }}>
-            A página da escola com todos os links:{' '}
-            <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer" style={{ color: '#00A896', fontWeight: 600, textDecoration: 'none' }}>
-              {publicUrl(page.slug).replace(/^https:\/\//, '')}
-            </a>
-            <button type="button" title="Copiar link" aria-label="Copiar link"
-              onClick={() => navigator.clipboard.writeText(publicUrl(page.slug)).then(() => showToast('Link copiado.'), () => {})}
-              style={{ marginLeft: 6, background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: '#94a3b8', verticalAlign: 'middle' }}>
-              <Copy size={13} />
-            </button>
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span aria-live="polite" style={{ fontSize: 12, color: pageState === 'error' ? '#dc2626' : incomplete > 0 && !anySaving && !anyDirty ? '#B45309' : '#64748b', display: 'flex', alignItems: 'center', gap: 5 }}>
-            {anySaving ? <><Loader2 size={13} className="animate-spin" /> Salvando…</>
-              : pageState === 'error' ? <><AlertCircle size={13} /> Erro ao salvar a aparência</>
-              : anyDirty ? 'Alterações pendentes…'
-              : incomplete > 0 ? <><AlertTriangle size={13} /> {incomplete === 1 ? '1 bloco não salvo' : `${incomplete} blocos não salvos`}</>
-              : <><Check size={13} color="#16A34A" /> Tudo salvo</>}
-          </span>
-          {!wide && (
-            <button type="button" onClick={() => setPreviewOpen(true)}
-              className="vit-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, boxShadow: DS.shadowSm, color: '#475569', cursor: 'pointer' }}>
-              <Smartphone size={15} /> Prévia
-            </button>
-          )}
-          {page.is_published && (
-            <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer"
-              className="vit-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, boxShadow: DS.shadowSm, color: '#475569', textDecoration: 'none' }}>
-              <ExternalLink size={15} /> Ver página
-            </a>
-          )}
-          <button type="button" onClick={togglePublish} disabled={publishing}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: publishing ? 'wait' : 'pointer', boxShadow: DS.shadowMd,
-              border: page.is_published ? '1px solid #e2e8f0' : 'none',
-              background: page.is_published ? '#fff' : '#00A896', color: page.is_published ? '#475569' : '#fff',
-            }}>
-            {publishing ? <Loader2 size={15} className="animate-spin" /> : page.is_published ? <EyeOff size={15} /> : <Eye size={15} />}
-            {page.is_published ? 'Despublicar' : 'Publicar página'}
+
+          <button type="button" className="vit-save" data-tone={save.tone} aria-live="polite" disabled={!save.click}
+            onClick={() => { if (firstProblem) { setTab('blocks'); setOpenKey(firstProblem.key) } }}
+            title={save.click ? 'Abrir o bloco' : undefined}
+            style={{ ...SAVE_TONE[save.tone], display: 'flex', alignItems: 'center', gap: 8, height: 34, padding: '0 14px', borderRadius: 999, border: 'none', fontSize: 13, fontWeight: 600, cursor: save.click ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+            {save.tone === 'saved' || save.tone === 'idle' ? <Check size={14} /> : save.tone === 'error' ? <AlertCircle size={14} /> : <span className="vit-dot" />}
+            {save.text}
           </button>
-        </div>
-      </div>
 
-      {/* ── Indicadores (mesmo KpiCard das Transmissões) ────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
-        <KpiCard label="Página" value={pageStatus.label} hint={pageStatus.hint}
-          icon={<Globe size={16} color={pageStatus.color} />} bg={pageStatus.bg} />
-        <KpiCard label="Blocos na página" value={String(blocks.filter(b => b.id && b.is_visible).length)}
-          hint={blocks.some(b => !b.is_visible) ? `${blocks.filter(b => !b.is_visible).length} oculto(s)` : 'Todos visíveis'}
-          icon={<Layers size={16} color="#00A896" />} bg="#E6F7F5" />
-        <KpiCard label="Visitas · 7 dias" value={stats7 ? stats7.views.toLocaleString('pt-BR') : '—'}
-          hint={stats7 ? `${stats7.visitors.toLocaleString('pt-BR')} pessoa(s)` : undefined}
-          icon={<Users size={16} color="#0284C7" />} bg="#E0F2FE" />
-        <KpiCard label="Cliques · 7 dias" value={stats7 ? stats7.clicks.toLocaleString('pt-BR') : '—'}
-          hint={stats7 && stats7.views ? `${Math.round((stats7.clicks / stats7.views) * 100)}% das visitas` : 'Botões, links e redes'}
-          icon={<MousePointerClick size={16} color="#7C3AED" />} bg="#EDE9FE" />
-      </div>
-
-      {pageError && (
-        <div role="alert" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', borderRadius: 12, padding: '12px 16px', fontSize: 13, lineHeight: 1.5, display: 'flex', gap: 10 }}>
-          <AlertCircle size={15} style={{ flex: 'none', marginTop: 1 }} /> {pageError}
-        </div>
-      )}
-      {incomplete > 0 && (
-        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', borderRadius: 12, padding: '12px 16px', fontSize: 13, lineHeight: 1.5, display: 'flex', gap: 10 }}>
-          <AlertTriangle size={15} style={{ flex: 'none', marginTop: 1 }} />
-          {incomplete === 1 ? '1 bloco tem campos a corrigir e ainda não foi salvo.' : `${incomplete} blocos têm campos a corrigir e ainda não foram salvos.`}
-          {' '}Blocos não salvos não aparecem na página publicada.
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}>
-        {/* ── Editor ──────────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0, maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div role="tablist" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 12, padding: 4, width: 'fit-content', flexWrap: 'wrap' }}>
-            {([
-              { key: 'blocks' as const, label: `Blocos (${blocks.length})`, Icon: LayoutList },
-              { key: 'appearance' as const, label: 'Aparência', Icon: Palette },
-              { key: 'settings' as const, label: 'Configurações', Icon: SlidersHorizontal },
-            ]).map(t => (
-              <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)} style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: '8px 18px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
-                background: tab === t.key ? '#fff' : 'transparent', color: tab === t.key ? '#1e2d6b' : '#64748b',
-                boxShadow: tab === t.key ? DS.shadowMd : 'none',
-              }}><t.Icon size={14} color={tab === t.key ? '#00A896' : '#94a3b8'} /> {t.label}</button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginLeft: 'auto' }}>
+            {stats7 && (
+              <button type="button" onClick={() => goTab('stats')} className="vit-ghost" title="Últimos 7 dias"
+                style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '6px 10px', borderRadius: 10, border: 'none', background: 'transparent', fontSize: 12, color: '#64748b', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <span><strong style={{ color: '#1e293b', fontVariantNumeric: 'tabular-nums' }}>{stats7.views.toLocaleString('pt-BR')}</strong> visitas</span>
+                <span><strong style={{ color: '#1e293b', fontVariantNumeric: 'tabular-nums' }}>{stats7.clicks.toLocaleString('pt-BR')}</strong> cliques</span>
+                <span style={{ color: '#94a3b8' }}>7 dias</span>
+              </button>
+            )}
+            {!wide && (
+              <button type="button" onClick={() => setPreviewOpen(true)} className="vit-btn" style={btn}>
+                <Smartphone size={15} /> Prévia
+              </button>
+            )}
+            {page.is_published && (
+              <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer" className="vit-btn" style={btn}>
+                <ExternalLink size={15} /> Ver página
+              </a>
+            )}
+            <button type="button" onClick={togglePublish} disabled={publishing} className="vit-btn"
+              style={page.is_published
+                ? { ...btn, color: '#64748b', cursor: publishing ? 'wait' : 'pointer' }
+                : { ...btn, border: '1px solid #00A896', background: '#00A896', color: '#fff', boxShadow: '0 4px 14px rgba(0,168,150,0.25)', padding: '9px 20px', cursor: publishing ? 'wait' : 'pointer' }}>
+              {publishing ? <Loader2 size={15} className="animate-spin" /> : page.is_published ? <EyeOff size={15} /> : <Eye size={15} />}
+              {page.is_published ? 'Despublicar' : 'Publicar página'}
+            </button>
           </div>
+        </div>
 
-          {/* Troca de aba com a entrada suave do app (slideUp). */}
-          <div key={tab} role="tabpanel" style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'slideUp 0.2s ease' }}>
-          {tab === 'blocks' && (
-            <>
+        <div role="tablist" aria-label="Áreas do editor" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 12, padding: 4, width: 'fit-content', maxWidth: '100%', overflowX: 'auto' }}>
+          {NAV.map(t => {
+            const sel = tab === t.key
+            return (
+              <button key={t.key} role="tab" aria-selected={sel} onClick={() => goTab(t.key)} className="vit-nav" style={{
+                display: 'flex', alignItems: 'center', gap: 7, flex: 'none',
+                padding: '8px 16px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                background: sel ? '#fff' : 'transparent', color: sel ? '#1e2d6b' : '#64748b',
+                boxShadow: sel ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+              }}>
+                <t.Icon size={15} color={sel ? '#00A896' : '#94a3b8'} /> {t.label}
+                {t.count !== undefined && (
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, background: sel ? '#E6F7F5' : '#E2E8F0', color: sel ? '#00A896' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{t.count}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div style={{ padding: '24px 24px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {pageError && (
+          <div role="alert" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', borderRadius: 12, padding: '12px 16px', fontSize: 13, lineHeight: 1.5, display: 'flex', gap: 10 }}>
+            <AlertCircle size={15} style={{ flex: 'none', marginTop: 1 }} /> {pageError}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
+          {/* ── Área de trabalho: lista ↔ edição, ou a área escolhida ─────── */}
+          <div key={viewKey} role="tabpanel" className="vit-view" style={{ ['--vit-anim' as any]: viewAnim, flex: 1, minWidth: 0, maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {tab === 'blocks' && editing && (
+              <BlockEditor block={editing}
+                ctx={{
+                  institutionId, schoolPhone, onError: msg => showToast(msg, true),
+                  duplicateMessage: (() => { const m = captureMessage(editing); return !!m && (dupMessages.get(m) || 0) > 1 })(),
+                  hasCaptureTrigger: !!editing.capture_trigger_id, institutionName: institution.name,
+                }}
+                onChange={patch => changeBlock(editing.key, patch)}
+                onBack={backToList}
+                onToggleVisible={() => toggleVisible(editing.key)}
+                onSchedule={() => setScheduleDraft({ key: editing.key, from: editing.visible_from ?? null, until: editing.visible_until ?? null })}
+                onDuplicate={() => duplicateBlock(editing.key)}
+                onDelete={() => setDeleteTarget(editing)} />
+            )}
+
+            {tab === 'blocks' && !editing && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.01em' }}>Blocos da página</h2>
+                    <p style={{ margin: '2px 0 0', fontSize: 13, color: '#64748b' }}>
+                      {blocks.length ? 'Clique num bloco para editar. Arraste pela alça para mudar a ordem.' : 'Botões e informações que aparecem na página, na ordem da lista.'}
+                    </p>
+                  </div>
+                  {blocks.length > 0 && (
+                    <button type="button" onClick={() => setShowPicker(true)} disabled={blocks.length >= VITRINE_MAX_BLOCKS} className="vit-btn"
+                      style={{ ...btn, border: '1px solid #00A896', background: '#00A896', color: '#fff', boxShadow: '0 4px 14px rgba(0,168,150,0.25)' }}>
+                      <Plus size={15} /> Adicionar bloco
+                    </button>
+                  )}
+                </div>
+                {blocks.length === 0 ? (
+                  <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: '48px 28px', textAlign: 'center', boxShadow: DS.shadowSm }}>
+                    <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                      <Store size={24} color="#00A896" />
+                    </div>
+                    <p style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.01em' }}>Monte a página da escola</p>
+                    <p style={{ margin: '0 0 20px', fontSize: 13, color: '#64748b', maxWidth: 440, marginInline: 'auto', lineHeight: 1.6 }}>
+                      Adicione os botões e informações que as famílias precisam: WhatsApp, matrícula, redes sociais, endereço e horário.
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {(['whatsapp', 'enroll', 'link'] as BlockType[]).map(t => {
+                        const Icon = BLOCK_ICONS[t]
+                        return (
+                          <button key={t} type="button" onClick={() => addBlock(t)} className="vit-btn" style={btn}>
+                            <Icon size={15} color={BLOCK_TYPES[t].color} /> {BLOCK_TYPES[t].label}
+                          </button>
+                        )
+                      })}
+                      <button type="button" onClick={() => setShowPicker(true)} className="vit-btn"
+                        style={{ ...btn, border: '1px solid #00A896', background: '#00A896', color: '#fff', boxShadow: '0 4px 14px rgba(0,168,150,0.25)' }}>
+                        <Plus size={15} /> Outros blocos
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <BlockList blocks={blocks} flashKey={flashKey} enterKey={null}
+                    onSelect={openBlock} onReorder={reorder} onToggleVisible={toggleVisible}
+                    onInsertAt={i => setPickerAt(i)} />
+                )}
+              </>
+            )}
+
+            {tab === 'social' && (
               <SocialLinksEditor links={page.social_links || []} theme={readTheme(page.theme)} schoolPhone={schoolPhone}
                 onChange={social_links => updatePage({ social_links })}
                 onThemeChange={patch => updatePage({ theme: { ...readTheme(page.theme), ...patch } })}
                 position={page.social_position === 'bottom' ? 'bottom' : 'top'} onPositionChange={social_position => updatePage({ social_position })} />
-              {blocks.length === 0 ? (
-                <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: '48px 28px', textAlign: 'center', boxShadow: DS.shadowSm }}>
-                  <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                    <Store size={24} color="#00A896" />
-                  </div>
-                  <p style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: DS.navy, letterSpacing: '-0.01em' }}>Monte a página da escola</p>
-                  <p style={{ margin: '0 0 20px', fontSize: 13, color: '#64748b', maxWidth: 440, marginInline: 'auto', lineHeight: 1.6 }}>
-                    Adicione os botões e informações que as famílias precisam: WhatsApp, matrícula, redes sociais, endereço e horário.
-                  </p>
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                    {(['whatsapp', 'enroll', 'link'] as BlockType[]).map(t => {
-                      const Icon = BLOCK_ICONS[t]
-                      return (
-                        <button key={t} type="button" onClick={() => addBlock(t)}
-                          className="vit-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', boxShadow: DS.shadowSm, fontSize: 13, fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}>
-                          <Icon size={15} color={BLOCK_TYPES[t].color} /> {BLOCK_TYPES[t].label}
-                        </button>
-                      )
-                    })}
-                    <button type="button" onClick={() => setShowPicker(true)}
-                      className="vit-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: 'none', background: '#00A896', boxShadow: DS.shadowMd, fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
-                      <Plus size={15} /> Outros blocos
-                    </button>
-                  </div>
+            )}
+
+            {tab === 'appearance' && (
+              <AppearancePanel page={page} institution={institution} institutionId={institutionId}
+                onChange={updatePage} onError={msg => showToast(msg, true)} />
+            )}
+
+            {tab === 'settings' && (
+              <SettingsPanel page={page} onChange={updatePage} onToast={msg => showToast(msg)}
+                floatingOptions={blocks.filter(b => b.id && (b.type === 'whatsapp' || (b.type === 'enroll' && b.config.mode === 'whatsapp')))
+                  .map(b => ({ id: b.id!, label: `${BLOCK_TYPES[b.type].label}: ${blockSummary(b.type, b.config)}${b.is_visible ? '' : ' (oculto)'}` }))}
+                onSlugSaved={slug => {
+                  setPage(p => (p ? { ...p, slug } : p))
+                  if (savedPageRef.current) savedPageRef.current = { ...savedPageRef.current, slug }
+                }} />
+            )}
+
+            {tab === 'stats' && (
+              <>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.01em' }}>Desempenho</h2>
+                  <p style={{ margin: '2px 0 0', fontSize: 13, color: '#64748b' }}>Resumo dos últimos 7 dias. O painel completo (por bloco, por origem e funil do Captação) chega na próxima fase.</p>
                 </div>
-              ) : (
-                <BlockList
-                  blocks={blocks}
-                  openKey={openKey}
-                  onToggleOpen={k => setOpenKey(o => (o === k ? null : k))}
-                  onReorder={reorder}
-                  onChange={changeBlock}
-                  onToggleVisible={toggleVisible}
-                  onSchedule={k => { const b = blocks.find(x => x.key === k); if (b) setScheduleDraft({ key: k, from: b.visible_from ?? null, until: b.visible_until ?? null }) }}
-                  onDuplicate={duplicateBlock}
-                  onDelete={k => setDeleteTarget(blocks.find(b => b.key === k) || null)}
-                  formCtx={b => ({
-                    institutionId,
-                    schoolPhone,
-                    onError: msg => showToast(msg, true),
-                    duplicateMessage: (() => { const m = captureMessage(b); return !!m && (dupMessages.get(m) || 0) > 1 })(),
-                    hasCaptureTrigger: !!b.capture_trigger_id,
-                    institutionName: institution.name,
-                  })}
-                />
-              )}
-              {blocks.length > 0 && (
-                <button type="button" onClick={() => setShowPicker(true)} disabled={blocks.length >= VITRINE_MAX_BLOCKS}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '14px', borderRadius: 16, border: '1.5px dashed #94d8cf', background: '#F0FDFA', color: '#0F766E', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  <Plus size={15} /> Adicionar bloco
-                </button>
-              )}
-            </>
-          )}
-
-          {tab === 'appearance' && (
-            <AppearancePanel page={page} institution={institution} institutionId={institutionId}
-              onChange={updatePage} onError={msg => showToast(msg, true)} />
-          )}
-
-          {tab === 'settings' && (
-            <SettingsPanel page={page} onChange={updatePage} onToast={msg => showToast(msg)}
-              floatingOptions={blocks.filter(b => b.id && (b.type === 'whatsapp' || (b.type === 'enroll' && b.config.mode === 'whatsapp')))
-                .map(b => ({ id: b.id!, label: `${BLOCK_TYPES[b.type].label}: ${blockSummary(b.type, b.config)}${b.is_visible ? '' : ' (oculto)'}` }))}
-              onSlugSaved={slug => {
-                setPage(p => (p ? { ...p, slug } : p))
-                if (savedPageRef.current) savedPageRef.current = { ...savedPageRef.current, slug }
-              }} />
-          )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                  <KpiCard label="Página" value={pageStatus.label} hint={pageStatus.hint}
+                    icon={<Globe size={16} color={pageStatus.color} />} bg={pageStatus.bg} />
+                  <KpiCard label="Blocos na página" value={String(blocks.filter(b => b.id && b.is_visible).length)}
+                    hint={blocks.some(b => !b.is_visible) ? `${blocks.filter(b => !b.is_visible).length} oculto(s)` : 'Todos visíveis'}
+                    icon={<Layers size={16} color="#00A896" />} bg="#E6F7F5" />
+                  <KpiCard label="Visitas · 7 dias" value={stats7 ? stats7.views.toLocaleString('pt-BR') : '—'}
+                    hint={stats7 ? `${stats7.visitors.toLocaleString('pt-BR')} pessoa(s)` : undefined}
+                    icon={<Users size={16} color="#0284C7" />} bg="#E0F2FE" />
+                  <KpiCard label="Cliques · 7 dias" value={stats7 ? stats7.clicks.toLocaleString('pt-BR') : '—'}
+                    hint={stats7 && stats7.views ? `${Math.round((stats7.clicks / stats7.views) * 100)}% das visitas` : 'Botões, links e redes'}
+                    icon={<MousePointerClick size={16} color="#7C3AED" />} bg="#EDE9FE" />
+                </div>
+              </>
+            )}
           </div>
-        </div>
 
-        {/* ── Prévia ──────────────────────────────────────────────────────── */}
-        {wide && (
-          <aside style={{ position: 'sticky', top: 0, flex: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 30 }}>
-              <div role="radiogroup" aria-label="Tamanho da prévia" style={{ display: 'flex', gap: 2, background: '#F1F5F9', borderRadius: 999, padding: 3 }}>
-                {([{ v: 'mobile' as const, label: 'Celular', Icon: Smartphone }, { v: 'desktop' as const, label: 'Computador', Icon: Monitor }]).map(({ v, label, Icon }) => (
-                  <button key={v} type="button" role="radio" aria-checked={device === v} onClick={() => setDevice(v)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
-                      background: device === v ? '#fff' : 'transparent', color: device === v ? '#1e2d6b' : '#64748b', boxShadow: device === v ? '0 1px 3px rgba(0,0,0,.10)' : 'none' }}>
-                    <Icon size={13} /> {label}
+          {/* ── Prévia ligada à edição ────────────────────────────────────── */}
+          {wide && (
+            <aside aria-label="Prévia da página" style={{ position: 'sticky', top: headerH + 16, flex: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#64748b' }}>
+                  <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: '#00A896', boxShadow: '0 0 0 3px #E6F7F5' }} /> Prévia ao vivo
+                </span>
+                <div role="radiogroup" aria-label="Tamanho da prévia" style={{ display: 'flex', gap: 2, background: '#F1F5F9', borderRadius: 999, padding: 3 }}>
+                  {([{ v: 'mobile' as const, label: 'Celular', Icon: Smartphone }, { v: 'desktop' as const, label: 'Computador', Icon: Monitor }]).map(({ v, label, Icon }) => (
+                    <button key={v} type="button" role="radio" aria-checked={device === v} onClick={() => setDevice(v)} className="vit-nav"
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        background: device === v ? '#fff' : 'transparent', color: device === v ? '#1e2d6b' : '#64748b', boxShadow: device === v ? '0 1px 3px rgba(0,0,0,.10)' : 'none' }}>
+                      <Icon size={13} /> {label}
+                    </button>
+                  ))}
+                </div>
+                {hasAnimation && (
+                  <button type="button" onClick={playAnimation} className="vit-btn"
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 999, border: '1px solid #D1FAE5', background: '#F0FDFB', fontSize: 12, fontWeight: 600, color: '#00A896', cursor: 'pointer' }}>
+                    <Play size={12} /> Ver animação
                   </button>
-                ))}
+                )}
               </div>
-              {hasAnimation && (
-                <button type="button" onClick={playAnimation}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 999, border: '1px solid #CCFBF1', background: '#F0FDFA', fontSize: 12, fontWeight: 600, color: '#0F766E', cursor: 'pointer' }}>
-                  <Play size={12} /> Ver animação
-                </button>
-              )}
-            </div>
-            {phoneFrame('min(760px, calc(100vh - 170px))')}
-          </aside>
-        )}
+              {phoneFrame(`min(740px, calc(100vh - ${headerH + 90}px))`)}
+              <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>Clique num bloco da prévia para editá-lo.</p>
+            </aside>
+          )}
+        </div>
       </div>
 
       {/* ── Escolha do tipo de bloco ─────────────────────────────────────── */}
       {showPicker && (
-        <Modal title="Adicionar bloco" onClose={() => setShowPicker(false)} wide>
+        <Modal title={pickerAt === null ? 'Adicionar bloco' : `Inserir bloco na posição ${(pickerAt ?? 0) + 1}`} onClose={() => setShowPicker(false)} wide>
           <BlockGallery onPick={t => addBlock(t)} />
         </Modal>
       )}
 
-      {/* ── Confirmação de exclusão ──────────────────────────────────────── */}
+      {/* ── Agenda do bloco ──────────────────────────────────────────────── */}
       {scheduleDraft && (() => {
         const b = blocks.find(x => x.key === scheduleDraft.key)
         if (!b) return null
@@ -745,10 +893,9 @@ export default function Vitrine() {
               A página publicada troca sozinha no horário marcado (em até 1 minuto). A prévia ao lado mostra todos os blocos, agendados ou não.
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button type="button" onClick={() => setScheduleDraft(null)}
-                style={{ padding: '10px 18px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Cancelar</button>
-              <button type="button" disabled={!!err || scheduleSaving} onClick={saveSchedule}
-                style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: err ? '#E2E8F0' : '#00A896', color: err ? '#94a3b8' : '#fff', fontSize: 13, fontWeight: 600, cursor: err ? 'not-allowed' : 'pointer', boxShadow: err ? 'none' : DS.shadowMd }}>
+              <button type="button" onClick={() => setScheduleDraft(null)} className="vit-btn" style={btn}>Cancelar</button>
+              <button type="button" disabled={!!err || scheduleSaving} onClick={saveSchedule} className="vit-btn"
+                style={{ ...btn, border: 'none', background: err ? '#E2E8F0' : '#00A896', color: err ? '#94a3b8' : '#fff', cursor: err ? 'not-allowed' : 'pointer', boxShadow: err ? 'none' : '0 4px 14px rgba(0,168,150,0.25)' }}>
                 {scheduleSaving ? 'Salvando…' : 'Salvar agenda'}
               </button>
             </div>
@@ -756,6 +903,7 @@ export default function Vitrine() {
         )
       })()}
 
+      {/* ── Confirmação de exclusão ──────────────────────────────────────── */}
       {deleteTarget && (
         <Modal title="Excluir bloco?" onClose={() => setDeleteTarget(null)} narrow>
           <p style={{ margin: '0 0 8px', fontSize: 14, color: '#1e293b' }}>
@@ -767,17 +915,16 @@ export default function Vitrine() {
             </p>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-            <button type="button" onClick={() => setDeleteTarget(null)}
-              style={{ padding: '10px 18px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Cancelar</button>
-            <button type="button" onClick={confirmDelete}
-              style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: '#dc2626', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(220,38,38,0.18)' }}>Excluir</button>
+            <button type="button" onClick={() => setDeleteTarget(null)} className="vit-btn" style={btn}>Cancelar</button>
+            <button type="button" onClick={confirmDelete} className="vit-btn"
+              style={{ ...btn, border: 'none', background: '#dc2626', color: '#fff', boxShadow: '0 4px 12px rgba(220,38,38,0.18)' }}>Excluir</button>
           </div>
         </Modal>
       )}
 
       {/* ── Prévia em telas estreitas ────────────────────────────────────── */}
       {previewOpen && !wide && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16, gap: 12 }}
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16, gap: 12, animation: 'slideUp 0.2s ease' }}
           onClick={e => { if (e.target === e.currentTarget) setPreviewOpen(false) }}>
           <button type="button" onClick={() => setPreviewOpen(false)} aria-label="Fechar prévia"
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 999, border: 'none', background: '#fff', fontSize: 13, fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}>

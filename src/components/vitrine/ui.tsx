@@ -16,12 +16,12 @@ export const DS = {
   focusRing: '0 0 0 3px rgba(0,168,150,0.14)',
   r: { sm: 8, md: 12, lg: 16, xl: 20 },
   ease: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
-  navy: '#1A2B4A', text: '#1e293b', muted: '#64748B', faint: '#94A3B8', border: '#E2E8F0',
+  navy: '#1e2d6b', text: '#1e293b', muted: '#64748B', faint: '#94A3B8', border: '#E2E8F0',
 } as const
 
 export const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 12, fontWeight: 600, color: '#475569',
-  marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em',
+  display: 'block', fontSize: 13, fontWeight: 600, color: '#475569',
+  marginBottom: 6,
 }
 export const inputStyle: React.CSSProperties = {
   width: '100%', padding: '10px 14px', borderRadius: DS.r.md,

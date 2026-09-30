@@ -91,7 +91,7 @@ export default function ItemListEditor<T>({
       {items.length < max && (addSlot ?? (newItem && (
         <button type="button" onClick={add}
           style={{ marginTop: 10, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 12, borderRadius: DS.r.md,
-            border: '1.5px dashed #94d8cf', background: '#F0FDFA', color: '#0F766E', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: T }}>
+            border: '1.5px dashed #94d8cf', background: '#F0FDFB', color: '#007A6E', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: T }}>
           <Plus size={14} /> {addLabel || `Adicionar ${noun}`}
         </button>
       )))}

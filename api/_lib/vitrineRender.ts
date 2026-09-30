@@ -505,18 +505,25 @@ bt.addEventListener('click',function(){f.src=li.getAttribute('data-embed');s.que
 // Monta os blocos na ordem; links marcados como "Ícone" em sequência dividem
 // uma fileira (um sozinho vira fileira de um). Cada ícone conta clique no
 // próprio bloco.
+// Prévia do editor: marca o elemento raiz de cada bloco com o id (data-pb),
+// pro editor destacar o bloco em edição e abrir a edição ao clicar nele.
+function markPreview(html: string, id: string): string {
+  return html.replace(/^<([a-z]+)/, (_m, tag) => `<${tag} data-pb="${esc(id)}"`)
+}
+
 function renderBlocks(blocks: VitrineBlock[], preview: boolean, ctx: BlockCtx): string {
   const out: string[] = []
   for (let i = 0; i < blocks.length; i++) {
     if (socialOf(blocks[i])) {
       let j = i
       while (j + 1 < blocks.length && socialOf(blocks[j + 1])) j++
-      out.push(socialRow(blocks.slice(i, j + 1))); i = j; continue
+      const row = socialRow(blocks.slice(i, j + 1))
+      out.push(preview ? markPreview(row, blocks[i].id) : row); i = j; continue
     }
     // Imagem grande nos 2 primeiros blocos (banner/destaque no topo) é o que
     // o celular mostra primeiro: carrega na hora; o resto fica "lazy".
     const html = renderBlock(blocks[i], preview, out.length < 2, ctx)
-    if (html) out.push(html)
+    if (html) out.push(preview ? markPreview(html, blocks[i].id) : html)
   }
   return out.join('\n')
 }

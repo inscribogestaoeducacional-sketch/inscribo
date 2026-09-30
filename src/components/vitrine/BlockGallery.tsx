@@ -74,7 +74,7 @@ export default function BlockGallery({ onPick }: { onPick: (type: BlockType) => 
       {GROUPS.map(g => (
         <section key={g.title} aria-labelledby={`bg-${g.title}`}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-            <h3 id={`bg-${g.title}`} style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1e2d6b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{g.title}</h3>
+            <h3 id={`bg-${g.title}`} style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>{g.title}</h3>
             <span style={{ fontSize: 12, color: '#94a3b8' }}>{g.hint}</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
