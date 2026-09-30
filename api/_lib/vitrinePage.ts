@@ -67,5 +67,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const html = renderVitrinePage(data, { siteUrl: SITE_URL, supabaseUrl, anonKey })
-  return sendHtml(res, 200, html, 'public, s-maxage=60, stale-while-revalidate=600')
+  return sendHtml(res, 200, html, cacheFor((data as any).next_change_at))
+}
+
+// Cache normal: 60 s + até 10 min servindo a versão anterior enquanto
+// revalida. Com virada de agenda (bloco entrando/saindo, página saindo do ar)
+// antes disso, o cache vai só até a virada e sem versão antiga — senão o
+// bloco agendado apareceria (ou sumiria) até 11 min atrasado.
+export function cacheFor(nextChangeAt: unknown, now = Date.now()): string {
+  const t = typeof nextChangeAt === 'string' ? Date.parse(nextChangeAt) : NaN
+  const secs = Number.isFinite(t) ? Math.floor((t - now) / 1000) : Infinity
+  if (secs >= 660) return 'public, s-maxage=60, stale-while-revalidate=600'
+  return `public, s-maxage=${Math.max(1, Math.min(60, secs))}, stale-while-revalidate=0`
 }

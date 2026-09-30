@@ -19,6 +19,7 @@ export interface VitrinePage {
   bio: string | null
   logo_url: string | null
   cover_url: string | null
+  cover_video_url?: string | null   // capa em vídeo (MP4/WebM); cover_url vira o quadro de espera
   theme: Record<string, unknown> | null
   seo_description: string | null
   social_links?: unknown   // [{network, handle}] — fileira de redes do topo
@@ -397,6 +398,9 @@ function fmtNum(v: number, dec: number): string {
   return i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (f ? ',' + f : '')
 }
 
+// Efeito do botão (config.effect, lista fechada no banco): vira classe.
+const fx = (c: Record<string, any>) => (['pulse', 'shine', 'shake'].includes(c?.effect) ? ` fx-${c.effect}` : '')
+
 function button(blockId: string, href: string, label: string, icon: string, cls = ''): string {
   return `<a class="btn ${cls}" href="${esc(href)}" data-b="${esc(blockId)}" target="_blank" rel="noopener noreferrer">`
     + `<span class="ic">${icon}</span><span class="lb">${esc(label)}</span><span class="ic"></span></a>`
@@ -474,6 +478,11 @@ var f=document.createElement('iframe');f.src='https://www.youtube-nocookie.com/e
 f.allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';f.allowFullscreen=true;
 var d=document.createElement('div');d.className='frame';d.appendChild(f);a.parentNode.replaceChild(d,a)});`
 
+// Capa em vídeo: quem pediu menos movimento ou está economizando dados fica
+// só com o quadro de espera (a imagem de capa), sem baixar o vídeo todo.
+const COVER_SCRIPT = `(function(){var v=document.querySelector('video.cover');if(!v)return;var c=navigator.connection;
+try{if(matchMedia('(prefers-reduced-motion: reduce)').matches||(c&&c.saveData)){v.removeAttribute('autoplay');v.preload='none';v.pause()}}catch(e){}})();`
+
 // WhatsApp flutuante: some enquanto o bloco de origem está na tela (evita
 // dois botões iguais lado a lado) e volta ao rolar.
 const FAB_SCRIPT = `(function(){var f=document.querySelector('.fab');if(!f||!('IntersectionObserver' in window))return;
@@ -525,7 +534,7 @@ function renderBlock(b: VitrineBlock, preview = false, eager = false, ctx: Block
       const thumb = isHttpUrl(c.thumbnail_url)
         ? `<img class="thumb" src="${esc(c.thumbnail_url)}" alt="" loading="lazy">`
         : net ? SOCIAL[net].svg : ICON.link
-      return button(b.id, c.url, c.label, thumb)
+      return button(b.id, c.url, c.label, thumb, fx(c))
     }
     case 'banner': {
       if (!isHttpUrl(c.image_url)) return ''
@@ -537,11 +546,11 @@ function renderBlock(b: VitrineBlock, preview = false, eager = false, ctx: Block
     }
     case 'whatsapp': {
       const href = waMeLink(c.phone, c.message)
-      return href ? button(b.id, href, c.label, ICON.whatsapp, 'wa') : ''
+      return href ? button(b.id, href, c.label, ICON.whatsapp, 'wa' + fx(c)) : ''
     }
     case 'enroll': {
       const href = c.mode === 'link' ? (isHttpUrl(c.url) ? c.url : null) : waMeLink(c.phone, c.message)
-      return href ? button(b.id, href, c.label, c.mode === 'link' ? ICON.school : ICON.whatsapp, 'cta') : ''
+      return href ? button(b.id, href, c.label, c.mode === 'link' ? ICON.school : ICON.whatsapp, 'cta' + fx(c)) : ''
     }
     case 'text': {
       if (!c.body) return ''
@@ -664,7 +673,7 @@ function renderBlock(b: VitrineBlock, preview = false, eager = false, ctx: Block
           + (c.description ? `<span class="ldesc">${esc(c.description)}</span>` : '')
           + `<span class="ldom">${esc(meta)}</span></span><span class="larrow" aria-hidden="true">↓</span></a>`
       }
-      return button(b.id, c.file_url, c.label, ICON.pdf)
+      return button(b.id, c.file_url, c.label, ICON.pdf, fx(c))
     }
     case 'contact': {
       if (!c.label || !ctx.slug) return ''
@@ -672,7 +681,7 @@ function renderBlock(b: VitrineBlock, preview = false, eager = false, ctx: Block
       // Na página, caminho relativo (mesma origem: o "download" vale); na
       // prévia (iframe srcdoc, sem origem), o endereço completo.
       const href = `${preview ? ctx.siteUrl : ''}/api/public?route=vcard&amp;slug=${encodeURIComponent(ctx.slug)}&amp;b=${encodeURIComponent(b.id)}`
-      return `<a class="btn" href="${href}" data-b="${esc(b.id)}" download>`
+      return `<a class="btn${fx(c)}" href="${href}" data-b="${esc(b.id)}" download>`
         + `<span class="ic">${ICON.contact}</span><span class="lb">${esc(c.label)}</span><span class="ic"></span></a>`
     }
     case 'hours': {
@@ -869,6 +878,19 @@ main>section:not(.card):not(.banner){margin:4px 0}
 .btn .ic svg{width:22px;height:22px}
 ${t.buttonStyle === 'minimal' ? `.btn:not(.cta) .ic:last-child::after{content:'→';font-size:18px;color:${t.primary}}` : ''}
 .btn .thumb{width:36px;height:36px;border-radius:${t.radius === 0 ? '0' : '8px'};object-fit:cover}
+.btn{position:relative}
+.fx-pulse::before{content:'';position:absolute;inset:-2px;border-radius:inherit;border:2px solid ${alpha(accent, 0.55)};pointer-events:none;animation:fxpulse 2.4s ${ease} infinite}
+@keyframes fxpulse{0%{opacity:.9;transform:scale(1)}70%,100%{opacity:0;transform:scale(1.08,1.3)}}
+.fx-shine{overflow:hidden}
+.fx-shine::after{content:'';position:absolute;top:0;bottom:0;left:-60%;width:40%;pointer-events:none;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-18deg);animation:fxshine 3.2s ease-in-out infinite}
+@keyframes fxshine{0%,55%{left:-60%}85%,100%{left:130%}}
+.fx-shake{animation:fxshake 4s ease-in-out infinite}
+/* Com animação de entrada, o bloco revelado (.in) recebe animation:none (e o
+   de matrícula, o pulso "cta"): o balanço precisa vencer as duas regras. A
+   trava de segurança (rvsafe) antes do .in continua valendo. */
+html.anim main>.btn.fx-shake.fx-shake.in{animation:fxshake 4s ease-in-out infinite}
+.fx-shake:hover{animation-play-state:paused}
+@keyframes fxshake{0%,82%,100%{transform:none}84%{transform:rotate(-2.5deg)}87%{transform:rotate(2.5deg)}90%{transform:rotate(-2deg)}93%{transform:rotate(1.5deg)}96%{transform:rotate(-.5deg)}}
 .btn.cta{min-height:64px;font-size:17px;background:${t.primary};color:${onPrimary};border:2px solid ${t.buttonStyle === 'shadow' ? t.text : t.primary};border-radius:${t.buttonStyle === 'minimal' ? rCard : r};padding:10px 14px}
 ${t.buttonStyle === 'minimal' ? '.btn.cta .lb{text-align:center}' : ''}
 .card{${card}border-radius:${rCard};padding:18px 20px}
@@ -1111,6 +1133,9 @@ export function renderVitrinePage(data: VitrinePublicData, opts: RenderOptions):
   const desc = (p.seo_description || p.bio || `Links, contato e informações de ${name}.`).trim()
   const url = `${opts.siteUrl}/${p.slug}`
   const cover = isHttpUrl(p.cover_url) ? p.cover_url : null
+  // Capa em vídeo: só MP4/WebM por https (o banco já exige); a imagem de capa
+  // vira o quadro de espera (poster) e a prévia do link continua sendo ela.
+  const coverVideo = isHttpUrl(p.cover_video_url) && /\.(mp4|webm)(\?|$)/i.test(p.cover_video_url) ? p.cover_video_url : null
   const logo = isHttpUrl(p.logo_url) ? p.logo_url : null
   const ogImage = cover || logo
   const blocks = renderBlocks(data.blocks || [], !!opts.preview, { siteUrl: opts.siteUrl, slug: p.slug })
@@ -1182,11 +1207,13 @@ ${animate ? ANIM_HEAD : ''}
 ${counting ? COUNT_HEAD : ''}
 ${jsonLd}
 </head>
-<body class="${[cover ? 'has-cover' : '', fab ? 'has-fab' : ''].filter(Boolean).join(' ')}">
+<body class="${[cover || coverVideo ? 'has-cover' : '', fab ? 'has-fab' : ''].filter(Boolean).join(' ')}">
 ${t.bgType !== 'solid' ? '<div class="bgl" aria-hidden="true"></div>' : ''}
 <div class="wrap">
 ${share}
-${cover ? `<img class="cover" src="${esc(cover)}" alt="">` : ''}
+${coverVideo
+  ? `<video class="cover" autoplay muted loop playsinline preload="metadata" aria-hidden="true"${cover ? ` poster="${esc(cover)}"` : ''}><source src="${esc(coverVideo)}" type="video/${/\.webm(\?|$)/i.test(coverVideo) ? 'webm' : 'mp4'}"></video>`
+  : cover ? `<img class="cover" src="${esc(cover)}" alt="">` : ''}
 <header>
 ${logo ? `<img class="logo" src="${esc(logo)}" alt="Logo ${esc(name)}">` : ''}
 <h1>${esc(name)}</h1>
@@ -1206,6 +1233,7 @@ ${videoScript}
 ${hoursJs}
 ${mapJs}
 ${counting ? `<script>${COUNT_SCRIPT}</script>` : ''}
+${coverVideo && !opts.preview ? `<script>${COVER_SCRIPT}</script>` : ''}
 ${fab && !opts.preview ? `<script>${FAB_SCRIPT}</script>` : ''}
 ${share && !opts.preview ? `<script>${SHARE_SCRIPT}</script>` : ''}
 ${script}
