@@ -27,7 +27,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import {
   type BlockType, type VitrineBlockRow, type VitrinePageRow,
-  BLOCK_TYPES, blockSummary, VITRINE_MAX_BLOCKS, defaultConfig, validateBlock, buildPreviewData,
+  BLOCK_TYPES, blockSummary, scheduleState, fmtWhen, VITRINE_MAX_BLOCKS, defaultConfig, validateBlock, buildPreviewData,
   blockImageUrls, removeVitrineImage, publicUrl, VITRINE_SITE_URL, readTheme,
 } from '../../lib/vitrine'
 import { renderVitrinePage } from '../../../api/_lib/vitrineRender'
@@ -38,6 +38,7 @@ import AppearancePanel from '../../components/vitrine/AppearancePanel'
 import SettingsPanel from '../../components/vitrine/SettingsPanel'
 import SocialLinksEditor from '../../components/vitrine/SocialLinksEditor'
 import { DS } from '../../components/vitrine/ui'
+import ScheduleFields, { scheduleError } from '../../components/vitrine/ScheduleFields'
 
 type Tab = 'blocks' | 'appearance' | 'settings'
 type PageSaveState = 'saved' | 'dirty' | 'saving' | 'error'
@@ -46,7 +47,7 @@ interface InstitutionInfo { name: string; logo_url: string | null; primary_color
 interface SavedBlock { type: BlockType; config: Record<string, any> }
 
 const SAVE_DELAY = 800
-const PAGE_FIELDS = ['title', 'bio', 'logo_url', 'cover_url', 'theme', 'seo_description', 'social_links', 'floating_block_id', 'show_share', 'social_position'] as const
+const PAGE_FIELDS = ['title', 'bio', 'logo_url', 'cover_url', 'theme', 'seo_description', 'social_links', 'floating_block_id', 'show_share', 'social_position', 'cover_video_url', 'publish_at', 'unpublish_at'] as const
 
 let tempSeq = 0
 const tempKey = () => `novo-${Date.now()}-${++tempSeq}`
@@ -76,6 +77,8 @@ export default function Vitrine() {
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [showPicker, setShowPicker] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<EditorBlock | null>(null)
+  const [scheduleDraft, setScheduleDraft] = useState<{ key: string; from: string | null; until: string | null } | null>(null)
+  const [scheduleSaving, setScheduleSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null)
   const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1180)
@@ -119,7 +122,7 @@ export default function Vitrine() {
       if (pgErr || !pg) { setLoadError(pgErr?.message || 'Não foi possível abrir a Vitrine.'); setLoading(false); return }
       const pageRow = pg as VitrinePageRow
       const [blkRes, instRes, phoneRes] = await Promise.all([
-        supabase.from('vitrine_blocks').select('id, institution_id, page_id, type, position, is_visible, config, capture_trigger_id')
+        supabase.from('vitrine_blocks').select('id, institution_id, page_id, type, position, is_visible, config, capture_trigger_id, visible_from, visible_until')
           .eq('page_id', pageRow.id).order('position').order('created_at'),
         supabase.from('institutions').select('name, logo_url, primary_color, address').eq('id', institutionId).maybeSingle(),
         supabase.from('whatsapp_phone_numbers').select('phone_number').eq('institution_id', institutionId).eq('is_active', true)
@@ -131,7 +134,7 @@ export default function Vitrine() {
       const saved = new Map<string, SavedBlock>()
       const eb: EditorBlock[] = rows.map(r => {
         saved.set(r.id, { type: r.type, config: r.config })
-        return { key: r.id, id: r.id, type: r.type, config: r.config, is_visible: r.is_visible, capture_trigger_id: r.capture_trigger_id, state: 'saved', error: null }
+        return { key: r.id, id: r.id, type: r.type, config: r.config, is_visible: r.is_visible, capture_trigger_id: r.capture_trigger_id, visible_from: r.visible_from ?? null, visible_until: r.visible_until ?? null, state: 'saved', error: null }
       })
       savedBlocksRef.current = saved
       savedPageRef.current = pageRow
@@ -185,6 +188,7 @@ export default function Vitrine() {
     savedPageRef.current = { ...(prev || p), ...payload } as VitrinePageRow
     if (prev && prev.logo_url !== p.logo_url) removeVitrineImage(institutionId, prev.logo_url)
     if (prev && prev.cover_url !== p.cover_url) removeVitrineImage(institutionId, prev.cover_url)
+    if (prev && prev.cover_video_url && prev.cover_video_url !== p.cover_video_url) removeVitrineImage(institutionId, prev.cover_video_url)
     const prevBg = (prev?.theme as any)?.bg_image_url, curBg = (p.theme as any)?.bg_image_url
     if (prev && prevBg && prevBg !== curBg) removeVitrineImage(institutionId, prevBg)
     setPageError(null)
@@ -317,6 +321,20 @@ export default function Vitrine() {
     if (error) { patchBlock(key, { is_visible: b.is_visible }); showToast(`Não foi possível ${b.is_visible ? 'ocultar' : 'mostrar'} o bloco: ${error.message}`, true) }
   }
 
+  // Agenda do bloco: colunas próprias (fora do config), salva na hora.
+  async function saveSchedule() {
+    const d = scheduleDraft
+    const b = d && blocks.find(x => x.key === d.key)
+    if (!d || !b?.id) return
+    setScheduleSaving(true)
+    const { error } = await supabase.from('vitrine_blocks').update({ visible_from: d.from, visible_until: d.until }).eq('id', b.id)
+    setScheduleSaving(false)
+    if (error) { showToast(`Não foi possível salvar a agenda: ${error.message}`, true); return }
+    patchBlock(d.key, { visible_from: d.from, visible_until: d.until })
+    setScheduleDraft(null)
+    showToast(d.from || d.until ? 'Agenda do bloco salva.' : 'Agenda removida: o bloco aparece sempre.')
+  }
+
   async function confirmDelete() {
     const b = deleteTarget
     setDeleteTarget(null)
@@ -426,6 +444,15 @@ export default function Vitrine() {
     )
   }
 
+  // Situação da página, contando a agenda (Configurações → Agendamento).
+  const pageSched = scheduleState(page.publish_at, page.unpublish_at)
+  const pageStatus = !page.is_published
+    ? { label: 'Rascunho', hint: 'Só você vê — publique quando estiver pronta', bg: '#F1F5F9', color: '#475569' }
+    : pageSched === 'future'
+      ? { label: 'Agendada', hint: `Entra no ar em ${fmtWhen(page.publish_at!)}`, bg: '#FEF3C7', color: '#B45309' }
+      : pageSched === 'expired'
+        ? { label: 'Fora do ar', hint: `Saiu do ar em ${fmtWhen(page.unpublish_at!)} (agendamento)`, bg: '#FFE4E6', color: '#BE123C' }
+        : { label: 'Publicada', hint: page.unpublish_at ? `No ar até ${fmtWhen(page.unpublish_at)}` : 'Visível pra quem tem o link', bg: '#DCFCE7', color: '#15803D' }
   const iframe = (style: React.CSSProperties) => (
     <iframe title="Prévia da página" srcDoc={previewHtml} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
       style={{ border: 0, display: 'block', background: '#fff', ...style }} />
@@ -494,8 +521,8 @@ export default function Vitrine() {
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Vitrine</h1>
             <span style={{
               fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.04em',
-              background: page.is_published ? '#DCFCE7' : '#F1F5F9', color: page.is_published ? '#166534' : '#475569',
-            }}>{page.is_published ? 'Publicada' : 'Rascunho'}</span>
+              background: pageStatus.bg, color: pageStatus.color,
+            }}>{pageStatus.label}</span>
           </div>
           <p style={{ margin: 0, fontSize: 13, color: '#64748b', paddingLeft: 46 }}>
             A página da escola com todos os links:{' '}
@@ -543,9 +570,8 @@ export default function Vitrine() {
 
       {/* ── Indicadores (mesmo KpiCard das Transmissões) ────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
-        <KpiCard label="Página" value={page.is_published ? 'Publicada' : 'Rascunho'}
-          hint={page.is_published ? 'Visível pra quem tem o link' : 'Só você vê — publique quando estiver pronta'}
-          icon={<Globe size={16} color={page.is_published ? '#15803D' : '#64748b'} />} bg={page.is_published ? '#DCFCE7' : '#F1F5F9'} />
+        <KpiCard label="Página" value={pageStatus.label} hint={pageStatus.hint}
+          icon={<Globe size={16} color={pageStatus.color} />} bg={pageStatus.bg} />
         <KpiCard label="Blocos na página" value={String(blocks.filter(b => b.id && b.is_visible).length)}
           hint={blocks.some(b => !b.is_visible) ? `${blocks.filter(b => !b.is_visible).length} oculto(s)` : 'Todos visíveis'}
           icon={<Layers size={16} color="#00A896" />} bg="#E6F7F5" />
@@ -629,6 +655,7 @@ export default function Vitrine() {
                   onReorder={reorder}
                   onChange={changeBlock}
                   onToggleVisible={toggleVisible}
+                  onSchedule={k => { const b = blocks.find(x => x.key === k); if (b) setScheduleDraft({ key: k, from: b.visible_from ?? null, until: b.visible_until ?? null }) }}
                   onDuplicate={duplicateBlock}
                   onDelete={k => setDeleteTarget(blocks.find(b => b.key === k) || null)}
                   formCtx={b => ({
@@ -700,6 +727,35 @@ export default function Vitrine() {
       )}
 
       {/* ── Confirmação de exclusão ──────────────────────────────────────── */}
+      {scheduleDraft && (() => {
+        const b = blocks.find(x => x.key === scheduleDraft.key)
+        if (!b) return null
+        const err = scheduleError(scheduleDraft.from, scheduleDraft.until)
+        return (
+          <Modal title="Agendar bloco" onClose={() => setScheduleDraft(null)}>
+            <p style={{ margin: '0 0 16px', fontSize: 14, color: DS.text, lineHeight: 1.55 }}>
+              <strong>{BLOCK_TYPES[b.type].label}: {blockSummary(b.type, b.config)}</strong><br />
+              <span style={{ color: DS.muted }}>O bloco só aparece na página dentro deste período. Útil pra campanha de matrícula, evento ou aviso com data. Deixe em branco o lado sem limite.</span>
+            </p>
+            <ScheduleFields from={scheduleDraft.from} until={scheduleDraft.until}
+              onChange={v => setScheduleDraft(d => (d ? { ...d, ...v } : d))}
+              fromLabel="Mostrar a partir de" untilLabel="Esconder depois de"
+              fromHint="Em branco: aparece desde já." untilHint="Em branco: fica sem prazo." />
+            <p style={{ margin: '14px 0 0', fontSize: 12, color: DS.faint, lineHeight: 1.5 }}>
+              A página publicada troca sozinha no horário marcado (em até 1 minuto). A prévia ao lado mostra todos os blocos, agendados ou não.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button type="button" onClick={() => setScheduleDraft(null)}
+                style={{ padding: '10px 18px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Cancelar</button>
+              <button type="button" disabled={!!err || scheduleSaving} onClick={saveSchedule}
+                style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: err ? '#E2E8F0' : '#00A896', color: err ? '#94a3b8' : '#fff', fontSize: 13, fontWeight: 600, cursor: err ? 'not-allowed' : 'pointer', boxShadow: err ? 'none' : DS.shadowMd }}>
+                {scheduleSaving ? 'Salvando…' : 'Salvar agenda'}
+              </button>
+            </div>
+          </Modal>
+        )
+      })()}
+
       {deleteTarget && (
         <Modal title="Excluir bloco?" onClose={() => setDeleteTarget(null)} narrow>
           <p style={{ margin: '0 0 8px', fontSize: 14, color: '#1e293b' }}>

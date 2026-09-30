@@ -30,6 +30,19 @@ export type VideoFormat = '16:9' | '9:16'
 export const LIST_LIMITS = { faq: 20, testimonials: 12, team: 24, stats: 6 } as const
 export type HoursLayout = 'table' | 'compact' | 'today'
 export const MAP_MAX_UNITS = 4   // além da principal
+
+// Efeito por botão (config.effect): blocos que viram botão na página.
+export type ButtonEffect = 'none' | 'pulse' | 'shine' | 'shake'
+export const EFFECT_TYPES: BlockType[] = ['link', 'whatsapp', 'enroll', 'pdf', 'contact']
+export const EFFECTS: { value: ButtonEffect; label: string; hint: string }[] = [
+  { value: 'none',  label: 'Nenhum',   hint: 'Botão parado.' },
+  { value: 'pulse', label: 'Pulsar',   hint: 'Um anel sai do botão de tempos em tempos. Bom pra matrícula e WhatsApp.' },
+  { value: 'shine', label: 'Brilho',   hint: 'Um reflexo de luz atravessa o botão a cada poucos segundos.' },
+  { value: 'shake', label: 'Balançar', hint: 'O botão dá uma balançada curta a cada 4 segundos. Use em um botão só.' },
+]
+// Link só vira botão no estilo "Botão" (cartão, destaque e ícone não têm efeito).
+export const effectApplies = (type: BlockType, c: Record<string, any>) =>
+  EFFECT_TYPES.includes(type) && (type !== 'link' || !c.style || c.style === 'button') && (type !== 'pdf' || c.style !== 'card')
 export const PDF_MAX_BYTES = 10 * 1024 * 1024   // limite do bucket vitrine-docs
 
 // Tamanho recomendado de cada formato de banner (mostrado no upload).
@@ -81,6 +94,9 @@ export interface VitrinePageRow {
   floating_block_id: string | null   // bloco de WhatsApp que vira botão flutuante
   show_share: boolean
   social_position: 'top' | 'bottom'
+  cover_video_url: string | null      // capa em vídeo (MP4); cover_url vira o quadro de espera
+  publish_at: string | null           // agenda da página (ISO); vazio = sem limite
+  unpublish_at: string | null
   updated_at: string
 }
 
@@ -97,6 +113,8 @@ export interface VitrineBlockRow {
   is_visible: boolean
   config: Record<string, any>
   capture_trigger_id: string | null
+  visible_from: string | null         // agenda do bloco (ISO); vazio = sem limite
+  visible_until: string | null
 }
 
 // Pares de fonte: definidos no renderizador (uma fonte só da verdade pra
@@ -277,6 +295,13 @@ const between = (v: unknown, min: number, max: number) => { const n = String(v ?
 const badPhoto = (u: unknown) => u != null && u !== '' && !isHttpUrl(u)
 
 export function validateBlock(type: BlockType, c: Record<string, any>): string | null {
+  const e = validateBlockType(type, c)
+  if (e) return e
+  if (c.effect !== undefined && (!EFFECT_TYPES.includes(type) || !['none', 'pulse', 'shine', 'shake'].includes(c.effect))) return 'Efeito do botão inválido.'
+  return null
+}
+
+function validateBlockType(type: BlockType, c: Record<string, any>): string | null {
   const label = String(c.label || '').trim()
   const msg = String(c.message || '').trim()
   if (['link', 'whatsapp', 'enroll'].includes(type) && (!label || label.length > 80)) {
@@ -464,12 +489,12 @@ export function buildPreviewData(
     if (b.type === 'whatsapp') {
       const p = c.phone_source === 'custom' ? c.custom_phone : phone
       if (!p) continue
-      out.push({ id: b.id, type: b.type, config: { label: c.label, message: c.message, phone: p } })
+      out.push({ id: b.id, type: b.type, config: { label: c.label, message: c.message, phone: p, effect: c.effect } })
     } else if (b.type === 'enroll') {
       if (c.mode === 'whatsapp' && !phone) continue
       out.push({ id: b.id, type: b.type, config: c.mode === 'link'
-        ? { label: c.label, mode: 'link', url: c.url }
-        : { label: c.label, mode: 'whatsapp', message: c.message, phone } })
+        ? { label: c.label, mode: 'link', url: c.url, effect: c.effect }
+        : { label: c.label, mode: 'whatsapp', message: c.message, phone, effect: c.effect } })
     } else {
       // Mapa sem place_name: a página pública usa o nome da escola (ver
       // 20260929080000_vitrine_map_place_name.sql) — a prévia faz igual.
@@ -480,7 +505,7 @@ export function buildPreviewData(
       if (b.type === 'contact') {
         const src = c.phone_source || 'school'
         cfg = { label: c.label, name: String(c.name || '').trim() || ctx.institutionName, email: c.email || null, website: c.website || null,
-          address: c.address || null, phone: src === 'school' ? phone : src === 'custom' ? c.phone : null }
+          address: c.address || null, phone: src === 'school' ? phone : src === 'custom' ? c.phone : null, effect: c.effect }
       }
       out.push({ id: b.id, type: b.type, config: cfg })
     }
@@ -488,7 +513,7 @@ export function buildPreviewData(
   return {
     page: {
       id: page.id, slug: page.slug, title: page.title, bio: page.bio,
-      logo_url: page.logo_url, cover_url: page.cover_url, theme: page.theme as Record<string, unknown>,
+      logo_url: page.logo_url, cover_url: page.cover_url, cover_video_url: page.cover_video_url, theme: page.theme as Record<string, unknown>,
       seo_description: page.seo_description, institution_name: ctx.institutionName,
       social_links: page.social_links,
       floating_block_id: page.floating_block_id, show_share: page.show_share, social_position: page.social_position,
@@ -510,3 +535,42 @@ export function contrastRatio(a: string, b: string): number {
 }
 
 export const HEX_RE = /^#[0-9A-Fa-f]{6}$/
+
+// ── Agenda (página e blocos) ────────────────────────────────────────────────
+// <input type="datetime-local"> trabalha no horário do aparelho, sem fuso:
+// "2026-10-05T08:00". O banco guarda o instante (ISO/UTC).
+export function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+export function fromLocalInput(v: string): string | null {
+  if (!v) return null
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+// "05/10 às 08:00" (com o ano só se não for o atual).
+export function fmtWhen(iso: string, now = new Date()): string {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  const year = d.getFullYear() !== now.getFullYear() ? `/${d.getFullYear()}` : ''
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}${year} às ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+export type ScheduleState = 'none' | 'future' | 'active' | 'expired'
+// Situação de uma janela [de, até) agora. 'active' com "até" = no ar, mas vai sair.
+export function scheduleState(from: string | null | undefined, until: string | null | undefined, now = Date.now()): ScheduleState {
+  const f = from ? Date.parse(from) : NaN, u = until ? Date.parse(until) : NaN
+  if (Number.isNaN(f) && Number.isNaN(u)) return 'none'
+  if (!Number.isNaN(u) && now >= u) return 'expired'
+  if (!Number.isNaN(f) && now < f) return 'future'
+  return 'active'
+}
+export function scheduleLabel(from: string | null | undefined, until: string | null | undefined, now = Date.now()): string | null {
+  const st = scheduleState(from, until, now)
+  if (st === 'none') return null
+  if (st === 'expired') return `Encerrado em ${fmtWhen(until!)}`
+  if (st === 'future') return until ? `De ${fmtWhen(from!)} até ${fmtWhen(until)}` : `A partir de ${fmtWhen(from!)}`
+  return until ? `No ar até ${fmtWhen(until)}` : null
+}

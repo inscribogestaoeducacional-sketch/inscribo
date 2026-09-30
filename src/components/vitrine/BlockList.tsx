@@ -9,10 +9,10 @@ import { SortableContext, useSortable, verticalListSortingStrategy, sortableKeyb
 import { CSS } from '@dnd-kit/utilities'
 import {
   GripVertical, ChevronDown, Eye, EyeOff, Copy, Trash2, Loader2, Check, AlertCircle,
-  MessageCircle, GraduationCap, Link2, Type, Images, PlayCircle, MapPin, Clock, Megaphone, RectangleHorizontal, HelpCircle, Quote, Users, BarChart3, FileText, UserPlus, type LucideIcon,
+  MessageCircle, GraduationCap, Link2, Type, Images, PlayCircle, MapPin, Clock, Megaphone, RectangleHorizontal, CalendarClock, HelpCircle, Quote, Users, BarChart3, FileText, UserPlus, type LucideIcon,
 } from 'lucide-react'
-import { type BlockType, BLOCK_TYPES, blockSummary, blockDetail } from '../../lib/vitrine'
-import BlockForm, { type BlockFormContext } from './BlockForms'
+import { type BlockType, BLOCK_TYPES, blockSummary, blockDetail, effectApplies, scheduleLabel, scheduleState } from '../../lib/vitrine'
+import BlockForm, { type BlockFormContext, EffectField } from './BlockForms'
 import { DS } from './ui'
 
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'invalid' | 'error'
@@ -24,6 +24,8 @@ export interface EditorBlock {
   config: Record<string, any>
   is_visible: boolean
   capture_trigger_id: string | null
+  visible_from?: string | null      // agenda (ISO); vazio = sem limite
+  visible_until?: string | null
   state: SaveState
   error: string | null
 }
@@ -41,6 +43,7 @@ interface ListProps {
   onReorder: (fromKey: string, toKey: string) => void
   onChange: (key: string, patch: Record<string, any>) => void
   onToggleVisible: (key: string) => void
+  onSchedule: (key: string) => void
   onDuplicate: (key: string) => void
   onDelete: (key: string) => void
   formCtx: (b: EditorBlock) => BlockFormContext
@@ -95,15 +98,17 @@ const cardShell = (b: EditorBlock): React.CSSProperties => ({
 })
 
 // Cabeçalho do cartão (também usado no bloco "flutuante" do arraste).
-function Header({ b, open, ghost, dragHandle, onToggleOpen, onToggleVisible }: {
+function Header({ b, open, ghost, dragHandle, onToggleOpen, onToggleVisible, onSchedule }: {
   b: EditorBlock; open: boolean; ghost?: boolean
-  dragHandle?: React.ReactNode; onToggleOpen?: () => void; onToggleVisible?: () => void
+  dragHandle?: React.ReactNode; onToggleOpen?: () => void; onToggleVisible?: () => void; onSchedule?: () => void
 }) {
   const meta = BLOCK_TYPES[b.type]
   const Icon = BLOCK_ICONS[b.type]
   const tracking = !!b.capture_trigger_id && (b.type === 'enroll'
     ? b.config.mode === 'whatsapp'
     : b.type === 'whatsapp' && b.config.phone_source !== 'custom' && b.config.track_capture !== false)
+  const sched = scheduleLabel(b.visible_from, b.visible_until)
+  const schedState = scheduleState(b.visible_from, b.visible_until)
   const iconBtn: React.CSSProperties = {
     width: 32, height: 32, borderRadius: DS.r.sm, border: '1px solid #E2E8F0', background: '#fff',
     cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', transition: T,
@@ -122,6 +127,8 @@ function Header({ b, open, ghost, dragHandle, onToggleOpen, onToggleVisible }: {
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             {meta.label}
             {!b.is_visible && <span style={{ color: '#64748b', textTransform: 'none', letterSpacing: 0 }}>· oculto</span>}
+            {sched && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, textTransform: 'none', letterSpacing: 0, fontWeight: 600,
+              color: schedState === 'expired' ? '#BE123C' : schedState === 'future' ? '#B45309' : '#0F766E' }}><CalendarClock size={11} /> {sched}</span>}
             {tracking && <span title="Gatilho ativo no Captação" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#DB2777', textTransform: 'none', letterSpacing: 0 }}><Megaphone size={11} /> Captação</span>}
           </span>
           <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: DS.navy, letterSpacing: '-0.01em', lineHeight: 1.35, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -134,6 +141,11 @@ function Header({ b, open, ghost, dragHandle, onToggleOpen, onToggleVisible }: {
         <StateBadge b={b} />
         <ChevronDown size={16} color="#94a3b8" style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: T }} />
       </button>
+      <button type="button" onClick={onSchedule} tabIndex={ghost ? -1 : undefined} disabled={!b.id}
+        style={{ ...iconBtn, ...(sched ? { color: '#0F766E', border: '1px solid #99F6E4', background: '#F0FDFA' } : {}), ...(!b.id ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}
+        title={b.id ? 'Agendar quando o bloco aparece' : 'Salve o bloco para poder agendar'} aria-label="Agendar bloco">
+        <CalendarClock size={14} />
+      </button>
       <button type="button" style={iconBtn} onClick={onToggleVisible} tabIndex={ghost ? -1 : undefined}
         title={b.is_visible ? 'Ocultar da página' : 'Mostrar na página'} aria-label={b.is_visible ? 'Ocultar bloco' : 'Mostrar bloco'}>
         {b.is_visible ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -144,7 +156,7 @@ function Header({ b, open, ghost, dragHandle, onToggleOpen, onToggleVisible }: {
 
 const T = 'all 0.18s cubic-bezier(0.4,0,0.2,1)'
 
-function BlockItem({ block: b, open, onToggleOpen, onChange, onToggleVisible, onDuplicate, onDelete, formCtx }: ListProps & { block: EditorBlock; open: boolean }) {
+function BlockItem({ block: b, open, onToggleOpen, onChange, onToggleVisible, onSchedule, onDuplicate, onDelete, formCtx }: ListProps & { block: EditorBlock; open: boolean }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: b.key })
 
   return (
@@ -155,7 +167,7 @@ function BlockItem({ block: b, open, onToggleOpen, onChange, onToggleVisible, on
       ...(isDragging ? { opacity: 0.35, borderStyle: 'dashed', borderColor: '#94d8cf', background: '#F0FDFA' } : {}),
     }}>
       <Header b={b} open={open}
-        onToggleOpen={() => onToggleOpen(b.key)} onToggleVisible={() => onToggleVisible(b.key)}
+        onToggleOpen={() => onToggleOpen(b.key)} onToggleVisible={() => onToggleVisible(b.key)} onSchedule={() => onSchedule(b.key)}
         dragHandle={
           <button ref={setActivatorNodeRef} {...attributes} {...listeners} type="button" aria-label="Arrastar para reordenar"
             style={{ width: 32, height: 32, borderRadius: DS.r.sm, border: 'none', background: 'transparent', cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', touchAction: 'none' }}>
@@ -167,6 +179,11 @@ function BlockItem({ block: b, open, onToggleOpen, onChange, onToggleVisible, on
         <div style={{ padding: '4px 20px 20px 22px', borderTop: '1px solid #F1F5F9', animation: 'slideUp 0.2s ease' }}>
           <div style={{ paddingTop: 18 }}>
             <BlockForm type={b.type} config={b.config} ctx={formCtx(b)} onChange={patch => onChange(b.key, patch)} />
+            {effectApplies(b.type, b.config) && (
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #F1F5F9' }}>
+                <EffectField value={b.config.effect || 'none'} onChange={v => onChange(b.key, { effect: v === 'none' ? undefined : v })} />
+              </div>
+            )}
           </div>
           {b.error && (
             <p role="alert" style={{ margin: '12px 0 0', fontSize: 12, color: b.state === 'error' ? '#dc2626' : '#B45309', display: 'flex', gap: 6, alignItems: 'flex-start', lineHeight: 1.5 }}>

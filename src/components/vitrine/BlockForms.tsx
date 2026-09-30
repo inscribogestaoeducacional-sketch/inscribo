@@ -8,7 +8,7 @@ import { AlertTriangle, FileUp, ImagePlus, Megaphone, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   type BlockType, type LinkStyle, type BannerAspect, normalizeUrl, parseVideoUrl, uploadVitrineImage,
-  IMAGE_ACCEPT, IMAGE_WIDTH, BANNER_ASPECTS, SOCIAL, detectSocial, LIST_LIMITS, MAP_MAX_UNITS, uploadVitrinePdf,
+  IMAGE_ACCEPT, IMAGE_WIDTH, BANNER_ASPECTS, SOCIAL, detectSocial, LIST_LIMITS, MAP_MAX_UNITS, uploadVitrinePdf, EFFECTS, type ButtonEffect,
 } from '../../lib/vitrine'
 import { Field, TextInput, TextArea, Toggle, Segmented, ImagePicker, hintStyle } from './ui'
 import ItemListEditor from './ItemListEditor'
@@ -446,6 +446,17 @@ function GalleryForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange
         <p style={hintStyle}>Arraste pela alça pra mudar a ordem. JPG, PNG ou WebP; fotos grandes são reduzidas antes de enviar.</p>
       </div>
     </Grid>
+  )
+}
+
+// Efeito do botão (pulsar, brilho, balançar): chama atenção pro botão mais
+// importante. Quem configurou o celular pra reduzir movimento não vê.
+export function EffectField({ value, onChange }: { value: ButtonEffect; onChange: (v: ButtonEffect) => void }) {
+  const cur = EFFECTS.find(e => e.value === value) || EFFECTS[0]
+  return (
+    <Field label="Efeito do botão" hint={cur.hint + (value !== 'none' ? ' Quem configurou o celular pra reduzir movimento vê o botão parado.' : '')}>
+      <Segmented value={cur.value} onChange={onChange} options={EFFECTS.map(e => ({ value: e.value, label: e.label }))} />
+    </Field>
   )
 }
 

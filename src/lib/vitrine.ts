@@ -103,6 +103,34 @@ export async function uploadVitrinePdf(institutionId: string, file: File): Promi
   return { url: supabase.storage.from(VITRINE_DOCS_BUCKET).getPublicUrl(path).data.publicUrl, name: file.name.slice(0, 120), size: file.size }
 }
 
+// Capa em vídeo: MP4/WebM até 30 MB (limite do bucket vitrine-videos) e até
+// 30 s — é um fundo em loop, não um vídeo pra assistir; vídeo longo só pesa
+// no 4G de quem abre a página. Duração lida do próprio arquivo no navegador.
+export const VIDEO_MAX_BYTES = 30 * 1024 * 1024
+export const VIDEO_MAX_SECONDS = 30
+function videoDuration(file: File): Promise<number | null> {
+  return new Promise(resolve => {
+    const v = document.createElement('video'), url = URL.createObjectURL(file)
+    const done = (d: number | null) => { URL.revokeObjectURL(url); resolve(d) }
+    v.preload = 'metadata'; v.muted = true
+    v.onloadedmetadata = () => done(Number.isFinite(v.duration) ? v.duration : null)
+    v.onerror = () => done(null)
+    setTimeout(() => done(null), 8000)
+    v.src = url
+  })
+}
+export async function uploadVitrineVideo(institutionId: string, file: File): Promise<string> {
+  const ext = file.type === 'video/mp4' || /\.mp4$/i.test(file.name) ? 'mp4' : file.type === 'video/webm' || /\.webm$/i.test(file.name) ? 'webm' : null
+  if (!ext) throw new Error('Use um vídeo MP4 (ou WebM). Vídeo do iPhone (.mov): exporte como MP4 antes de enviar.')
+  if (file.size > VIDEO_MAX_BYTES) throw new Error(`O vídeo pode ter no máximo 30 MB (este tem ${(file.size / 1048576).toFixed(0)} MB). Corte ou comprima antes de enviar.`)
+  const d = await videoDuration(file)
+  if (d !== null && d > VIDEO_MAX_SECONDS + 0.5) throw new Error(`A capa em vídeo pode ter até ${VIDEO_MAX_SECONDS} segundos (este tem ${Math.round(d)} s). Use um trecho curto: ele roda em repetição.`)
+  const path = `${institutionId}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from(VITRINE_VIDEOS_BUCKET).upload(path, file, { contentType: `video/${ext}`, upsert: false })
+  if (error) throw new Error(`Não foi possível enviar o vídeo: ${error.message}`)
+  return supabase.storage.from(VITRINE_VIDEOS_BUCKET).getPublicUrl(path).data.publicUrl
+}
+
 // Arquivos dos buckets usados por um bloco (pra limpar ao excluir o bloco).
 export function blockImageUrls(type: BlockType, c: Record<string, any>): string[] {
   if (type === 'pdf' && c.file_url) return [c.file_url]

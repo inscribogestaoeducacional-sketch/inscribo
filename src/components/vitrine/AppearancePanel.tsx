@@ -3,10 +3,10 @@
 // Só edita o rascunho da página (onChange); o editor salva sozinho.
 // Opções = listas fechadas validadas no banco (20260929090000_vitrine_theme_v2).
 import React, { useEffect } from 'react'
-import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowRight, ArrowUp, ArrowUpRight } from 'lucide-react'
+import { AlertTriangle, Film, Trash2, ArrowDown, ArrowDownRight, ArrowRight, ArrowUp, ArrowUpRight } from 'lucide-react'
 import {
   type VitrinePageRow, type VitrineTheme, type ButtonStyle,
-  FONT_PAIRS, HEX_RE, IMAGE_WIDTH, contrastRatio, currentFontPair, readTheme,
+  FONT_PAIRS, HEX_RE, IMAGE_WIDTH, contrastRatio, currentFontPair, readTheme, uploadVitrineVideo,
 } from '../../lib/vitrine'
 import { Field, TextInput, TextArea, Segmented, ImagePicker, cardStyle, hintStyle, sectionTitleStyle } from './ui'
 
@@ -141,6 +141,54 @@ function ButtonSample({ style, theme }: { style: ButtonStyle; theme: VitrineThem
   )
 }
 
+// Capa em vídeo (MP4, até 30 s / 30 MB): roda sem som, em repetição, no
+// lugar da imagem de capa — que vira o quadro de espera.
+function CoverVideoField({ institutionId, value, hasCoverImage, onChange, onError }: {
+  institutionId: string; value: string | null; hasCoverImage: boolean
+  onChange: (url: string | null) => void; onError: (msg: string) => void
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = React.useState(false)
+  const [over, setOver] = React.useState(false)
+  async function send(file: File | undefined | null) {
+    if (!file || busy) return
+    setBusy(true)
+    try { onChange(await uploadVitrineVideo(institutionId, file)) }
+    catch (e: any) { onError(e?.message || 'Não foi possível enviar o vídeo.') }
+    setBusy(false)
+    if (inputRef.current) inputRef.current.value = ''
+  }
+  const btn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', color: '#475569', fontSize: 12, fontWeight: 600 }
+  return (
+    <Field label="Capa em vídeo (opcional)"
+      hint="Um trecho curto (até 30 segundos e 30 MB, MP4) que roda sem som, em repetição, no topo da página. Quem está economizando dados ou pediu menos movimento vê a imagem de capa.">
+      <div onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
+        onDrop={e => { e.preventDefault(); setOver(false); send(e.dataTransfer.files?.[0]) }}>
+        {value ? (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <video src={value} muted loop autoPlay playsInline aria-label="Prévia da capa em vídeo"
+              style={{ width: 200, aspectRatio: '3 / 1', objectFit: 'cover', borderRadius: 12, background: '#0f172a', boxShadow: '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <button type="button" style={btn} disabled={busy} onClick={() => inputRef.current?.click()}><Film size={13} /> {busy ? 'Enviando…' : 'Trocar vídeo'}</button>
+              <button type="button" style={{ ...btn, borderColor: '#FECACA', color: '#dc2626' }} onClick={() => onChange(null)}><Trash2 size={13} /> Remover</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
+            style={{ width: '100%', height: 72, borderRadius: 16, cursor: busy ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13, fontWeight: 600,
+              border: over ? '2px dashed #00A896' : '1.5px dashed #CBD5E1', background: over ? '#F0FDFA' : '#FAFAFA', color: over ? '#0F766E' : '#64748b', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)' }}>
+            <Film size={17} /> {busy ? 'Enviando o vídeo…' : over ? 'Solte o vídeo aqui' : 'Clique ou arraste um vídeo MP4'}
+          </button>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept="video/mp4,video/webm,.mp4,.webm" hidden aria-label="Enviar capa em vídeo" onChange={e => send(e.target.files?.[0])} />
+      {value && !hasCoverImage && (
+        <div style={{ marginTop: 8 }}><Warn>Envie também uma imagem de capa: ela aparece enquanto o vídeo carrega, na prévia do link no WhatsApp e pra quem economiza dados.</Warn></div>
+      )}
+    </Field>
+  )
+}
+
 // A logo tem transparência? Lê os pixels numa miniatura (o Storage do
 // Supabase libera CORS). true/false; null = não deu pra saber (sem aviso).
 function useHasTransparency(url: string | null): boolean | null {
@@ -226,6 +274,8 @@ export default function AppearancePanel({ page, institution, institutionId, onCh
               emptyLabel="Enviar capa" onError={onError} onChange={url => onChange({ cover_url: url })} />
           </Field>
         </div>
+        <CoverVideoField institutionId={institutionId} value={page.cover_video_url} hasCoverImage={!!page.cover_url}
+          onError={onError} onChange={url => onChange({ cover_video_url: url })} />
         <Field label="Formato da logo" hint={theme.logo_shape === 'none' ? 'Sem moldura, a logo aparece solta e um pouco maior — ideal pra PNG com fundo transparente.' : undefined}>
           <Segmented value={theme.logo_shape || 'circle'} onChange={v => setTheme({ logo_shape: v })}
             options={[{ value: 'circle', label: 'Redonda' }, { value: 'rounded', label: 'Quadrada arredondada' }, { value: 'none', label: 'Sem moldura' }]} />

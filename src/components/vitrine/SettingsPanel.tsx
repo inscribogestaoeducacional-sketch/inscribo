@@ -9,6 +9,7 @@ import {
   type VitrinePageRow, type SlugStatus, SLUG_RE, SLUG_STATUS_MSG, VITRINE_SITE_URL, publicUrl, slugify,
 } from '../../lib/vitrine'
 import { Field, TextArea, Toggle, cardStyle, hintStyle, inputStyle, sectionTitleStyle } from './ui'
+import ScheduleFields, { scheduleError } from './ScheduleFields'
 
 interface Props {
   page: VitrinePageRow
@@ -26,6 +27,8 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast, fl
   const [saveError, setSaveError] = useState<string | null>(null)
   const [redirects, setRedirects] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
+  // Rascunho da agenda: só vai pra página (e pro salvamento) quando é válida.
+  const [sched, setSched] = useState({ from: page.publish_at ?? null, until: page.unpublish_at ?? null })
 
   useEffect(() => { setDraft(page.slug) }, [page.slug])
 
@@ -129,6 +132,18 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast, fl
           <TextArea rows={3} value={page.seo_description || ''} maxLength={200}
             onChange={e => onChange({ seo_description: e.target.value || null })} />
         </Field>
+      </section>
+
+      <section style={{ ...cardStyle, padding: 24 }}>
+        <h3 style={{ ...sectionTitleStyle, margin: '0 0 6px' }}>Agendamento da página</h3>
+        <p style={{ ...hintStyle, margin: '0 0 16px' }}>
+          Pra página entrar ou sair do ar sozinha numa data (ex.: campanha de matrícula). Vale junto com o “Publicar”: a página
+          precisa estar publicada, e aparece só dentro do período. Em branco, sem limite.
+        </p>
+        <ScheduleFields from={sched.from} until={sched.until}
+          onChange={v => { setSched(v); if (!scheduleError(v.from, v.until)) onChange({ publish_at: v.from, unpublish_at: v.until }) }}
+          fromLabel="Entrar no ar em" untilLabel="Sair do ar em"
+          fromHint="Em branco: no ar assim que publicar." untilHint="Em branco: fica no ar sem prazo." />
       </section>
 
       <section style={{ ...cardStyle, padding: 24 }}>
