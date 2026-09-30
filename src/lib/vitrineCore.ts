@@ -20,14 +20,15 @@ export const VITRINE_SITE_URL = 'https://aionedu.com.br'
 export const VITRINE_BUCKET = 'vitrine-media'
 export const VITRINE_MAX_BLOCKS = 50
 
-export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll' | 'banner' | 'faq' | 'testimonials' | 'team'
+export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll' | 'banner' | 'faq' | 'testimonials' | 'team' | 'stats'
 export type LinkStyle = 'button' | 'icon' | 'card' | 'featured'
 export type BannerAspect = '3:1' | '16:9'
 export type VideoSize = 'normal' | 'featured'
 export type VideoFormat = '16:9' | '9:16'
 
 // Limites dos blocos com lista (iguais aos do banco, 20260929130000).
-export const LIST_LIMITS = { faq: 20, testimonials: 12, team: 24 } as const
+export const LIST_LIMITS = { faq: 20, testimonials: 12, team: 24, stats: 6 } as const
+export type HoursLayout = 'table' | 'compact' | 'today'
 
 // Tamanho recomendado de cada formato de banner (mostrado no upload).
 export const BANNER_ASPECTS: Record<BannerAspect, { label: string; size: string; ratio: number }> = {
@@ -142,9 +143,10 @@ export const BLOCK_TYPES: Record<BlockType, { label: string; description: string
   faq:      { label: 'Perguntas frequentes', description: 'Dúvidas dos pais, com resposta ao tocar',    color: '#0D9488', bg: '#CCFBF1' },
   testimonials: { label: 'Depoimentos',      description: 'O que as famílias dizem, com nota',          color: '#CA8A04', bg: '#FEF9C3' },
   team:     { label: 'Equipe',               description: 'Direção e professores, com foto e cargo',    color: '#4F46E5', bg: '#E0E7FF' },
+  stats:    { label: 'Números',              description: 'Alunos, anos de história, aprovações…',      color: '#0891B2', bg: '#CFFAFE' },
 }
 
-export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'banner', 'text', 'gallery', 'video', 'faq', 'testimonials', 'team', 'map', 'hours']
+export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'banner', 'text', 'gallery', 'video', 'faq', 'testimonials', 'team', 'stats', 'map', 'hours']
 
 export function defaultConfig(type: BlockType, ctx: { address?: string | null; placeName?: string | null }): Record<string, any> {
   switch (type) {
@@ -164,6 +166,7 @@ export function defaultConfig(type: BlockType, ctx: { address?: string | null; p
     case 'faq':      return { title: 'Perguntas frequentes', items: [{ q: '', a: '' }] }
     case 'testimonials': return { title: 'O que as famílias dizem', items: [{ quote: '', name: '', role: '', photo_url: '', rating: 5 }] }
     case 'team':     return { title: 'Nossa equipe', layout: 'grid', items: [{ name: '', role: '', photo_url: '', bio: '' }] }
+    case 'stats':    return { title: '', animate: true, items: [{ value: null, prefix: '', suffix: '', label: '' }] }
   }
 }
 
@@ -180,6 +183,7 @@ export function blockSummary(type: BlockType, c: Record<string, any>): string {
     case 'faq':     return c.title || 'Perguntas frequentes'
     case 'testimonials': return c.title || 'Depoimentos'
     case 'team':    return c.title || 'Equipe'
+    case 'stats':   return c.title || 'Números'
   }
 }
 
@@ -214,15 +218,21 @@ export function blockDetail(type: BlockType, c: Record<string, any>): string {
       const n = (c.items || []).length
       return `${n} pessoa${n === 1 ? '' : 's'} · ${c.layout === 'carousel' ? 'carrossel' : 'grade'}`
     }
+    case 'stats': {
+      const parts = (c.items || []).filter((i: any) => typeof i?.value === 'number')
+        .map((i: any) => `${i.prefix || ''}${String(i.value).replace('.', ',')}${i.suffix || ''} ${i.label || ''}`.trim())
+      return parts.length ? clip(parts.join(' · ')) : 'Sem números'
+    }
     case 'map':      return clip(c.address) || 'Sem endereço'
     case 'hours': {
+      const lay = c.layout === 'compact' ? 'Compacto · ' : c.layout === 'today' ? 'Hoje · ' : ''
       const open = (Array.isArray(c.days) ? c.days : []).filter((d: any) => !d.closed)
-      if (!open.length) return 'Todos os dias fechado'
+      if (!open.length) return lay + 'Todos os dias fechado'
       const first = open.sort((a: any, b: any) => ((a.dow + 6) % 7) - ((b.dow + 6) % 7))
       const same = first.every((d: any) => d.open === first[0].open && d.close === first[0].close)
-      return same
+      return lay + (same
         ? `${DAY_SHORT[first[0].dow]}–${DAY_SHORT[first[first.length - 1].dow]} · ${first[0].open}–${first[0].close}`
-        : `${open.length} dia(s) com horário`
+        : `${open.length} dia(s) com horário`)
     }
   }
 }
@@ -348,6 +358,19 @@ export function validateBlock(type: BlockType, c: Record<string, any>): string |
       // (o banco aceita) quase sempre é erro de digitação.
       if (days.some((d: any) => !d.closed && d.open >= d.close)) return 'O horário de fechamento precisa ser depois da abertura.'
       if (String(c.note || '').length > 200) return 'A observação pode ter no máximo 200 caracteres.'
+      if (c.layout !== undefined && !['table', 'compact', 'today'].includes(c.layout)) return 'Layout do horário inválido.'
+      return null
+    }
+    case 'stats': {
+      if (String(c.title || '').length > 100) return 'O título pode ter no máximo 100 caracteres.'
+      if (c.animate !== undefined && typeof c.animate !== 'boolean') return 'Opção de animação inválida.'
+      const items = Array.isArray(c.items) ? c.items : null
+      if (!items || items.length < 1 || items.length > LIST_LIMITS.stats) return 'Adicione de 1 a 6 números.'
+      if (items.some((i: any) => typeof i?.value !== 'number' || !/^[0-9]{1,7}(\.[0-9])?$/.test(String(i.value)))) {
+        return 'Todo número precisa de um valor (de 0 a 9.999.999, até 1 casa decimal).'
+      }
+      if (items.some((i: any) => !between(i?.label, 1, 60))) return 'Todo número precisa de uma legenda (até 60 caracteres).'
+      if (items.some((i: any) => String(i?.prefix || '').length > 4 || String(i?.suffix || '').length > 12)) return 'Antes do número: até 4 caracteres; depois: até 12.'
       return null
     }
   }

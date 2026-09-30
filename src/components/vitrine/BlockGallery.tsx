@@ -10,7 +10,7 @@ const GROUPS: { title: string; hint: string; types: BlockType[] }[] = [
   { title: 'Contato e matrícula', hint: 'O que mais gera conversa com as famílias', types: ['whatsapp', 'enroll'] },
   { title: 'Links e destaques',    hint: 'Leve pra site, redes e campanhas',          types: ['link', 'banner'] },
   { title: 'Conteúdo',             hint: 'Mostre a escola',                           types: ['text', 'gallery', 'video'] },
-  { title: 'Confiança',            hint: 'Responda dúvidas e mostre quem faz a escola', types: ['faq', 'testimonials', 'team'] },
+  { title: 'Confiança',            hint: 'Responda dúvidas e mostre quem faz a escola', types: ['stats', 'testimonials', 'faq', 'team'] },
   { title: 'Informações',          hint: 'Onde fica e quando atende',                 types: ['map', 'hours'] },
 ]
 
@@ -44,6 +44,11 @@ function Mini({ type }: { type: BlockType }) {
       return <div style={{ ...box, flexDirection: 'row', gap: 4, justifyContent: 'flex-start', paddingLeft: 8 }}>{[0, 1].map(i => (
         <div key={i} style={{ flex: 'none', width: 44, height: 38, borderRadius: 6, background: '#fff', opacity: i ? 0.6 : 1, padding: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={{ fontSize: 7, lineHeight: 1, color: '#F59E0B', letterSpacing: 0.5 }}>★★★★★</span>{bar('30px', 3, 0.35)}{bar('22px', 3, 0.35)}
+        </div>))}</div>
+    case 'stats':
+      return <div style={{ ...box, flexDirection: 'row', gap: 5 }}>{['20', '1k', '98'].map((n, i) => (
+        <div key={n} style={{ width: 20, height: 30, borderRadius: 5, background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, opacity: i === 1 ? 1 : 0.8 }}>
+          <span style={{ fontSize: 8, fontWeight: 800, lineHeight: 1, color: c }}>{n}</span>{bar('12px', 2, 0.4)}
         </div>))}</div>
     case 'team':
       return <div style={{ ...box, flexDirection: 'row', gap: 6 }}>{[0, 1, 2].map(i => (

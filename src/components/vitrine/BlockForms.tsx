@@ -244,6 +244,10 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
     case 'team':
       return <TeamForm config={config} onChange={onChange} ctx={ctx} />
 
+    // ── Números ─────────────────────────────────────────────────────────────
+    case 'stats':
+      return <StatsForm config={config} onChange={onChange} />
+
     // ── Mapa ────────────────────────────────────────────────────────────────
     case 'map':
       return (
@@ -584,6 +588,61 @@ function TeamForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' |
   )
 }
 
+function StatsForm({ config, onChange }: Pick<Props, 'config' | 'onChange'>) {
+  type N = { value: number | null; prefix?: string; suffix?: string; label: string }
+  const items: N[] = Array.isArray(config.items) ? config.items : []
+  // "1200", "4,8" ou "4.8" → número; vazio → null (bloco fica incompleto).
+  const parse = (raw: string): number | null => {
+    const s = raw.trim().replace(',', '.')
+    if (!s) return null
+    const n = Number(s)
+    return Number.isFinite(n) ? Math.round(n * 10) / 10 : null
+  }
+  const show = (v: number | null) => (v === null || v === undefined ? '' : String(v).replace('.', ','))
+  return (
+    <Grid>
+      <TitleField config={config} onChange={onChange} placeholder="Ex.: O Ágape em números" />
+      <div>
+        <span style={listTitle}>Números</span>
+        <ItemListEditor<N>
+          items={items} onChange={v => onChange({ items: v })} max={LIST_LIMITS.stats} noun="número"
+          itemLabel={(n, i) => (n.value === null || n.value === undefined ? `Número ${i + 1}` : `${n.prefix || ''}${show(n.value)}${n.suffix || ''} ${n.label || ''}`.trim())}
+          newItem={() => ({ value: null, prefix: '', suffix: '', label: '' })}
+          renderItem={(n, update) => (
+            <div style={itemBody}>
+              <div style={{ display: 'grid', gridTemplateColumns: '80px minmax(90px, 1fr) 110px', gap: 10 }}>
+                <Field label="Antes" counter={{ value: n.prefix || '', max: 4 }}>
+                  <TextInput value={n.prefix || ''} maxLength={4} placeholder="+" onChange={e => update({ prefix: e.target.value })} />
+                </Field>
+                <Field label="Número">
+                  <NumberInput value={n.value} show={show} parse={parse} onChange={v => update({ value: v })} />
+                </Field>
+                <Field label="Depois" counter={{ value: n.suffix || '', max: 12 }}>
+                  <TextInput value={n.suffix || ''} maxLength={12} placeholder="%" onChange={e => update({ suffix: e.target.value })} />
+                </Field>
+              </div>
+              <Field label="Legenda" counter={{ value: n.label || '', max: 60 }}>
+                <TextInput value={n.label || ''} maxLength={60} placeholder="Ex.: alunos matriculados" onChange={e => update({ label: e.target.value })} />
+              </Field>
+            </div>
+          )} />
+        <p style={hintStyle}>Exemplos: +1.200 alunos · 20 anos de história · 98% de aprovação. Aceita 1 casa decimal (4,8). No “Depois”, comece com espaço para separar do número (“ anos”).</p>
+      </div>
+      <Toggle checked={config.animate !== false} onChange={v => onChange({ animate: v })}
+        label="Contar ao aparecer" description="Os números sobem de 0 até o valor quando a pessoa rola até o bloco." />
+    </Grid>
+  )
+}
+
+// Campo numérico com vírgula: guarda o texto enquanto a pessoa digita
+// ("4," no meio do caminho) e só devolve o número interpretado.
+function NumberInput({ value, show, parse, onChange }: { value: number | null; show: (v: number | null) => string; parse: (s: string) => number | null; onChange: (v: number | null) => void }) {
+  const [text, setText] = React.useState(show(value))
+  React.useEffect(() => { if (parse(text) !== value) setText(show(value)) }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+  return <TextInput value={text} inputMode="decimal" placeholder="1200" aria-label="Número"
+    onChange={e => { const t = e.target.value.replace(/[^0-9.,]/g, ''); setText(t); onChange(parse(t)) }} />
+}
+
 function HoursForm({ config, onChange }: Pick<Props, 'config' | 'onChange'>) {
   const days: { dow: number; open?: string; close?: string; closed?: boolean }[] = Array.isArray(config.days) ? config.days : []
   const get = (dow: number) => days.find(d => d.dow === dow) || { dow, closed: true }
@@ -595,8 +654,15 @@ function HoursForm({ config, onChange }: Pick<Props, 'config' | 'onChange'>) {
   }
   const time: React.CSSProperties = { width: 96, padding: '7px 8px', borderRadius: 8, border: '1.5px solid #E2E8F0', background: '#FAFAFA', fontSize: 13, fontFamily: 'inherit' }
 
+  const layout = config.layout === 'compact' || config.layout === 'today' ? config.layout : 'table'
   return (
     <Grid>
+      <Field label="Layout" hint={layout === 'table' ? 'Um dia por linha, com “Aberto agora”.'
+        : layout === 'compact' ? 'Dias seguidos com o mesmo horário ficam juntos (ex.: Seg a Sex).'
+        : 'Destaca a situação de agora (“Aberto agora · fecha às 18:00”); a semana abre ao tocar.'}>
+        <Segmented value={layout} onChange={v => onChange({ layout: v })}
+          options={[{ value: 'table', label: 'Tabela' }, { value: 'compact', label: 'Compacto' }, { value: 'today', label: 'Hoje' }]} />
+      </Field>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {DAY_ORDER.map(dow => {
           const d = get(dow)
