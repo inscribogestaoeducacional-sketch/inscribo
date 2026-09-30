@@ -3,7 +3,7 @@
 // Só edita o rascunho da página (onChange); o editor salva sozinho.
 // Opções = listas fechadas validadas no banco (20260929090000_vitrine_theme_v2).
 import React, { useEffect } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowRight, ArrowUp, ArrowUpRight } from 'lucide-react'
 import {
   type VitrinePageRow, type VitrineTheme, type ButtonStyle,
   FONT_PAIRS, HEX_RE, IMAGE_WIDTH, contrastRatio, currentFontPair, readTheme,
@@ -21,9 +21,21 @@ interface Props {
 const PRIMARY_SWATCHES = ['#00A896', '#3B82F6', '#1A2B4A', '#7C3AED', '#DB2777', '#DC2626', '#F59E0B', '#16A34A']
 const BG_SWATCHES = ['#FFFFFF', '#F8FAFC', '#FFF7ED', '#F0FDFA', '#EFF6FF', '#F8F5EE', '#0F172A', '#111827']
 const TEXT_SWATCHES = ['#111827', '#1E293B', '#1A2B4A', '#FFFFFF', '#F8FAFC']
-const ANGLES: { value: 0 | 45 | 90 | 135 | 180; label: string }[] = [
-  { value: 180, label: '↓' }, { value: 135, label: '↘' }, { value: 90, label: '→' }, { value: 45, label: '↗' }, { value: 0, label: '↑' },
+// Ícones do mesmo desenho (os caracteres ↘ ↗ saíam menores que ↓ → ↑).
+const ANGLES: { value: 0 | 45 | 90 | 135 | 180; label: React.ReactNode; aria: string }[] = [
+  { value: 180, label: <ArrowDown size={16} />, aria: 'De cima para baixo' },
+  { value: 135, label: <ArrowDownRight size={16} />, aria: 'Diagonal para baixo' },
+  { value: 90, label: <ArrowRight size={16} />, aria: 'Da esquerda para a direita' },
+  { value: 45, label: <ArrowUpRight size={16} />, aria: 'Diagonal para cima' },
+  { value: 0, label: <ArrowUp size={16} />, aria: 'De baixo para cima' },
 ]
+
+// Mistura duas cores #RRGGBB (t = peso de a).
+function mixHex(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16)
+  const ch = (s: number) => Math.round(((pa >> s) & 255) * t + ((pb >> s) & 255) * (1 - t))
+  return '#' + [16, 8, 0].map(s => ch(s).toString(16).padStart(2, '0')).join('').toUpperCase()
+}
 const BUTTONS: { value: ButtonStyle; label: string }[] = [
   { value: 'filled', label: 'Preenchido' }, { value: 'soft', label: 'Suave' }, { value: 'outline', label: 'Contorno' },
   { value: 'glass', label: 'Vidro' }, { value: 'shadow', label: 'Sombra marcada' }, { value: 'minimal', label: 'Minimalista' },
@@ -71,7 +83,10 @@ function ColorField({ label, value, swatches, onChange, hint }: { label: string;
             const v = e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}`
             setText(v)
             if (HEX_RE.test(v)) onChange(v.toUpperCase())
-          }} />
+          }}
+          // Código incompleto ("#12") não vale: ao sair do campo, volta a
+          // mostrar a cor que está de fato salva.
+          onBlur={() => { if (!HEX_RE.test(text)) setText(value) }} />
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {swatches.map(s => (
             <button key={s} type="button" onClick={() => onChange(s)} title={s} aria-label={`Usar ${s}`}
@@ -103,13 +118,20 @@ function Choice({ selected, onClick, children, label }: { selected: boolean; onC
 // Miniatura de botão no estilo escolhido, com as cores da escola.
 function ButtonSample({ style, theme }: { style: ButtonStyle; theme: VitrineTheme }) {
   const r = theme.radius === 999 ? 999 : theme.radius
+  // Mesmas regras da página publicada (api/_lib/vitrineRender.ts): texto
+  // branco na cor principal só com contraste de 3:1, senão quase-preto; vidro
+  // claro com texto escuro, vidro translúcido com texto claro.
+  const onPrimary = contrastRatio('#FFFFFF', theme.primary) >= 3 ? '#FFFFFF' : '#111827'
+  const darkText = contrastRatio(theme.text, '#000000') < 9
   const base: React.CSSProperties = { height: 30, borderRadius: r, fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.text }
   const s: Record<ButtonStyle, React.CSSProperties> = {
-    filled:  { background: theme.primary, color: '#fff', border: `2px solid ${theme.primary}` },
+    filled:  { background: theme.primary, color: onPrimary, border: `2px solid ${theme.primary}` },
     soft:    { background: theme.primary + '26', border: '2px solid transparent' },
     outline: { background: 'transparent', border: `2px solid ${theme.primary}` },
-    glass:   { background: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 1px 6px rgba(0,0,0,.12)' },
-    shadow:  { background: theme.primary, color: '#fff', border: `2px solid ${theme.text}`, boxShadow: `3px 3px 0 ${theme.text}` },
+    glass:   darkText
+      ? { background: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.75)', boxShadow: '0 1px 6px rgba(0,0,0,.12)' }
+      : { background: 'rgba(255,255,255,.14)', border: '1px solid rgba(255,255,255,.3)', boxShadow: '0 1px 6px rgba(0,0,0,.12)' },
+    shadow:  { background: theme.primary, color: onPrimary, border: `2px solid ${theme.text}`, boxShadow: `3px 3px 0 ${theme.text}` },
     minimal: { background: 'transparent', border: 0, borderBottom: `1px solid ${theme.text}33`, borderRadius: 0, justifyContent: 'space-between', padding: '0 2px' },
   }
   return (
@@ -220,7 +242,12 @@ export default function AppearancePanel({ page, institution, institutionId, onCh
       </Section>
 
       <Section title="Fundo">
-        <Segmented value={bgType} onChange={v => setTheme({ bg_type: v })}
+        <Segmented value={bgType} onChange={v => setTheme(
+          // Gradiente com as duas pontas iguais parece que "não funcionou":
+          // a cor final começa num tom suave da cor principal.
+          v === 'gradient' && (!theme.bg_gradient_to || theme.bg_gradient_to.toUpperCase() === theme.background.toUpperCase())
+            ? { bg_type: v, bg_gradient_to: mixHex(theme.primary, theme.background, 0.3) }
+            : { bg_type: v })}
           options={[{ value: 'solid', label: 'Cor sólida' }, { value: 'gradient', label: 'Gradiente' }, { value: 'image', label: 'Imagem' }]} />
         {bgType === 'solid' && (
           <ColorField label="Cor do fundo" value={theme.background} swatches={BG_SWATCHES} onChange={v => setTheme({ background: v })} />

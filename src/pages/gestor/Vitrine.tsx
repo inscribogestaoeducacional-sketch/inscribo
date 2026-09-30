@@ -185,6 +185,8 @@ export default function Vitrine() {
     savedPageRef.current = { ...(prev || p), ...payload } as VitrinePageRow
     if (prev && prev.logo_url !== p.logo_url) removeVitrineImage(institutionId, prev.logo_url)
     if (prev && prev.cover_url !== p.cover_url) removeVitrineImage(institutionId, prev.cover_url)
+    const prevBg = (prev?.theme as any)?.bg_image_url, curBg = (p.theme as any)?.bg_image_url
+    if (prev && prevBg && prevBg !== curBg) removeVitrineImage(institutionId, prevBg)
     setPageError(null)
     // Se editaram durante o save, o timer pendente salva de novo.
     setPageState(PAGE_FIELDS.some(f => JSON.stringify((pageRef.current as any)?.[f]) !== JSON.stringify(payload[f])) ? 'dirty' : 'saved')

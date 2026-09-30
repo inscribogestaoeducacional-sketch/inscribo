@@ -101,14 +101,14 @@ export function Toggle({ checked, onChange, label, description, disabled }: {
 }
 
 export function Segmented<T extends string | number>({ value, options, onChange }: {
-  value: T; options: { value: T; label: string }[]; onChange: (v: T) => void
+  value: T; options: { value: T; label: React.ReactNode; aria?: string }[]; onChange: (v: T) => void
 }) {
   return (
     <div role="radiogroup" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: DS.r.md, padding: 4, flexWrap: 'wrap' }}>
       {options.map(o => {
         const sel = o.value === value
         return (
-          <button key={String(o.value)} type="button" role="radio" aria-checked={sel} onClick={() => onChange(o.value)}
+          <button key={String(o.value)} type="button" role="radio" aria-checked={sel} aria-label={o.aria} title={o.aria} onClick={() => onChange(o.value)}
             style={{
               flex: '1 1 auto', padding: '8px 12px', borderRadius: DS.r.sm, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
               background: sel ? '#fff' : 'transparent', color: sel ? DS.navy : DS.muted,
