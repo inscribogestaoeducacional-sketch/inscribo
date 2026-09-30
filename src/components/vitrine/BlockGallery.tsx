@@ -7,8 +7,8 @@ import { type BlockType, BLOCK_TYPES } from '../../lib/vitrine'
 import { BLOCK_ICONS } from './BlockList'
 
 const GROUPS: { title: string; hint: string; types: BlockType[] }[] = [
-  { title: 'Contato e matrícula', hint: 'O que mais gera conversa com as famílias', types: ['whatsapp', 'enroll'] },
-  { title: 'Links e destaques',    hint: 'Leve pra site, redes e campanhas',          types: ['link', 'banner'] },
+  { title: 'Contato e matrícula', hint: 'O que mais gera conversa com as famílias', types: ['whatsapp', 'enroll', 'contact'] },
+  { title: 'Links e destaques',    hint: 'Leve pra site, redes e campanhas',          types: ['link', 'banner', 'pdf'] },
   { title: 'Conteúdo',             hint: 'Mostre a escola',                           types: ['text', 'gallery', 'video'] },
   { title: 'Confiança',            hint: 'Responda dúvidas e mostre quem faz a escola', types: ['stats', 'testimonials', 'faq', 'team'] },
   { title: 'Informações',          hint: 'Onde fica e quando atende',                 types: ['map', 'hours'] },
@@ -45,6 +45,15 @@ function Mini({ type }: { type: BlockType }) {
         <div key={i} style={{ flex: 'none', width: 44, height: 38, borderRadius: 6, background: '#fff', opacity: i ? 0.6 : 1, padding: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={{ fontSize: 7, lineHeight: 1, color: '#F59E0B', letterSpacing: 0.5 }}>★★★★★</span>{bar('30px', 3, 0.35)}{bar('22px', 3, 0.35)}
         </div>))}</div>
+    case 'pdf':
+      return <div style={box}><div style={{ width: 30, height: 38, borderRadius: 4, background: '#fff', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 5 }}>
+        <span style={{ position: 'absolute', top: 0, right: 0, width: 9, height: 9, background: BLOCK_TYPES[type].bg, borderBottomLeftRadius: 3 }} />
+        <span style={{ fontSize: 8, fontWeight: 800, color: '#fff', background: c, borderRadius: 2, padding: '1px 3px', lineHeight: 1.2 }}>PDF</span>
+      </div></div>
+    case 'contact':
+      return <div style={box}><div style={{ width: 62, height: 18, borderRadius: 999, background: c, display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', border: '1.5px solid #fff', flex: 'none' }} /><span style={{ width: 34, height: 3, borderRadius: 2, background: '#fff', opacity: 0.8 }} />
+      </div></div>
     case 'stats':
       return <div style={{ ...box, flexDirection: 'row', gap: 5 }}>{['20', '1k', '98'].map((n, i) => (
         <div key={n} style={{ width: 20, height: 30, borderRadius: 5, background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, opacity: i === 1 ? 1 : 0.8 }}>

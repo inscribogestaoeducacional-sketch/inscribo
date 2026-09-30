@@ -20,7 +20,7 @@ export const VITRINE_SITE_URL = 'https://aionedu.com.br'
 export const VITRINE_BUCKET = 'vitrine-media'
 export const VITRINE_MAX_BLOCKS = 50
 
-export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll' | 'banner' | 'faq' | 'testimonials' | 'team' | 'stats'
+export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll' | 'banner' | 'faq' | 'testimonials' | 'team' | 'stats' | 'pdf' | 'contact'
 export type LinkStyle = 'button' | 'icon' | 'card' | 'featured'
 export type BannerAspect = '3:1' | '16:9'
 export type VideoSize = 'normal' | 'featured'
@@ -29,6 +29,8 @@ export type VideoFormat = '16:9' | '9:16'
 // Limites dos blocos com lista (iguais aos do banco, 20260929130000).
 export const LIST_LIMITS = { faq: 20, testimonials: 12, team: 24, stats: 6 } as const
 export type HoursLayout = 'table' | 'compact' | 'today'
+export const MAP_MAX_UNITS = 4   // além da principal
+export const PDF_MAX_BYTES = 10 * 1024 * 1024   // limite do bucket vitrine-docs
 
 // Tamanho recomendado de cada formato de banner (mostrado no upload).
 export const BANNER_ASPECTS: Record<BannerAspect, { label: string; size: string; ratio: number }> = {
@@ -144,9 +146,11 @@ export const BLOCK_TYPES: Record<BlockType, { label: string; description: string
   testimonials: { label: 'Depoimentos',      description: 'O que as famílias dizem, com nota',          color: '#CA8A04', bg: '#FEF9C3' },
   team:     { label: 'Equipe',               description: 'Direção e professores, com foto e cargo',    color: '#4F46E5', bg: '#E0E7FF' },
   stats:    { label: 'Números',              description: 'Alunos, anos de história, aprovações…',      color: '#0891B2', bg: '#CFFAFE' },
+  pdf:      { label: 'Arquivo PDF',          description: 'Cardápio, calendário, lista de material',    color: '#E11D48', bg: '#FFE4E6' },
+  contact:  { label: 'Salvar contato',       description: 'Botão que salva a escola na agenda do celular', color: '#0D9488', bg: '#CCFBF1' },
 }
 
-export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'banner', 'text', 'gallery', 'video', 'faq', 'testimonials', 'team', 'stats', 'map', 'hours']
+export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'banner', 'text', 'gallery', 'video', 'faq', 'testimonials', 'team', 'stats', 'pdf', 'contact', 'map', 'hours']
 
 export function defaultConfig(type: BlockType, ctx: { address?: string | null; placeName?: string | null }): Record<string, any> {
   switch (type) {
@@ -167,6 +171,8 @@ export function defaultConfig(type: BlockType, ctx: { address?: string | null; p
     case 'testimonials': return { title: 'O que as famílias dizem', items: [{ quote: '', name: '', role: '', photo_url: '', rating: 5 }] }
     case 'team':     return { title: 'Nossa equipe', layout: 'grid', items: [{ name: '', role: '', photo_url: '', bio: '' }] }
     case 'stats':    return { title: '', animate: true, items: [{ value: null, prefix: '', suffix: '', label: '' }] }
+    case 'pdf':      return { label: '', file_url: '', file_name: '', style: 'button' }
+    case 'contact':  return { label: 'Salvar contato na agenda', name: '', phone_source: 'school', email: '', website: '', address: ctx.address || '' }
   }
 }
 
@@ -184,6 +190,8 @@ export function blockSummary(type: BlockType, c: Record<string, any>): string {
     case 'testimonials': return c.title || 'Depoimentos'
     case 'team':    return c.title || 'Equipe'
     case 'stats':   return c.title || 'Números'
+    case 'pdf':     return c.label || 'Arquivo PDF'
+    case 'contact': return c.label || 'Salvar contato'
   }
 }
 
@@ -223,7 +231,18 @@ export function blockDetail(type: BlockType, c: Record<string, any>): string {
         .map((i: any) => `${i.prefix || ''}${String(i.value).replace('.', ',')}${i.suffix || ''} ${i.label || ''}`.trim())
       return parts.length ? clip(parts.join(' · ')) : 'Sem números'
     }
-    case 'map':      return clip(c.address) || 'Sem endereço'
+    case 'map': {
+      const n = Array.isArray(c.units) ? c.units.length : 0
+      return (n ? `${n + 1} unidades · ` : '') + (clip(c.address, n ? 44 : 60) || 'Sem endereço')
+    }
+    case 'pdf': {
+      const kb = Number(c.file_size) > 0 ? (Number(c.file_size) < 1048576 ? `${Math.max(1, Math.round(c.file_size / 1024))} KB` : `${(c.file_size / 1048576).toFixed(1).replace('.', ',')} MB`) : ''
+      return c.file_url ? [c.style === 'card' ? 'Cartão' : 'Botão', c.file_name, kb].filter(Boolean).join(' · ') : 'Sem arquivo'
+    }
+    case 'contact': {
+      const bits = [c.phone_source === 'none' ? '' : c.phone_source === 'custom' ? 'telefone próprio' : 'WhatsApp da escola', c.email, c.website ? 'site' : ''].filter(Boolean)
+      return bits.length ? clip(bits.join(' · ')) : 'Só o nome'
+    }
     case 'hours': {
       const lay = c.layout === 'compact' ? 'Compacto · ' : c.layout === 'today' ? 'Hoje · ' : ''
       const open = (Array.isArray(c.days) ? c.days : []).filter((d: any) => !d.closed)
@@ -346,8 +365,30 @@ export function validateBlock(type: BlockType, c: Record<string, any>): string |
       const a = String(c.address || '').trim()
       if (a.length < 5 || a.length > 300) return 'Informe o endereço (de 5 a 300 caracteres).'
       if (String(c.place_name || '').length > 120) return 'O nome no Google Maps pode ter no máximo 120 caracteres.'
+      if (String(c.unit_name || '').length > 80) return 'O nome da unidade pode ter no máximo 80 caracteres.'
+      if (c.units !== undefined && (!Array.isArray(c.units) || c.units.length > MAP_MAX_UNITS)) return 'Adicione no máximo 4 outras unidades.'
+      if (Array.isArray(c.units) && c.units.some((u: any) => !between(u?.name, 1, 80) || !between(u?.address, 5, 300) || String(u?.place_name || '').length > 120)) {
+        return 'Toda unidade precisa de nome (até 80) e endereço (de 5 a 300 caracteres).'
+      }
       return null
     }
+    case 'pdf':
+      if (!between(c.label, 1, 80)) return 'O texto do botão é obrigatório (até 80 caracteres).'
+      if (!isHttpUrl(c.file_url)) return 'Envie o arquivo PDF.'
+      if (String(c.file_name || '').length > 120) return 'Nome do arquivo muito longo.'
+      if (c.file_size != null && (typeof c.file_size !== 'number' || !/^[0-9]{1,9}$/.test(String(c.file_size)))) return 'Tamanho do arquivo inválido.'
+      if (String(c.description || '').length > 120) return 'A descrição pode ter no máximo 120 caracteres.'
+      if (c.style !== undefined && c.style !== 'button' && c.style !== 'card') return 'Estilo do bloco inválido.'
+      return null
+    case 'contact':
+      if (!between(c.label, 1, 80)) return 'O texto do botão é obrigatório (até 80 caracteres).'
+      if (String(c.name || '').length > 100) return 'O nome pode ter no máximo 100 caracteres.'
+      if (c.phone_source !== undefined && !['school', 'custom', 'none'].includes(c.phone_source)) return 'Origem do telefone inválida.'
+      if (c.phone_source === 'custom' && !/^[0-9]{10,13}$/.test(String(c.phone || ''))) return 'Telefone inválido: DDD + número, só dígitos.'
+      if (c.email && (String(c.email).length > 120 || !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(c.email))) return 'E-mail inválido.'
+      if (c.website && !isHttpUrl(c.website)) return 'Site inválido: use um endereço começando com https://'
+      if (String(c.address || '').length > 300) return 'O endereço pode ter no máximo 300 caracteres.'
+      return null
     case 'hours': {
       const days = Array.isArray(c.days) ? c.days : []
       if (days.length > 7 || days.some((d: any) => !/^[0-6]$/.test(String(d?.dow)))) return 'Horário inválido.'
@@ -429,7 +470,15 @@ export function buildPreviewData(
     } else {
       // Mapa sem place_name: a página pública usa o nome da escola (ver
       // 20260929080000_vitrine_map_place_name.sql) — a prévia faz igual.
-      const cfg = b.type === 'map' && !('place_name' in c) ? { ...c, place_name: ctx.institutionName } : c
+      let cfg = b.type === 'map' && !('place_name' in c) ? { ...c, place_name: ctx.institutionName } : c
+      if (b.type === 'map' && Array.isArray(c.units)) {
+        cfg = { ...cfg, units: c.units.map((u: any) => ('place_name' in (u || {}) ? u : { ...u, place_name: ctx.institutionName })) }
+      }
+      if (b.type === 'contact') {
+        const src = c.phone_source || 'school'
+        cfg = { label: c.label, name: String(c.name || '').trim() || ctx.institutionName, email: c.email || null, website: c.website || null,
+          address: c.address || null, phone: src === 'school' ? phone : src === 'custom' ? c.phone : null }
+      }
       out.push({ id: b.id, type: b.type, config: cfg })
     }
   }

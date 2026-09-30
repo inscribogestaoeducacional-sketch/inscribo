@@ -10,7 +10,12 @@
 // aqui, o upload pro bucket vitrine-media.
 // =============================================================================
 import { supabase } from './supabase'
-import { VITRINE_BUCKET, type BlockType } from './vitrineCore'
+import { VITRINE_BUCKET, PDF_MAX_BYTES, type BlockType } from './vitrineCore'
+
+// Buckets de arquivo (20260929150000): limite de tamanho por tipo no servidor.
+export const VITRINE_DOCS_BUCKET = 'vitrine-docs'
+export const VITRINE_VIDEOS_BUCKET = 'vitrine-videos'
+const ALL_BUCKETS = [VITRINE_BUCKET, VITRINE_DOCS_BUCKET, VITRINE_VIDEOS_BUCKET]
 
 export * from './vitrineCore'
 
@@ -71,16 +76,36 @@ export async function uploadVitrineImage(institutionId: string, original: File, 
 // quebra nada.
 export async function removeVitrineImage(institutionId: string, url: string | null | undefined) {
   if (!url) return
-  const marker = `/storage/v1/object/public/${VITRINE_BUCKET}/`
-  const i = url.indexOf(marker)
-  if (i < 0) return
-  const path = decodeURIComponent(url.slice(i + marker.length).split('?')[0])
-  if (!path.startsWith(`${institutionId}/`)) return
-  await supabase.storage.from(VITRINE_BUCKET).remove([path]).catch(() => {})
+  // Vale pros três buckets da Vitrine (imagem, PDF, vídeo).
+  for (const bucket of ALL_BUCKETS) {
+    const marker = `/storage/v1/object/public/${bucket}/`
+    const i = url.indexOf(marker)
+    if (i < 0) continue
+    const path = decodeURIComponent(url.slice(i + marker.length).split('?')[0])
+    if (!path.startsWith(`${institutionId}/`)) return
+    await supabase.storage.from(bucket).remove([path]).catch(() => {})
+    return
+  }
 }
 
-// Imagens do bucket usadas por um bloco (pra limpar ao excluir o bloco).
+// PDF do bloco "Arquivo PDF": sobe como está (sem conversão), até 10 MB.
+// Confere a assinatura "%PDF" — extensão .pdf num arquivo que não é PDF
+// abriria quebrado pro visitante.
+export async function uploadVitrinePdf(institutionId: string, file: File): Promise<{ url: string; name: string; size: number }> {
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+  if (!isPdf) throw new Error('Escolha um arquivo PDF.')
+  if (file.size > PDF_MAX_BYTES) throw new Error('O PDF pode ter no máximo 10 MB. Reduza o arquivo (ex.: “Salvar como PDF reduzido”) e tente de novo.')
+  const head = new Uint8Array(await file.slice(0, 5).arrayBuffer())
+  if (String.fromCharCode(...head).slice(0, 4) !== '%PDF') throw new Error('Esse arquivo não parece ser um PDF válido.')
+  const path = `${institutionId}/${crypto.randomUUID()}.pdf`
+  const { error } = await supabase.storage.from(VITRINE_DOCS_BUCKET).upload(path, file, { contentType: 'application/pdf', upsert: false })
+  if (error) throw new Error(`Não foi possível enviar o PDF: ${error.message}`)
+  return { url: supabase.storage.from(VITRINE_DOCS_BUCKET).getPublicUrl(path).data.publicUrl, name: file.name.slice(0, 120), size: file.size }
+}
+
+// Arquivos dos buckets usados por um bloco (pra limpar ao excluir o bloco).
 export function blockImageUrls(type: BlockType, c: Record<string, any>): string[] {
+  if (type === 'pdf' && c.file_url) return [c.file_url]
   if (type === 'gallery') return (c.images || []).map((i: any) => i?.url).filter(Boolean)
   if (type === 'link' && c.thumbnail_url) return [c.thumbnail_url]
   if (type === 'banner' && c.image_url) return [c.image_url]

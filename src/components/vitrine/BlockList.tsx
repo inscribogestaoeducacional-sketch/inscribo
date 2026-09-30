@@ -9,7 +9,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy, sortableKeyb
 import { CSS } from '@dnd-kit/utilities'
 import {
   GripVertical, ChevronDown, Eye, EyeOff, Copy, Trash2, Loader2, Check, AlertCircle,
-  MessageCircle, GraduationCap, Link2, Type, Images, PlayCircle, MapPin, Clock, Megaphone, RectangleHorizontal, HelpCircle, Quote, Users, BarChart3, type LucideIcon,
+  MessageCircle, GraduationCap, Link2, Type, Images, PlayCircle, MapPin, Clock, Megaphone, RectangleHorizontal, HelpCircle, Quote, Users, BarChart3, FileText, UserPlus, type LucideIcon,
 } from 'lucide-react'
 import { type BlockType, BLOCK_TYPES, blockSummary, blockDetail } from '../../lib/vitrine'
 import BlockForm, { type BlockFormContext } from './BlockForms'
@@ -30,7 +30,7 @@ export interface EditorBlock {
 export const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
   whatsapp: MessageCircle, enroll: GraduationCap, link: Link2, text: Type,
   gallery: Images, video: PlayCircle, map: MapPin, hours: Clock, banner: RectangleHorizontal,
-  faq: HelpCircle, testimonials: Quote, team: Users, stats: BarChart3,
+  faq: HelpCircle, testimonials: Quote, team: Users, stats: BarChart3, pdf: FileText, contact: UserPlus,
 }
 
 interface ListProps {

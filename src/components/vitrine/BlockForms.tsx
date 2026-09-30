@@ -4,11 +4,11 @@
 // depois que a alteração foi salva (senão um bloco inválido, que não salva,
 // deixaria a página publicada apontando pra arquivo apagado).
 import React from 'react'
-import { AlertTriangle, ImagePlus, Megaphone, Star } from 'lucide-react'
+import { AlertTriangle, FileUp, ImagePlus, Megaphone, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   type BlockType, type LinkStyle, type BannerAspect, normalizeUrl, parseVideoUrl, uploadVitrineImage,
-  IMAGE_ACCEPT, IMAGE_WIDTH, BANNER_ASPECTS, SOCIAL, detectSocial, LIST_LIMITS,
+  IMAGE_ACCEPT, IMAGE_WIDTH, BANNER_ASPECTS, SOCIAL, detectSocial, LIST_LIMITS, MAP_MAX_UNITS, uploadVitrinePdf,
 } from '../../lib/vitrine'
 import { Field, TextInput, TextArea, Toggle, Segmented, ImagePicker, hintStyle } from './ui'
 import ItemListEditor from './ItemListEditor'
@@ -248,6 +248,14 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
     case 'stats':
       return <StatsForm config={config} onChange={onChange} />
 
+    // ── PDF ─────────────────────────────────────────────────────────────────
+    case 'pdf':
+      return <PdfForm config={config} onChange={onChange} ctx={ctx} />
+
+    // ── Contato (vCard) ─────────────────────────────────────────────────────
+    case 'contact':
+      return <ContactForm config={config} onChange={onChange} ctx={ctx} />
+
     // ── Mapa ────────────────────────────────────────────────────────────────
     case 'map':
       return (
@@ -262,6 +270,7 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
             hint="Como a escola aparece no Google Maps. Com o nome, o pino cai exatamente na escola; só com o endereço, o Google estima a posição do número e o pino pode ficar alguns metros ao lado. Deixe em branco se a escola não estiver no Google Maps.">
             <TextInput value={config.place_name ?? ctx.institutionName} maxLength={120} placeholder="Ex.: Colégio Exemplo" onChange={e => onChange({ place_name: e.target.value })} />
           </Field>
+          <UnitsEditor config={config} onChange={onChange} ctx={ctx} />
         </Grid>
       )
 
@@ -584,6 +593,157 @@ function TeamForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' |
             </div>
           )} />
       </div>
+    </Grid>
+  )
+}
+
+// Outras unidades do mapa (até 4 além da principal). Com unidades, a página
+// mostra a lista com "Como chegar" de cada uma e o mapa troca ao tocar.
+function UnitsEditor({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {
+  type Un = { name: string; address: string; place_name?: string }
+  const units: Un[] = Array.isArray(config.units) ? config.units : []
+  const set = (v: Un[]) => onChange(v.length ? { units: v } : { units: undefined, unit_name: undefined })
+  return (
+    <div style={{ paddingTop: 12, borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div>
+        <span style={listTitle}>Outras unidades</span>
+        <p style={{ ...hintStyle, marginTop: 2 }}>A escola tem mais de um endereço? Adicione as outras unidades: a página mostra todas, cada uma com o próprio “Como chegar”.</p>
+      </div>
+      {units.length > 0 && (
+        <Field label="Nome da unidade acima" counter={{ value: config.unit_name || '', max: 80 }} hint="Como aparece na lista. Ex.: Sede, Unidade Centro.">
+          <TextInput value={config.unit_name || ''} maxLength={80} placeholder="Unidade principal" onChange={e => onChange({ unit_name: e.target.value })} />
+        </Field>
+      )}
+      <ItemListEditor<Un>
+        items={units} onChange={set} max={MAP_MAX_UNITS} noun="unidade" addLabel="Adicionar unidade"
+        itemLabel={(u, i) => u.name?.trim() || `Unidade ${i + 2}`}
+        // Em branco de propósito: com o nome da escola, o Google tende a
+        // apontar o prédio principal em vez da filial.
+        newItem={() => ({ name: '', address: '', place_name: '' })}
+        renderItem={(u, update) => (
+          <div style={itemBody}>
+            <Field label="Nome da unidade" counter={{ value: u.name || '', max: 80 }}>
+              <TextInput value={u.name || ''} maxLength={80} placeholder="Ex.: Unidade Centro" onChange={e => update({ name: e.target.value })} />
+            </Field>
+            <Field label="Endereço" counter={{ value: u.address || '', max: 300 }}>
+              <TextArea rows={2} value={u.address || ''} maxLength={300} onChange={e => update({ address: e.target.value })} />
+            </Field>
+            <Field label="Nome no Google Maps" counter={{ value: u.place_name ?? '', max: 120 }} hint="Se essa unidade tem cadastro próprio no Google Maps, escreva o nome como aparece lá (o pino fica no lugar exato). Em branco, o mapa busca só pelo endereço.">
+              <TextInput value={u.place_name ?? ''} maxLength={120} onChange={e => update({ place_name: e.target.value })} />
+            </Field>
+          </div>
+        )} />
+    </div>
+  )
+}
+
+function fmtBytes(n: number) {
+  return n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1).replace('.', ',')} MB`
+}
+
+function PdfForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = React.useState(false)
+  const [over, setOver] = React.useState(false)
+  const style = config.style === 'card' ? 'card' : 'button'
+
+  async function send(file: File | undefined | null) {
+    if (!file || busy) return
+    setBusy(true)
+    try {
+      const r = await uploadVitrinePdf(ctx.institutionId, file)
+      // Sem texto ainda: usa o nome do arquivo ("Cardapio-outubro.pdf" → "Cardapio outubro").
+      const auto = r.name.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, 80)
+      onChange({ file_url: r.url, file_name: r.name, file_size: r.size, ...(config.label ? {} : { label: auto }) })
+    } catch (e: any) { ctx.onError(e?.message || 'Não foi possível enviar o PDF.') }
+    setBusy(false)
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  const box: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)' }
+  return (
+    <Grid>
+      <div>
+        <span style={listTitle}>Arquivo</span>
+        <div style={{ marginTop: 6 }}
+          onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
+          onDrop={e => { e.preventDefault(); setOver(false); send(e.dataTransfer.files?.[0]) }}>
+          {config.file_url ? (
+            <div style={{ ...box, border: over ? '2px dashed #00A896' : '1px solid #E2E8F0', background: over ? '#F0FDFA' : '#fff' }}>
+              <span aria-hidden="true" style={{ width: 40, height: 48, borderRadius: 6, background: '#FFE4E6', color: '#E11D48', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>PDF</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{config.file_name || 'arquivo.pdf'}</span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>{config.file_size ? fmtBytes(config.file_size) + ' · ' : ''}<a href={config.file_url} target="_blank" rel="noopener noreferrer" style={{ color: '#0F766E', fontWeight: 600 }}>Abrir</a></span>
+              </span>
+              <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
+                style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#475569', cursor: busy ? 'wait' : 'pointer' }}>
+                {busy ? 'Enviando…' : 'Trocar'}
+              </button>
+            </div>
+          ) : (
+            <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
+              style={{ ...box, width: '100%', justifyContent: 'center', height: 88, cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600,
+                border: over ? '2px dashed #00A896' : '1.5px dashed #CBD5E1', background: over ? '#F0FDFA' : '#FAFAFA', color: over ? '#0F766E' : '#64748b' }}>
+              <FileUp size={18} /> {busy ? 'Enviando…' : over ? 'Solte o PDF aqui' : 'Clique ou arraste o PDF (até 10 MB)'}
+            </button>
+          )}
+        </div>
+        <input ref={inputRef} type="file" accept="application/pdf,.pdf" hidden aria-label="Enviar PDF" onChange={e => send(e.target.files?.[0])} />
+        <p style={hintStyle}>O arquivo fica público: qualquer pessoa com o link consegue abrir. Não envie documentos com dados pessoais de alunos ou famílias.</p>
+      </div>
+      <Field label="Texto do botão" counter={{ value: config.label || '', max: 80 }}>
+        <TextInput value={config.label || ''} maxLength={80} placeholder="Ex.: Cardápio de outubro" onChange={e => onChange({ label: e.target.value })} />
+      </Field>
+      <Field label="Aparência">
+        <Segmented value={style} onChange={v => onChange({ style: v })}
+          options={[{ value: 'button', label: 'Botão' }, { value: 'card', label: 'Cartão' }]} />
+      </Field>
+      {style === 'card' && (
+        <Field label="Descrição (opcional)" counter={{ value: config.description || '', max: 120 }} hint="Uma frase curta embaixo do título. O cartão mostra também o tamanho do arquivo.">
+          <TextInput value={config.description || ''} maxLength={120} placeholder="Ex.: Atualizado toda segunda-feira" onChange={e => onChange({ description: e.target.value || undefined })} />
+        </Field>
+      )}
+    </Grid>
+  )
+}
+
+function ContactForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {
+  const src = ['custom', 'none'].includes(config.phone_source) ? config.phone_source : 'school'
+  return (
+    <Grid>
+      <Field label="Texto do botão" counter={{ value: config.label || '', max: 80 }}>
+        <TextInput value={config.label || ''} maxLength={80} placeholder="Ex.: Salvar contato na agenda" onChange={e => onChange({ label: e.target.value })} />
+      </Field>
+      <p style={{ ...hintStyle, marginTop: -6 }}>Ao tocar, o celular abre a tela de “novo contato” já preenchida com os dados abaixo. A logo entra como foto quando for JPG ou PNG.</p>
+      <Field label="Nome no contato" counter={{ value: config.name || '', max: 100 }} hint="Em branco, usa o nome da escola.">
+        <TextInput value={config.name || ''} maxLength={100} placeholder={ctx.institutionName} onChange={e => onChange({ name: e.target.value })} />
+      </Field>
+      <Field label="Telefone">
+        <Segmented value={src} onChange={v => onChange({ phone_source: v })}
+          options={[{ value: 'school', label: 'WhatsApp da escola' }, { value: 'custom', label: 'Outro número' }, { value: 'none', label: 'Sem telefone' }]} />
+      </Field>
+      {src === 'school' && (ctx.schoolPhone
+        ? <p style={{ ...hintStyle, marginTop: -8 }}>Número conectado ao Áion: <strong style={{ color: '#475569' }}>{fmtPhone(ctx.schoolPhone)}</strong></p>
+        : <Warn>A escola não tem WhatsApp conectado ao Áion: o contato vai sem telefone até o número ser conectado.</Warn>)}
+      {src === 'custom' && (
+        <Field label="Número" hint="DDD + número, só dígitos. Ex.: 8334214738">
+          <TextInput value={config.phone || ''} inputMode="numeric" maxLength={13} placeholder="8334214738"
+            onChange={e => onChange({ phone: e.target.value.replace(/\D/g, '') })} />
+        </Field>
+      )}
+      <div style={twoCols}>
+        <Field label="E-mail (opcional)">
+          <TextInput value={config.email || ''} maxLength={120} inputMode="email" placeholder="secretaria@escola.com.br" onChange={e => onChange({ email: e.target.value.trim() })} />
+        </Field>
+        <Field label="Site (opcional)">
+          <TextInput value={config.website || ''} inputMode="url" placeholder="https://..."
+            onChange={e => onChange({ website: e.target.value })}
+            onBlur={e => { const v = normalizeUrl(e.target.value); if (v !== config.website) onChange({ website: v }) }} />
+        </Field>
+      </div>
+      <Field label="Endereço (opcional)" counter={{ value: config.address || '', max: 300 }}>
+        <TextArea rows={2} value={config.address || ''} maxLength={300} onChange={e => onChange({ address: e.target.value })} />
+      </Field>
     </Grid>
   )
 }
