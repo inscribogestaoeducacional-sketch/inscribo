@@ -16,6 +16,20 @@ const SHARE_PAGES = [
     description: 'Saiba de qual anúncio veio cada matrícula. Cada conversa do WhatsApp chega marcada com a campanha de origem e vai direto pra pessoa certa.',
     image: '/novidades/img/captacao-og.jpg',
   },
+  {
+    path: '/novidades/vitrine',
+    file: 'novidades/vitrine.html',
+    title: 'Novidade: Vitrine Áion — Áion Edu',
+    description: 'Um link só com tudo o que a família procura: WhatsApp, matrícula, redes sociais, horário e endereço da escola, em aionedu.com.br/sua-escola.',
+    image: '/novidades/img/vitrine-og.jpg',
+  },
+  {
+    path: '/novidades/transmissoes',
+    file: 'novidades/transmissoes.html',
+    title: 'Novidade: Transmissões — Áion Edu',
+    description: 'Campanhas pelo WhatsApp oficial da escola, com mensagem aprovada pela Meta, custo antes do envio e acompanhamento de quem leu e respondeu.',
+    image: '/novidades/img/transmissoes-og.jpg',
+  },
 ]
 
 const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')

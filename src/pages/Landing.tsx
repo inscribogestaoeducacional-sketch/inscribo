@@ -132,11 +132,13 @@ function Hero() {
       <div style={{ maxWidth: 1200, margin: '0 auto', width: '100%', position: 'relative', zIndex: 1 }}>
         <div className="hero-cols" style={{ display: 'flex', alignItems: 'center', gap: 80 }}>
           <div className="hero-text-block" style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ marginBottom: 14, animation: 'fadeIn .9s ease both' }}>
-              <a href="/novidades/captacao-inteligente" className="tag-novo-d" style={{ fontSize: 11, padding: '6px 14px' }}>
-                <span style={{ background: '#DB2777', color: '#fff', borderRadius: 999, padding: '2px 8px', fontSize: 10 }}>Novo</span>
-                Captação Inteligente <IcArrowRight size={12} />
-              </a>
+            <div style={{ marginBottom: 14, animation: 'fadeIn .9s ease both', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {[{ href: '/novidades/vitrine', label: 'Vitrine Áion' }, { href: '/novidades/transmissoes', label: 'Transmissões' }].map(n => (
+                <a key={n.href} href={n.href} className="tag-novo-d" style={{ fontSize: 11, padding: '6px 14px' }}>
+                  <span style={{ background: '#DB2777', color: '#fff', borderRadius: 999, padding: '2px 8px', fontSize: 10 }}>Novo</span>
+                  {n.label} <IcArrowRight size={12} />
+                </a>
+              ))}
             </div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 32, animation: 'fadeIn .9s ease both', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.18)', borderRadius: 999, padding: '8px 18px' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#4ADE80', display: 'inline-block', animation: 'pulse2 2s infinite' }} />
@@ -175,7 +177,7 @@ function Hero() {
 
 // ── TICKER ────────────────────────────────────────────────────────────────
 function Ticker() {
-  const items = ['Captação Inteligente','CRM de Leads','Contatos','Consolidação de Família','WhatsApp Oficial Meta','Bot Visual sem Código','Chat Interno da Equipe','Relatórios','Transferências','Pesquisas NPS','Diagnóstico com IA','Google Meet Automático','Score de Mercado INEP','Relatórios Mensais','Alertas Inteligentes','Captação no Site']
+  const items = ['Vitrine Áion','Transmissões','Captação Inteligente','CRM de Leads','Contatos','Consolidação de Família','WhatsApp Oficial Meta','Bot Visual sem Código','Chat Interno da Equipe','Relatórios','Transferências','Pesquisas NPS','Diagnóstico com IA','Google Meet Automático','Score de Mercado INEP','Relatórios Mensais','Alertas Inteligentes','Captação no Site']
   const doubled = [...items, ...items]
   return (
     <div style={{ background: '#E6F7F5', borderTop: '1px solid #A7F3D0', borderBottom: '1px solid #A7F3D0', padding: '14px 0', overflow: 'hidden' }}>
@@ -408,6 +410,78 @@ function CaptacaoInteligente() {
         </div>
         <div ref={r1}>
           <BrowserFrame src="/novidades/img/captacao-dashboard.jpg" alt="Dashboard da Captação Inteligente com conversas e matrículas por anúncio" url="app.aionedu.com.br/captacao" />
+          <p style={{ fontSize: 12, color: '#9CA3AF', textAlign: 'center', marginTop: 14 }}>Tela ilustrativa com dados de exemplo.</p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── VITRINE e TRANSMISSÕES (módulos novos — detalhes em /novidades/vitrine e
+// /novidades/transmissoes). Mesmo desenho da seção da Captação; `rev` alterna
+// o lado da tela pra as três seções seguidas não ficarem iguais.
+interface NovoModuloProps {
+  id: string; tag: string; title: string; hl: string; text: string; bullets: string[]
+  href: string; img: string; alt: string; url: string; bg: string; rev?: boolean
+}
+const NOVO_VITRINE: NovoModuloProps = {
+  id: 'vitrine', tag: 'Novo módulo · Vitrine Áion',
+  title: 'Um link só com', hl: 'tudo o que a família procura',
+  text: 'A página da escola em aionedu.com.br/sua-escola, pra bio do Instagram, o anúncio e o QR code. Escolha um modelo, adicione os blocos e publique, com prévia ao vivo e sem programador.',
+  bullets: [
+    'Quatro modelos prontos, com as cores e a fonte da escola',
+    'WhatsApp, matrícula, redes, horário, mapa, perguntas frequentes e mais',
+    'Botão de matrícula ligado à Captação Inteligente, com origem Vitrine',
+    'Visitas e cliques dos últimos 7 dias no próprio editor',
+  ],
+  href: '/novidades/vitrine', img: '/novidades/img/vitrine-editor.jpg', alt: 'Editor da Vitrine Áion com prévia ao vivo da página da escola',
+  url: 'app.aionedu.com.br/vitrine', bg: '#F4F7F5', rev: true,
+}
+const NOVO_TRANSMISSOES: NovoModuloProps = {
+  id: 'transmissoes', tag: 'Novo módulo · Transmissões',
+  title: 'Fale com todas as famílias', hl: 'pelo WhatsApp oficial',
+  text: 'Campanhas de rematrícula, eventos e captação com mensagem aprovada pela Meta. Você escolhe o público, vê o custo antes de enviar e acompanha quem leu e respondeu.',
+  bullets: [
+    'Público por etiqueta, turma, gatilho da Captação ou planilha',
+    'Mensagem com o nome de cada família, imagem ou vídeo e botões',
+    'Quem responde vai direto pra atendente; quem pede "parar" sai da lista',
+    'Enviadas, entregues, lidas, respostas e cliques por botão',
+  ],
+  href: '/novidades/transmissoes', img: '/novidades/img/transmissoes-detalhe.jpg', alt: 'Detalhe de uma campanha de Transmissões com os números de envio e respostas',
+  url: 'app.aionedu.com.br/transmissoes', bg: '#fff',
+}
+
+function NovoModulo(p: NovoModuloProps) {
+  const r0 = useReveal()
+  const r1 = useReveal('2')
+  return (
+    <section id={p.id} className="section-pad" style={{ background: p.bg, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', width: 560, height: 560, borderRadius: '50%', background: 'radial-gradient(circle,rgba(219,39,119,.07),transparent 70%)', top: -160, [p.rev ? 'left' : 'right']: -160, pointerEvents: 'none' }} />
+      <div className={`split-cols${p.rev ? ' rev' : ''}`} style={{ maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
+        <div ref={r0} style={{ flex: '0 0 42%' }}>
+          <div className="tag-novo" style={{ marginBottom: 20 }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#DB2777', display: 'inline-block', animation: 'pulse2 2s infinite' }} />
+            {p.tag}
+          </div>
+          <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,50px)', color: '#111827', marginBottom: 18 }}>
+            {p.title} <span style={{ color: '#0DD3BF' }}>{p.hl}</span>
+          </h2>
+          <p style={{ fontSize: 16, color: '#4B5563', lineHeight: 1.8, marginBottom: 26 }}>{p.text}</p>
+          <ul style={{ listStyle: 'none', padding: 0, marginBottom: 32 }}>
+            {p.bullets.map((b, j) => (
+              <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                <div style={{ flexShrink: 0, marginTop: 2 }}><IcCheck size={15} color="#00A896" stroke={2.2} /></div>
+                <span style={{ fontSize: 14, color: '#374151', lineHeight: 1.65 }}>{b}</span>
+              </li>
+            ))}
+          </ul>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <a href={p.href} className="btn-g">Conheça a novidade <IcArrowRight size={16} /></a>
+            <a href="#demo" className="btn-outline-green" style={{ padding: '14px 26px', fontSize: 14 }}>Agendar reunião</a>
+          </div>
+        </div>
+        <div ref={r1}>
+          <BrowserFrame src={p.img} alt={p.alt} url={p.url} />
           <p style={{ fontSize: 12, color: '#9CA3AF', textAlign: 'center', marginTop: 14 }}>Tela ilustrativa com dados de exemplo.</p>
         </div>
       </div>
@@ -776,6 +850,8 @@ export default function Landing() {
         <Dores />
         <Solucoes />
         <CaptacaoInteligente />
+        <NovoModulo {...NOVO_VITRINE} />
+        <NovoModulo {...NOVO_TRANSMISSOES} />
         <MetaPartner />
         <ComoFunciona />
         <Implantacao />

@@ -31,6 +31,8 @@ const NAV_LINKS = [
 ]
 
 const SOLUCOES_DROPDOWN = [
+  { href: '/novidades/vitrine', label: 'Vitrine Áion · Novo' },
+  { href: '/novidades/transmissoes', label: 'Transmissões · Novo' },
   { href: '/novidades/captacao-inteligente', label: 'Captação Inteligente · Novo' },
   { href: '/#solucoes', label: 'CRM de Leads' },
   { href: '/#solucoes', label: 'WhatsApp Oficial' },

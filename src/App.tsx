@@ -14,6 +14,9 @@ import SatisfactionPage   from './pages/survey/SatisfactionPage'
 import ProposalView       from './pages/ProposalView'
 import RaioXPage          from './pages/RaioXPage'
 import NovidadeCaptacao   from './pages/NovidadeCaptacao'
+import NovidadeModulo     from './pages/NovidadeModulo'
+import { NOVIDADE_VITRINE } from './pages/novidadeVitrineContent'
+import { NOVIDADE_TRANSMISSOES } from './pages/novidadeTransmissoesContent'
 import Landing            from './pages/Landing'
 import ResetPassword      from './pages/ResetPassword'
 import Privacidade        from './pages/Privacidade'
@@ -233,6 +236,12 @@ function AppContent() {
   // Página de novidade: link enviado a clientes (logados) e prospects — abre igual pros dois
   if (pathname.startsWith('/novidades/captacao-inteligente')) {
     return <Routes><Route path="/novidades/captacao-inteligente" element={<NovidadeCaptacao />} /></Routes>
+  }
+  if (pathname.startsWith('/novidades/vitrine')) {
+    return <Routes><Route path="/novidades/vitrine" element={<NovidadeModulo content={NOVIDADE_VITRINE} />} /></Routes>
+  }
+  if (pathname.startsWith('/novidades/transmissoes')) {
+    return <Routes><Route path="/novidades/transmissoes" element={<NovidadeModulo content={NOVIDADE_TRANSMISSOES} />} /></Routes>
   }
 
   if (initializing || !ready) {
