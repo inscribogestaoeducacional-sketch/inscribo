@@ -860,16 +860,43 @@ export class DatabaseService {
     return (data || []) as unknown as WhatsappMessage[]
   }
 
+  // Paginado: o PostgREST corta em 1.000 linhas por requisição, e sem ORDER
+  // o corte pegava conversas arbitrárias (o Ágape tem mais de 1.000 e
+  // algumas não chegavam a ninguém, nem ao dono). Ordena pela última
+  // mensagem, com id como desempate pra paginação estável.
   static async getWhatsappConversations(institutionId: string): Promise<WhatsappConversation[]> {
-    const { data, error } = await supabase
-      .from('whatsapp_conversations')
-      .select('*')
-      .eq('institution_id', institutionId)
-    if (error) {
-      console.error('Error loading whatsapp conversations:', error)
-      return []
+    const PAGE = 1000
+    const all: WhatsappConversation[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('whatsapp_conversations')
+        .select('*')
+        .eq('institution_id', institutionId)
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (error) {
+        console.error('Error loading whatsapp conversations:', error)
+        return all
+      }
+      all.push(...(data || []))
+      if (!data || data.length < PAGE) return all
     }
-    return data || []
+  }
+
+  // Cria a conversa já atribuída a quem iniciou — INSERT, nunca upsert: se a
+  // linha já existir (em qualquer dono), não mexe nela. Antes "Nova
+  // conversa"/link do Kanban usavam upsertConversationStatus, que sobrescrevia
+  // o dono de uma conversa existente que só não estava carregada na tela.
+  // Retorna 'exists' quando a linha já existe (inclusive invisível por RLS).
+  static async createConversation(institutionId: string, remoteJid: string, userId: string, userName: string | null): Promise<'created' | 'exists'> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+    const { error } = await supabase
+      .from('whatsapp_conversations')
+      .insert({ institution_id: institutionId, remote_jid: raw, status: 'open', bot_active: false, assigned_user_id: userId, assigned_user_name: userName })
+    if (!error) return 'created'
+    if (error.code === '23505') return 'exists'
+    throw error
   }
 
   // assignedUserId é opcional e só deve ser passado ao CRIAR uma conversa nova
@@ -887,6 +914,10 @@ export class DatabaseService {
     // mão) — robô desligado, senão ele segue respondendo e o cron de timeout
     // tira a conversa do atendente.
     if (status === 'open') updates.bot_active = false
+    // 'waiting' = sem atendente. A trigger trg_normalize_conversation_state
+    // transforma 'waiting' com dono em 'open' — sem soltar o dono aqui, mudar
+    // o status pra "Aguardando" no seletor seria desfeito em silêncio.
+    if (status === 'waiting') { updates.assigned_user_id = null; updates.assigned_user_name = null }
     if (leadId) updates.lead_id = leadId
     if (assignedUserId) { updates.assigned_user_id = assignedUserId; updates.assigned_user_name = assignedUserName ?? null }
     const { error } = await supabase

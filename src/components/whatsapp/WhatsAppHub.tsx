@@ -258,37 +258,56 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       const normJid = normalizeJid(remoteJid)
       if (coveredJids.has(normJid) || coveredJids.has(remoteJid)) continue
       if (!conv.last_message && !conv.last_message_at) continue
-      const isGroup = normJid.endsWith('@g.us')
-      result.push({
-        id: normJid,
-        name: conv.contact_name || formatPhone(normJid),
-        phone: isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid),
-        avatarColor: jidToColor(normJid),
-        lastMessage: conv.last_message || '',
-        lastTime: conv.last_message_at ? new Date(conv.last_message_at) : new Date(0),
-        unreadCount: conv.unread_count ?? 0,
-        status: ((conv.status ?? 'waiting') as ConvStatus),
-        online: false,
-        labels: [],
-        isGroup,
-        lead_id: conv.lead_id,
-        assigned_user_id: conv.assigned_user_id,
-        assigned_user_name: conv.assigned_user_name,
-        contact_type: conv.contact_type,
-        tags: conv.tags || [],
-        profile_picture_url: conv.profile_picture_url,
-        satisfaction_score: (conv as any).satisfaction_score ?? null,
-        notes: (conv as any).notes ?? null,
-        last_customer_message_at: conv.last_customer_message_at,
-        capture_trigger_id: (conv as any).capture_trigger_id ?? null,
-        capture_bot_skipped: (conv as any).capture_bot_skipped ?? false,
-        capture_referral: (conv as any).capture_referral ?? null,
-        messages: [],
-      })
+      result.push(conversationFromRow(conv))
     }
   }
 
   return result.sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
+}
+
+// Card de lista montado só a partir da linha de whatsapp_conversations (sem
+// mensagens carregadas — o thread é buscado sob demanda ao abrir).
+function conversationFromRow(conv: WhatsappConversation): Conversation {
+  const normJid = normalizeJid(conv.remote_jid)
+  const isGroup = normJid.endsWith('@g.us')
+  return {
+    id: normJid,
+    name: conv.contact_name || formatPhone(normJid),
+    phone: isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid),
+    avatarColor: jidToColor(normJid),
+    lastMessage: conv.last_message || '',
+    lastTime: conv.last_message_at ? new Date(conv.last_message_at) : new Date(0),
+    unreadCount: conv.unread_count ?? 0,
+    status: ((conv.status ?? 'waiting') as ConvStatus),
+    online: false,
+    labels: [],
+    isGroup,
+    lead_id: conv.lead_id,
+    assigned_user_id: conv.assigned_user_id,
+    assigned_user_name: conv.assigned_user_name,
+    contact_type: conv.contact_type,
+    tags: conv.tags || [],
+    profile_picture_url: conv.profile_picture_url,
+    bot_active: (conv as any).bot_active ?? false,
+    satisfaction_score: (conv as any).satisfaction_score ?? null,
+    notes: (conv as any).notes ?? null,
+    last_customer_message_at: conv.last_customer_message_at,
+    capture_trigger_id: (conv as any).capture_trigger_id ?? null,
+    capture_bot_skipped: (conv as any).capture_bot_skipped ?? false,
+    capture_referral: (conv as any).capture_referral ?? null,
+    messages: [],
+  }
+}
+
+// Variantes de remote_jid de um telefone brasileiro: cru e com sufixo, com e
+// sem o 9º dígito — a mesma pessoa pode ter linha de 12 ou de 13 dígitos.
+function phoneJidVariants(digits: string): string[] {
+  let d = digits.replace(/\D/g, '')
+  if (!d.startsWith('55') && (d.length === 10 || d.length === 11)) d = '55' + d
+  const set = new Set<string>([d])
+  if (d.length === 13 && d[4] === '9') set.add(d.slice(0, 4) + d.slice(5))
+  if (d.length === 12) set.add(d.slice(0, 4) + '9' + d.slice(4))
+  return [...set].flatMap(v => [v, `${v}@s.whatsapp.net`])
 }
 
 // ─── Time helpers ──────────────────────────────────────────────────────────────
@@ -1070,17 +1089,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [loading, setLoading] = useState(true)
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<'abertos' | 'concluido' | 'ambos'>('abertos')
+  // Abas fixas da lista — ver listTab* mais abaixo. 'unclassified' é a rede
+  // de segurança: qualquer combinação que não caia nas outras três aparece
+  // ali (com contador), em vez de sumir da tela.
+  const [listTab, setListTab] = useState<'queue' | 'attending' | 'closed' | 'unclassified'>('attending')
   const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
-  // Padrão em "Meus chats" pra quem tem permissão de ver todas — mesmo
-  // padrão já usado no Kanban de Leads (ownerFilter). É o único controle de
-  // "meus vs todos" (antes havia um botão showAllConvs redundante, removido
-  // — ver filteredWaitingConvs/filteredStaleConvs/filteredOtherConvs abaixo,
-  // que agora usam só este filtro). Só entra em jogo pra quem canSeeAll=true:
-  // quem já é restrito por RLS nunca recebe conversa de outro atendente do
-  // backend, então este filtro não muda nada pra esse caso (dropdown de
-  // Atribuição só aparece condicionado a canSeeAll mais abaixo).
-  const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>('mine')
+  // Admin/gestor começam em "Todos" (enxergam a operação inteira); atendente
+  // comum — mesmo com "ver todas as conversas" — começa em "Meus chats". O
+  // filtro só esconde conversa COM dono de outra pessoa: fila e concluídas
+  // sem dono aparecem sempre. Quem é restrito por RLS nunca recebe conversa
+  // de colega do backend (dropdown só aparece pra canSeeAll, mais abaixo).
+  const roleSeesAllByDefault = (u: typeof user) =>
+    u?.role === 'admin' || u?.role === 'manager' || u?.user_type === 'admin_geral'
+  const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>(() => roleSeesAllByDefault(user) ? 'all' : 'mine')
+  useEffect(() => {
+    setAssignFilter(roleSeesAllByDefault(user) ? 'all' : 'mine')
+  }, [user?.role, user?.user_type, user?.institution_id])
   const [canSeeAllConversations, setCanSeeAllConversations] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
   const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
@@ -1974,8 +1998,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         }
       }
 
-      const initialConvs = await loadMessages()
-      setActiveId(prev => prev ?? (initialConvs?.[0]?.id ?? null))
+      // Sem seleção automática: o Hub abre só com a lista e "Selecione uma
+      // conversa". Antes abria a mais recente da instituição inteira — às
+      // vezes de outro atendente — e abrir zerava as não lidas dela.
+      await loadMessages()
       if (!isAionInbox) DatabaseService.getUsers(effectiveInstitutionId).then(setUsers).catch(() => {})
 
       if (!isAionInbox) {
@@ -2215,15 +2241,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }, [effectiveInstitutionId, isAionInbox])
 
-  // Reset unread, auto-assign, auto-link lead, auto-transition waiting→open when opening conversation
+  const activeOwnerId = conversations.find(c => c.id === activeId)?.assigned_user_id ?? null
+  // Abrir é só leitura: não muda dono nem status. Zerar não lidas e
+  // auto-vincular lead gravam no banco, então só acontecem quando a conversa
+  // é minha — abrir a conversa de um colega (ou da fila) não pode apagar o
+  // indicador de não lidas de quem vai atender.
   useEffect(() => {
     if (!activeId || !effectiveInstitutionId) return
-    // Reset unread
+    const conv = conversations.find(c => c.id === activeId)
+    const isMine = !!conv && !!user?.id && conv.assigned_user_id === user.id
+    if (!isMine) return
+
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, unreadCount: 0 } : c))
     const rJid = rawJid(activeId)
     DatabaseService.resetConversationUnread(effectiveInstitutionId, rJid).catch(() => {})
-
-    const conv = conversations.find(c => c.id === activeId)
 
     // Auto-link lead if not linked
     if (conv && !conv.lead_id && !conv.isGroup && effectiveInstitutionId) {
@@ -2247,7 +2278,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         .catch(() => {})
     }
 
-  }, [activeId])
+  // Dono nas deps: ao assumir a conversa que já está aberta, ela vira "minha"
+  // e as não lidas são zeradas na hora, sem precisar reabrir.
+  }, [activeId, activeOwnerId])
 
   // Busca só as mensagens da conversa `jid` (nunca a instituição inteira) —
   // escopada por remote_jid, colunas explícitas sem raw_data, limite de 100.
@@ -2477,110 +2510,89 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     return () => { supabase.removeChannel(ch); presenceChannelRef.current = null }
   }, [activeId, user?.id])
 
-  // Handle incoming phone param from LeadKanban — runs only after conversations finish loading
+  // Abre a conversa de um telefone vindo de fora da lista (Kanban, perfil do
+  // contato, "Nova conversa"). Procura em todos os formatos (cru/sufixo,
+  // 12/13 dígitos) — primeiro na lista local, depois no banco (pode não estar
+  // carregada) — e, se existir, SÓ ABRE: nunca muda o dono (sendo de outro
+  // atendente, a tela mostra "Atendida por"). Só cria quando não existe em
+  // formato nenhum, com INSERT já atribuído a quem iniciou. Antes era um
+  // upsert que tomava a conversa de quem estava atendendo.
+  const openConversationByPhone = async (phone: string, name: string | null): Promise<{ id: string; created: boolean } | null> => {
+    const variants = phoneJidVariants(phone)
+    const rawVariants = new Set(variants.map(rawJid))
+    const showChat = (id: string) => { setActiveId(id); if (isMobile) setMobilePanel('chat') }
+
+    const local = conversationsRef.current.find(c => rawVariants.has(rawJid(c.id)))
+    if (local) { showChat(local.id); return { id: local.id, created: false } }
+
+    if (effectiveInstitutionId) {
+      const { data: row } = await supabase
+        .from('whatsapp_conversations')
+        .select('*')
+        .eq('institution_id', effectiveInstitutionId)
+        .in('remote_jid', variants)
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle()
+      if (row) {
+        const conv = conversationFromRow(row as WhatsappConversation)
+        setConversations(prev => prev.some(c => c.id === conv.id) ? prev : [conv, ...prev])
+        showChat(conv.id)
+        return { id: conv.id, created: false }
+      }
+    }
+
+    // Formato canônico pra conversa nova: 13 dígitos quando houver.
+    const target = [...rawVariants].find(v => v.length === 13) ?? [...rawVariants][0]
+    const jid = `${target}@s.whatsapp.net`
+    if (effectiveInstitutionId && user?.id) {
+      try {
+        const result = await DatabaseService.createConversation(effectiveInstitutionId, jid, user.id, user.full_name || user.email)
+        if (result === 'exists') {
+          // Existe, mas o RLS não me deixa ver: é de outro atendente.
+          setSendError('Esta conversa já existe e está com outro atendente. Peça a transferência a um gestor.')
+          return null
+        }
+      } catch (err) {
+        console.error('[openConversationByPhone] falha ao criar conversa', err)
+        setSendError('Erro ao criar a conversa. Tente novamente.')
+        return null
+      }
+    }
+    const newConv: Conversation = {
+      id: jid, name: name || formatPhone(jid), phone: formatPhone(jid),
+      avatarColor: jidToColor(jid),
+      lastMessage: '', lastTime: new Date(),
+      unreadCount: 0, status: 'open', online: false,
+      labels: [], isGroup: false, tags: [],
+      messages: [],
+      assigned_user_id: user?.id,
+      assigned_user_name: user?.full_name || user?.email,
+    }
+    setConversations(prev => [newConv, ...prev])
+    showChat(jid)
+    return { id: jid, created: true }
+  }
+
+  // ?phone= vindo do Kanban de Leads — uma vez, depois da lista carregar.
   useEffect(() => {
     if (!phoneParam || phoneParamHandledRef.current || loading) return
     phoneParamHandledRef.current = true
+    openConversationByPhone(phoneParam, nameParam ? decodeURIComponent(nameParam) : null)
+  }, [phoneParam, nameParam, loading])
 
-    // Normalize to canonical 13-digit BR format: 55 + DDD + 9 + 8 digits
-    const normP = (p: string): string => {
-      let d = p.replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    }
-    const targetPhone = normP(phoneParam)
-
-    const existing = conversations.find(c => {
-      const convPhone = normP(c.phone || c.id || '')
-      return convPhone === targetPhone
-    })
-
-    if (existing) {
-      setActiveId(existing.id)
-      if (isMobile) setMobilePanel('chat')
-    } else {
-      const jid   = `${targetPhone}@s.whatsapp.net`
-      const local = targetPhone.slice(2) // strip 55
-      const phone = local.replace(/(\d{2})(\d{5})(\d{4})/, '$1 $2-$3')
-      const name  = nameParam ? decodeURIComponent(nameParam) : `+55 ${phone}`
-      const newConv: Conversation = {
-        id: jid, name, phone,
-        avatarColor: jidToColor(jid),
-        lastMessage: '', lastTime: new Date(),
-        unreadCount: 0, status: 'open', online: false,
-        labels: [], isGroup: false, tags: [],
-        messages: [],
-      }
-      setConversations(prev => [newConv, ...prev])
-      setActiveId(jid)
-      if (isMobile) setMobilePanel('chat')
-    }
-  }, [phoneParam, nameParam, loading, conversations])
-
-  // Handle phone passed via navigation state (e.g. from ContactProfile WhatsApp button)
+  // Telefone via state de navegação (botão WhatsApp do perfil do contato).
+  // Marcado por location.key: o replaceState abaixo não limpa location.state
+  // do React Router, e sem a marca este efeito reabria a mesma conversa a
+  // cada atualização da lista.
+  const handledLocationKeyRef = useRef<string | null>(null)
   useEffect(() => {
-    const phoneParam = location.state?.phone
-    if (!phoneParam || loading) return
-
-    const normP = (p: string): string => {
-      let d = p.replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    }
-
-    const target = normP(String(phoneParam))
-    console.log('[PHONE PARAM] procurando:', target)
-
-    const found = conversations.find(c => {
-      const jid = (c.id || '').replace('@s.whatsapp.net', '').replace('@c.us', '')
-      const norm = normP(jid)
-      console.log('[PHONE PARAM] comparando:', norm, '===', target)
-      return norm === target
-    })
-
-    if (found) {
-      console.log('[PHONE PARAM] conversa encontrada:', found.id)
-      setActiveId(found.id)
-      if (isMobile) setMobilePanel('chat')
-    } else {
-      console.log('[PHONE PARAM] conversa não encontrada — criando em branco')
-      const jid = `${target}@s.whatsapp.net`
-      const existingByJid = conversations.find(c => c.id === jid)
-      if (existingByJid) {
-        setActiveId(existingByJid.id)
-        if (isMobile) setMobilePanel('chat')
-      } else {
-        const phone = formatPhone(jid)
-        const newConv: Conversation = {
-          id: jid, name: phone, phone,
-          avatarColor: jidToColor(jid),
-          lastMessage: '', lastTime: new Date(),
-          unreadCount: 0, status: 'open', online: false,
-          labels: [], isGroup: false, tags: [],
-          messages: [],
-          assigned_user_id: user?.id,
-          assigned_user_name: user?.full_name || user?.email,
-        }
-        if (effectiveInstitutionId && user?.id) {
-          // Atribui ao criador já na criação — sem isso a conversa nasce sem
-          // dono e com status='open' (não 'waiting'), e nenhuma exceção da
-          // policy de RLS libera SELECT/UPDATE pra ela depois, nem pro
-          // próprio criador (ver auditoria RLS do WhatsApp Hub).
-          DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open', undefined, user.id, user.full_name || user.email)
-            .catch(err => { console.error('[PHONE PARAM] falha ao criar conversa', err); setSendError('Erro ao criar a conversa. Tente novamente.') })
-        }
-        setConversations(prev => [newConv, ...prev])
-        setActiveId(jid)
-        if (isMobile) setMobilePanel('chat')
-      }
-    }
-
+    const statePhone = location.state?.phone
+    if (!statePhone || loading || handledLocationKeyRef.current === location.key) return
+    handledLocationKeyRef.current = location.key
+    openConversationByPhone(String(statePhone), null)
     window.history.replaceState({}, '', '/whatsapp')
-  }, [location.state?.phone, conversations, loading])
+  }, [location.state?.phone, location.key, loading])
 
   const activeConvMsgCount = conversations.find(c => c.id === activeId)?.messages.length ?? 0
 
@@ -2778,53 +2790,55 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // atendentes da instituição (RLS já garante isso; aqui é só organização visual).
   const waitingQueueConvs = conversations.filter(c => !c.isGroup && !c.assigned_user_id && c.status === 'waiting')
 
-  // Base: busca + status + lida/não-lida, SEM o filtro de dono (assignFilter)
-  // — "Aguardando" precisa continuar visível a todo mundo independente da
-  // Atribuição selecionada (RLS já libera isso à parte do canSeeAll), então
-  // é derivada desta lista, não de filteredConvs.
-  const filteredConvsBase = conversations.filter(c => {
+  // Abas fixas da lista. Modelo de status (trigger
+  // trg_normalize_conversation_state): waiting = sem dono, open = com dono,
+  // closed = encerrada (com ou sem dono — o robô encerra soltando o dono).
+  // Toda combinação fora disso — 'open' sem dono, status desconhecido, dono
+  // desativado — vai pra 'unclassified', com contador: nada some da tela.
+  const inactiveUserIds = new Set(users.filter(u => (u as any).active === false).map(u => u.id))
+  const classifyConv = (c: Conversation): typeof listTab => {
+    if (c.status === 'closed') return 'closed'
+    if (c.assigned_user_id && inactiveUserIds.has(c.assigned_user_id)) return 'unclassified'
+    if (c.status === 'waiting' && !c.assigned_user_id) return 'queue'
+    if ((c.status === 'open' || c.status === 'waiting') && c.assigned_user_id) return 'attending'
+    return 'unclassified'
+  }
+
+  // Busca + lida/não-lida. Fora do "Não lida", só admin/gestor contam as não
+  // lidas de colegas (antes testava 'gestor'/'superadmin', papéis que não
+  // existem — gestor ('manager') caía na regra de atendente).
+  const matchesSearchAndRead = (c: Conversation) => {
     if (c.isGroup) return false
-    if (!search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)) {
-      // status filter
-      if (statusFilter === 'abertos'  && c.status === 'closed') return false
-      if (statusFilter === 'concluido' && c.status !== 'closed') return false
-      // read filter
-      if (readFilter === 'read' && (c.unreadCount || 0) > 0) return false
-      if (readFilter === 'unread') {
-        if ((c.unreadCount || 0) === 0) return false
-        if (user?.role !== 'gestor' && user?.role !== 'admin' && user?.role !== 'superadmin') {
-          if (c.assigned_user_id !== user?.id) return false
-        }
-      }
-      return true
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.phone.includes(search)) return false
+    if (readFilter === 'read' && (c.unreadCount || 0) > 0) return false
+    if (readFilter === 'unread') {
+      if ((c.unreadCount || 0) === 0) return false
+      if (!isPrivilegedRole && c.assigned_user_id !== user?.id) return false
     }
-    return false
-  })
-
-  // + filtro de dono (assignFilter) — único controle de "meus vs todos".
-  const filteredConvs = filteredConvsBase.filter(c => {
-    if (assignFilter === 'mine' && c.assigned_user_id !== user?.id) return false
-    if (assignFilter === 'none' && c.assigned_user_id != null) return false
     return true
-  })
+  }
 
-  // Agrupamento visual da lista. RLS já garante que um atendente comum nunca
-  // recebe do backend conversas de outro atendente — "outras conversas" só é
-  // populado de fato para quem tem user_can_see_all_conversations() = true
-  // (admin etc). "Aguardando" é visível pra todo mundo (RLS libera isso à
-  // parte do canSeeAll) — por isso vem de filteredConvsBase, não filteredConvs.
-  const filteredWaitingConvs = filteredConvsBase.filter(c => !c.assigned_user_id && c.status === 'waiting')
-  const filteredMyConvs      = filteredConvs.filter(c => c.assigned_user_id === user?.id)
-  // "Conversas paradas" respeita o filtro de dono (assignFilter) — antes um
-  // botão separado (showAllConvs) restringia isso a "só minhas" por padrão
-  // mesmo com Atribuição="Todos"; consolidado num único controle, isso já
-  // vem de graça de filteredConvs (que já aplica assignFilter).
-  const filteredStaleConvs  = filteredConvs.filter(c => isConvStale(c))
-  const filteredOtherConvs  = filteredConvs.filter(c =>
-    !(!c.assigned_user_id && c.status === 'waiting') &&
-    c.assigned_user_id !== user?.id &&
-    !isConvStale(c)
-  )
+  // Filtro de atendente: só esconde conversa COM dono de outra pessoa (ou,
+  // em "Não atribuídos", qualquer uma com dono). Fila, concluídas sem dono e
+  // "Sem classificação" nunca são escondidas por ele.
+  const hiddenByAssignFilter = (c: Conversation) => {
+    if (!c.assigned_user_id) return false
+    if (assignFilter === 'mine') return c.assigned_user_id !== user?.id
+    if (assignFilter === 'none') return true
+    return false
+  }
+
+  const tabConvs: Record<typeof listTab, Conversation[]> = { queue: [], attending: [], closed: [], unclassified: [] }
+  const tabHiddenByFilter: Record<typeof listTab, number> = { queue: 0, attending: 0, closed: 0, unclassified: 0 }
+  for (const c of conversations) {
+    if (!matchesSearchAndRead(c)) continue
+    const tab = classifyConv(c)
+    if (tab !== 'queue' && tab !== 'unclassified' && hiddenByAssignFilter(c)) { tabHiddenByFilter[tab]++; continue }
+    tabConvs[tab].push(c)
+  }
+  const visibleTabConvs = tabConvs[listTab]
+  const myAttendingConvs    = tabConvs.attending.filter(c => c.assigned_user_id === user?.id)
+  const otherAttendingConvs = tabConvs.attending.filter(c => c.assigned_user_id !== user?.id)
 
   const renderConvItem = (conv: Conversation) => {
     const isActive = conv.id === activeId
@@ -3834,65 +3848,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       existingContact = data as any
     }
 
-    let existing = conversations.find(c => c.id === jid)
-
-    // A conversa pode já existir no banco sem estar carregada no estado local
-    // (filtro de atendente, paginação etc.) — confirma antes de tratar como
-    // nova, senão a gente cria um card duplicado na UI pro mesmo contato.
-    if (!existing && effectiveInstitutionId) {
-      const { data: existingConvRow } = await supabase
-        .from('whatsapp_conversations')
-        .select('id')
-        .eq('institution_id', effectiveInstitutionId)
-        .eq('remote_jid', jid)
-        .maybeSingle()
-      if (existingConvRow) {
-        const phone = formatPhone(jid)
-        const placeholder: Conversation = {
-          id: jid, name: newConvName || existingContact?.name || phone, phone,
-          avatarColor: jidToColor(jid),
-          lastMessage: '', lastTime: new Date(),
-          unreadCount: 0, status: 'open', online: false,
-          labels: [], isGroup: false, tags: [],
-          messages: [],
-        }
-        existing = placeholder
-        setConversations(prev => prev.some(c => c.id === jid) ? prev : [placeholder, ...prev])
-      }
-    }
-
-    if (existing) {
+    // Conversa existente (em qualquer formato, carregada ou não) só abre;
+    // nova é criada já atribuída a quem iniciou — ver openConversationByPhone.
+    const opened = await openConversationByPhone(normalized, newConvName || existingContact?.name || null)
+    if (opened) {
       const nameOverride = newConvName || existingContact?.name
-      if (nameOverride) {
-        setConversations(prev => prev.map(c => c.id === jid ? { ...c, name: nameOverride } : c))
+      if (nameOverride && !opened.created) {
+        setConversations(prev => prev.map(c => c.id === opened.id ? { ...c, name: nameOverride } : c))
       }
-      setActiveId(existing.id)
-    } else {
-      const phone = formatPhone(jid)
-      const name = newConvName || existingContact?.name || phone
-      const newConv: Conversation = {
-        id: jid, name, phone,
-        avatarColor: jidToColor(jid),
-        lastMessage: '', lastTime: new Date(),
-        unreadCount: 0, status: 'open', online: false,
-        labels: [], isGroup: false, tags: [],
-        messages: [],
-        assigned_user_id: user?.id,
-        assigned_user_name: user?.full_name || user?.email,
+      if (opened.created) {
+        // Show template panel for new outbound conversations
+        setSelectedTemplate('')
+        setTemplateVars({})
+        setShowTemplatePanel(true)
       }
-      if (effectiveInstitutionId && user?.id) {
-        // Atribui ao criador já na criação — ver comentário equivalente no
-        // fluxo de "PHONE PARAM" acima (mesma raiz de bug, dois pontos de
-        // criação de conversa nova).
-        DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open', undefined, user.id, user.full_name || user.email)
-          .catch(err => { console.error('[handleNewConv] falha ao criar conversa', err); setSendError('Erro ao criar a conversa. Tente novamente.') })
-      }
-      setConversations(prev => [newConv, ...prev])
-      setActiveId(jid)
-      // Show template panel for new outbound conversations
-      setSelectedTemplate('')
-      setTemplateVars({})
-      setShowTemplatePanel(true)
     }
 
     if (effectiveInstitutionId) {
@@ -4485,7 +4454,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 </span>
               )}
               {waitingQueueConvs.length > 0 && (
-                <span title="Conversas aguardando atendimento" style={{ background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span title="Conversas na fila, sem atendente — clique para ver" onClick={() => setListTab('queue')} style={{ cursor: 'pointer', background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 3 }}>
                   ⏳ {waitingQueueConvs.length}
                 </span>
               )}
@@ -4521,20 +4490,37 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Filters — Botconversa style */}
           <div style={{ borderBottom: '1px solid #D1FAE5' }}>
-            {/* Row 1: Status + Atribuição dropdowns */}
+            {/* Row 1: abas fixas (Fila / Em atendimento / Concluídas / Sem classificação) */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', padding: '8px 12px 0', gap: 4 }}>
+              {([
+                { key: 'queue',        label: 'Fila',           color: '#D97706', bg: '#FEF3C7', title: 'Conversas sem atendente. Todos os atendentes veem esta fila — clique para ler e assuma para responder.' },
+                { key: 'attending',    label: 'Em atendimento', color: '#00A896', bg: '#E6F7F5', title: 'Conversas com um atendente responsável.' },
+                { key: 'closed',       label: 'Concluídas',     color: '#64748B', bg: '#F1F5F9', title: 'Conversas encerradas, com ou sem atendente.' },
+                { key: 'unclassified', label: 'Sem classificação', color: '#B91C1C', bg: '#FEE2E2', title: 'Conversas num estado inesperado (ex.: em atendimento sem atendente, ou com atendente desativado). Ficam aqui para não sumirem — abra e assuma, transfira ou conclua.' },
+              ] as { key: typeof listTab; label: string; color: string; bg: string; title: string }[])
+                .filter(t => t.key !== 'unclassified' || tabConvs.unclassified.length > 0 || listTab === 'unclassified')
+                .map(t => {
+                  const active = listTab === t.key
+                  const count = tabConvs[t.key].length
+                  return (
+                    <button key={t.key} onClick={() => setListTab(t.key)} title={t.title} style={{
+                      padding: '4px 9px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+                      fontWeight: active ? 700 : 500,
+                      border: `1px solid ${active ? t.color : '#E2E8F0'}`,
+                      background: active ? t.bg : '#FFFFFF',
+                      color: active ? t.color : '#64748B',
+                      display: 'flex', alignItems: 'center', gap: 4,
+                    }}>
+                      {t.key === 'unclassified' && '⚠ '}{t.label}
+                      {count > 0 && (
+                        <span style={{ background: t.key === 'queue' ? '#EF4444' : t.color, color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{count}</span>
+                      )}
+                    </button>
+                  )
+                })}
+            </div>
+            {/* Row 2: Atribuição (só pra quem enxerga conversas de colegas) */}
             <div style={{ display: 'flex', padding: '8px 12px', gap: 8 }}>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</span>
-                <select
-                  value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
-                  style={{ width: '100%', padding: '5px 8px', fontSize: 12, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', cursor: 'pointer', outline: 'none' }}
-                >
-                  <option value="abertos">Abertos</option>
-                  <option value="concluido">Concluídos</option>
-                  <option value="ambos">Ambos</option>
-                </select>
-              </div>
               {canSeeAll && (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Atribuição</span>
@@ -4575,47 +4561,46 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Conversation list */}
           <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
-            {filteredConvs.length === 0 ? (
+            {listTab === 'queue' && (
+              <p style={{ margin: 0, padding: '8px 14px', fontSize: 11, color: '#92400E', background: '#FFFBEB', borderBottom: '1px solid #FDE68A', lineHeight: 1.4 }}>
+                Conversas sem atendente. Todos os atendentes veem esta fila: clique para ler e use <b>Assumir conversa</b> para responder — ela sai da fila e passa a ser sua.
+              </p>
+            )}
+            {listTab === 'unclassified' && (
+              <p style={{ margin: 0, padding: '8px 14px', fontSize: 11, color: '#991B1B', background: '#FEF2F2', borderBottom: '1px solid #FECACA', lineHeight: 1.4 }}>
+                Conversas num estado inesperado (em atendimento sem atendente, ou com atendente desativado). Ficam aqui para não sumirem: abra e assuma, transfira ou conclua.
+              </p>
+            )}
+            {tabHiddenByFilter[listTab] > 0 && (
+              <button onClick={() => setAssignFilter('all')} style={{ width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: 11, color: '#475569', background: '#F8FAFC', border: 'none', borderBottom: '1px solid #E2E8F0', cursor: 'pointer' }}>
+                {tabHiddenByFilter[listTab]} {tabHiddenByFilter[listTab] === 1 ? 'conversa de outro atendente oculta' : 'conversas de outros atendentes ocultas'} pelo filtro de atribuição · <span style={{ color: '#00A896', fontWeight: 600 }}>Mostrar todas</span>
+              </button>
+            )}
+            {visibleTabConvs.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, textAlign: 'center', padding: '0 16px' }}>
                 <p style={{ fontSize: 12, color: '#94A3B8' }}>Nenhuma conversa encontrada</p>
               </div>
-            ) : (
+            ) : listTab === 'attending' ? (
               <>
-                {filteredWaitingConvs.length > 0 && (
-                  <>
-                    <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      ⏳ Aguardando atendimento
-                      <span style={{ background: '#EF4444', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredWaitingConvs.length}</span>
-                    </div>
-                    {filteredWaitingConvs.map(conv => renderConvItem(conv))}
-                  </>
-                )}
-                {filteredMyConvs.length > 0 && (
+                {myAttendingConvs.length > 0 && (
                   <>
                     <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Minhas conversas
                     </div>
-                    {filteredMyConvs.map(conv => renderConvItem(conv))}
+                    {myAttendingConvs.map(conv => renderConvItem(conv))}
                   </>
                 )}
-                {filteredStaleConvs.length > 0 && (
-                  <>
-                    <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      ⏰ Conversas paradas
-                      <span style={{ background: '#F97316', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredStaleConvs.length}</span>
-                    </div>
-                    {filteredStaleConvs.map(conv => renderConvItem(conv))}
-                  </>
-                )}
-                {canSeeAll && assignFilter === 'all' && filteredOtherConvs.length > 0 && (
+                {otherAttendingConvs.length > 0 && (
                   <>
                     <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Outras conversas
+                      Outros atendentes
                     </div>
-                    {filteredOtherConvs.map(conv => renderConvItem(conv))}
+                    {otherAttendingConvs.map(conv => renderConvItem(conv))}
                   </>
                 )}
               </>
+            ) : (
+              visibleTabConvs.map(conv => renderConvItem(conv))
             )}
           </div>
         </div>
@@ -5186,6 +5171,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 >
                   Assumir conversa
                 </button>
+              </div>
+            )}
+
+            {/* Conversa de outro atendente aberta pela lista, Kanban ou link — só leitura */}
+            {activeConv && activeConv.assigned_user_id && activeConv.assigned_user_id !== user?.id && activeConv.status !== 'closed' && !isConvStale(activeConv) && (
+              <div style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 12, padding: '12px 16px', marginBottom: 8 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', margin: 0 }}>👤 Atendida por {activeConv.assigned_user_name || 'outro atendente'}</p>
+                <p style={{ fontSize: 11, color: '#475569', margin: '2px 0 0' }}>Abrir esta conversa não muda o atendente responsável.</p>
               </div>
             )}
 
