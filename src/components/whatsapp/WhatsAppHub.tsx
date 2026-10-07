@@ -3031,7 +3031,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     })
 
     setConversations(prev => prev.map(c => c.id === convId
-      ? { ...c, status: 'open' as ConvStatus, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
+      ? { ...c, status: 'open' as ConvStatus, bot_active: false, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
       : c
     ))
     return true
@@ -4207,7 +4207,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       user_name: user.full_name || user.email,
     })
     setConversations(prev => prev.map(c => c.id === activeId
-      ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open' as ConvStatus }
+      ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open' as ConvStatus, bot_active: false }
       : c
     ))
     setTransferring(false)

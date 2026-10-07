@@ -883,6 +883,10 @@ export class DatabaseService {
   static async upsertConversationStatus(institutionId: string, remoteJid: string, status: string, leadId?: string, assignedUserId?: string, assignedUserName?: string | null): Promise<void> {
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const updates: any = { status }
+    // 'open' = humano atendendo (reabrir, iniciar conversa, mudar status na
+    // mão) — robô desligado, senão ele segue respondendo e o cron de timeout
+    // tira a conversa do atendente.
+    if (status === 'open') updates.bot_active = false
     if (leadId) updates.lead_id = leadId
     if (assignedUserId) { updates.assigned_user_id = assignedUserId; updates.assigned_user_name = assignedUserName ?? null }
     const { error } = await supabase
@@ -1048,6 +1052,10 @@ export class DatabaseService {
         assigned_user_id:   userId,
         assigned_user_name: userName,
         status:             'open',
+        // Humano assumiu: robô desligado. Sem isso a conversa ficava 'open'
+        // com bot_active=true — o robô continuava respondendo e o cron
+        // process_bot_timeouts devolvia pra fila/outro atendente.
+        bot_active:         false,
       })
       .eq('institution_id', institutionId)
       .in('remote_jid', [raw, norm])

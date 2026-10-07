@@ -165,7 +165,12 @@ serve(async (req) => {
       assigned_user_name: newUserName,
       transferred_at:     new Date().toISOString(),
       unread_count:       0,
+      // Transferida pra um humano: robô desligado e 'open' (não 'waiting'
+      // com dono). Antes a conversa podia seguir com bot_active=true e o
+      // cron process_bot_timeouts a tirava do novo atendente.
+      bot_active:         false,
     }
+    if (conv.status !== 'closed') updatePayload.status = 'open'
     if (fromUserId) updatePayload.transferred_from = fromUserId
 
     const { error: updateErr } = await admin
