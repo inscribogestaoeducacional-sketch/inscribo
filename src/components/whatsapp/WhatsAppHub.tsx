@@ -3159,7 +3159,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       return false
     }
     const askFirst = hasOwner && (mode === 'implicit' || !isPrivilegedRole)
-    if (askFirst && !window.confirm(`${ownerName} está atendendo. Assumir mesmo assim?`)) return false
+    const confirmText = conv?.status === 'closed'
+      ? `${ownerName} atendeu esta conversa (concluída). Reabrir e assumir?`
+      : `${ownerName} está atendendo. Assumir mesmo assim?`
+    if (askFirst && !window.confirm(confirmText)) return false
 
     try {
       let result = await DatabaseService.assumeConversation(rawJid(convId), hasOwner)
@@ -3191,9 +3194,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleClaimConversation = async () => {
     if (!activeId) return
+    // A RPC reabre como 'open' quando a conversa estava concluída.
+    const wasClosed = conversationsRef.current.find(c => c.id === activeId)?.status === 'closed'
     const claimed = await assumeConversation(activeId, 'explicit')
     if (claimed) {
-      setHubToast('Conversa assumida!')
+      setHubToast(wasClosed ? 'Conversa reaberta e assumida!' : 'Conversa assumida!')
       setTimeout(() => setHubToast(null), 3000)
     }
   }
@@ -5275,12 +5280,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               </div>
             )}
 
-            {/* Conversa de outro atendente aberta pela lista, Kanban ou link — só leitura */}
-            {activeConv && activeConv.assigned_user_id && activeConv.assigned_user_id !== user?.id && activeConv.status !== 'closed' && !isConvStale(activeConv) && (
+            {/* Conversa de outro atendente aberta pela lista, Kanban ou link — só
+                leitura. Também em concluída e parada: concluída ganha "Reabrir e
+                assumir"; parada mantém o "Resgatar" na faixa laranja abaixo. */}
+            {activeConv && activeConv.assigned_user_id && activeConv.assigned_user_id !== user?.id && (
               <div style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 12, padding: '12px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', margin: 0 }}>👤 Atendida por {activeConv.assigned_user_name || 'outro atendente'}</p>
-                  <p style={{ fontSize: 11, color: '#475569', margin: '2px 0 0' }}>Abrir esta conversa não muda o atendente responsável.</p>
+                  <p style={{ fontSize: 11, color: '#475569', margin: '2px 0 0' }}>
+                    {activeConv.status === 'closed' ? 'Conversa concluída. ' : ''}Abrir esta conversa não muda o atendente responsável.
+                  </p>
                 </div>
                 {/* Ação principal da faixa — regra da RPC: admin/gestor assumem
                     direto, acesso total confirma ("Fulano está atendendo..."). */}
@@ -5291,7 +5300,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
                     onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
                   >
-                    Assumir conversa
+                    {activeConv.status === 'closed' ? 'Reabrir e assumir' : 'Assumir conversa'}
                   </button>
                 )}
               </div>
