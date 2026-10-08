@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { createNotification } from '../../lib/notifications'
 import SurveyQuestion, { SurveyQuestionData } from '../../components/survey/SurveyQuestion'
 
 // ─── tipos ──────────────────────────────────────────────────
@@ -162,36 +161,21 @@ export default function SatisfactionPage() {
   }, [token]) // eslint-disable-line
 
   async function loadSurvey() {
-    const { data, error } = await supabase
-      .from('satisfaction_surveys')
-      .select('*')
-      .eq('survey_token', token)
-      .maybeSingle()
-
-    if (error || !data) { setStatus('invalid'); return }
+    // Anônimo não lê as tabelas (migration 20261008180000): a função devolve
+    // só a pesquisa deste token, com as perguntas e a marca da escola.
+    const { data: res, error } = await supabase.rpc('satisfaction_survey_view', { p_token: token })
+    if (error || !res?.survey) { setStatus('invalid'); return }
+    const data = res.survey
+    if (res.institution) setInstitution(res.institution)
     if (data.status === 'closed') { setStatus('closed'); return }
 
     if (data.survey_mode === 'custom') {
-      const { data: questions } = await supabase
-        .from('satisfaction_questions')
-        .select('*')
-        .eq('survey_id', data.id)
-        .order('order_index', { ascending: true })
-      if (!questions || questions.length === 0) { setStatus('invalid'); return }
+      const questions = res.questions || []
+      if (questions.length === 0) { setStatus('invalid'); return }
       setCustomQuestions(questions)
     }
 
     setSurvey(data)
-
-    if (data.institution_id) {
-      const { data: inst } = await supabase
-        .from('institutions')
-        .select('id, name, logo_url, primary_color')
-        .eq('id', data.institution_id)
-        .maybeSingle()
-      if (inst) setInstitution(inst)
-    }
-
     setStatus(data.require_identification ? 'identify' : 'active')
   }
 
@@ -243,32 +227,16 @@ export default function SatisfactionPage() {
     setStatus('submitting')
 
     try {
-      await supabase.from('satisfaction_responses').insert({
-        survey_id: survey.id,
-        institution_id: survey.institution_id,
-        respondent_name: idName.trim() || null,
-        respondent_grade: idGrade || null,
-        answers: isCustom ? {} : answers,
-        custom_answers: isCustom ? customAnswers : null,
+      // A função grava a resposta (só em pesquisa ativa) e avisa a escola.
+      // response_count continua no trigger trg_increment_survey_response_count.
+      const { data: saved, error } = await supabase.rpc('satisfaction_survey_submit', {
+        p_token: token,
+        p_name: idName.trim() || null,
+        p_grade: idGrade || null,
+        p_answers: isCustom ? {} : answers,
+        p_custom_answers: isCustom ? customAnswers : null,
       })
-      // response_count é incrementado atomicamente por um trigger no banco
-      // (trg_increment_survey_response_count) — não repetir aqui, senão conta em dobro.
-
-      const { data: institutionUsers } = await supabase
-        .from('users')
-        .select('id')
-        .eq('institution_id', survey.institution_id)
-        .eq('role', 'user')
-      if (institutionUsers && institutionUsers.length > 0) {
-        await createNotification({
-          institution_id: survey.institution_id,
-          type: 'milestone',
-          title: 'Nova resposta de pesquisa',
-          message: `${idName.trim() || 'Anônimo'} respondeu à pesquisa "${survey.title}"`,
-          severity: 'info',
-          action_url: '/surveys',
-        })
-      }
+      if (error || !saved) throw error ?? new Error('Pesquisa encerrada ou inválida')
 
       if (survey.redirect_url) {
         window.location.href = survey.redirect_url
