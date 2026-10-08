@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { supabase, type Lead } from '../../lib/supabase'
+import { useLeadUnits, unitOptionsFor } from '../../lib/leadUnits'
 import {
   type SimpleUser, type AuditEntry, type StudentEntry, type FamilyMatch,
   statusConfig, sourceOptions, LEAD_TEMPERATURES, LEAD_STAGES,
@@ -44,6 +45,7 @@ export interface NewLeadModalProps {
     lead_temperature: '' | 'frio' | 'morno' | 'quente'
     origin_school: string; referral_source: string; contest_name: string
     year_interest: number | ''
+    unit_id: string
   }>
 }
 
@@ -54,6 +56,7 @@ const YEAR_INTEREST_OPTIONS = [0, 1, 2].map(offset => new Date().getFullYear() +
 export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institutionId, users, activeCampaignLabel, institutionCity, createDefaults }: NewLeadModalProps) {
   const { user: modalUser } = useAuth()
   const { names: gradeNames } = useGradeLevels(institutionId)
+  const unitCfg = useLeadUnits(institutionId)
   const [activeTab, setActiveTab] = useState<'dados' | 'historico' | 'anotacoes'>('dados')
   const [saving, setSaving] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
@@ -83,6 +86,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
     lead_temperature: '' as '' | 'frio' | 'morno' | 'quente',
     origin_school: '', referral_source: '', contest_name: '',
     year_interest: '' as number | '',
+    unit_id: '' as string,
   })
 
   useEffect(() => {
@@ -108,6 +112,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
         referral_source: editingLead.referral_source ?? '',
         contest_name: editingLead.contest_name ?? '',
         year_interest: editingLead.year_interest ?? '',
+        unit_id: editingLead.unit_id ?? '',
       })
     } else {
       setFormData({
@@ -119,6 +124,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
         next_followup: '', lead_temperature: '',
         origin_school: '', referral_source: '', contest_name: '',
         year_interest: '',
+        unit_id: '',
         ...createDefaults,
       })
     }
@@ -255,7 +261,14 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
       // Filhos extras com nome em branco são descartados silenciosamente —
       // é um bloco que o usuário abriu e não chegou a preencher, não um erro.
       const additionalStudents = extraStudents.filter(s => s.student_name.trim()).map(s => ({ ...s, student_name: s.student_name.trim() }))
-      await onSave({ ...formData, lead_temperature: formData.lead_temperature || null, year_interest: formData.year_interest || null, familyMatchId, additionalStudents })
+      // Campo de unidade só vai pro save quando a escola usa — sem isso,
+      // escola com o campo desligado gravaria unit_id: null em toda edição.
+      const { unit_id, ...rest } = formData
+      await onSave({
+        ...rest,
+        ...(unitCfg.enabled ? { unit_id: unit_id || null } : {}),
+        lead_temperature: formData.lead_temperature || null, year_interest: formData.year_interest || null, familyMatchId, additionalStudents,
+      })
       onClose()
     } finally { setSaving(false) }
   }
@@ -354,6 +367,9 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                 const t = LEAD_TEMPERATURES.find(x => x.value === formData.lead_temperature)!
                 return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.25)', color: '#fff' }}><t.icon size={11} />{t.label}</span>
               })()}
+              {unitCfg.enabled && formData.unit_id && unitCfg.unitName(formData.unit_id) && (
+                <span title={unitCfg.label} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.25)', color: '#fff' }}>📍 {unitCfg.unitName(formData.unit_id)}</span>
+              )}
               {formData.phone && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>📞 {formData.phone}</span>}
               {formData.email && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>✉ {formData.email}</span>}
             </div>
@@ -549,6 +565,16 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                       {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                     </select>
                   </div>
+                  {unitCfg.enabled && (
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>{unitCfg.label}</label>
+                      <select value={formData.unit_id} onChange={e => setFormData(f => ({ ...f, unit_id: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
+                        <option value="">Sem {unitCfg.label.toLowerCase()}</option>
+                        {unitOptionsFor(unitCfg, formData.unit_id).map(u => <option key={u.id} value={u.id}>{u.name}{u.active ? '' : ' (desativada)'}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Ano de interesse</label>
                     <select value={formData.year_interest} onChange={e => setFormData(f => ({ ...f, year_interest: e.target.value ? parseInt(e.target.value, 10) : '' }))}

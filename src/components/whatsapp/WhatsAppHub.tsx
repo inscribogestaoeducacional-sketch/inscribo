@@ -16,6 +16,7 @@ import { CONVERSATION_NOTIFICATION_EVENT, type ConversationNotification } from '
 import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
+import { useLeadUnits } from '../../lib/leadUnits'
 import { getAuthHeaders } from '../../lib/authHeaders'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { statusConfig } from '../leads/leadFormShared'
@@ -1123,6 +1124,9 @@ function QuickReplyManagerModal({ isOpen, onClose, institutionId, userId, onSave
 export default function WhatsAppHub({ institutionId: propInstitutionId, isAionInbox = false }: WhatsAppHubProps = {}) {
   const { user } = useAuth()
   const effectiveInstitutionId = propInstitutionId ?? user?.institution_id ?? ''
+  // Campo de unidade do lead (opcional por escola) — a conversa não guarda
+  // unidade, mostra a do lead vinculado.
+  const unitCfg = useLeadUnits(effectiveInstitutionId)
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -1653,7 +1657,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     // Carregar dados do lead imediatamente no painel direito
     const { data: lead } = await supabase
       .from('leads')
-      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at, unit_id')
       .eq('id', leadId)
       .single()
     if (lead) {
@@ -1903,7 +1907,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
       const { data: refreshed } = await supabase
         .from('leads')
-        .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+        .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at, unit_id')
         .eq('id', leadId)
         .single()
       if (refreshed) setLeadData(refreshed)
@@ -2805,7 +2809,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!leadId) { setLeadData(null); return }
     supabase
       .from('leads')
-      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at, unit_id')
       .eq('id', leadId)
       .single()
       .then(({ data }) => {
@@ -6026,6 +6030,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                     {statusConfig[leadData.status as keyof typeof statusConfig]?.label || leadData.status}
                                   </span>
                                 </div>
+                                {unitCfg.enabled && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                    <span style={{ color: '#64748B' }}>{unitCfg.label}</span>
+                                    <span style={{ color: unitCfg.unitName(leadData.unit_id) ? '#4F46E5' : '#94A3B8', fontWeight: 600 }}>
+                                      {unitCfg.unitName(leadData.unit_id) || `Sem ${unitCfg.label.toLowerCase()}`}
+                                    </span>
+                                  </div>
+                                )}
                                 {leadData.source && (
                                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                                     <span style={{ color: '#64748B' }}>Origem</span>

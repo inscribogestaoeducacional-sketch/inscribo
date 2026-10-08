@@ -22,6 +22,7 @@ import { DatabaseService, Lead, supabase } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
+import { useLeadUnits, matchesUnitFilter, UNIT_FILTER_ALL, UNIT_FILTER_NONE, type LeadUnit } from '../../lib/leadUnits'
 import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS } from '../../lib/leadReminders'
 import NewLeadModal from './NewLeadModal'
 import ScheduleVisitModal from './ScheduleVisitModal'
@@ -301,6 +302,8 @@ interface CardContentProps {
   overlay?: boolean
   compact?: boolean
   assignedUser?: SimpleUser | null
+  // Campo de unidade do lead — só vem preenchido quando a escola usa o campo.
+  unitName?: string | null
   // Consolidação de família (item de leads-irmãos) — quando a família tem
   // ≥2 filhos, este card representa a família inteira: `familyMembers` traz
   // TODOS os filhos (incluindo `lead`, que é só o representante escolhido
@@ -317,7 +320,7 @@ interface CardContentProps {
   onReopenAll: () => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, unitName, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll }: CardContentProps) {
   const hasFamily = !!familyMembers && familyMembers.length > 1
   const lostReason = lead.lost_reason
   const lostLabel = lostReason ? LOST_REASONS.find(r => r.value === lostReason)?.label : null
@@ -366,8 +369,11 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
         </div>
 
         {/* Item 9b — badges: série, origem, temperatura, campanha, ano de interesse */}
-        {(lead.grade_interest || lead.source || temperature || lead.campaign_cycle_id || lead.year_interest) && (
+        {(unitName || lead.grade_interest || lead.source || temperature || lead.campaign_cycle_id || lead.year_interest) && (
           <div className="flex flex-wrap gap-1 mb-1.5">
+            {unitName && (
+              <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-indigo-200">📍 {unitName}</span>
+            )}
             {lead.grade_interest && <span className="inline-flex items-center bg-[#14b8a6]/10 text-[#0d9488] text-xs font-medium px-2 py-0.5 rounded-full border border-[#14b8a6]/20">{lead.grade_interest}</span>}
             {lead.year_interest && !compact && (
               <span title="Ano de interesse" className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-xs font-medium px-2 py-0.5 rounded-full border border-amber-200">
@@ -551,11 +557,13 @@ interface FilterDrawerProps {
   users: SimpleUser[]
   noContactFilter: boolean; setNoContactFilter: (v: boolean) => void
   noContactDays: number; setNoContactDays: (v: number) => void
+  // Campo de unidade do lead — ausente quando a escola não usa o campo.
+  unitFilterCfg?: { label: string; units: LeadUnit[]; value: string; onChange: (v: string) => void }
   onClear: () => void
 }
 
 function FilterDrawer(props: FilterDrawerProps) {
-  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, noContactFilter, setNoContactFilter, noContactDays, setNoContactDays, onClear } = props
+  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, noContactFilter, setNoContactFilter, noContactDays, setNoContactDays, unitFilterCfg, onClear } = props
   if (!open) return null
 
   const section = (label: string) => (
@@ -587,6 +595,15 @@ function FilterDrawer(props: FilterDrawerProps) {
               {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
             </optgroup>}
           </select>
+
+          {unitFilterCfg && (<>
+            {section(unitFilterCfg.label)}
+            <select value={unitFilterCfg.value} onChange={e => unitFilterCfg.onChange(e.target.value)} style={selCls}>
+              <option value={UNIT_FILTER_ALL}>Todas</option>
+              {unitFilterCfg.units.map(u => <option key={u.id} value={u.id}>{u.name}{u.active ? '' : ' (desativada)'}</option>)}
+              <option value={UNIT_FILTER_NONE}>Sem {unitFilterCfg.label.toLowerCase()}</option>
+            </select>
+          </>)}
 
           {section('Status')}
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={selCls}>
@@ -697,6 +714,8 @@ export default function LeadKanban() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { names: gradeNames } = useGradeLevels(user?.institution_id)
+  const unitCfg = useLeadUnits(user?.institution_id)
+  const [unitFilter, setUnitFilter] = useState<string>(UNIT_FILTER_ALL)
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewLeadModal, setShowNewLeadModal] = useState(false)
@@ -1106,6 +1125,7 @@ export default function LeadKanban() {
     if (ownerFilter === 'mine') { if (lead.assigned_to !== user?.id) return false }
     else if (ownerFilter === 'unassigned') { if (lead.assigned_to) return false }
     else if (ownerFilter !== 'all') { if (lead.assigned_to !== ownerFilter) return false }
+    if (unitCfg.enabled && !matchesUnitFilter(lead.unit_id, unitFilter)) return false
     return true
   }
 
@@ -1292,7 +1312,7 @@ export default function LeadKanban() {
   const activeLead = activeId ? leads.find(l => l.id === activeId) : null
   const visibleStatuses = filterStatus ? Object.keys(statusConfig).filter(s => s === filterStatus) : Object.keys(statusConfig)
   const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s as Lead['status']).length, 0)
-  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'all' || noContactFilter
+  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'all' || noContactFilter || (unitCfg.enabled && unitFilter !== UNIT_FILTER_ALL)
 
   // ── Consolidação de família — decisão individual por filho, dentro do
   // card (item 2 do pedido). 'open' reverte pro mesmo estágio usado pelo
@@ -1333,6 +1353,7 @@ export default function LeadKanban() {
     setSearchTerm(''); setFilterSource(''); setFilterStatus(''); setPeriodFilter('all')
     setCustomStart(''); setCustomEnd(''); setGradeFilter('all'); setShiftFilter('all')
     setTemperatureFilter(''); setOwnerFilter('all'); setNoContactFilter(false); setNoContactDays(NO_CONTACT_DAYS)
+    setUnitFilter(UNIT_FILTER_ALL)
   }
 
   const filterDrawerEl = (
@@ -1350,6 +1371,7 @@ export default function LeadKanban() {
       users={users}
       noContactFilter={noContactFilter} setNoContactFilter={setNoContactFilter}
       noContactDays={noContactDays} setNoContactDays={setNoContactDays}
+      unitFilterCfg={unitCfg.enabled ? { label: unitCfg.label, units: unitCfg.units, value: unitFilter, onChange: setUnitFilter } : undefined}
       onClear={clearAllFilters}
     />
   )
@@ -1437,6 +1459,7 @@ export default function LeadKanban() {
                     {siblings && siblings.length > 0 && <span style={{ marginLeft: 5, fontWeight: 600, color: '#8B5CF6' }}>+{siblings.length} irmão{siblings.length === 1 ? '' : 's'}</span>}
                   </p>
                   <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {unitCfg.enabled && unitCfg.unitName(lead.unit_id) && <span style={{ fontSize: 12, fontWeight: 600, color: '#4F46E5' }}>📍 {unitCfg.unitName(lead.unit_id)}</span>}
                     {lead.grade_interest && <span style={{ fontSize: 12, color: '#94A3B8' }}>{lead.grade_interest}</span>}
                     {lead.source && <span style={{ fontSize: 12, color: '#94A3B8' }}>{lead.source}</span>}
                     {reminder && reminderColors && (
@@ -1578,6 +1601,7 @@ export default function LeadKanban() {
                               key={lead.id} lead={lead} config={config} isFlashing={flashingLeadId === lead.id}
                               compact={compactView}
                               assignedUser={lead.assigned_to ? usersById.get(lead.assigned_to) ?? null : null}
+                              unitName={unitCfg.enabled ? unitCfg.unitName(lead.unit_id) : null}
                               familyMembers={family?.members}
                               onReopenAll={() => handleReopenAllLost(family ? family.lostMembers.map(m => m.id) : [lead.id])}
                               {...cardActions}
@@ -1608,6 +1632,7 @@ export default function LeadKanban() {
                 lead={activeLead} config={statusConfig[activeLead.status]} isFlashing={false} overlay
                 compact={compactView}
                 assignedUser={activeLead.assigned_to ? usersById.get(activeLead.assigned_to) ?? null : null}
+                unitName={unitCfg.enabled ? unitCfg.unitName(activeLead.unit_id) : null}
                 familyMembers={activeLead.family_id ? familyInfoMap.get(activeLead.family_id)?.members : undefined}
                 onSchedule={() => {}} onEdit={() => {}} onDelete={() => {}} onStatusChange={() => {}} onWhatsApp={() => {}} onReminder={() => {}}
                 onChildDecision={() => {}} onReopenAll={() => {}}

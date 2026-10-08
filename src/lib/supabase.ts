@@ -47,6 +47,8 @@ export interface Lead {
   family_id?: string | null
   lost_reason?: string | null
   lost_reason_detail?: string | null
+  // Campo de unidade do lead (opcional por escola — ver src/lib/leadUnits.ts).
+  unit_id?: string | null
 }
 
 // CRM comercial interno da Áion (venda do produto pra escolas) — não confundir

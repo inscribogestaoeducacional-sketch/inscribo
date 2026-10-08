@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
+import { useLeadUnits, unitOptionsFor } from '../../lib/leadUnits'
 import {
   X, ArrowLeft, ArrowRightLeft, Clock, Check, Loader2,
   MessageCircle, Plus, Eye, Trash2, Pencil,
@@ -110,6 +111,7 @@ export default function ContactCard({
   const navigate = useNavigate()
   const mountedRef = useRef(true)
   const { names: GRADES } = useGradeLevels(institutionId)
+  const unitCfg = useLeadUnits(institutionId)
 
   // All state hooks — unconditional
   const [loading, setLoading]           = useState(true)
@@ -126,6 +128,7 @@ export default function ContactCard({
     grade_interest:   initialData.grade_interest  || '',
     shift:            '',
     source:           initialData.source          || '',
+    unit_id:          '',
     tags:             (initialData.tags           || []) as string[],
   })
   const [tagInput, setTagInput]         = useState('')
@@ -186,6 +189,7 @@ export default function ContactCard({
       grade_interest:   initialData.grade_interest || '',
       shift:            '',
       source:           initialData.source         || '',
+      unit_id:          '',
       tags:             (initialData.tags          || []) as string[],
     })
     setTForm({ studentName: initialData.student_name || '', grade: initialData.grade_interest || '', statedReason: '', internalNotes: '' })
@@ -229,6 +233,7 @@ export default function ContactCard({
         updates.student_name     = lead.student_name     || initialData.student_name || ''
         updates.grade_interest   = lead.grade_interest   || ''
         updates.source           = lead.source           || ''
+        updates.unit_id          = lead.unit_id          || ''
       }
     }
 
@@ -247,6 +252,7 @@ export default function ContactCard({
             updates.student_name     = updates.student_name     || lead.student_name     || initialData.student_name || ''
             updates.grade_interest   = updates.grade_interest   || lead.grade_interest   || ''
             updates.source           = updates.source           || lead.source           || ''
+            updates.unit_id          = updates.unit_id          || lead.unit_id          || ''
           }
         }
         if (!updates.contact_type) updates.contact_type = conv.contact_type || initialData.contact_type || ''
@@ -268,6 +274,7 @@ export default function ContactCard({
           updates.student_name     = updates.student_name     || data.student_name     || ''
           updates.grade_interest   = updates.grade_interest   || data.grade_interest   || ''
           updates.source           = updates.source           || data.source           || ''
+          updates.unit_id          = updates.unit_id          || data.unit_id          || ''
         }
       }
     }
@@ -503,6 +510,8 @@ export default function ContactCard({
           student_name:     form.student_name     || undefined,
           grade_interest:   form.grade_interest   || undefined,
           source:           form.source           || undefined,
+          // Só com o campo de unidade ligado na escola; senão não mexe.
+          ...(unitCfg.enabled ? { unit_id: form.unit_id || null } : {}),
         }).eq('id', leadId))
       } else {
         const { data: newLead } = await supabase.from('leads').insert({
@@ -514,6 +523,7 @@ export default function ContactCard({
           grade_interest:   form.grade_interest,
           source:           form.source,
           status:           'new',
+          ...(unitCfg.enabled && form.unit_id ? { unit_id: form.unit_id } : {}),
         }).select('id').single()
         if (newLead) {
           setResolvedLeadId(newLead.id)
@@ -851,6 +861,16 @@ export default function ContactCard({
                 {ORIGINS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
+            {unitCfg.enabled && (
+              <div>
+                <label className="block text-xs font-medium text-[#64748B] mb-1">{unitCfg.label}</label>
+                <select value={form.unit_id} onChange={e => setForm(f => ({ ...f, unit_id: e.target.value }))}
+                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none">
+                  <option value="">Sem {unitCfg.label.toLowerCase()}</option>
+                  {unitOptionsFor(unitCfg, form.unit_id).map(u => <option key={u.id} value={u.id}>{u.name}{u.active ? '' : ' (desativada)'}</option>)}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Campos personalizados */}

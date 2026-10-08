@@ -59,6 +59,7 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
       next_followup?: string | null; lead_temperature?: 'frio' | 'morno' | 'quente' | null
       referral_source?: string | null; contest_name?: string | null
       family_id: string | null; campaign_cycle_id?: string | null; auditSuffix?: string
+      unit_id?: string | null
     }
   ) => {
     const { data: newLead, error } = await supabase.from('leads').insert({
@@ -88,6 +89,9 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
       contest_name:      shared.contest_name || null,
       family_id:         shared.family_id,
       campaign_cycle_id: shared.campaign_cycle_id ?? null,
+      // Campo de unidade (opcional por escola): só vai no insert quando
+      // preenchido — escola que não usa o campo grava exatamente como antes.
+      ...(shared.unit_id ? { unit_id: shared.unit_id } : {}),
     }).select().single()
     if (error) throw error
     await supabase.from('audit_logs').insert({
@@ -121,6 +125,9 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
       origin_school:     leadData.origin_school !== undefined ? (leadData.origin_school || null) : editingLead.origin_school,
       referral_source:   leadData.referral_source !== undefined ? (leadData.referral_source || null) : editingLead.referral_source,
       contest_name:      leadData.contest_name !== undefined ? (leadData.contest_name || null) : editingLead.contest_name,
+      // Só quando o formulário mandou o campo (escola com unidade ligada);
+      // ausente = não mexe na unidade já gravada.
+      ...(leadData.unit_id !== undefined ? { unit_id: leadData.unit_id || null } : {}),
       updated_at:        new Date().toISOString(),
     }).eq('id', editingLead.id)
     if (error) throw error
@@ -179,6 +186,7 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
         contest_name:     leadData.contest_name !== undefined ? (leadData.contest_name || null) : (editingLead.contest_name || null),
         family_id:        null as string | null,
         campaign_cycle_id: editingLead.campaign_cycle_id ?? null,
+        unit_id:          leadData.unit_id !== undefined ? (leadData.unit_id || null) : (editingLead.unit_id ?? null),
         auditSuffix:      ` (irmão de ${editingLead.student_name})`,
       }
       if (!familyId) {
@@ -251,6 +259,7 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
       contest_name:      leadData.contest_name || null,
       family_id:         familyId,
       campaign_cycle_id: campaignCycleId,
+      unit_id:           leadData.unit_id || null,
     }
 
     const newLead = await insertStudentLead({
