@@ -173,28 +173,14 @@ export default function TransferSurveyPage() {
   }, [token]) // eslint-disable-line
 
   const loadSurvey = async () => {
-    // Busca sem RLS (política pública por token)
-    const { data, error } = await supabase
-      .from('student_transfers')
-      .select('*')
-      .eq('survey_token', token)
-      .maybeSingle()
-
+    // Anônimo não lê a tabela (migration 20261008170000): a função devolve só
+    // a pesquisa deste token, já com a marca da escola.
+    const { data, error } = await supabase.rpc('transfer_survey_view', { p_token: token })
     if (error || !data) { setStatus('invalid'); return }
-    if (data.survey_completed_at) { setStatus('completed'); return }
+    if (data.institution) setInstitution(data.institution)
+    if (data.status === 'completed') { setStatus('completed'); return }
 
     setTransfer(data)
-
-    // buscar dados da instituição (sem RLS)
-    if (data.institution_id) {
-      const { data: inst } = await supabase
-        .from('institutions')
-        .select('id, name, logo_url, primary_color')
-        .eq('id', data.institution_id)
-        .maybeSingle()
-      if (inst) setInstitution(inst)
-    }
-
     setStatus('active')
   }
 
@@ -249,15 +235,8 @@ export default function TransferSurveyPage() {
 
     try {
       // Salvar respostas
-      const { error } = await supabase
-        .from('student_transfers')
-        .update({
-          survey_responses: responses,
-          survey_completed_at: new Date().toISOString(),
-        })
-        .eq('survey_token', token)
-
-      if (error) throw error
+      const { data: saved, error } = await supabase.rpc('transfer_survey_submit', { p_token: token, p_responses: responses })
+      if (error || !saved) throw error ?? new Error('Pesquisa não encontrada ou já respondida')
 
       // Diagnóstico da IA em background, sem bloquear a tela. Página pública
       // (sem login): o /api/ai aceita só o token desta pesquisa, monta o
