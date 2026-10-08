@@ -348,7 +348,7 @@ async function fetchLeadsPipeline(
 //     prompt usa os dados gravados, não o que vier na requisição.
 // Toda chamada com escola conhecida consome 1 da cota do mês
 // (ai_consume_quota, migration 20261008130000).
-const DEFAULT_AI_MONTHLY_QUOTA = 300
+const DEFAULT_AI_MONTHLY_QUOTA = 1000
 
 interface AiCaller {
   institutionId: string | null
