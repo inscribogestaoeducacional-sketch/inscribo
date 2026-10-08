@@ -4873,18 +4873,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {/* Assumir — sempre que a conversa não é minha (fila, de outro
-                      atendente, concluída). A regra (confirmação etc.) é da RPC. */}
-                  {!isAionInbox && !activeConv.isGroup && activeConv.assigned_user_id !== user?.id && (
-                    <button onClick={handleClaimConversation}
-                      title={activeConv.assigned_user_id ? `Atendida por ${activeConv.assigned_user_name || 'outro atendente'}` : 'Conversa sem atendente'}
-                      style={{ height: 36, padding: '0 12px', borderRadius: 8, background: '#00A896', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background 0.15s', marginRight: 4 }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
-                    >
-                      Assumir conversa
-                    </button>
-                  )}
                   {[
                     { icon: Search, key: 'search', active: showMsgSearch, onClick: () => { setShowMsgSearch(v => !v); if (showMsgSearch) setMsgSearchText('') }, title: 'Buscar mensagens' },
                     { icon: Info,   key: 'info',   active: showContactInfo, onClick: () => setShowContactInfo(v => !v), title: 'Informações do contato' },
@@ -5389,9 +5377,23 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
             {/* Conversa de outro atendente aberta pela lista, Kanban ou link — só leitura */}
             {activeConv && activeConv.assigned_user_id && activeConv.assigned_user_id !== user?.id && activeConv.status !== 'closed' && !isConvStale(activeConv) && (
-              <div style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 12, padding: '12px 16px', marginBottom: 8 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', margin: 0 }}>👤 Atendida por {activeConv.assigned_user_name || 'outro atendente'}</p>
-                <p style={{ fontSize: 11, color: '#475569', margin: '2px 0 0' }}>Abrir esta conversa não muda o atendente responsável.</p>
+              <div style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 12, padding: '12px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', margin: 0 }}>👤 Atendida por {activeConv.assigned_user_name || 'outro atendente'}</p>
+                  <p style={{ fontSize: 11, color: '#475569', margin: '2px 0 0' }}>Abrir esta conversa não muda o atendente responsável.</p>
+                </div>
+                {/* Ação principal da faixa — regra da RPC: admin/gestor assumem
+                    direto, acesso total confirma ("Fulano está atendendo..."). */}
+                {!isAionInbox && (
+                  <button
+                    onClick={handleClaimConversation}
+                    style={{ background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
+                  >
+                    Assumir conversa
+                  </button>
+                )}
               </div>
             )}
 
