@@ -1089,19 +1089,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [loading, setLoading] = useState(true)
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
-  // Abas fixas da lista — ver listTab* mais abaixo. 'unclassified' é a rede
-  // de segurança: qualquer combinação que não caia nas outras três aparece
-  // ali (com contador), em vez de sumir da tela.
-  const [listTab, setListTab] = useState<'queue' | 'attending' | 'closed' | 'unclassified'>('attending')
+  const [statusFilter, setStatusFilter] = useState<'abertos' | 'concluido' | 'ambos'>('abertos')
   const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
-  // Admin/gestor começam em "Todos" (enxergam a operação inteira); atendente
-  // comum — mesmo com "ver todas as conversas" — começa em "Meus chats". O
-  // filtro só esconde conversa COM dono de outra pessoa: fila e concluídas
-  // sem dono aparecem sempre. Quem é restrito por RLS nunca recebe conversa
-  // de colega do backend (dropdown só aparece pra canSeeAll, mais abaixo).
+  // Filtro "Atendente" (mesmo modelo do ownerFilter do Kanban de Leads):
+  // 'all' | 'mine' | 'none' (sem atendente) | id de um atendente. Admin/gestor
+  // começam em "Todos"; atendente comum — mesmo com "ver todas as conversas"
+  // — em "Eu". Só esconde conversa COM dono que não bate com o filtro: fila e
+  // concluídas sem dono aparecem sempre. Quem é restrito por RLS nunca recebe
+  // conversa de colega do backend (dropdown só aparece pra canSeeAll).
   const roleSeesAllByDefault = (u: typeof user) =>
     u?.role === 'admin' || u?.role === 'manager' || u?.user_type === 'admin_geral'
-  const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>(() => roleSeesAllByDefault(user) ? 'all' : 'mine')
+  const [assignFilter, setAssignFilter] = useState<string>(() => roleSeesAllByDefault(user) ? 'all' : 'mine')
   useEffect(() => {
     setAssignFilter(roleSeesAllByDefault(user) ? 'all' : 'mine')
   }, [user?.role, user?.user_type, user?.institution_id])
@@ -2790,19 +2788,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // atendentes da instituição (RLS já garante isso; aqui é só organização visual).
   const waitingQueueConvs = conversations.filter(c => !c.isGroup && !c.assigned_user_id && c.status === 'waiting')
 
-  // Abas fixas da lista. Modelo de status (trigger
+  // Grupos da lista. Modelo de status (trigger
   // trg_normalize_conversation_state): waiting = sem dono, open = com dono,
   // closed = encerrada (com ou sem dono — o robô encerra soltando o dono).
   // Toda combinação fora disso — 'open' sem dono, status desconhecido, dono
-  // desativado — vai pra 'unclassified', com contador: nada some da tela.
+  // desativado — cai em "Sem classificação", com contador: nada some da tela.
   const inactiveUserIds = new Set(users.filter(u => (u as any).active === false).map(u => u.id))
-  const classifyConv = (c: Conversation): typeof listTab => {
-    if (c.status === 'closed') return 'closed'
-    if (c.assigned_user_id && inactiveUserIds.has(c.assigned_user_id)) return 'unclassified'
-    if (c.status === 'waiting' && !c.assigned_user_id) return 'queue'
-    if ((c.status === 'open' || c.status === 'waiting') && c.assigned_user_id) return 'attending'
-    return 'unclassified'
+  const isUnclassified = (c: Conversation) => {
+    if (c.status === 'closed') return false
+    if (c.assigned_user_id && inactiveUserIds.has(c.assigned_user_id)) return true
+    if (c.status === 'waiting' && !c.assigned_user_id) return false
+    if ((c.status === 'open' || c.status === 'waiting') && c.assigned_user_id) return false
+    return true
   }
+  const isQueued = (c: Conversation) => c.status === 'waiting' && !c.assigned_user_id
 
   // Busca + lida/não-lida. Fora do "Não lida", só admin/gestor contam as não
   // lidas de colegas (antes testava 'gestor'/'superadmin', papéis que não
@@ -2818,27 +2817,44 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     return true
   }
 
-  // Filtro de atendente: só esconde conversa COM dono de outra pessoa (ou,
-  // em "Não atribuídos", qualquer uma com dono). Fila, concluídas sem dono e
-  // "Sem classificação" nunca são escondidas por ele.
+  // Filtro de atendente: só esconde conversa COM dono que não bate com o
+  // filtro. Fila, concluídas sem dono e "Sem classificação" nunca são
+  // escondidas por ele. Atendente restrito não vê o dropdown e fica em "Eu".
+  const effectiveAssignFilter = canSeeAll ? assignFilter : 'mine'
   const hiddenByAssignFilter = (c: Conversation) => {
     if (!c.assigned_user_id) return false
-    if (assignFilter === 'mine') return c.assigned_user_id !== user?.id
-    if (assignFilter === 'none') return true
-    return false
+    if (effectiveAssignFilter === 'all') return false
+    if (effectiveAssignFilter === 'mine') return c.assigned_user_id !== user?.id
+    if (effectiveAssignFilter === 'none') return true
+    return c.assigned_user_id !== effectiveAssignFilter
   }
+  const matchesStatusFilter = (c: Conversation) =>
+    statusFilter === 'ambos' || (statusFilter === 'concluido' ? c.status === 'closed' : c.status !== 'closed')
 
-  const tabConvs: Record<typeof listTab, Conversation[]> = { queue: [], attending: [], closed: [], unclassified: [] }
-  const tabHiddenByFilter: Record<typeof listTab, number> = { queue: 0, attending: 0, closed: 0, unclassified: 0 }
+  // "Aguardando" fica sempre visível (independe de status e atendente);
+  // "Sem classificação" também. Os demais respeitam Status e Atendente.
+  const filteredWaitingConvs: Conversation[] = []
+  const filteredMyConvs: Conversation[] = []
+  const filteredStaleConvs: Conversation[] = []
+  const filteredOtherConvs: Conversation[] = []
+  const filteredUnclassifiedConvs: Conversation[] = []
+  let hiddenByFilterCount = 0
   for (const c of conversations) {
     if (!matchesSearchAndRead(c)) continue
-    const tab = classifyConv(c)
-    if (tab !== 'queue' && tab !== 'unclassified' && hiddenByAssignFilter(c)) { tabHiddenByFilter[tab]++; continue }
-    tabConvs[tab].push(c)
+    if (isUnclassified(c)) { filteredUnclassifiedConvs.push(c); continue }
+    if (isQueued(c)) { filteredWaitingConvs.push(c); continue }
+    if (!matchesStatusFilter(c)) continue
+    if (hiddenByAssignFilter(c)) { hiddenByFilterCount++; continue }
+    if (c.assigned_user_id === user?.id) filteredMyConvs.push(c)
+    else if (isConvStale(c)) filteredStaleConvs.push(c)
+    else filteredOtherConvs.push(c)
   }
-  const visibleTabConvs = tabConvs[listTab]
-  const myAttendingConvs    = tabConvs.attending.filter(c => c.assigned_user_id === user?.id)
-  const otherAttendingConvs = tabConvs.attending.filter(c => c.assigned_user_id !== user?.id)
+  const listIsEmpty = filteredWaitingConvs.length + filteredMyConvs.length + filteredStaleConvs.length
+    + filteredOtherConvs.length + filteredUnclassifiedConvs.length === 0
+  // Opções do filtro "Atendente" — só ativos, em ordem alfabética.
+  const attendantOptions = users
+    .filter(u => (u as any).active !== false)
+    .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'pt-BR'))
 
   const renderConvItem = (conv: Conversation) => {
     const isActive = conv.id === activeId
@@ -4454,7 +4470,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 </span>
               )}
               {waitingQueueConvs.length > 0 && (
-                <span title="Conversas na fila, sem atendente — clique para ver" onClick={() => setListTab('queue')} style={{ cursor: 'pointer', background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span title="Conversas aguardando atendimento" style={{ background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 3 }}>
                   ⏳ {waitingQueueConvs.length}
                 </span>
               )}
@@ -4490,48 +4506,34 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Filters — Botconversa style */}
           <div style={{ borderBottom: '1px solid #D1FAE5' }}>
-            {/* Row 1: abas fixas (Fila / Em atendimento / Concluídas / Sem classificação) */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', padding: '8px 12px 0', gap: 4 }}>
-              {([
-                { key: 'queue',        label: 'Fila',           color: '#D97706', bg: '#FEF3C7', title: 'Conversas sem atendente. Todos os atendentes veem esta fila — clique para ler e assuma para responder.' },
-                { key: 'attending',    label: 'Em atendimento', color: '#00A896', bg: '#E6F7F5', title: 'Conversas com um atendente responsável.' },
-                { key: 'closed',       label: 'Concluídas',     color: '#64748B', bg: '#F1F5F9', title: 'Conversas encerradas, com ou sem atendente.' },
-                { key: 'unclassified', label: 'Sem classificação', color: '#B91C1C', bg: '#FEE2E2', title: 'Conversas num estado inesperado (ex.: em atendimento sem atendente, ou com atendente desativado). Ficam aqui para não sumirem — abra e assuma, transfira ou conclua.' },
-              ] as { key: typeof listTab; label: string; color: string; bg: string; title: string }[])
-                .filter(t => t.key !== 'unclassified' || tabConvs.unclassified.length > 0 || listTab === 'unclassified')
-                .map(t => {
-                  const active = listTab === t.key
-                  const count = tabConvs[t.key].length
-                  return (
-                    <button key={t.key} onClick={() => setListTab(t.key)} title={t.title} style={{
-                      padding: '4px 9px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
-                      fontWeight: active ? 700 : 500,
-                      border: `1px solid ${active ? t.color : '#E2E8F0'}`,
-                      background: active ? t.bg : '#FFFFFF',
-                      color: active ? t.color : '#64748B',
-                      display: 'flex', alignItems: 'center', gap: 4,
-                    }}>
-                      {t.key === 'unclassified' && '⚠ '}{t.label}
-                      {count > 0 && (
-                        <span style={{ background: t.key === 'queue' ? '#EF4444' : t.color, color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{count}</span>
-                      )}
-                    </button>
-                  )
-                })}
-            </div>
-            {/* Row 2: Atribuição (só pra quem enxerga conversas de colegas) */}
+            {/* Row 1: Status + Atendente dropdowns */}
             <div style={{ display: 'flex', padding: '8px 12px', gap: 8 }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</span>
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
+                  style={{ width: '100%', padding: '5px 8px', fontSize: 12, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', cursor: 'pointer', outline: 'none' }}
+                >
+                  <option value="abertos">Abertos</option>
+                  <option value="concluido">Concluídos</option>
+                  <option value="ambos">Ambos</option>
+                </select>
+              </div>
               {canSeeAll && (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Atribuição</span>
+                  <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Atendente</span>
                   <select
                     value={assignFilter}
-                    onChange={e => setAssignFilter(e.target.value as typeof assignFilter)}
+                    onChange={e => setAssignFilter(e.target.value)}
                     style={{ width: '100%', padding: '5px 8px', fontSize: 12, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', cursor: 'pointer', outline: 'none' }}
                   >
                     <option value="all">Todos</option>
-                    <option value="mine">Meus chats</option>
-                    <option value="none">Não atribuídos</option>
+                    <option value="mine">Eu</option>
+                    <option value="none">Sem atendente</option>
+                    {attendantOptions.length > 0 && <optgroup label="Atendente específico">
+                      {attendantOptions.filter(u => u.id !== user?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                    </optgroup>}
                   </select>
                 </div>
               )}
@@ -4561,46 +4563,64 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Conversation list */}
           <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
-            {listTab === 'queue' && (
-              <p style={{ margin: 0, padding: '8px 14px', fontSize: 11, color: '#92400E', background: '#FFFBEB', borderBottom: '1px solid #FDE68A', lineHeight: 1.4 }}>
-                Conversas sem atendente. Todos os atendentes veem esta fila: clique para ler e use <b>Assumir conversa</b> para responder — ela sai da fila e passa a ser sua.
-              </p>
-            )}
-            {listTab === 'unclassified' && (
-              <p style={{ margin: 0, padding: '8px 14px', fontSize: 11, color: '#991B1B', background: '#FEF2F2', borderBottom: '1px solid #FECACA', lineHeight: 1.4 }}>
-                Conversas num estado inesperado (em atendimento sem atendente, ou com atendente desativado). Ficam aqui para não sumirem: abra e assuma, transfira ou conclua.
-              </p>
-            )}
-            {tabHiddenByFilter[listTab] > 0 && (
-              <button onClick={() => setAssignFilter('all')} style={{ width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: 11, color: '#475569', background: '#F8FAFC', border: 'none', borderBottom: '1px solid #E2E8F0', cursor: 'pointer' }}>
-                {tabHiddenByFilter[listTab]} {tabHiddenByFilter[listTab] === 1 ? 'conversa de outro atendente oculta' : 'conversas de outros atendentes ocultas'} pelo filtro de atribuição · <span style={{ color: '#00A896', fontWeight: 600 }}>Mostrar todas</span>
-              </button>
-            )}
-            {visibleTabConvs.length === 0 ? (
+            {listIsEmpty ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, textAlign: 'center', padding: '0 16px' }}>
                 <p style={{ fontSize: 12, color: '#94A3B8' }}>Nenhuma conversa encontrada</p>
               </div>
-            ) : listTab === 'attending' ? (
+            ) : (
               <>
-                {myAttendingConvs.length > 0 && (
+                {filteredWaitingConvs.length > 0 && (
+                  <>
+                    <div title="Conversas sem atendente. Todos os atendentes veem esta fila: clique para ler e assuma para responder." style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      ⏳ Aguardando atendimento
+                      <span style={{ background: '#EF4444', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredWaitingConvs.length}</span>
+                    </div>
+                    {filteredWaitingConvs.map(conv => renderConvItem(conv))}
+                  </>
+                )}
+                {filteredUnclassifiedConvs.length > 0 && (
+                  <>
+                    <div title="Conversas num estado inesperado (em atendimento sem atendente, ou com atendente desativado). Ficam aqui para não sumirem: abra e assuma, transfira ou conclua." style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      ⚠️ Sem classificação
+                      <span style={{ background: '#DC2626', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredUnclassifiedConvs.length}</span>
+                    </div>
+                    {filteredUnclassifiedConvs.map(conv => renderConvItem(conv))}
+                  </>
+                )}
+                {filteredMyConvs.length > 0 && (
                   <>
                     <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Minhas conversas
                     </div>
-                    {myAttendingConvs.map(conv => renderConvItem(conv))}
+                    {filteredMyConvs.map(conv => renderConvItem(conv))}
                   </>
                 )}
-                {otherAttendingConvs.length > 0 && (
+                {filteredStaleConvs.length > 0 && (
+                  <>
+                    <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      ⏰ Conversas paradas
+                      <span style={{ background: '#F97316', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredStaleConvs.length}</span>
+                    </div>
+                    {filteredStaleConvs.map(conv => renderConvItem(conv))}
+                  </>
+                )}
+                {filteredOtherConvs.length > 0 && (
                   <>
                     <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Outros atendentes
+                      Outras conversas
                     </div>
-                    {otherAttendingConvs.map(conv => renderConvItem(conv))}
+                    {filteredOtherConvs.map(conv => renderConvItem(conv))}
                   </>
                 )}
               </>
-            ) : (
-              visibleTabConvs.map(conv => renderConvItem(conv))
+            )}
+            {hiddenByFilterCount > 0 && (
+              <div style={{ padding: '10px 14px', fontSize: 11, color: '#94A3B8', textAlign: 'center' }}>
+                {hiddenByFilterCount} {hiddenByFilterCount === 1 ? 'conversa oculta' : 'conversas ocultas'} pelo filtro ·{' '}
+                <button onClick={() => setAssignFilter('all')} style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, color: '#00A896', fontWeight: 600, cursor: 'pointer' }}>
+                  Mostrar todas
+                </button>
+              </div>
             )}
           </div>
         </div>
