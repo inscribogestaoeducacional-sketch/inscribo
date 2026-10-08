@@ -23,8 +23,10 @@ export function normalizePhone(raw: string): string {
 
   // Número brasileiro já com código do país: 55 + DDD(2) + [9] + local(8) = 12-13 dígitos
   if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
-    if (digits.length === 12) {
-      // Formato antigo de 8 dígitos locais: insere o 9º dígito obrigatório após o DDD
+    if (digits.length === 12 && isBrazilianMobileLocal(digits[4])) {
+      // Celular no formato antigo de 8 dígitos: insere o 9º dígito após o DDD.
+      // Fixo (local começando com 2 a 5) NÃO ganha 9 — o número inventado
+      // não existe e todo envio pra ele falha (caso Escola Semear).
       digits = digits.slice(0, 4) + '9' + digits.slice(4)
     }
     return digits
@@ -33,6 +35,12 @@ export function normalizePhone(raw: string): string {
   // Qualquer outro número: já é internacional (Meta sempre manda E.164 completo).
   // Retorna sem alterar — NÃO prefixa 55.
   return digits
+}
+
+// Celular brasileiro antigo (8 dígitos locais) começa com 6, 7, 8 ou 9; fixo
+// começa com 2, 3, 4 ou 5. Só celular ganhou o 9º dígito.
+export function isBrazilianMobileLocal(firstLocalDigit: string | undefined): boolean {
+  return !!firstLocalDigit && firstLocalDigit >= '6' && firstLocalDigit <= '9'
 }
 
 // =============================================================================

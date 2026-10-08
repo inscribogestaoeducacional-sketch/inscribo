@@ -669,8 +669,11 @@ function normalizePhone(raw: string): string {
 
   // Brazilian number already has country code: 55 + DDD(2) + [9] + local(8) = 12-13 digits
   if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
-    if (digits.length === 12) {
-      // Old 8-digit local format: insert the mandatory 9th digit after DDD
+    // Old 8-digit local format: insert the 9th digit after DDD — ONLY for
+    // mobiles (local starts with 6-9). Landlines (2-5) never got a 9: the
+    // invented number doesn't exist and every send to it failed (Escola
+    // Semear case). Same rule as src/lib/phone.ts and normalize_phone_br().
+    if (digits.length === 12 && digits[4] >= '6' && digits[4] <= '9') {
       digits = digits.slice(0, 4) + '9' + digits.slice(4)
     }
     return digits

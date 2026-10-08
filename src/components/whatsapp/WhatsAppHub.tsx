@@ -10,7 +10,7 @@ import {
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, Lead, supabase } from '../../lib/supabase'
-import { normalizeBrazilianInput } from '../../lib/phone'
+import { normalizeBrazilianInput, isBrazilianMobileLocal } from '../../lib/phone'
 import { startVoiceRecording, isMetaAcceptedAudio, UnsupportedAudioFormatError, type VoiceRecorderHandle } from '../../lib/voiceRecorder'
 import { CONVERSATION_NOTIFICATION_EVENT, type ConversationNotification } from '../layout/ConversationNotifier'
 import NewLeadModal from '../leads/NewLeadModal'
@@ -320,12 +320,14 @@ function conversationFromRow(conv: WhatsappConversation): Conversation {
 
 // Variantes de remote_jid de um telefone brasileiro: cru e com sufixo, com e
 // sem o 9º dígito — a mesma pessoa pode ter linha de 12 ou de 13 dígitos.
+// O 9 só é acrescentado pra celular (local 6–9); de 13 pra 12 sempre, pra
+// achar também a linha real de um fixo que ganhou um 9 inventado.
 function phoneJidVariants(digits: string): string[] {
   let d = digits.replace(/\D/g, '')
   if (!d.startsWith('55') && (d.length === 10 || d.length === 11)) d = '55' + d
   const set = new Set<string>([d])
-  if (d.length === 13 && d[4] === '9') set.add(d.slice(0, 4) + d.slice(5))
-  if (d.length === 12) set.add(d.slice(0, 4) + '9' + d.slice(4))
+  if (d.startsWith('55') && d.length === 13 && d[4] === '9') set.add(d.slice(0, 4) + d.slice(5))
+  if (d.startsWith('55') && d.length === 12 && isBrazilianMobileLocal(d[4])) set.add(d.slice(0, 4) + '9' + d.slice(4))
   return [...set].flatMap(v => [v, `${v}@s.whatsapp.net`])
 }
 
@@ -2674,8 +2676,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       }
     }
 
-    // Formato canônico pra conversa nova: 13 dígitos quando houver.
-    const target = [...rawVariants].find(v => v.length === 13) ?? [...rawVariants][0]
+    // Formato canônico pra conversa nova: 13 dígitos só pra celular; fixo e
+    // estrangeiro ficam como estão (src/lib/phone.ts).
+    const target = normalizeBrazilianInput(phone)
     const jid = `${target}@s.whatsapp.net`
     if (effectiveInstitutionId && user?.id) {
       try {
@@ -4954,13 +4957,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     if (!window.confirm('Bloquear este contato? Mensagens futuras serão ignoradas.')) return
                     setShowMoreMenu(false)
                     if (!activeId || !effectiveInstitutionId) return
-                    const normPhone = (() => {
-                      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-                      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-                      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-                      if (d.length === 11) d = '55' + d
-                      return d
-                    })()
+                    const normPhone = normalizeBrazilianInput(rawJid(activeId).replace(/@.*/, ''))
                     try {
                       await supabase.from('whatsapp_blacklist').insert({
                         institution_id: effectiveInstitutionId,
@@ -5688,13 +5685,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                     if (nameErr) throw nameErr
                                     if (!nameData || nameData.length === 0) throw new Error('Não foi possível salvar o nome — esta conversa não está atribuída a você.')
                                     setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
-                                    const normPhone = (() => {
-                                      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-                                      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-                                      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-                                      if (d.length === 11) d = '55' + d
-                                      return d
-                                    })()
+                                    const normPhone = normalizeBrazilianInput(rawJid(activeId).replace(/@.*/, ''))
                                     await supabase.from('whatsapp_contacts')
                                       .update({ name: editForm.name })
                                       .eq('institution_id', effectiveInstitutionId)

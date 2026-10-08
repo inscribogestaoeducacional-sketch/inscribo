@@ -160,6 +160,22 @@ function contentPreview(type: MsgType, message?: string, caption?: string, filen
   return '[Mídia]'
 }
 
+// ── Telefone BR: 9º dígito só em celular ─────────────────────────────────────
+// Mesma regra de api/whatsapp/webhook.ts:normalizePhone e src/lib/phone.ts
+// (api/ não importa de src/lib). Fixo (local 2–5) e estrangeiro não mudam.
+function normalizeBrPhone(raw: string): string {
+  const d = raw.replace(/@.*/, '').replace(/\D/g, '')
+  if (d.startsWith('55') && d.length === 12 && d[4] >= '6' && d[4] <= '9') return d.slice(0, 4) + '9' + d.slice(4)
+  return d
+}
+// Formas em que a conversa pode estar gravada: canônica e legada (sem o 9),
+// crua ou com @s.whatsapp.net.
+function brPhoneVariants(canonical: string): string[] {
+  const forms = [canonical]
+  if (/^55\d{2}9\d{8}$/.test(canonical)) forms.push(canonical.slice(0, 4) + canonical.slice(5))
+  return forms.flatMap(f => [f, `${f}@s.whatsapp.net`])
+}
+
 // ── Upload base64 to Supabase Storage → return public URL ────────────────────
 async function uploadToStorage(
   supabase: ReturnType<typeof createClient>,
@@ -345,8 +361,28 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
       )
     }
 
+    // ── Número de destino normalizado (9º dígito só em celular) ──
+    // A Meta recebe sempre o número canônico — atendente respondendo pela
+    // linha antiga de 12 dígitos deixa de mandar pro formato antigo. A
+    // mensagem é gravada na conversa que já existe (canônica, ou a legada
+    // enquanto ela não for renomeada/unificada), senão sumiria da tela.
+    const metaTo = normalizeBrPhone(String(to))
+    let storeJid: string = to
+    if (!isAionSend && institution_id) {
+      const variants = brPhoneVariants(metaTo)
+      const { data: convRows } = await supabase
+        .from('whatsapp_conversations')
+        .select('remote_jid')
+        .eq('institution_id', institution_id)
+        .in('remote_jid', variants)
+      const existing = (convRows || []).map((r: any) => r.remote_jid as string)
+      storeJid = existing.find(j => j.replace(/@.*/, '') === metaTo)
+        ?? existing[0]
+        ?? metaTo
+    }
+
     // ── Send via Meta Cloud API ──
-    const payload = buildPayload(to, type as MsgType, {
+    const payload = buildPayload(metaTo, type as MsgType, {
       message,
       mediaUrl:       resolvedMediaUrl,
       caption:        caption || undefined,
@@ -446,7 +482,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     // ── Persist message ──
     await supabase.from('whatsapp_messages').insert({
       institution_id:    isAionSend ? null : institution_id,
-      remote_jid:        to,
+      remote_jid:        storeJid,
       message_id:        wamid,
       instance_name:     'cloud-api',
       content:           type === 'text' ? message : (caption || preview),
@@ -473,7 +509,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     } else if (isAionSend) {
       convSelect = convSelect.eq('is_aion_inbox', true).eq('remote_jid', to)
     } else {
-      convSelect = convSelect.eq('institution_id', institution_id).eq('remote_jid', to)
+      convSelect = convSelect.eq('institution_id', institution_id).eq('remote_jid', storeJid)
     }
     const { data: convRow } = await convSelect.maybeSingle()
 
@@ -491,7 +527,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     } else if (isAionSend) {
       await convUpdate.eq('is_aion_inbox', true).eq('remote_jid', to)
     } else {
-      await convUpdate.eq('institution_id', institution_id).eq('remote_jid', to)
+      await convUpdate.eq('institution_id', institution_id).eq('remote_jid', storeJid)
     }
 
     return res.status(200).json({ success: true, wamid })

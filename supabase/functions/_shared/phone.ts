@@ -23,8 +23,10 @@ export function normalizePhone(raw: string): string {
 
   // Número brasileiro já com código do país: 55 + DDD(2) + [9] + local(8) = 12-13 dígitos
   if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
-    if (digits.length === 12) {
-      // Formato antigo de 8 dígitos locais: insere o 9º dígito obrigatório após o DDD
+    // Celular no formato antigo (local começando com 6 a 9): insere o 9º
+    // dígito após o DDD. Fixo (2 a 5) não ganha 9 — mesma regra de
+    // src/lib/phone.ts e api/whatsapp/webhook.ts.
+    if (digits.length === 12 && digits[4] >= '6' && digits[4] <= '9') {
       digits = digits.slice(0, 4) + '9' + digits.slice(4)
     }
     return digits

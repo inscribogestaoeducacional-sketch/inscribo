@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DatabaseService, Lead, supabase } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
+import { normalizeBrazilianInput } from '../../lib/phone'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS } from '../../lib/leadReminders'
 import NewLeadModal from './NewLeadModal'
@@ -1283,14 +1284,8 @@ export default function LeadKanban() {
       showToast('Este lead não tem telefone cadastrado', 'error')
       return
     }
-    const normPhone = (p: string): string => {
-      let d = p.replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    }
-    navigate(`/whatsapp?phone=${normPhone(lead.phone)}`)
+    // Mesma regra do resto do sistema: 9º dígito só em celular (src/lib/phone.ts).
+    navigate(`/whatsapp?phone=${normalizeBrazilianInput(lead.phone)}`)
   }
 
   const stats = getLeadStats()

@@ -84,9 +84,10 @@ function classifyMetaError(code: number | null, httpStatus: number | null): Erro
 
 // Igual a api/whatsapp/webhook.ts:normalizePhone — celular BR sempre com o 9º
 // dígito (13 dígitos), que é o formato em que o webhook grava remote_jid.
+// Fixo (local começando com 2 a 5) fica com 12: não existe 9 em fixo.
 function normalizePhone(raw: string): string {
   const d = raw.replace(/\D/g, '')
-  if (d.startsWith('55') && d.length === 12) return d.slice(0, 4) + '9' + d.slice(4)
+  if (d.startsWith('55') && d.length === 12 && d[4] >= '6' && d[4] <= '9') return d.slice(0, 4) + '9' + d.slice(4)
   return d
 }
 // Forma antiga (12 dígitos, sem o 9) — ainda existe em conversas legadas.
