@@ -11,6 +11,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, Lead, supabase } from '../../lib/supabase'
 import { normalizeBrazilianInput } from '../../lib/phone'
+import { startVoiceRecording, isMetaAcceptedAudio, UnsupportedAudioFormatError, type VoiceRecorderHandle } from '../../lib/voiceRecorder'
 import { CONVERSATION_NOTIFICATION_EVENT, type ConversationNotification } from '../layout/ConversationNotifier'
 import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
@@ -52,6 +53,23 @@ interface Message {
   quoted_from_me?: boolean
   reaction?: string | null
   reaction_attendant?: string | null
+  // Motivo da falha (status 'failed' vindo do webhook da Meta), já traduzido.
+  error_reason?: string | null
+}
+
+// Motivo legível pra uma falha de envio da Meta (whatsapp_messages.error_details,
+// gravado pelo webhook de status).
+function metaFailureReason(details: any): string | null {
+  const e = Array.isArray(details) ? details[0] : details
+  if (!e) return null
+  switch (Number(e.code)) {
+    case 131053: return 'Formato de mídia não aceito pelo WhatsApp.'
+    case 131047: return 'Janela de 24h fechada — envie um template para retomar a conversa.'
+    case 131042: return 'Problema de pagamento na conta do WhatsApp Business.'
+    case 131026: return 'O número não pôde receber a mensagem (sem WhatsApp ou bloqueado).'
+    case 131049: return 'A Meta limitou mensagens para este contato. Tente mais tarde.'
+  }
+  return e.error_data?.details || e.message || e.title || null
 }
 
 interface Label { text: string; color: string }
@@ -708,13 +726,14 @@ const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
 function MessageBubble({
-  msg, onImageClick, contactName, onReply, onReact,
+  msg, onImageClick, contactName, onReply, onReact, onRetry,
 }: {
   msg: Message
   onImageClick?: (url: string) => void
   contactName?: string
   onReply?: (m: Message) => void
   onReact?: (m: Message, emoji: string) => void
+  onRetry?: (m: Message) => void
 }) {
   const isMe = msg.from === 'me'
   const [hovered, setHovered]                 = useState(false)
@@ -900,7 +919,7 @@ function MessageBubble({
           </span>
           {isMe && (() => {
             if (msg.status === 'failed') {
-              return <span style={{ fontSize: 12, color: '#EF4444' }} title="Falha ao enviar">⚠</span>
+              return <span style={{ fontSize: 12, color: '#FECACA', fontWeight: 700 }} title={msg.error_reason || 'Falha ao enviar'}>⚠ Não enviada</span>
             }
             const color = msg.status === 'read' ? '#0DD3BF' : 'rgba(255,255,255,0.45)'
             const showDouble = msg.status === 'delivered' || msg.status === 'read'
@@ -932,6 +951,19 @@ function MessageBubble({
             whiteSpace: 'nowrap',
           }}>
             {reactionBadge}
+          </div>
+        )}
+        {/* Falha de envio: motivo + reenvio — antes parecia enviada */}
+        {isMe && msg.status === 'failed' && (
+          <div style={{ marginTop: 6, padding: '6px 8px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: '#B91C1C', flex: 1, lineHeight: 1.35 }}>
+              Não enviada{msg.error_reason ? ` — ${msg.error_reason}` : ''}
+            </span>
+            {onRetry && (
+              <button onClick={() => onRetry(msg)} style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#DC2626', border: 'none', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', flexShrink: 0 }}>
+                Reenviar
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1299,13 +1331,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const messagesScrollRef = useRef<HTMLDivElement>(null)
   const [loadingOlderId, setLoadingOlderId] = useState<string | null>(null)
   const [exhaustedOlder, setExhaustedOlder] = useState<Set<string>>(new Set())
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const waveformAnimRef = useRef<number | null>(null)
   const audioStreamRef = useRef<MediaStream | null>(null)
   const recordingMimeTypeRef = useRef<string>('')
+  const recordingExtRef = useRef<'ogg' | 'm4a'>('ogg')
+  const voiceRecRef = useRef<VoiceRecorderHandle | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const phoneParamHandledRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notifAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -1412,58 +1445,46 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         })
         audioStreamRef.current = stream
       }
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-      recordingMimeTypeRef.current = mimeType
-
-      const recorder = new MediaRecorder(stream, { mimeType })
-      audioChunksRef.current = []
-      recorder.ondataavailable = e => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      // Formato aceito pela Meta (ogg/opus ou mp4) — ver src/lib/voiceRecorder.ts.
+      // Nunca webm: o Chrome só grava webm e a Meta recusava todo áudio.
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      const ctx: AudioContext = new AudioCtx()
+      if (ctx.state === 'suspended') await ctx.resume().catch(() => {})
+      audioCtxRef.current = ctx
+      let handle: VoiceRecorderHandle
+      try {
+        handle = await startVoiceRecording(stream, ctx)
+      } catch (recErr: any) {
+        ctx.close().catch(() => {})
+        audioCtxRef.current = null
+        setSendError(recErr instanceof UnsupportedAudioFormatError ? recErr.message : 'Não foi possível iniciar a gravação de áudio.')
+        return
       }
-      recorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: mimeType })
-        setAudioBlob(blob)
-        const url = URL.createObjectURL(blob)
-        setAudioPreviewUrl(url)
-        if (waveformAnimRef.current) {
-          cancelAnimationFrame(waveformAnimRef.current)
-          waveformAnimRef.current = null
-        }
-        analyserRef.current = null
-        setWaveformBars(Array(20).fill(0.2))
-        setRecorderState('preview')
-      }
-      recorder.start(100)
-      mediaRecorderRef.current = recorder
+      voiceRecRef.current = handle
+      recordingMimeTypeRef.current = handle.mimeType
 
       setRecordingSeconds(0)
       recordingTimerRef.current = setInterval(() =>
         setRecordingSeconds(s => s + 1), 1000)
 
       try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
-        if (AudioCtx) {
-          const ctx = new AudioCtx()
-          const src = ctx.createMediaStreamSource(stream)
-          const analyser = ctx.createAnalyser()
-          analyser.fftSize = 64
-          src.connect(analyser)
-          analyserRef.current = analyser
-          const animate = () => {
-            if (!analyserRef.current) return
-            const data = new Uint8Array(analyserRef.current.frequencyBinCount)
-            analyserRef.current.getByteFrequencyData(data)
-            const bars = Array.from({ length: 20 }, (_, i) => {
-              const idx = Math.floor(i * data.length / 20)
-              return Math.max(0.1, (data[idx] ?? 0) / 255)
-            })
-            setWaveformBars(bars)
-            waveformAnimRef.current = requestAnimationFrame(animate)
-          }
+        const src = ctx.createMediaStreamSource(stream)
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = 64
+        src.connect(analyser)
+        analyserRef.current = analyser
+        const animate = () => {
+          if (!analyserRef.current) return
+          const data = new Uint8Array(analyserRef.current.frequencyBinCount)
+          analyserRef.current.getByteFrequencyData(data)
+          const bars = Array.from({ length: 20 }, (_, i) => {
+            const idx = Math.floor(i * data.length / 20)
+            return Math.max(0.1, (data[idx] ?? 0) / 255)
+          })
+          setWaveformBars(bars)
           waveformAnimRef.current = requestAnimationFrame(animate)
         }
+        waveformAnimRef.current = requestAnimationFrame(animate)
       } catch {}
 
       setRecorderState('recording')
@@ -1486,21 +1507,37 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }
 
-  const stopRecordingForPreview = () => {
-    const recorder = mediaRecorderRef.current
-    if (!recorder || recorder.state === 'inactive') return
-    recorder.stop()
+  const stopRecordingForPreview = async () => {
+    const handle = voiceRecRef.current
+    if (!handle) return
+    voiceRecRef.current = null
     // [FIX P1] Do NOT stop the stream here — keep it alive so the next startRecording
     // can reuse it without triggering a new Chrome permission prompt.
     if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null }
+    if (waveformAnimRef.current) { cancelAnimationFrame(waveformAnimRef.current); waveformAnimRef.current = null }
+    analyserRef.current = null
+    setWaveformBars(Array(20).fill(0.2))
+    try {
+      const recording = await handle.stop()
+      recordingExtRef.current = recording.ext
+      setAudioBlob(recording.blob)
+      setAudioPreviewUrl(URL.createObjectURL(recording.blob))
+      setRecorderState('preview')
+    } catch (err) {
+      console.error('[AUDIO] falha ao finalizar gravação', err)
+      setSendError('Não foi possível finalizar a gravação. Tente de novo.')
+      setRecorderState('idle')
+    } finally {
+      audioCtxRef.current?.close().catch(() => {})
+      audioCtxRef.current = null
+    }
   }
 
   const cancelRecording = () => {
-    const recorder = mediaRecorderRef.current
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.onstop = null
-      recorder.stop()
-    }
+    voiceRecRef.current?.cancel()
+    voiceRecRef.current = null
+    audioCtxRef.current?.close().catch(() => {})
+    audioCtxRef.current = null
     audioStreamRef.current?.getTracks().forEach(t => t.stop())
     if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null }
     if (waveformAnimRef.current) { cancelAnimationFrame(waveformAnimRef.current); waveformAnimRef.current = null }
@@ -1526,7 +1563,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const blob = audioBlob
     const mimeType = recordingMimeTypeRef.current || blob.type
     console.log('[AUDIO] sendAudio blob.size:', blob.size, 'mimeType:', mimeType)
-    const filename = `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}`
+    // Rede de segurança: a Meta recusa webm (131053). Nunca subir/enviar.
+    if (!isMetaAcceptedAudio(mimeType)) {
+      setSendError('Este áudio foi gravado num formato que o WhatsApp não aceita e não foi enviado. Atualize a página e grave de novo.')
+      discardAudio()
+      return
+    }
+    const filename = `audio-${Date.now()}.${recordingExtRef.current}`
 
     if (blob.size > MEDIA_SIZE_LIMITS.audio) {
       setSendError(`${MEDIA_TYPE_LABELS.audio} podem ter até ${formatMB(MEDIA_SIZE_LIMITS.audio)}MB — esse áudio tem ${formatMB(blob.size)}MB.`)
@@ -1716,6 +1759,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       quoted_from_me:    newMsg.quoted_from_me,
       reaction:           (newMsg as any).reaction || null,
       reaction_attendant: (newMsg as any).reaction_attendant || null,
+      error_reason: newMsg.status === 'failed' ? metaFailureReason((newMsg as any).error_details) : null,
     }
     setConversations(prev => {
       const normJid = normalizeJid(newMsg.remote_jid)
@@ -2156,6 +2200,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     status:             (updated.status as Message['status']) || m.status,
                     reaction:           updated.reaction           !== undefined ? updated.reaction           : m.reaction,
                     reaction_attendant: updated.reaction_attendant !== undefined ? updated.reaction_attendant : m.reaction_attendant,
+                    // Status 'failed' do webhook da Meta chega aqui — mostra o motivo.
+                    error_reason:       updated.status === 'failed' ? metaFailureReason((updated as any).error_details) : m.error_reason,
                   }
                 : m
             ),
@@ -2382,7 +2428,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (isAionInbox) {
       let q = supabase
         .from('whatsapp_messages')
-        .select('id, remote_jid, from_me, message_id, message_type, content, media_url, contact_name, lead_id, timestamp, status, quoted_message_id, quoted_content, quoted_from_me, reaction, reaction_attendant')
+        .select('id, remote_jid, from_me, message_id, message_type, content, media_url, contact_name, lead_id, timestamp, status, quoted_message_id, quoted_content, quoted_from_me, reaction, reaction_attendant, error_details')
         .eq('is_aion_inbox', true)
         .or(`remote_jid.eq.${rawJid(jid)},remote_jid.eq.${jid}`)
       if (beforeTimestamp) q = q.lt('timestamp', beforeTimestamp)
@@ -2414,6 +2460,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         quoted_from_me:    m.quoted_from_me,
         reaction:           (m as any).reaction || null,
         reaction_attendant: (m as any).reaction_attendant || null,
+        error_reason: m.status === 'failed' ? metaFailureReason((m as any).error_details) : null,
       }))
   }
 
@@ -4287,6 +4334,59 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }).catch(() => {})
   }
 
+  // Reenvio simples de uma mensagem que a Meta recusou: manda de novo o mesmo
+  // conteúdo (texto ou mídia já no Storage). A original continua marcada como
+  // "não enviada"; a nova chega pelo Realtime como qualquer envio.
+  const [retryingId, setRetryingId] = useState<string | null>(null)
+  const handleRetryMessage = async (msg: Message) => {
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox) || retryingId) return
+    if (msg.type === 'audio' && /\.webm(\?|$)/i.test(msg.media_url || '')) {
+      setSendError('Este áudio foi gravado num formato que o WhatsApp não aceita (webm) e não pode ser reenviado. Grave de novo.')
+      return
+    }
+    if (msg.isTemplate || !['text', 'audio', 'image', 'video', 'document'].includes(msg.type) || (msg.type !== 'text' && !msg.media_url)) {
+      setSendError('Esta mensagem não pode ser reenviada automaticamente. Envie de novo pelo campo de mensagem ou pelos templates.')
+      return
+    }
+    if (windowExpired) {
+      setSendError('A janela de 24h está fechada — envie um template para retomar a conversa.')
+      return
+    }
+    const conv = conversationsRef.current.find(c => c.id === activeId)
+    if (conv && !conv.assigned_user_id && conv.status === 'waiting') {
+      if (!(await claimActiveConversation(activeId))) return
+    }
+    setRetryingId(msg.id)
+    try {
+      const to = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify({
+          institution_id: effectiveInstitutionId || undefined,
+          isAionSend: isAionInbox,
+          to,
+          type: msg.type,
+          ...(msg.type === 'text'
+            ? { message: msg.content }
+            : { mediaUrl: msg.media_url, ...(msg.type === 'document' ? { filename: msg.fileName || msg.content || 'documento' } : {}) }),
+          sender_name: user?.full_name,
+          sender_user_id: user?.id,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Não foi possível reenviar.')
+      }
+      setHubToast('Mensagem reenviada')
+      setTimeout(() => setHubToast(null), 3000)
+    } catch (err: any) {
+      setSendError(err?.message || 'Não foi possível reenviar.')
+    } finally {
+      setRetryingId(null)
+    }
+  }
+
   const handleReact = async (msg: Message, emoji: string) => {
     if (!msg.message_id || !activeId) return
     const rJid = rawJid(activeId)
@@ -4954,7 +5054,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     </span>
                   </div>
                 ) : (
-                  <MessageBubble key={item.msg.id} msg={item.msg} onImageClick={url => setLightboxUrl(url)} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} onReact={handleReact} />
+                  <MessageBubble key={item.msg.id} msg={item.msg} onImageClick={url => setLightboxUrl(url)} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} onReact={handleReact} onRetry={retryingId ? undefined : handleRetryMessage} />
                 ))}
               </div>
             ))}

@@ -806,7 +806,7 @@ export class DatabaseService {
   // — confirmado via pg_stat_statements que SELECT * nesta tabela era o maior
   // consumidor de I/O do banco (87.817 chamadas, 400ms média, 9h46min total).
   private static readonly WHATSAPP_MESSAGE_COLUMNS =
-    'id, institution_id, remote_jid, from_me, message_id, message_type, content, media_url, contact_name, lead_id, timestamp, created_at, status, direction, quoted_message_id, quoted_content, quoted_from_me, reaction, reaction_attendant'
+    'id, institution_id, remote_jid, from_me, message_id, message_type, content, media_url, contact_name, lead_id, timestamp, created_at, status, direction, quoted_message_id, quoted_content, quoted_from_me, reaction, reaction_attendant, error_details'
 
   // WhatsApp Messages
   // ATENÇÃO: histórico institucional inteiro, não de uma conversa — só usada

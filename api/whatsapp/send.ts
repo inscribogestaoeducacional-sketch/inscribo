@@ -255,6 +255,10 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'templateName é obrigatório para type=template' })
   if (type !== 'text' && type !== 'template' && !mediaUrl && !base64)
     return res.status(400).json({ error: `mediaUrl ou base64 é obrigatório para type=${type}` })
+  // A Meta recusa áudio webm (erro 131053) depois de aceitar a requisição —
+  // o envio parecia ok e falhava em silêncio. Bloqueia antes, com motivo claro.
+  if (type === 'audio' && (/\.webm(\?|$)/i.test(String(mediaUrl || '')) || /webm/i.test(String(mimetype || ''))))
+    return res.status(400).json({ error: 'Áudio em formato webm não é aceito pelo WhatsApp. Grave de novo pelo Hub atualizado.' })
 
   // ── Auth — este endpoint roda com service role logo abaixo (precisa pra
   // gravar em whatsapp_messages/conversations normalmente), então RLS não
