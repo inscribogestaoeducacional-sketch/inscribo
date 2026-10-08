@@ -25,31 +25,18 @@ export default function ProposalView() {
   }, [token])
 
   const loadProposal = async () => {
-    const { data, error } = await supabase
-      .from('proposals')
-      .select('*')
-      .eq('view_token', token)
-      .single()
-
+    // Anônimo não lê a tabela (migration 20261008150000): a função devolve só
+    // a proposta deste token e já registra a visualização.
+    const { data, error } = await supabase.rpc('proposal_public_view', { p_token: token })
     if (error || !data) { setNotFound(true); setLoading(false); return }
     setProposal(data)
     setLoading(false)
-
-    await supabase.from('proposals').update({
-      view_count:      (data.view_count || 0) + 1,
-      first_viewed_at: data.first_viewed_at || new Date().toISOString(),
-      last_viewed_at:  new Date().toISOString(),
-      status: ['sent', 'delivered'].includes(data.status) ? 'opened' : data.status,
-    }).eq('view_token', token)
   }
 
   const handleFeedback = async (type: 'accepted' | 'thinking') => {
     if (!proposal || submitting) return
     setSubmitting(true)
-    await supabase
-      .from('proposals')
-      .update({ status: type === 'accepted' ? 'accepted' : 'rejected' })
-      .eq('id', proposal.id)
+    await supabase.rpc('proposal_public_feedback', { p_token: token, p_accepted: type === 'accepted' })
     setFeedback(type)
     setSubmitting(false)
   }
