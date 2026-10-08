@@ -27,3 +27,7 @@ dist-ssr
 
 # Relatórios locais com dados sensíveis (PII de contatos/leads) — nunca commitar
 local-reports/
+
+# Divulgação: mídias geradas (PNG/MP4) ficam fora do git — só o calendário e os scripts são versionados
+docs/marketing/artes/
+docs/marketing/reels/
