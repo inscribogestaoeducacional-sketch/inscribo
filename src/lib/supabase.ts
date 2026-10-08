@@ -17,6 +17,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 // Types
+// whatsapp_phone_numbers sem access_token: a coluna não tem privilégio pro
+// navegador (migration 20261008140000) — select('*') nessa tabela dá
+// "permission denied" pra qualquer usuário. Sempre selecionar por esta lista.
+export const WHATSAPP_PHONE_COLUMNS =
+  'id,institution_id,phone_number_id,phone_number,display_name,waba_id,is_active,created_at,use_meta_api,school_group_id,connection_method,token_expires_at'
+
 export interface Lead {
   id: string
   student_name: string

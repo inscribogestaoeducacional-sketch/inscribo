@@ -7,7 +7,7 @@
 // (resolveOrRouteGroupSharedContact).
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
+import { supabase, WHATSAPP_PHONE_COLUMNS } from '../../lib/supabase'
 import { platformAdmin } from '../../lib/platformAdmin'
 import SuperAdminLayout from './SuperAdminLayout'
 import FlowEditor from '../whatsapp/FlowEditor'
@@ -185,7 +185,7 @@ function SchoolGroupDetail({ id }: { id: string }) {
       supabase.from('school_groups').select('*').eq('id', id).maybeSingle(),
       supabase.from('institutions').select('id, name, city, school_group_id').eq('school_group_id', id).order('name'),
       supabase.from('institutions').select('id, name, city, school_group_id').is('school_group_id', null).order('name'),
-      supabase.from('whatsapp_phone_numbers').select('*').eq('school_group_id', id).maybeSingle(),
+      supabase.from('whatsapp_phone_numbers').select(WHATSAPP_PHONE_COLUMNS).eq('school_group_id', id).maybeSingle(),
     ])
     setGroup(grp as SchoolGroup)
     setMapRows((grp as SchoolGroup)?.menu_institution_map || [])

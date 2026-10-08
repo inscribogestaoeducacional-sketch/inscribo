@@ -1,7 +1,7 @@
 // src/components/superadmin/AdminSchools.tsx
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
+import { supabase, WHATSAPP_PHONE_COLUMNS } from '../../lib/supabase'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { toReenrollFraction } from '../../lib/campaignApply'
 import SuperAdminLayout from './SuperAdminLayout'
@@ -866,7 +866,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
           .select('whatsapp_phone_id,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
           .eq('id', inst.id).single(),
         supabase.from('whatsapp_phone_numbers')
-          .select('*')
+          .select(WHATSAPP_PHONE_COLUMNS)
           .eq('institution_id', inst.id)
           .maybeSingle(),
       ])
@@ -1289,7 +1289,7 @@ export default function AdminSchools() {
       supabase.from('campaign_cycles')
         .select('institution_id, status, year, id, start_date, end_date, campaign_start_month, label')
         .order('created_at', { ascending: false }),
-      supabase.from('whatsapp_phone_numbers').select('*'),
+      supabase.from('whatsapp_phone_numbers').select(WHATSAPP_PHONE_COLUMNS),
       supabase.from('whatsapp_conversation_usage')
         .select('institution_id, initiated_count, limit_count')
         .eq('month_year', monthYear),
