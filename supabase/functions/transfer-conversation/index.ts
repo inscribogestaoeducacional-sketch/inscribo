@@ -100,7 +100,7 @@ serve(async (req) => {
 
     const { data: conv, error: convErr } = await admin
       .from('whatsapp_conversations')
-      .select('id, institution_id, assigned_user_id, status, last_message_at')
+      .select('id, institution_id, remote_jid, contact_name, assigned_user_id, assigned_user_name, status, last_message_at')
       .eq('institution_id', institutionId)
       .in('remote_jid', [raw, norm])
       .maybeSingle()
@@ -140,7 +140,7 @@ serve(async (req) => {
     // ── 4. O novo responsável precisa ser da mesma instituição ──
     const { data: targetUser } = await admin
       .from('users')
-      .select('id, institution_id, active')
+      .select('id, institution_id, active, full_name')
       .eq('id', newUserId)
       .maybeSingle()
 
@@ -150,28 +150,33 @@ serve(async (req) => {
       })
     }
 
+    // Dono anterior lido do banco (não do corpo da requisição): é ele que
+    // aparece na linha de sistema e recebe o aviso.
+    const prevOwnerId   = conv.assigned_user_id as string | null
+    const prevOwnerName = (conv.assigned_user_name as string | null) || null
+    const { data: callerRow } = await admin.from('users').select('full_name, email').eq('id', callerId).maybeSingle()
+    const callerName = callerRow?.full_name || callerRow?.email || fromUserName || 'Alguém'
+    const targetName = targetUser.full_name || newUserName
+
     // ── 5. Update com service role — o trigger trg_snapshot_visibility_on_transfer
     //    continua disparando normalmente (é um trigger de tabela, roda
     //    independente de qual role fez o UPDATE), preservando o acesso do
     //    atendente anterior ao histórico como sempre fez. ──
-    // unread_count zerado aqui: sem isso, o contador acumulado antes da
-    // transferência sobrevive no badge do novo atendente, mas
-    // whatsapp_messages_select só libera pra ele mensagens com
-    // timestamp >= transferred_at — as mensagens que geraram aquele contador
-    // ficam invisíveis, então o badge mostra "não lidas" que não existem
-    // pra quem está olhando.
+    // unread_count = 1: a conversa chega como nova (não lida) pra quem recebe.
+    // Não preserva o contador acumulado: whatsapp_messages_select só libera
+    // pro novo dono restrito mensagens com timestamp >= transferred_at, então
+    // o número antigo contaria mensagens que ele nem consegue ver.
     const updatePayload: Record<string, unknown> = {
       assigned_user_id:   newUserId,
-      assigned_user_name: newUserName,
+      assigned_user_name: targetName,
       transferred_at:     new Date().toISOString(),
-      unread_count:       0,
-      // Transferida pra um humano: robô desligado e 'open' (não 'waiting'
-      // com dono). Antes a conversa podia seguir com bot_active=true e o
-      // cron process_bot_timeouts a tirava do novo atendente.
+      unread_count:       1,
+      // Transferida pra um humano: robô desligado e 'open' — inclusive a
+      // partir de 'closed' ("Atribuir" numa concluída reabre pro destino).
       bot_active:         false,
+      status:             'open',
     }
-    if (conv.status !== 'closed') updatePayload.status = 'open'
-    if (fromUserId) updatePayload.transferred_from = fromUserId
+    if (prevOwnerId) updatePayload.transferred_from = prevOwnerId
 
     const { error: updateErr } = await admin
       .from('whatsapp_conversations')
@@ -183,6 +188,43 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: updateErr.message }), {
         status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
       })
+    }
+
+    // ── 6. Evento e avisos gravados aqui, no servidor — antes o navegador
+    //    gravava o evento depois, e ele se perdia se a aba fechasse. ──
+    const contactLabel = conv.contact_name || String(conv.remote_jid)
+    const description = prevOwnerId
+      ? `Transferida de ${prevOwnerName || 'outro atendente'} para ${targetName}`
+      : `Transferida da fila para ${targetName}`
+    const { error: eventErr } = await admin.from('whatsapp_conversation_events').insert({
+      institution_id: institutionId,
+      remote_jid:     raw,
+      event_type:     'transfer',
+      description:    callerId !== prevOwnerId && callerId !== newUserId ? `${description} (por ${callerName})` : description,
+      user_id:        callerId,
+      user_name:      callerName,
+      metadata:       { from_user_id: prevOwnerId, to_user_id: newUserId, by_user_id: callerId },
+    })
+    if (eventErr) console.error('[transfer-conversation] event error:', eventErr.message)
+
+    const notifications: Record<string, unknown>[] = []
+    if (newUserId !== callerId) {
+      notifications.push({
+        user_id: newUserId, institution_id: institutionId, type: 'conversation_transferred',
+        title: `${callerName} transferiu uma conversa para você`, body: contactLabel,
+        remote_jid: conv.remote_jid, conversation_id: conv.id, actor_user_id: callerId,
+      })
+    }
+    if (prevOwnerId && prevOwnerId !== callerId && prevOwnerId !== newUserId) {
+      notifications.push({
+        user_id: prevOwnerId, institution_id: institutionId, type: 'conversation_taken',
+        title: `${callerName} transferiu uma conversa sua para ${targetName}`, body: contactLabel,
+        remote_jid: conv.remote_jid, conversation_id: conv.id, actor_user_id: callerId,
+      })
+    }
+    if (notifications.length) {
+      const { error: notifErr } = await admin.from('user_notifications').insert(notifications)
+      if (notifErr) console.error('[transfer-conversation] notification error:', notifErr.message)
     }
 
     return new Response(JSON.stringify({ success: true }), {

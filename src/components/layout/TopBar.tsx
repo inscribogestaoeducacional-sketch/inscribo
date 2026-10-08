@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { LogOut, Settings, User, Menu, Network, ChevronDown } from 'lucide-react'
 import NotificationBell from './NotificationBell'
+import ConversationNotifier from './ConversationNotifier'
 
 // Seletor de instituição — troca a instituição ativa (ver
 // AuthContext.switchInstitution) sem precisar logout/login. Aparece pra
@@ -159,6 +160,8 @@ export default function TopBar() {
 
         {/* Bell */}
         <NotificationBell institutionId={user?.institution_id || null} isSuperAdmin={user?.user_type === 'admin_geral'} />
+        {/* Avisos de conversa do WhatsApp por pessoa (transferência, assumida) */}
+        <ConversationNotifier userId={user?.id || null} />
 
         {/* Disponível / Ausente */}
         {user?.id && <AvailabilityToggle userId={user.id} initialAvailable={user.is_available ?? true} />}

@@ -11,6 +11,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, Lead, supabase } from '../../lib/supabase'
 import { normalizeBrazilianInput } from '../../lib/phone'
+import { CONVERSATION_NOTIFICATION_EVENT, type ConversationNotification } from '../layout/ConversationNotifier'
 import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
@@ -332,14 +333,23 @@ function fmtDateSep(d: Date) {
   return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })
 }
 
-function groupByDate(msgs: Message[]): { label: string; msgs: Message[] }[] {
-  const map = new Map<string, Message[]>()
-  msgs.forEach(m => {
-    const key = m.ts.toDateString()
+// Mensagens + linhas de sistema (eventos de dono) na mesma linha do tempo,
+// agrupadas por dia como as mensagens.
+type TimelineItem = { kind: 'msg'; msg: Message } | { kind: 'event'; id: string; ts: Date; text: string }
+function groupTimelineByDate(msgs: Message[], events: { id: string; ts: Date; text: string }[]): { label: string; items: TimelineItem[] }[] {
+  const items: TimelineItem[] = [
+    ...msgs.map(msg => ({ kind: 'msg' as const, msg })),
+    ...events.map(e => ({ kind: 'event' as const, ...e })),
+  ]
+  const tsOf = (i: TimelineItem) => (i.kind === 'msg' ? i.msg.ts : i.ts)
+  items.sort((a, b) => tsOf(a).getTime() - tsOf(b).getTime())
+  const map = new Map<string, TimelineItem[]>()
+  items.forEach(i => {
+    const key = tsOf(i).toDateString()
     if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(m)
+    map.get(key)!.push(i)
   })
-  return Array.from(map.entries()).map(([, ms]) => ({ label: fmtDateSep(ms[0].ts), msgs: ms }))
+  return Array.from(map.values()).map(list => ({ label: fmtDateSep(tsOf(list[0])), items: list }))
 }
 
 function buildTemplatePreview(tmpl: any, vars: Record<string, string>): string {
@@ -1868,6 +1878,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (data) { setLeadModalTarget(data as Lead); setShowLeadModal(true) }
   }
 
+  // Linhas de sistema da conversa aberta (assumiu / transferiu / resgatou),
+  // intercaladas com as mensagens por horário. Só pra atendentes — vêm de
+  // whatsapp_conversation_events, nunca vão pra Meta.
+  const [chatEvents, setChatEvents] = useState<{ id: string; ts: Date; text: string }[]>([])
+  const chatEventsJidRef = useRef<string | null>(null)
+  const loadChatEvents = async (jid: string) => {
+    if (!effectiveInstitutionId || !jid) return
+    chatEventsJidRef.current = jid
+    const events = await DatabaseService.getConversationEvents(effectiveInstitutionId, rawJid(jid))
+    if (chatEventsJidRef.current !== jid) return
+    setChatEvents(events
+      .filter(e => ['assignment', 'transfer', 'rescue'].includes(e.event_type) && e.description)
+      .map(e => ({ id: e.id, ts: new Date(e.created_at), text: e.description as string })))
+  }
+
   const loadHistory = async (jid: string) => {
     if (!effectiveInstitutionId || !jid) return
     setHistoryLoading(true)
@@ -1939,8 +1964,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         name: conv.contact_name || existing.name,
         status: (conv.status ?? existing.status) as ConvStatus,
         unreadCount: conv.unread_count ?? existing.unreadCount,
-        assigned_user_id: conv.assigned_user_id ?? existing.assigned_user_id,
-        assigned_user_name: conv.assigned_user_name ?? existing.assigned_user_name,
+        // Valor do banco mesmo quando nulo: com `??` uma conversa devolvida
+        // à fila continuava com o dono antigo na tela.
+        assigned_user_id: conv.assigned_user_id ?? undefined,
+        assigned_user_name: conv.assigned_user_name ?? undefined,
         contact_type: conv.contact_type ?? existing.contact_type,
         tags: conv.tags || existing.tags,
         profile_picture_url: conv.profile_picture_url ?? existing.profile_picture_url,
@@ -2178,6 +2205,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           return
         }
 
+        // Conversa que ainda não está na lista local (ex.: transferida pra mim,
+        // restrito que não a enxergava antes): o Realtime só entrega o UPDATE
+        // se o RLS já me deixa ver a linha — então entra na lista na hora.
+        // Antes era ignorada até recarregar a página.
+        if (payload.new?.remote_jid && !conversationsRef.current.some(c => c.id === normJid)) {
+          const row = payload.new as WhatsappConversation
+          if (!row.remote_jid.endsWith('@g.us')) {
+            setConversations(prev => prev.some(c => c.id === normJid) ? prev : [conversationFromRow(row), ...prev])
+          }
+          return
+        }
+
         setConversations(prev => prev.map(c => {
           if (c.id !== normJid) return c
           return {
@@ -2195,6 +2234,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             // estado do bot/janela ficava desatualizado até um reload manual,
             // aparentando ter "voltado ao estado inicial".
             bot_active:                'bot_active'                in payload.new ? payload.new.bot_active                : c.bot_active,
+            // Transferência marca não lida (1) pra quem recebe.
+            unreadCount:               'unread_count'              in payload.new ? (payload.new.unread_count ?? 0)        : c.unreadCount,
             last_customer_message_at:  'last_customer_message_at'  in payload.new ? payload.new.last_customer_message_at  : c.last_customer_message_at,
             notes:                     'notes'                     in payload.new ? payload.new.notes                     : c.notes,
             capture_trigger_id:        'capture_trigger_id'        in payload.new ? payload.new.capture_trigger_id        : c.capture_trigger_id,
@@ -2279,6 +2320,48 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Dono nas deps: ao assumir a conversa que já está aberta, ela vira "minha"
   // e as não lidas são zeradas na hora, sem precisar reabrir.
   }, [activeId, activeOwnerId])
+
+  // Linhas de sistema: recarrega ao abrir e sempre que o dono muda (assumir,
+  // transferir — inclusive feito por outra pessoa, via Realtime).
+  useEffect(() => {
+    if (!activeId || isAionInbox) { setChatEvents([]); chatEventsJidRef.current = null; return }
+    loadChatEvents(activeId)
+  }, [activeId, activeOwnerId])
+
+  // Avisos por pessoa (ConversationNotifier, no TopBar): conversa transferida
+  // pra mim entra na lista na hora, mesmo que não estivesse carregada;
+  // conversa minha assumida por outra pessoa é atualizada — e sai da lista se
+  // eu (atendente restrito) deixei de enxergá-la.
+  useEffect(() => {
+    if (isAionInbox) return
+    const handler = async (ev: Event) => {
+      const n = (ev as CustomEvent<ConversationNotification>).detail
+      if (!n?.remote_jid || !effectiveInstitutionId || n.institution_id !== effectiveInstitutionId) return
+      const convId = normalizeJid(n.remote_jid)
+      const { data: row } = await supabase
+        .from('whatsapp_conversations')
+        .select('*')
+        .eq('institution_id', effectiveInstitutionId)
+        .in('remote_jid', [rawJid(convId), convId])
+        .limit(1)
+        .maybeSingle()
+      if (!row) {
+        setConversations(prev => prev.filter(c => c.id !== convId))
+        if (activeIdRef.current === convId) setActiveId(null)
+        return
+      }
+      const fresh = conversationFromRow(row as WhatsappConversation)
+      setConversations(prev => prev.some(c => c.id === convId)
+        ? prev.map(c => c.id === convId
+            ? { ...c, status: fresh.status, assigned_user_id: fresh.assigned_user_id, assigned_user_name: fresh.assigned_user_name, bot_active: fresh.bot_active, unreadCount: fresh.unreadCount }
+            : c)
+        : [fresh, ...prev]
+      )
+      if (activeIdRef.current === convId) loadChatEvents(convId)
+    }
+    window.addEventListener(CONVERSATION_NOTIFICATION_EVENT, handler)
+    return () => window.removeEventListener(CONVERSATION_NOTIFICATION_EVENT, handler)
+  }, [effectiveInstitutionId, isAionInbox])
 
   // Busca só as mensagens da conversa `jid` (nunca a instituição inteira) —
   // escopada por remote_jid, colunas explícitas sem raw_data, limite de 100.
@@ -2414,25 +2497,29 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // garantir que o estado local reflita o banco sem esperar o Realtime (que
   // também cobre isso via o listener de UPDATE em whatsapp_conversations,
   // mas pode chegar com atraso).
-  const refreshConversationRow = async (convId: string) => {
-    if (!effectiveInstitutionId) return
+  // Retorna false quando a linha não é (mais) visível pra mim — ex.: um
+  // admin assumiu a conversa de um atendente restrito.
+  const refreshConversationRow = async (convId: string): Promise<boolean> => {
+    if (!effectiveInstitutionId) return false
     const { data } = await supabase
       .from('whatsapp_conversations')
-      .select('status, assigned_user_id, assigned_user_name, bot_active')
+      .select('status, assigned_user_id, assigned_user_name, bot_active, unread_count')
       .eq('institution_id', effectiveInstitutionId)
       .eq('remote_jid', rawJid(convId))
       .maybeSingle()
-    if (!data) return
+    if (!data) return false
     setConversations(prev => prev.map(c => c.id === convId
       ? {
           ...c,
           status: (data.status ?? c.status) as ConvStatus,
-          assigned_user_id: data.assigned_user_id ?? c.assigned_user_id,
-          assigned_user_name: data.assigned_user_name ?? c.assigned_user_name,
+          assigned_user_id: data.assigned_user_id ?? undefined,
+          assigned_user_name: data.assigned_user_name ?? undefined,
           bot_active: data.bot_active ?? (c as any).bot_active,
+          unreadCount: data.unread_count ?? c.unreadCount,
         }
       : c
     ))
+    return true
   }
 
   // Lazy-load messages for conversations that had none after the initial bulk fetch
@@ -3014,6 +3101,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 </span>
               )}
 
+              {/* Robô ainda conversando com o cliente nesta conversa da fila */}
+              {isFree && conv.bot_active && (
+                <span title="O robô está atendendo. Ele para quando alguém assume a conversa." style={{
+                  fontSize: 9, fontWeight: 700, color: '#059669',
+                  background: '#D1FAE5', border: '1px solid #A7F3D0',
+                  padding: '2px 6px', borderRadius: 999, whiteSpace: 'nowrap',
+                }}>
+                  🤖 robô atendendo
+                </span>
+              )}
+
               {/* Unread badge */}
               {conv.unreadCount > 0 && (
                 <span style={{
@@ -3039,37 +3137,61 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // no envio da primeira mensagem quanto no botão "Assumir conversa" — mesmo
   // comportamento nos dois casos. UPDATE atômico (WHERE assigned_user_id IS
   // NULL): se outro atendente já respondeu/assumiu primeiro, retorna false.
-  const claimActiveConversation = async (convId: string): Promise<boolean> => {
+  // Assumir passa sempre pela RPC assume_conversation: a regra (fila, admin/
+  // gestor, acesso total com confirmação, restrito recusado) é aplicada no
+  // servidor, que também grava o evento e avisa o dono anterior.
+  //   mode 'queue'    → só assume se estiver sem dono (fila / primeira mensagem)
+  //   mode 'explicit' → botão "Assumir conversa": admin/gestor sem pergunta,
+  //                     acesso total com confirmação
+  //   mode 'implicit' → ação que tomaria a conversa de outro (template, robô):
+  //                     sempre confirma
+  const assumeConversation = async (
+    convId: string,
+    mode: 'queue' | 'explicit' | 'implicit',
+  ): Promise<boolean> => {
     if (!effectiveInstitutionId || !user?.id) return false
-    const rJid = rawJid(convId)
-    const claimed = await DatabaseService.claimConversationIfUnassigned(
-      effectiveInstitutionId, rJid, user.id, user.full_name || user.email
-    )
+    const conv = conversationsRef.current.find(c => c.id === convId)
+    if (conv?.assigned_user_id === user.id) return true
+    const ownerName = conv?.assigned_user_name || 'Outro atendente'
+    const hasOwner = !!conv?.assigned_user_id
+    if (hasOwner && mode === 'queue') {
+      setSendError(`Essa conversa já foi assumida por ${ownerName}.`)
+      return false
+    }
+    const askFirst = hasOwner && (mode === 'implicit' || !isPrivilegedRole)
+    if (askFirst && !window.confirm(`${ownerName} está atendendo. Assumir mesmo assim?`)) return false
 
-    if (!claimed) {
-      setSendError('Essa conversa já foi assumida por outro atendente.')
+    try {
+      let result = await DatabaseService.assumeConversation(rawJid(convId), hasOwner)
+      if (result.status === 'needs_confirmation') {
+        // O dono mudou entre a tela e o servidor — confirma com o nome atual.
+        if (mode === 'queue' || !window.confirm(`${result.owner_name || 'Outro atendente'} está atendendo. Assumir mesmo assim?`)) {
+          if (mode === 'queue') setSendError(`Essa conversa já foi assumida por ${result.owner_name || 'outro atendente'}.`)
+          await refreshConversationRow(convId)
+          return false
+        }
+        result = await DatabaseService.assumeConversation(rawJid(convId), true)
+      }
+    } catch (err: any) {
+      setSendError(err?.message || 'Não foi possível assumir esta conversa.')
       await refreshConversationRow(convId)
       return false
     }
-
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
-      remote_jid: rJid,
-      event_type: 'assignment',
-      description: `${user.full_name || user.email} assumiu a conversa`,
-      user_id: user.id,
-    })
 
     setConversations(prev => prev.map(c => c.id === convId
       ? { ...c, status: 'open' as ConvStatus, bot_active: false, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
       : c
     ))
+    loadChatEvents(convId)
     return true
   }
 
+  // Fila / primeira mensagem — mesmo nome de antes pros chamadores.
+  const claimActiveConversation = (convId: string) => assumeConversation(convId, 'queue')
+
   const handleClaimConversation = async () => {
     if (!activeId) return
-    const claimed = await claimActiveConversation(activeId)
+    const claimed = await assumeConversation(activeId, 'explicit')
     if (claimed) {
       setHubToast('Conversa assumida!')
       setTimeout(() => setHubToast(null), 3000)
@@ -3083,64 +3205,44 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const hours = hoursSince(conv.lastTime)
     if (!window.confirm(`Deseja resgatar essa conversa? Ela estava com ${conv.assigned_user_name || 'outro atendente'} há ${hours}h.`)) return
 
-    const rJid = rawJid(activeId)
-    const { error } = await DatabaseService.rescueConversation(
-      effectiveInstitutionId, rJid, user.id, user.full_name || user.email,
-      conv.assigned_user_id, conv.assigned_user_name || 'outro atendente', hours
-    )
-
-    if (error) {
-      setSendError(error)
+    try {
+      await DatabaseService.assumeConversation(rawJid(activeId), true, 'rescue')
+    } catch (err: any) {
+      setSendError(err?.message || 'Conversa não disponível para resgate')
       await refreshConversationRow(activeId)
       return
     }
 
     setConversations(prev => prev.map(c => c.id === activeId
-      ? { ...c, status: 'open' as ConvStatus, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
+      ? { ...c, status: 'open' as ConvStatus, bot_active: false, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
       : c
     ))
+    loadChatEvents(activeId)
     setHubToast('Conversa resgatada!')
     setTimeout(() => setHubToast(null), 3000)
   }
 
-  // Ao enviar uma mensagem humana, se o robô ainda estiver ativo na conversa,
-  // desativa e assume — evita o robô responder em seguida gerando conflito
-  // com o que o atendente acabou de escrever. UPDATE com WHERE bot_active =
-  // true evita sobrescrever à toa quando o robô já tiver sido desativado.
+  // Ao enviar uma mensagem humana com o robô ainda ativo: conversa sem dono é
+  // assumida (pela RPC, como da fila); conversa minha só desliga o robô.
+  // Conversa de outro atendente NUNCA é tomada aqui — com dono, o robô já está
+  // desligado (trigger trg_normalize_conversation_state).
   const stopBotIfActive = async (convId: string) => {
     if (!effectiveInstitutionId || !user?.id) return
     const conv = conversationsRef.current.find(c => c.id === convId)
     if (!conv?.bot_active) return
 
-    const rJid = rawJid(convId)
-    const { data, error } = await supabase
+    if (!conv.assigned_user_id) {
+      await assumeConversation(convId, 'queue')
+      return
+    }
+    if (conv.assigned_user_id !== user.id) return
+
+    const { error } = await supabase
       .from('whatsapp_conversations')
-      .update({
-        bot_active:         false,
-        assigned_user_id:   user.id,
-        assigned_user_name: user.full_name || user.email,
-        status:             'open',
-      })
+      .update({ bot_active: false })
       .eq('institution_id', effectiveInstitutionId)
-      .eq('remote_jid', rJid)
-      .eq('bot_active', true)
-      .select('id')
-
-    if (error || !data || data.length === 0) return
-
-    setConversations(prev => prev.map(c => c.id === convId
-      ? { ...c, bot_active: false, status: 'open' as ConvStatus, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
-      : c
-    ))
-
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
-      remote_jid: rJid,
-      event_type: 'bot_stopped',
-      description: `Robô desativado — ${user.full_name || user.email} entrou na conversa`,
-      user_id: user.id,
-      metadata: { triggered_by: 'human_message' },
-    })
+      .eq('remote_jid', rawJid(convId))
+    if (!error) setConversations(prev => prev.map(c => c.id === convId ? { ...c, bot_active: false } : c))
   }
 
   // Menu "/" de respostas rápidas: ativo enquanto o campo inteiro for só
@@ -3264,6 +3366,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleSendTemplate = async () => {
     if (!activeId || !effectiveInstitutionId || !selectedTemplate) return
+    // Template abre um atendimento: a conversa precisa ser minha antes do
+    // envio. Sem dono → assume como da fila; de outro atendente → confirma
+    // ("Fulano está atendendo. Assumir mesmo assim?"). Antes o envio tomava a
+    // conversa em silêncio, depois de mandar.
+    const convBefore = conversationsRef.current.find(c => c.id === activeId)
+    if (convBefore && convBefore.assigned_user_id !== user?.id) {
+      const ok = await assumeConversation(activeId, convBefore.assigned_user_id ? 'implicit' : 'queue')
+      if (!ok) return
+    }
     const tmpl = templates.find(t => t.id === selectedTemplate) ||
       { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
     const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
@@ -3312,40 +3423,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           : c
       ))
 
-      // [FIX P3] Assign current attendant + disable bot so customer reply goes to them.
-      // status: 'open', não 'waiting' — 'waiting' significa "sem atendente" em todo o
-      // resto do sistema (fila, RLS de resgate de conversa parada); usar aqui fazia essa
-      // conversa (já atribuída) ser tratada como abandonada depois de staleHours sem
-      // resposta do cliente, aparecendo pra outros atendentes na fila de "Paradas".
-      if (effectiveInstitutionId && user?.id && activeId) {
-        const rJid = rawJid(activeId)
-        // RLS de whatsapp_conversations só libera este UPDATE se quem envia já
-        // for o dono, a conversa estiver sem dono, ou estiver "stale" — pra um
-        // atendente restrito enviando num caso fora disso, o UPDATE afeta 0
-        // linhas sem erro (RLS silenciosa). O template já foi entregue (rota
-        // /api/whatsapp/send-template roda com service role), então isso não
-        // desfaz o envio — só avisa que a conversa não mudou de dono.
-        const { data: reassignData, error: reassignErr } = await supabase.from('whatsapp_conversations')
-          .update({
-            assigned_user_id:   user.id,
-            assigned_user_name: user.full_name || user.email,
-            bot_active:         false,
-            status:             'open',
-          })
-          .eq('institution_id', effectiveInstitutionId)
-          .eq('remote_jid', rJid)
-          .select('id')
-        if (reassignErr || !reassignData || reassignData.length === 0) {
-          console.warn('[handleSendTemplate] não foi possível assumir a conversa ao enviar template', reassignErr)
-          setSendError('Template enviado, mas a conversa não pôde ser atribuída a você — ela já pertence a outro atendente.')
-        } else {
-          setConversations(prev => prev.map(c =>
-            c.id === activeId
-              ? { ...c, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email, bot_active: false, status: 'open' as ConvStatus }
-              : c
-          ))
-        }
-      }
+      // A conversa já é minha (assumida antes do envio, acima) — com dono, a
+      // trigger mantém 'open' e o robô desligado; nada a regravar aqui.
 
       setShowTemplateModal(false)
       setSelectedTemplate('')
@@ -3596,16 +3675,29 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleStatusChange = async (status: ConvStatus) => {
     if (!activeId || !effectiveInstitutionId) return
-    const previousStatus = conversationsRef.current.find(c => c.id === activeId)?.status
-    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, status } : c))
+    const before = conversationsRef.current.find(c => c.id === activeId)
+    const previousStatus = before?.status
+    // "Em Atendimento" numa conversa sem dono = assumir (com dono, 'open'
+    // sem dono é desfeito pela trigger). Com dono de outro, também passa pela
+    // regra de assumir — nunca troca de dono por aqui.
+    if (status === 'open' && before?.assigned_user_id !== user?.id) {
+      await assumeConversation(activeId, before?.assigned_user_id ? 'explicit' : 'queue')
+      return
+    }
+    setConversations(prev => prev.map(c => c.id === activeId
+      ? { ...c, status, ...(status === 'waiting' ? { assigned_user_id: undefined, assigned_user_name: undefined } : {}) }
+      : c
+    ))
     const rJid = rawJid(activeId)
     try {
       await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, status)
     } catch (err: any) {
-      // Desfaz o otimismo — sem isso a UI mostra o novo status mesmo se o
-      // RLS de whatsapp_conversations tiver bloqueado o UPDATE (conversa não
-      // é do atendente restrito, não está sem dono, nem stale).
-      setConversations(prev => prev.map(c => c.id === activeId && previousStatus ? { ...c, status: previousStatus } : c))
+      // Desfaz o otimismo — RLS ou a trava de dono (só o dono ou admin/gestor
+      // devolvem a conversa pra fila) podem ter recusado.
+      setConversations(prev => prev.map(c => c.id === activeId && before
+        ? { ...c, status: previousStatus as ConvStatus, assigned_user_id: before.assigned_user_id, assigned_user_name: before.assigned_user_name }
+        : c
+      ))
       setSendError(err.message || 'Não foi possível alterar o status desta conversa.')
       return
     }
@@ -3656,22 +3748,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setSendError(err.message || 'Erro ao transferir a conversa.')
       return
     }
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
-      remote_jid: rJid,
-      event_type: 'transfer',
-      description: `Transferido de ${fromName} para ${targetUser.full_name}`,
-      user_id: user.id,
-      user_name: user.full_name || user.email,
-      metadata: { from_user_id: fromUserId || null, to_user_id: targetUser.id },
-    })
+    // Evento ("Transferida de X para Y") e avisos gravados pela própria edge
+    // function, no servidor.
     await refreshConversationRow(activeId)
     setConversations(prev => prev.map(c => c.id === activeId
-      ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name }
+      ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open' as ConvStatus, bot_active: false }
       : c
     ))
+    loadChatEvents(activeId)
     setTransferring(false)
     setTransferTarget('')
+    setHubToast(`Conversa transferida para ${targetUser.full_name}`)
+    setTimeout(() => setHubToast(null), 3000)
   }
 
   const handleContactType = async (type: string) => {
@@ -3930,6 +4018,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleSendNewConvTemplate = async () => {
     if (!activeId || !effectiveInstitutionId || !selectedTemplate) return
+    // Normalmente a conversa nasceu minha ("Nova conversa"); se não for,
+    // mesma regra de handleSendTemplate — nunca tomar em silêncio.
+    const convBefore = conversationsRef.current.find(c => c.id === activeId)
+    if (convBefore && convBefore.assigned_user_id !== user?.id) {
+      const ok = await assumeConversation(activeId, convBefore.assigned_user_id ? 'implicit' : 'queue')
+      if (!ok) return
+    }
     const tmpl = templates.find(t => t.id === selectedTemplate) ||
       { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
     const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
@@ -3965,36 +4060,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       }
       setConversations(prev => prev.map(c =>
         c.id === activeId
-          ? {
-              ...c,
-              messages: [...c.messages, optimistic],
-              lastMessage: optimistic.content,
-              lastTime: optimistic.ts,
-              status: 'open',
-              assigned_user_id: user?.id,
-              assigned_user_name: user?.full_name,
-            }
+          ? { ...c, messages: [...c.messages, optimistic], lastMessage: optimistic.content, lastTime: optimistic.ts }
           : c
       ))
-
-      // Update conversation in DB — normalmente já é um no-op de propriedade
-      // (handleNewConv agora atribui a conversa ao criador já na criação),
-      // mas fica como reforço defensivo; checa o resultado pelo mesmo motivo
-      // de handleSendTemplate (RLS silenciosa se, por algum motivo, a
-      // conversa não pertencer a quem está enviando).
-      const { data: reassignData, error: reassignErr } = await supabase.from('whatsapp_conversations')
-        .update({
-          status: 'open',
-          assigned_user_id: user?.id,
-          assigned_user_name: user?.full_name,
-          bot_active: false,
-        })
-        .eq('institution_id', effectiveInstitutionId)
-        .eq('remote_jid', rawJid(activeId))
-        .select('id')
-      if (reassignErr || !reassignData || reassignData.length === 0) {
-        console.warn('[handleSendNewConvTemplate] não foi possível atribuir a conversa', reassignErr)
-      }
+      // Dono já resolvido antes do envio (acima) — sem regravar aqui.
 
       // Increment outbound initiated count
       const monthYear = new Date().toISOString().slice(0, 7)
@@ -4176,25 +4245,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const targetUser = users.find(u => u.id === transferTarget)
     if (!targetUser) return
     const rJid = rawJid(activeId)
+    // Mesma edge function da transferência (reabre como 'open' pro destino,
+    // grava o evento e avisa no servidor) — a troca direta de dono pelo
+    // cliente é bloqueada pela trava trg_guard_conversation_owner.
     try {
-      await DatabaseService.assignConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name)
-      await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open')
+      await DatabaseService.transferConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name, user.full_name || user.email, activeConv?.assigned_user_id)
     } catch (err: any) {
       setSendError(err.message || 'Não foi possível atribuir esta conversa.')
       return
     }
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
-      remote_jid: rJid,
-      event_type: 'assignment',
-      description: `Atribuído para ${targetUser.full_name}`,
-      user_id: user.id,
-      user_name: user.full_name || user.email,
-    })
     setConversations(prev => prev.map(c => c.id === activeId
       ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open' as ConvStatus, bot_active: false }
       : c
     ))
+    loadChatEvents(activeId)
     setTransferring(false)
     setTransferTarget('')
   }
@@ -4257,8 +4321,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         ? activeConv.messages.filter(m => m.content.toLowerCase().includes(msgSearchText.toLowerCase()))
         : activeConv.messages)
     : []
+  // Linhas de sistema: fora da busca de mensagens; eventos anteriores à
+  // primeira mensagem carregada só entram quando o histórico todo já veio
+  // (senão apareceriam fora de ordem antes de "carregar anteriores").
+  const timelineEvents = !activeConv || msgSearchText.trim() ? [] : chatEvents.filter(e =>
+    !activeConv.messages[0] || exhaustedOlder.has(activeConv.id) || e.ts >= activeConv.messages[0].ts
+  )
   const msgGroups = filteredMessages.length > 0 || (activeConv && !msgSearchText.trim())
-    ? (activeConv ? groupByDate(filteredMessages) : [])
+    ? (activeConv ? groupTimelineByDate(filteredMessages, timelineEvents) : [])
     : []
 
   // ── Loading ──
@@ -4571,9 +4641,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               <>
                 {filteredWaitingConvs.length > 0 && (
                   <>
-                    <div title="Conversas sem atendente. Todos os atendentes veem esta fila: clique para ler e assuma para responder." style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      ⏳ Aguardando atendimento
+                    <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      ⏳ Fila de espera · sem atendente
                       <span style={{ background: '#EF4444', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredWaitingConvs.length}</span>
+                      <span
+                        title={'Conversas que ainda não têm responsável. Todos os atendentes veem esta fila.\nClique para ler; para responder, use "Assumir conversa" — ela sai da fila e passa a ser sua.\nSe o robô estiver atendendo, ele para quando você assumir.'}
+                        style={{ cursor: 'help', fontSize: 12, color: '#B45309', textTransform: 'none' }}
+                      >ⓘ</span>
                     </div>
                     {filteredWaitingConvs.map(conv => renderConvItem(conv))}
                   </>
@@ -4699,6 +4773,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {/* Assumir — sempre que a conversa não é minha (fila, de outro
+                      atendente, concluída). A regra (confirmação etc.) é da RPC. */}
+                  {!isAionInbox && !activeConv.isGroup && activeConv.assigned_user_id !== user?.id && (
+                    <button onClick={handleClaimConversation}
+                      title={activeConv.assigned_user_id ? `Atendida por ${activeConv.assigned_user_name || 'outro atendente'}` : 'Conversa sem atendente'}
+                      style={{ height: 36, padding: '0 12px', borderRadius: 8, background: '#00A896', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background 0.15s', marginRight: 4 }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
+                    >
+                      Assumir conversa
+                    </button>
+                  )}
                   {[
                     { icon: Search, key: 'search', active: showMsgSearch, onClick: () => { setShowMsgSearch(v => !v); if (showMsgSearch) setMsgSearchText('') }, title: 'Buscar mensagens' },
                     { icon: Info,   key: 'info',   active: showContactInfo, onClick: () => setShowContactInfo(v => !v), title: 'Informações do contato' },
@@ -4860,8 +4946,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   </span>
                   <div style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #D1FAE5, transparent)' }} />
                 </div>
-                {group.msgs.map(msg => (
-                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} onReact={handleReact} />
+                {group.items.map(item => item.kind === 'event' ? (
+                  // Linha de sistema — só no painel, nunca enviada ao cliente.
+                  <div key={`ev-${item.id}`} style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+                    <span style={{ fontSize: 11, color: '#64748B', background: '#F1F5F9', border: '1px solid #E2E8F0', padding: '4px 12px', borderRadius: 999, textAlign: 'center', maxWidth: '80%' }}>
+                      {item.text} · {fmtTime(item.ts)}
+                    </span>
+                  </div>
+                ) : (
+                  <MessageBubble key={item.msg.id} msg={item.msg} onImageClick={url => setLightboxUrl(url)} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} onReact={handleReact} />
                 ))}
               </div>
             ))}
@@ -5663,26 +5756,36 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                           onClick={async () => {
                             if (!activeId || !effectiveInstitutionId) return
                             const newBotActive = !activeConv.bot_active
+                            // Desligar o robô = alguém humano assume. Conversa sem
+                            // dono (ou de outro) passa pela regra de assumir; nunca
+                            // troca de dono em silêncio.
+                            if (!newBotActive && activeConv.assigned_user_id !== user?.id) {
+                              const ok = await assumeConversation(activeId, activeConv.assigned_user_id ? 'implicit' : 'queue')
+                              if (ok) { setHubToast('Robô desativado — atendimento assumido por você'); setTimeout(() => setHubToast(null), 3000) }
+                              return
+                            }
+                            // Ligar o robô devolve a conversa pra fila (sem dono) — a
+                            // trava só deixa o dono ou admin/gestor fazer isso.
                             const { data: botToggleData, error: botToggleErr } = await supabase.from('whatsapp_conversations')
                               .update(newBotActive
-                                ? { bot_active: true, assigned_user_id: null, assigned_user_name: null }
-                                : { bot_active: false, assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' }
+                                ? { bot_active: true, assigned_user_id: null, assigned_user_name: null, status: 'waiting' }
+                                : { bot_active: false }
                               )
                               .eq('institution_id', effectiveInstitutionId)
                               .eq('remote_jid', rawJid(activeId))
                               .select('id')
                             if (botToggleErr || !botToggleData || botToggleData.length === 0) {
-                              setSendError('Não foi possível alterar o robô — esta conversa não está atribuída a você.')
+                              setSendError(botToggleErr?.message || 'Não foi possível alterar o robô — esta conversa não está atribuída a você.')
                               return
                             }
                             setConversations(prev => prev.map(c =>
                               c.id === activeId
                                 ? { ...c, bot_active: newBotActive, ...(newBotActive
-                                    ? { assigned_user_id: undefined, assigned_user_name: undefined }
-                                    : { assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' as ConvStatus }) }
+                                    ? { assigned_user_id: undefined, assigned_user_name: undefined, status: 'waiting' as ConvStatus }
+                                    : {}) }
                                 : c
                             ))
-                            setHubToast(newBotActive ? 'Robô ativado' : 'Robô desativado — atendimento assumido por você')
+                            setHubToast(newBotActive ? 'Robô ativado — conversa voltou para a fila' : 'Robô desativado')
                             setTimeout(() => setHubToast(null), 3000)
                           }}
                           style={{

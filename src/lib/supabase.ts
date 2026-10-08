@@ -1097,6 +1097,23 @@ export class DatabaseService {
     return (data?.length ?? 0) > 0
   }
 
+  // Assumir conversa pela RPC assume_conversation (regra no servidor, evento e
+  // aviso ao dono anterior na mesma transação). Sem force, conversa de outro
+  // atendente devolve 'needs_confirmation' pra quem tem acesso total — a tela
+  // confirma e chama de novo com force. Atendente restrito recebe erro.
+  static async assumeConversation(remoteJid: string, force = false, reason?: 'rescue'): Promise<
+    { status: 'assumed' | 'already_mine'; previous_owner_name?: string | null } |
+    { status: 'needs_confirmation'; owner_name: string | null }
+  > {
+    const { data, error } = await supabase.rpc('assume_conversation', {
+      p_remote_jid: remoteJid.replace(/@s\.whatsapp\.net$/, ''),
+      p_force: force,
+      p_reason: reason ?? null,
+    })
+    if (error) throw new Error(error.message)
+    return data as any
+  }
+
   // Resgata uma conversa parada (atribuída a outro atendente, sem atividade
   // recente). Só funciona se a conversa ainda estiver com previousUserId no
   // banco — WHERE assigned_user_id = previousUserId evita resgatar a
