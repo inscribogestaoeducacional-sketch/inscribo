@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { fillHorario } from '../_lib/workingHours.js'
 import * as crypto from 'crypto'
 // Disable body-parser — raw buffer needed for HMAC-SHA256 validation
 export const config = {
@@ -1798,7 +1799,8 @@ async function processCustomFlow(
   const nextId = (e: any): string => e.toNodeId ?? e.to
 
   function interp(str: string): string {
-    return str.replace(/\{\{(\w+)\}\}/g, (_: string, k: string) => variables[k] ?? `{{${k}}}`)
+    const withVars = str.replace(/\{\{(\w+)\}\}/g, (_: string, k: string) => variables[k] ?? `{{${k}}}`)
+    return fillHorario(withVars, flow as any)
   }
 
   let current = findNode(currentNodeId)
@@ -1994,8 +1996,8 @@ async function processCustomFlow(
       const withinHours = ((flow as any).working_days ?? []).includes(curDay)
         && curMins >= sh * 60 + sm && curMins <= eh * 60 + em
 
-      const outsideMsg = (flow as any).outside_hours_message || (flow as any).off_hours_message || ''
-      const lunchMsgText = (flow as any).lunch_message || ''
+      const outsideMsg = fillHorario((flow as any).outside_hours_message || (flow as any).off_hours_message || '', flow as any)
+      const lunchMsgText = fillHorario((flow as any).lunch_message || '', flow as any)
 
       const isOnLunch = (att: { lunch_start?: string | null; lunch_end?: string | null } | null) => {
         if (!att?.lunch_start || !att?.lunch_end) return false
@@ -2685,7 +2687,7 @@ async function processFlow(
             last_message_at:    new Date().toISOString(),
           })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        await sendAutoMessage(institutionId, remoteJid, flow.off_hours_message)
+        await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.off_hours_message, flow))
         await supabase.from('whatsapp_conversation_events').insert({
           institution_id: institutionId,
           remote_jid:     remoteJid,
@@ -2709,10 +2711,10 @@ async function processFlow(
 
       if (!recentAuto) {
         if (flow.welcome_message) {
-          await sendAutoMessage(institutionId, remoteJid, flow.welcome_message)
+          await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.welcome_message, flow))
         }
         if (flow.menu_enabled && flow.menu_message) {
-          await sendAutoMessage(institutionId, remoteJid, flow.menu_message)
+          await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.menu_message, flow))
         }
       } else {
         console.log('[flow] boas-vindas suprimidas (mensagem automática recente)')
@@ -2759,7 +2761,7 @@ async function processFlow(
 
       // Invalid number typed — resend menu
       if (!isNaN(num) && menuOptions.length > 0 && flow.menu_message) {
-        await sendAutoMessage(institutionId, remoteJid, flow.menu_message)
+        await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.menu_message, flow))
         return
       }
     }
