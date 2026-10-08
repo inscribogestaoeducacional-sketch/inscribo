@@ -3,7 +3,7 @@ import {
   Plus, Phone, Calendar, Edit, Edit2, Trash2, X, Search,
   Clock, Users, Send, CheckCircle, Save,
   MessageCircle, AlertTriangle, ChevronDown, ChevronRight, ChevronUp,
-  Bell, UserCog, SlidersHorizontal,
+  Bell, UserCog, SlidersHorizontal, CheckSquare,
   LayoutGrid, Rows3, Tag, Megaphone, MapPin, GraduationCap,
 } from 'lucide-react'
 import { logAudit } from '../../hooks/useAudit'
@@ -304,6 +304,9 @@ interface CardContentProps {
   assignedUser?: SimpleUser | null
   // Campo de unidade do lead — só vem preenchido quando a escola usa o campo.
   unitName?: string | null
+  // Edição em lote: modo seleção (clique marca/desmarca, sem arrastar).
+  selectMode?: boolean
+  selected?: boolean
   // Consolidação de família (item de leads-irmãos) — quando a família tem
   // ≥2 filhos, este card representa a família inteira: `familyMembers` traz
   // TODOS os filhos (incluindo `lead`, que é só o representante escolhido
@@ -320,7 +323,7 @@ interface CardContentProps {
   onReopenAll: () => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, unitName, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, unitName, selectMode, selected, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll }: CardContentProps) {
   const hasFamily = !!familyMembers && familyMembers.length > 1
   const lostReason = lead.lost_reason
   const lostLabel = lostReason ? LOST_REASONS.find(r => r.value === lostReason)?.label : null
@@ -332,12 +335,18 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
   return (
     <div
       className={`group relative rounded-xl border transition-all duration-150 overflow-hidden ${
-        isFlashing ? 'bg-teal-50/40 border-teal-400 ring-2 ring-teal-500 shadow-md animate-pulse'
+        selectMode && selected ? 'bg-indigo-50/60 border-indigo-400 ring-2 ring-indigo-400 shadow-sm'
+        : isFlashing ? 'bg-teal-50/40 border-teal-400 ring-2 ring-teal-500 shadow-md animate-pulse'
         : overlay ? 'bg-white border-gray-200 shadow-xl scale-105 opacity-50'
         : 'bg-white border-gray-200 shadow-sm hover:shadow-md hover:border-teal-300'
       }`}
       style={{ borderLeft: `3px solid ${config.accent}` }}
     >
+      {selectMode && (
+        <div className="absolute top-2 right-2 z-10 pointer-events-none">
+          <input type="checkbox" readOnly checked={!!selected} className="h-4 w-4 accent-indigo-600" aria-label="Selecionado" />
+        </div>
+      )}
       {/* Card body — clicável para editar */}
       <div className={compact ? 'p-2' : 'p-3'}>
         {/* Item 9a — responsável/família em destaque, aluno(s) como subtítulo */}
@@ -676,7 +685,7 @@ function FilterDrawer(props: FilterDrawerProps) {
 
 // ─── SortableCard ─────────────────────────────────────────────────────────────
 function SortableCard(props: Omit<CardContentProps, 'overlay'>) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.lead.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.lead.id, disabled: !!props.selectMode })
   const didDrag = React.useRef(false)
 
   React.useEffect(() => {
@@ -716,6 +725,11 @@ export default function LeadKanban() {
   const { names: gradeNames } = useGradeLevels(user?.institution_id)
   const unitCfg = useLeadUnits(user?.institution_id)
   const [unitFilter, setUnitFilter] = useState<string>(UNIT_FILTER_ALL)
+  // Edição em lote "Definir unidade" (só com o campo ligado).
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkUnit, setBulkUnit] = useState('')
+  const [bulkSaving, setBulkSaving] = useState(false)
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewLeadModal, setShowNewLeadModal] = useState(false)
@@ -1328,9 +1342,60 @@ export default function LeadKanban() {
     lostLeadIds.forEach(id => handleStatusChange(id, 'contact'))
   }
 
+  // ── Edição em lote: "Definir unidade" ───────────────────────────────────
+  // Card de família representa todos os filhos: marcar o card marca todos.
+  const idsForCard = (lead: Lead): string[] =>
+    lead.family_id ? (familyInfoMap.get(lead.family_id)?.members.map(m => m.id) ?? [lead.id]) : [lead.id]
+  const toggleSelected = (ids: string[]) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    const allIn = ids.every(id => next.has(id))
+    ids.forEach(id => allIn ? next.delete(id) : next.add(id))
+    return next
+  })
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); setBulkUnit('') }
+  const applyBulkUnit = async () => {
+    const ids = [...selectedIds]
+    if (!ids.length || !user?.institution_id) return
+    const newUnitId = bulkUnit === UNIT_FILTER_NONE ? null : bulkUnit
+    if (bulkUnit === '') return
+    const newName = newUnitId ? (unitCfg.unitName(newUnitId) ?? '') : `Sem ${unitCfg.label.toLowerCase()}`
+    if (!window.confirm(`Definir ${unitCfg.label.toLowerCase()} "${newName}" para ${ids.length} lead${ids.length === 1 ? '' : 's'}?`)) return
+    setBulkSaving(true)
+    try {
+      const before = new Map(leads.filter(l => selectedIds.has(l.id)).map(l => [l.id, l.unit_id ?? null]))
+      for (let i = 0; i < ids.length; i += 200) {
+        const chunk = ids.slice(i, i + 200)
+        const { error: upErr } = await supabase.from('leads')
+          .update({ unit_id: newUnitId, updated_at: new Date().toISOString() })
+          .in('id', chunk).eq('institution_id', user.institution_id)
+        if (upErr) throw upErr
+      }
+      // Histórico de cada lead que de fato mudou.
+      const changed = ids.filter(id => (before.get(id) ?? null) !== newUnitId)
+      if (changed.length) {
+        await supabase.from('audit_logs').insert(changed.map(id => ({
+          institution_id: user.institution_id, module: 'lead', record_id: id,
+          action: `${unitCfg.label} alterada`,
+          field_changed: `${unitCfg.unitName(before.get(id)) || 'Sem ' + unitCfg.label.toLowerCase()} → ${newName} (em lote)`,
+          new_value: newName,
+          user_id: user.id, user_name: user.full_name, user_role: user.role,
+        })))
+      }
+      setLeads(prev => prev.map(l => selectedIds.has(l.id) ? { ...l, unit_id: newUnitId } : l))
+      showToast(`${unitCfg.label} definida para ${ids.length} lead${ids.length === 1 ? '' : 's'}.`, 'success')
+      exitSelectMode()
+    } catch (err) {
+      console.error('[Kanban] erro na edição em lote de unidade:', err)
+      showToast(formatSaveLeadError(err), 'error')
+    } finally { setBulkSaving(false) }
+  }
+
   const cardActions = {
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
-    onEdit: (lead: Lead) => { setEditingLead(lead); setShowNewLeadModal(true) },
+    onEdit: (lead: Lead) => {
+      if (selectMode) { toggleSelected(idsForCard(lead)); return }
+      setEditingLead(lead); setShowNewLeadModal(true)
+    },
     onDelete: handleDelete,
     onStatusChange: handleStatusChange,
     onWhatsApp: handleWhatsApp,
@@ -1376,6 +1441,30 @@ export default function LeadKanban() {
     />
   )
 
+  // Barra fixa da edição em lote "Definir unidade" (desktop e celular).
+  const bulkBarEl = unitCfg.enabled && selectMode ? (
+    <div style={{ position: 'fixed', left: '50%', bottom: isMobile ? 76 : 24, transform: 'translateX(-50%)', zIndex: 1040, width: 'min(680px, calc(100% - 24px))', background: '#1E1B4B', color: '#fff', borderRadius: 14, boxShadow: '0 12px 32px rgba(15,23,42,0.35)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
+        {selectedIds.size === 0 ? 'Toque nos leads para selecionar' : `${selectedIds.size} selecionado${selectedIds.size === 1 ? '' : 's'}`}
+      </span>
+      <select value={bulkUnit} onChange={e => setBulkUnit(e.target.value)} disabled={bulkSaving}
+        style={{ flex: 1, minWidth: 150, padding: '7px 10px', borderRadius: 9, border: 'none', fontSize: 13, color: '#1A2B4A', background: '#fff' }}>
+        <option value="">Definir {unitCfg.label.toLowerCase()}...</option>
+        {unitCfg.activeUnits.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        <option value={UNIT_FILTER_NONE}>Sem {unitCfg.label.toLowerCase()}</option>
+      </select>
+      <button onClick={applyBulkUnit} disabled={bulkSaving || !selectedIds.size || bulkUnit === ''}
+        style={{ padding: '7px 14px', borderRadius: 9, border: 'none', background: '#6366F1', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: (bulkSaving || !selectedIds.size || bulkUnit === '') ? 0.5 : 1 }}>
+        {bulkSaving ? 'Aplicando...' : 'Aplicar'}
+      </button>
+      <button onClick={exitSelectMode} disabled={bulkSaving}
+        style={{ padding: '7px 12px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+        Cancelar
+      </button>
+    </div>
+  ) : null
+  const selectButtonStyle = (active: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (active ? '#6366F1' : '#E2E8F0'), background: active ? '#EEF2FF' : '#fff', color: active ? '#4F46E5' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' })
+
   // ── Mobile early return ───────────────────────────────────────────────────
   if (isMobile) {
     const { start: pStart, end: pEnd } = getPeriodDates()
@@ -1414,6 +1503,12 @@ export default function LeadKanban() {
           <button onClick={() => setFilterDrawerOpen(true)} style={{ position: 'relative', width: 44, height: 44, borderRadius: 12, background: hasActiveFilters ? '#00A896' : '#fff', border: '1.5px solid ' + (hasActiveFilters ? '#00A896' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <SlidersHorizontal style={{ width: 17, height: 17, color: hasActiveFilters ? '#fff' : '#64748B' }} />
           </button>
+          {unitCfg.enabled && (
+            <button onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)} title={`Definir ${unitCfg.label.toLowerCase()} para vários leads`}
+              style={{ width: 44, height: 44, borderRadius: 12, background: selectMode ? '#6366F1' : '#fff', border: '1.5px solid ' + (selectMode ? '#6366F1' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+              <CheckSquare style={{ width: 17, height: 17, color: selectMode ? '#fff' : '#64748B' }} />
+            </button>
+          )}
         </div>
 
         {/* Status chips */}
@@ -1440,8 +1535,9 @@ export default function LeadKanban() {
             const reminderColors = reminder ? REMINDER_COLORS[reminder.urgency] : null
             const siblings = familySiblingsMap.get(lead.id)
             return (
-              <div key={lead.id} onClick={() => cardActions.onEdit(lead)}
-                style={{ padding: '14px 16px', background: '#fff', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: 12, cursor: 'pointer' }}>
+              <div key={lead.id} onClick={() => selectMode ? toggleSelected([lead.id]) : cardActions.onEdit(lead)}
+                style={{ padding: '14px 16px', background: selectMode && selectedIds.has(lead.id) ? '#EEF2FF' : '#fff', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: 12, cursor: 'pointer', alignItems: 'center' }}>
+                {selectMode && <input type="checkbox" readOnly checked={selectedIds.has(lead.id)} style={{ width: 18, height: 18, accentColor: '#4F46E5', flexShrink: 0 }} aria-label="Selecionado" />}
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: cfg?.accent ?? '#6b7280', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff' }}>
                   {(lead.responsible_name || '?').charAt(0).toUpperCase()}
                 </div>
@@ -1481,6 +1577,7 @@ export default function LeadKanban() {
         </button>
 
         {filterDrawerEl}
+        {bulkBarEl}
 
         {/* Modals */}
         <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} onDelete={handleDelete} institutionId={user!.institution_id} users={users} activeCampaignLabel={activeCampaignCycle?.label} institutionCity={institutionCity} />
@@ -1557,6 +1654,11 @@ export default function LeadKanban() {
           <SlidersHorizontal style={{ width: 14, height: 14 }} /> Filtros
           {hasActiveFilters && <span style={{ width: 6, height: 6, borderRadius: 999, background: '#00A896' }} />}
         </button>
+        {unitCfg.enabled && (
+          <button onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)} title={`Definir ${unitCfg.label.toLowerCase()} para vários leads`} style={selectButtonStyle(selectMode)}>
+            <CheckSquare style={{ width: 14, height: 14 }} /> {selectMode ? 'Sair da seleção' : 'Selecionar'}
+          </button>
+        )}
         {hasActiveFilters && (
           <button onClick={clearAllFilters} className="px-3 py-2.5 text-sm text-gray-400 hover:text-gray-600 transition-all font-semibold whitespace-nowrap">
             Limpar
@@ -1602,6 +1704,8 @@ export default function LeadKanban() {
                               compact={compactView}
                               assignedUser={lead.assigned_to ? usersById.get(lead.assigned_to) ?? null : null}
                               unitName={unitCfg.enabled ? unitCfg.unitName(lead.unit_id) : null}
+                              selectMode={selectMode}
+                              selected={idsForCard(lead).every(id => selectedIds.has(id))}
                               familyMembers={family?.members}
                               onReopenAll={() => handleReopenAllLost(family ? family.lostMembers.map(m => m.id) : [lead.id])}
                               {...cardActions}
@@ -1643,6 +1747,7 @@ export default function LeadKanban() {
       </DndContext>
 
       {filterDrawerEl}
+      {bulkBarEl}
 
       {/* Modals */}
       <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} institutionId={user!.institution_id} users={users} activeCampaignLabel={activeCampaignCycle?.label} institutionCity={institutionCity} />

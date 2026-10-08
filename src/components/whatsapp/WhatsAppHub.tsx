@@ -16,7 +16,7 @@ import { CONVERSATION_NOTIFICATION_EVENT, type ConversationNotification } from '
 import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
-import { useLeadUnits } from '../../lib/leadUnits'
+import { useLeadUnits, matchesUnitFilter, UNIT_FILTER_ALL, UNIT_FILTER_NONE } from '../../lib/leadUnits'
 import { getAuthHeaders } from '../../lib/authHeaders'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { statusConfig } from '../leads/leadFormShared'
@@ -1127,6 +1127,28 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Campo de unidade do lead (opcional por escola) — a conversa não guarda
   // unidade, mostra a do lead vinculado.
   const unitCfg = useLeadUnits(effectiveInstitutionId)
+  // lead_id → unit_id dos leads COM unidade (a conversa não guarda unidade).
+  // Carregado só com o campo ligado; mantido pelo realtime de leads abaixo.
+  const [leadUnitMap, setLeadUnitMap] = useState<Record<string, string | null>>({})
+  const [unitFilter, setUnitFilter] = useState<string>(UNIT_FILTER_ALL)
+  const convUnitId = (c: { lead_id?: string | null }) => (c.lead_id ? leadUnitMap[c.lead_id] ?? null : null)
+  useEffect(() => {
+    if (!unitCfg.enabled || !effectiveInstitutionId) { setLeadUnitMap({}); return }
+    let cancelled = false
+    ;(async () => {
+      const map: Record<string, string | null> = {}
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.from('leads').select('id, unit_id')
+          .eq('institution_id', effectiveInstitutionId).not('unit_id', 'is', null)
+          .order('id').range(from, from + 999)
+        if (error) { console.warn('[Hub] unidades dos leads indisponíveis:', error.message); break }
+        for (const r of data || []) map[(r as any).id] = (r as any).unit_id
+        if (!data || data.length < 1000) break
+      }
+      if (!cancelled) setLeadUnitMap(map)
+    })()
+    return () => { cancelled = true }
+  }, [unitCfg.enabled, effectiveInstitutionId])
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -2319,6 +2341,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 : c
             ))
           }
+          if (payload.new?.id && 'unit_id' in (payload.new || {})) {
+            setLeadUnitMap(m => ({ ...m, [payload.new.id]: payload.new.unit_id ?? null }))
+          }
+        })
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'leads',
+          filter: `institution_id=eq.${effectiveInstitutionId}`
+        }, (payload: any) => {
+          // Lead criado pelo Hub/Kanban já com unidade: entra no mapa na hora.
+          if (payload.new?.id && payload.new?.unit_id) {
+            setLeadUnitMap(m => ({ ...m, [payload.new.id]: payload.new.unit_id }))
+          }
         })
         .subscribe()
     }
@@ -2951,6 +2987,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (c.isGroup) return false
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.phone.includes(search)) return false
     if (readFilter === 'read' && (c.unreadCount || 0) > 0) return false
+    if (unitCfg.enabled && !matchesUnitFilter(convUnitId(c), unitFilter)) return false
     if (readFilter === 'unread') {
       if ((c.unreadCount || 0) === 0) return false
       if (!isPrivilegedRole && c.assigned_user_id !== user?.id) return false
@@ -3130,6 +3167,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 </span>
               )
             })()}
+
+            {/* Unidade do lead vinculado (campo opcional por escola) */}
+            {unitCfg.enabled && unitCfg.unitName(convUnitId(conv)) && (
+              <span title={`${unitCfg.label}: ${unitCfg.unitName(convUnitId(conv))}`} style={{
+                fontSize: 10, fontWeight: 600,
+                padding: '2px 7px', borderRadius: 999,
+                background: '#EEF2FF', color: '#4F46E5',
+                minWidth: 0, maxWidth: 110,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>📍 {unitCfg.unitName(convUnitId(conv))}</span>
+            )}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -4716,6 +4764,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     {attendantOptions.length > 0 && <optgroup label="Atendente específico">
                       {attendantOptions.filter(u => u.id !== user?.id).map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                     </optgroup>}
+                  </select>
+                </div>
+              )}
+              {unitCfg.enabled && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                  <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{unitCfg.label}</span>
+                  <select
+                    value={unitFilter}
+                    onChange={e => setUnitFilter(e.target.value)}
+                    title="Pela unidade do lead vinculado à conversa"
+                    style={{ width: '100%', padding: '5px 8px', fontSize: 12, border: '1px solid #D1FAE5', borderRadius: 8, background: unitFilter !== UNIT_FILTER_ALL ? '#EEF2FF' : '#F0FDFB', color: '#1A2B4A', cursor: 'pointer', outline: 'none' }}
+                  >
+                    <option value={UNIT_FILTER_ALL}>Todas</option>
+                    {unitCfg.units.map(u => <option key={u.id} value={u.id}>{u.name}{u.active ? '' : ' (desativada)'}</option>)}
+                    <option value={UNIT_FILTER_NONE}>Sem {unitCfg.label.toLowerCase()}</option>
                   </select>
                 </div>
               )}
