@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { Sparkles, Upload, Check, ArrowRight, ChevronRight, Loader2, AlertTriangle, FileText, X } from 'lucide-react'
+import { aiFetch } from '../../lib/authHeaders'
 
 interface ErpFileEntry {
   name: string; year: number; total: number
@@ -42,7 +43,7 @@ export default function GestorOnboarding({ institutionName, onComplete, onOpenCa
           else reader.readAsText(file, 'utf-8')
         })
         const fileContent = isPdf ? raw.split(',')[1] : raw
-        const resp = await fetch('/api/ai', {
+        const resp = await aiFetch({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'extract_file', payload: { fileContent, fileType: ext, fileName: file.name, ...(isPdf ? { isPdfImage: true } : {}) } })

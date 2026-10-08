@@ -10,6 +10,7 @@ import { logAudit } from '../../hooks/useAudit'
 import AuditModal from '../../components/common/AuditModal'
 import { createNotification } from '../../lib/notifications'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
+import { aiFetch } from '../../lib/authHeaders'
 
 // ─── types ────────────────────────────────────────────────────────────────────
 interface Transfer {
@@ -353,7 +354,7 @@ export default function GestorTransfers() {
     if (!t.survey_responses) return
     setGeneratingId(t.id)
     try {
-      const response = await fetch('/api/ai', {
+      const response = await aiFetch({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

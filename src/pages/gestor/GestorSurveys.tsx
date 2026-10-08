@@ -20,6 +20,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import SurveyQuestion, { SurveyQuestionData, SurveyQuestionType } from '../../components/survey/SurveyQuestion'
+import { aiFetch } from '../../lib/authHeaders'
 
 // ─── tipos ──────────────────────────────────────────────────
 interface Survey {
@@ -1087,7 +1088,7 @@ export default function GestorSurveys() {
     setGeneratingReport(true)
     const { data: inst } = await supabase.from('institutions').select('name').eq('id', institutionId).maybeSingle()
     try {
-      const res = await fetch('/api/ai', {
+      const res = await aiFetch({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

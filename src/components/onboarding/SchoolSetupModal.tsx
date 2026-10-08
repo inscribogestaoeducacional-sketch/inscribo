@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { sendEmail } from '../../lib/email'
+import { aiFetch } from '../../lib/authHeaders'
 
 // ─── tipos ──────────────────────────────────────────────────────
 interface ProcessedFile {
@@ -173,7 +174,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
           else reader.readAsText(file, 'utf-8')
         })
         const fileContent = isPdf ? content.split(',')[1] : content
-        const res = await fetch('/api/ai', {
+        const res = await aiFetch({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

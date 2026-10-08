@@ -337,17 +337,101 @@ async function fetchLeadsPipeline(
   }
 }
 
+// ─── Autenticação + cota mensal por escola ──────────────────────────────────
+// Antes este endpoint não exigia login nenhum: qualquer um na internet podia
+// gastar a chave da Anthropic. Agora:
+//   • usuário logado (Bearer do Supabase) — a escola é a do usuário (gestor de
+//     rede: a unidade ativa); institutionId no payload, se vier, precisa ser a
+//     mesma. Super Admin (admin_geral) pode agir por qualquer escola.
+//   • sem login — SÓ transfer_diagnosis da pesquisa pública de saída, com o
+//     survey_token de uma pesquisa já respondida e ainda sem diagnóstico; o
+//     prompt usa os dados gravados, não o que vier na requisição.
+// Toda chamada com escola conhecida consome 1 da cota do mês
+// (ai_consume_quota, migration 20261008130000).
+const DEFAULT_AI_MONTHLY_QUOTA = 300
+
+interface AiCaller {
+  institutionId: string | null
+  userId: string | null
+  surveyTransfer: { id: string; student_name: string | null; course_grade: string | null; survey_responses: unknown } | null
+}
+
+async function resolveCaller(req: VercelRequest, action: string, payload: Record<string, unknown>):
+  Promise<{ ok: true; caller: AiCaller } | { ok: false; status: number; error: string }> {
+  const supabase = getSupabaseAdmin()
+  const header = (req.headers.authorization || '') as string
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
+
+  if (token) {
+    const { data, error } = await supabase.auth.getUser(token)
+    if (error || !data?.user) return { ok: false, status: 401, error: 'Sessão inválida ou expirada. Entre de novo.' }
+    const { data: row } = await supabase.from('users')
+      .select('user_type, institution_id, active_institution_id, active')
+      .eq('id', data.user.id).maybeSingle()
+    if (!row || row.active === false) return { ok: false, status: 403, error: 'Usuário sem acesso.' }
+    const requested = typeof payload.institutionId === 'string' && payload.institutionId ? payload.institutionId : null
+    if (row.user_type === 'admin_geral') {
+      return { ok: true, caller: { institutionId: requested, userId: data.user.id, surveyTransfer: null } }
+    }
+    const own: string | null = row.user_type === 'gestor_rede' ? row.active_institution_id : row.institution_id
+    if (!own) return { ok: false, status: 403, error: 'Usuário sem escola vinculada.' }
+    if (requested && requested !== own) return { ok: false, status: 403, error: 'Esta escola não pertence ao seu usuário.' }
+    return { ok: true, caller: { institutionId: own, userId: data.user.id, surveyTransfer: null } }
+  }
+
+  const surveyToken = typeof payload.surveyToken === 'string' ? payload.surveyToken : ''
+  if (action === 'transfer_diagnosis' && surveyToken) {
+    const { data: t } = await supabase.from('student_transfers')
+      .select('id, institution_id, student_name, course_grade, survey_responses, survey_completed_at, ai_diagnosis')
+      .eq('survey_token', surveyToken).maybeSingle()
+    if (!t || !t.survey_completed_at) return { ok: false, status: 401, error: 'Pesquisa inválida.' }
+    if (t.ai_diagnosis) return { ok: false, status: 409, error: 'Diagnóstico já gerado para esta pesquisa.' }
+    return { ok: true, caller: { institutionId: t.institution_id, userId: null, surveyTransfer: t } }
+  }
+
+  return { ok: false, status: 401, error: 'Login obrigatório.' }
+}
+
+async function consumeQuota(institutionId: string):
+  Promise<{ allowed: boolean; calls: number; limit: number; monthYear: string }> {
+  const supabase = getSupabaseAdmin()
+  const { data: setting } = await supabase.from('platform_settings').select('value').eq('key', 'ai_monthly_quota').maybeSingle()
+  const parsed = Number.parseInt(String(setting?.value ?? ''), 10)
+  const defaultLimit = Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_AI_MONTHLY_QUOTA
+  const { data, error } = await supabase.rpc('ai_consume_quota', { p_institution_id: institutionId, p_default_limit: defaultLimit })
+  if (error) throw new Error(`Falha ao conferir a cota de IA: ${error.message}`)
+  const r = (Array.isArray(data) ? data[0] : data) as { allowed: boolean; calls: number; monthly_limit: number; month_year: string }
+  return { allowed: !!r?.allowed, calls: r?.calls ?? 0, limit: r?.monthly_limit ?? defaultLimit, monthYear: r?.month_year ?? '' }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
-  const { action, payload } = req.body as { action: string; payload: Record<string, unknown> }
+  const { action, payload } = (req.body || {}) as { action: string; payload: Record<string, unknown> }
   if (!action || !payload) return res.status(400).json({ error: 'action e payload são obrigatórios' })
 
+  const auth = await resolveCaller(req, action, payload)
+  if ('error' in auth) return res.status(auth.status).json({ error: auth.error })
+  const caller = auth.caller
+
   try {
+    if (caller.institutionId) {
+      const quota = await consumeQuota(caller.institutionId)
+      if (!quota.allowed) {
+        const [y, m] = quota.monthYear.split('-').map(Number)
+        const renews = y && m
+          ? new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1)).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+          : 'o próximo mês'
+        return res.status(429).json({
+          error: `A escola atingiu o limite de ${quota.limit} análises de IA neste mês. O limite renova em ${renews}. Para ampliar, fale com a equipe Áion.`,
+          quota: { used: quota.calls, limit: quota.limit, month: quota.monthYear },
+        })
+      }
+    }
 
     // ── INSIGHT SEMANAL ───────────────────────────────────────────────────────
     if (action === 'weekly_insight') {
@@ -487,7 +571,11 @@ ${fileContent.slice(0, 8000)}`
 
     // ── DIAGNÓSTICO DE TRANSFERÊNCIA ──────────────────────────────────────────
     if (action === 'transfer_diagnosis') {
-      const { responses, studentName, grade } = payload as { responses: Record<string, unknown>; studentName: string; grade: string }
+      // Pesquisa pública (sem login): usa só o que está gravado na transferência.
+      const st = caller.surveyTransfer
+      const { responses, studentName, grade } = st
+        ? { responses: (st.survey_responses ?? {}) as Record<string, unknown>, studentName: st.student_name ?? '', grade: st.course_grade ?? '' }
+        : payload as { responses: Record<string, unknown>; studentName: string; grade: string }
       const prompt = `Você é especialista em retenção de alunos em escolas privadas brasileiras.
 Analise as respostas da pesquisa de saída e retorne APENAS JSON válido, sem markdown.
 Aluno: ${studentName} | Série: ${grade}
@@ -506,6 +594,13 @@ Respostas: ${JSON.stringify(responses)}
         parsed = JSON.parse(extractJsonObject(raw))
       } catch {
         parsed = { primary_reason: 'other', confidence: 30, diagnosis: raw.substring(0, 400), risk_factors: [], retention_opportunity: false, retention_note: 'Análise manual necessária' }
+      }
+      if (st) {
+        // A página pública não grava mais o diagnóstico pelo navegador.
+        const { error: saveErr } = await getSupabaseAdmin().from('student_transfers')
+          .update({ ai_diagnosis: JSON.stringify(parsed), ai_risk_factors: parsed.risk_factors ?? [] })
+          .eq('id', st.id)
+        if (saveErr) console.error('[ai] erro ao gravar diagnóstico da pesquisa:', saveErr.message)
       }
       return res.json({ result: parsed })
     }

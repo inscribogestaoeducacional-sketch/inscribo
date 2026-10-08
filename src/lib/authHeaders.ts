@@ -12,6 +12,17 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }
 }
 
+// /api/ai com o Bearer da sessão (o endpoint exige login e cobra cota da
+// escola). Mesma assinatura do fetch, só sem a URL. Sem sessão, lança erro
+// — os chamadores já tratam falha de rede/HTTP no catch.
+export async function aiFetch(init: RequestInit): Promise<Response> {
+  const auth = await getBearerHeader()
+  return fetch('/api/ai', {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined), ...auth },
+  })
+}
+
 // Só o header de Authorization, sem Content-Type — pra upload multipart
 // (FormData), onde o browser precisa setar o Content-Type sozinho (com o
 // boundary correto); sobrescrever manualmente pra 'application/json' quebra

@@ -16,6 +16,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import CampaignGeneratorModal from './CampaignGeneratorModal'
 import LinkLeadsToCampaignModal from './LinkLeadsToCampaignModal'
+import { aiFetch } from '../../lib/authHeaders'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface CampaignCycle {
@@ -1323,7 +1324,7 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
       const totalReen = reenrollments.reduce((s, r) => s + r.confirmed, 0)
       const totalReenT = reenrollments.reduce((s, r) => s + r.target, 0)
 
-      const res = await fetch('/api/ai', {
+      const res = await aiFetch({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1379,7 +1380,7 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
       const totalReen  = reenrollments.reduce((s, r) => s + r.confirmed, 0)
       const totalReenT = reenrollments.reduce((s, r) => s + r.target, 0)
 
-      const res = await fetch('/api/ai', {
+      const res = await aiFetch({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

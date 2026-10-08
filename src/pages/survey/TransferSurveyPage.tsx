@@ -259,25 +259,13 @@ export default function TransferSurveyPage() {
 
       if (error) throw error
 
-      // Chamar IA para diagnóstico (em background, sem bloquear tela)
+      // Diagnóstico da IA em background, sem bloquear a tela. Página pública
+      // (sem login): o /api/ai aceita só o token desta pesquisa, monta o
+      // prompt com as respostas já gravadas e grava o diagnóstico ele mesmo.
       fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'transfer_diagnosis',
-          payload: {
-            responses,
-            studentName: transfer.student_name,
-            grade: transfer.course_grade,
-          }
-        })
-      }).then(res => res.json()).then(async data => {
-        if (data.result) {
-          await supabase.from('student_transfers').update({
-            ai_diagnosis: JSON.stringify(data.result),
-            ai_risk_factors: data.result.risk_factors ?? [],
-          }).eq('survey_token', token)
-        }
+        body: JSON.stringify({ action: 'transfer_diagnosis', payload: { surveyToken: token } }),
       }).catch(() => {/* silencioso */})
 
       setStatus('done')

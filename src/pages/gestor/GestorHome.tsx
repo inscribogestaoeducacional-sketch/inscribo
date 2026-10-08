@@ -27,6 +27,7 @@ import MarketReportModal from '../../components/gestor/MarketReportModal'
 import type { FunnelMetrics } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
 import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS } from '../../lib/leadReminders'
+import { aiFetch } from '../../lib/authHeaders'
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 interface HistoricalEntry {
@@ -772,7 +773,7 @@ export default function GestorHome() {
     if (!city || !state) return
     setMarketLoading(true)
     try {
-      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'fetch_ibge', payload: { city, state } }) })
+      const res = await aiFetch({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'fetch_ibge', payload: { city, state } }) })
       const json = await res.json()
       const result = json.result ?? null
       setMarketData(result)
@@ -809,7 +810,7 @@ export default function GestorHome() {
 
     setAiInsightLoading(true)
     try {
-      const res = await fetch('/api/ai', {
+      const res = await aiFetch({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'weekly_insight',

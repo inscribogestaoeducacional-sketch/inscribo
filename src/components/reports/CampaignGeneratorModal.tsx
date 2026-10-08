@@ -11,6 +11,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
+import { aiFetch } from '../../lib/authHeaders'
 
 // ─── Tipos ───────────────────────────────────────────────────────
 interface ErpFileEntry {
@@ -314,7 +315,7 @@ export default function CampaignGeneratorModal({
           if (isPdf) reader.readAsDataURL(file); else reader.readAsText(file,'utf-8')
         })
         const fileContent = isPdf ? content.split(',')[1] : content
-        const res = await fetch('/api/ai', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'extract_file', payload:{ fileContent, fileType:ext, fileName:file.name, ...(isPdf?{isPdfImage:true}:{}) } }) })
+        const res = await aiFetch({ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'extract_file', payload:{ fileContent, fileType:ext, fileName:file.name, ...(isPdf?{isPdfImage:true}:{}) } }) })
         const data = await res.json()
         const result = data.result
         if (!result) throw new Error('sem resultado')
@@ -395,7 +396,7 @@ export default function CampaignGeneratorModal({
       // de depender de um objeto que aqui sempre chegava vazio. institutionId
       // habilita o motor a usar funil de conversão real (Nível 1) e o
       // pipeline de leads já existente pro ano da campanha (Nível 3).
-      const res = await fetch('/api/ai', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'generate_campaign', payload:{ institutionId, schoolData:{...schoolData,name:institutionName}, historicalData, growthTarget, executionYear, campaignYear, start_date:schoolData.start_date, end_date:schoolData.end_date, current_date:new Date().toLocaleDateString('pt-BR'), campaign_start_month:campaignStartMonth, months_until_campaign:monthsUntil, total_exits:totalExits } }) })
+      const res = await aiFetch({ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'generate_campaign', payload:{ institutionId, schoolData:{...schoolData,name:institutionName}, historicalData, growthTarget, executionYear, campaignYear, start_date:schoolData.start_date, end_date:schoolData.end_date, current_date:new Date().toLocaleDateString('pt-BR'), campaign_start_month:campaignStartMonth, months_until_campaign:monthsUntil, total_exits:totalExits } }) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error||'Erro ao gerar campanha')
       setGenerationMode(data.mode||'benchmark')
