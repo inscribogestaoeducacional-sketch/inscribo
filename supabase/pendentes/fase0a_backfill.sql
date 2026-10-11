@@ -23,7 +23,8 @@
 --      do funil: resolved_at + resolved_reason (+ read_at), nada é apagado
 --   5. funil: recalcula funnel_metrics (só colunas reais) de todos os ciclos
 --      ativos/liberados com as definições novas
--- Não mexe: as 10 linhas órfãs de enrollments (sem escola, 16/09/2025), a
+-- Não mexe: registros de escola inexistente (10 enrollments, 11 leads e 4 visitas
+-- de teste de 2025/abr-2026), a
 -- visita da Ágape com data 10/09/2025 (lista à parte), metas (*_target).
 -- =============================================================================
 
@@ -64,6 +65,7 @@ WITH faltantes AS (
         AND a.field_changed ~ '\mstatus\M') AS dt_log_edicao
   FROM leads l
   WHERE l.status = 'enrolled' AND l.deleted_at IS NULL
+    AND EXISTS (SELECT 1 FROM institutions i WHERE i.id = l.institution_id)  -- 11 leads órfãos de teste (2025) ficam de fora
     AND NOT EXISTS (SELECT 1 FROM enrollments e WHERE e.lead_id = l.id)
 )
 INSERT INTO enrollments (institution_id, lead_id, student_name, course_grade, enrollment_date, user_id,
@@ -86,7 +88,7 @@ SELECT a.institution_id, a.record_id, NULLIF(a.old_value, ''), a.new_value, a.cr
   FROM audit_logs a
  WHERE a.module = 'leads' AND a.action = 'status_changed'
    AND a.new_value IN ('new','contact','scheduled','visit','proposal','enrolled','lost')
-   AND a.institution_id IS NOT NULL
+   AND EXISTS (SELECT 1 FROM institutions i WHERE i.id = a.institution_id)
    AND NOT EXISTS (SELECT 1 FROM lead_status_history h
                     WHERE h.lead_id = a.record_id AND h.changed_at = a.created_at AND h.to_status = a.new_value);
 
@@ -102,7 +104,8 @@ SELECT l.institution_id, l.id, NULL, l.status, ed.created_at, ed.user_id, ed.use
        AND a.field_changed ~ '\mstatus\M'
      ORDER BY a.created_at DESC LIMIT 1
   ) ed ON true
- WHERE ed.created_at > COALESCE((SELECT max(h.changed_at) FROM lead_status_history h WHERE h.lead_id = l.id), '-infinity')
+ WHERE EXISTS (SELECT 1 FROM institutions i WHERE i.id = l.institution_id)
+   AND ed.created_at > COALESCE((SELECT max(h.changed_at) FROM lead_status_history h WHERE h.lead_id = l.id), '-infinity')
    AND NOT EXISTS (SELECT 1 FROM lead_status_history h
                     WHERE h.lead_id = l.id AND h.changed_at = ed.created_at);
 
@@ -120,6 +123,7 @@ WITH quem AS (
          ) AS user_id
     FROM visits v
    WHERE v.assigned_to IS NULL
+     AND EXISTS (SELECT 1 FROM institutions i WHERE i.id = v.institution_id)
 )
 UPDATE visits v SET assigned_to = q.user_id
   FROM quem q
