@@ -26,8 +26,10 @@ import SatisfactionFullModal from '../../components/gestor/SatisfactionFullModal
 import MarketReportModal from '../../components/gestor/MarketReportModal'
 import type { FunnelMetrics } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
-import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS } from '../../lib/leadReminders'
+import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
+import { useLeadInteractions } from '../../hooks/useLeadInteractions'
 import { aiFetch } from '../../lib/authHeaders'
+import { pickCurrentFunnelRow } from '../../lib/funnelPeriod'
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 interface HistoricalEntry {
@@ -281,6 +283,8 @@ export default function GestorHome() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const institutionId = user?.institution_id!
+  // Fase 0A: "sem contato" desde a última interação real, limite por escola
+  const { optsFor, noContactDays, refresh: refreshInteractions } = useLeadInteractions(institutionId)
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   useEffect(() => {
@@ -305,6 +309,8 @@ export default function GestorHome() {
   const [userRankings, setUserRankings] = useState<UserRanking[]>([])
   // Item 2d — agregado de lembretes de leads (todos os atendentes), pro
   // gestor ver overdue/hoje/futuros sem entrar em cada lead individualmente.
+  // Fase 0A: visitas que já passaram e não receberam baixa (pendência)
+  const [pastVisitsNoOutcome, setPastVisitsNoOutcome] = useState(0)
   const [leadReminders, setLeadReminders] = useState<{ id: string; student_name: string; responsible_name: string; status: string; created_at: string; next_followup: string | null; assigned_to: string | null }[]>([])
   const [allUsers, setAllUsers] = useState<{ id: string; full_name: string }[]>([])
   const [marketData, setMarketData] = useState<MarketData | null>(null)
@@ -388,7 +394,7 @@ export default function GestorHome() {
       // prevStart/duration só dependem de start/end (já calculados acima),
       // então já entram no batch principal — antes ficavam pra uma rodada
       // separada, mais tarde, sem motivo (não dependem de nenhum outro
-      // resultado). Mesma lógica pra leadsForEnrollData/openConvs/npsRes/
+      // resultado). Mesma lógica pra openConvs/npsRes/
       // instData: nenhum depende de cyclesRes nem um do outro, só de
       // institutionId/start/end — juntar tudo num Promise.all só troca ~6
       // round-trips sequenciais por 1.
@@ -402,10 +408,11 @@ export default function GestorHome() {
       const [
         cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes,
         waPhoneRes, waConvsRes, overduePaymentsRes,
-        { data: leadsForEnrollData }, { data: openConvs },
+        { data: openConvs },
         { data: prevLeadsData }, { data: prevEnrollData },
         { data: npsRes, error: npsErr }, { data: instData },
         { data: allLeadsForOwnershipData }, { data: statusChangeLogsData },
+        { count: pastVisitsNoOutcomeCount },
       ] = await Promise.all([
         supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
@@ -413,7 +420,9 @@ export default function GestorHome() {
         supabase.from('leads').select('id,status,created_at,grade_interest,source').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('visits').select('id,status,created_at').eq('institution_id', institutionId).gte('created_at', start),
         supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid,direction,is_bot_message').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
-        supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
+        // Fase 0A: matrícula = evento (enrollment_date), gravada pelo banco por
+        // qualquer caminho; desfeitas (lead saiu de 'enrolled') não contam.
+        supabase.from('enrollments').select('id,user_id,created_at:enrollment_date').eq('institution_id', institutionId).is('cancelled_at', null).gte('enrollment_date', start).lte('enrollment_date', end),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
         supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_human_response_at,remote_jid,contact_name,last_message').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end).not('remote_jid', 'ilike', '%@g.us'),
@@ -425,23 +434,12 @@ export default function GestorHome() {
         // filtrados pelo period do dashboard, são "pendências atuais", igual
         // Inadimplência já não é period-filtrada em AdminFinancial.tsx.
         supabase.from('payments').select('id,amount,due_date').eq('institution_id', institutionId).eq('status', 'overdue').order('due_date', { ascending: true }),
-        // Coluna correta é `assigned_to` — a tabela `leads` não tem
-        // `responsible_id` (esse nome é da interface CrmLead, do CRM comercial
-        // interno da Áion, um schema diferente). A query antiga voltava 400 Bad
-        // Request (coluna inexistente); o supabase-js não lança exceção nesse
-        // caso (resolve com data:null, error:{...}), então o erro nunca
-        // aparecia — só o ranking de matrículas ficava sempre incompleto
-        // (perdia leads marcados 'enrolled' sem linha correspondente em
-        // enrollments) sem nenhum sinal visível do porquê.
-        supabase.from('leads').select('id, assigned_to').eq('institution_id', institutionId).eq('status', 'enrolled').gte('updated_at', start).lte('updated_at', end),
         // Open convs count — sem filtro de data (todas as conversas ativas agora)
         supabase.from('whatsapp_conversations').select('id').eq('institution_id', institutionId).in('status', ['open', 'waiting']).not('remote_jid', 'ilike', '%@g.us'),
         // prevEnrolled usa a mesma fonte/campo de data que totalEnrolled
-        // (enrollments.created_at) — antes comparava matrículas do período atual
-        // (evento de matrícula) contra leads do período anterior filtrados por
-        // data de cadastro do lead, uma base temporal diferente.
+        // (enrollments.enrollment_date, data do evento).
         supabase.from('leads').select('id,status,created_at').eq('institution_id', institutionId).gte('created_at', prevStart).lt('created_at', start),
-        supabase.from('enrollments').select('id').eq('institution_id', institutionId).gte('created_at', prevStart).lt('created_at', start),
+        supabase.from('enrollments').select('id').eq('institution_id', institutionId).is('cancelled_at', null).gte('enrollment_date', prevStart).lt('enrollment_date', start),
         // NPS — última pesquisa de satisfação com respostas de verdade
         // (status != 'draft' evita trocar pra um rascunho vazio recém-criado
         // em vez da pesquisa ativa/fechada que já tem respostas reais).
@@ -459,8 +457,12 @@ export default function GestorHome() {
         supabase.from('leads').select('id, student_name, responsible_name, status, created_at, next_followup, assigned_to').eq('institution_id', institutionId),
         // Item 8 — "avançados no funil": leads cujo status mudou nos
         // últimos 30 dias, pra contar por responsável atual (join em JS
-        // contra allLeadsForOwnershipData, ver abaixo).
-        supabase.from('audit_logs').select('record_id').eq('institution_id', institutionId).eq('module', 'lead').in('action', ['Status alterado', 'Lead reaberto']).gte('created_at', advancedSinceIso),
+        // contra allLeadsForOwnershipData, ver abaixo). Fonte: histórico de
+        // status (Fase 0A), que pega Kanban, modal, Hub e robô.
+        supabase.from('lead_status_history').select('lead_id').eq('institution_id', institutionId).gte('changed_at', advancedSinceIso),
+        // Fase 0A: visita só conta como realizada com baixa — as que já
+        // passaram e seguem 'scheduled' viram pendência nos Alertas.
+        supabase.from('visits').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId).eq('status', 'scheduled').lt('scheduled_date', new Date().toISOString()),
       ])
       if (npsErr) console.error('[GestorHome] erro ao buscar NPS:', npsErr)
 
@@ -472,11 +474,13 @@ export default function GestorHome() {
       const chartActive = loadedCycles.find(c => c.status === 'active') ?? null
       if (chartActive) {
         const [leadsAtivosRes, reenrollRes] = await Promise.all([
-          supabase.from('leads').select('id, updated_at')
+          // Matrículas pela data do evento (antes: updated_at do lead, que muda
+          // a cada edição). Ano civil no fuso de Brasília.
+          supabase.from('enrollments').select('id, updated_at:enrollment_date')
             .eq('institution_id', institutionId)
-            .eq('status', 'enrolled')
-            .gte('updated_at', `${chartActive.year}-01-01`)
-            .lte('updated_at', `${chartActive.year}-12-31`),
+            .is('cancelled_at', null)
+            .gte('enrollment_date', `${chartActive.year}-01-01T00:00:00-03:00`)
+            .lt('enrollment_date', `${chartActive.year + 1}-01-01T00:00:00-03:00`),
           supabase.from('monthly_reenrollments').select('period, confirmed')
             .eq('institution_id', institutionId)
             .gte('period', `${chartActive.year}-01`)
@@ -512,16 +516,12 @@ export default function GestorHome() {
       const enrollments = (enrollRes.data ?? []) as { id: string; user_id: string; created_at: string }[]
       const users = (usersRes.data ?? []) as { id: string; full_name: string; role: string }[]
 
-      const leadsForEnroll = (leadsForEnrollData ?? []) as { id: string; assigned_to: string | null }[]
-
+      // Fase 0A: enrollments é a fonte única (o banco grava a matrícula em
+      // qualquer caminho, com o responsável do lead) — sem mais somar leads
+      // 'enrolled' por updated_at.
       const enrollCountByUser: Record<string, number> = {}
       enrollments.forEach(e => {
         if (e.user_id) enrollCountByUser[e.user_id] = (enrollCountByUser[e.user_id] || 0) + 1
-      })
-      leadsForEnroll.forEach(l => {
-        if (l.assigned_to && !enrollments.find(e => e.user_id === l.assigned_to)) {
-          enrollCountByUser[l.assigned_to] = (enrollCountByUser[l.assigned_to] || 0) + 1
-        }
       })
 
       // Item 8 — volume de leads trabalhados por atendente, agora que
@@ -531,9 +531,9 @@ export default function GestorHome() {
       const assignedCountByUser: Record<string, number> = {}
       allLeadsForOwnership.forEach(l => { if (l.assigned_to) assignedCountByUser[l.assigned_to] = (assignedCountByUser[l.assigned_to] || 0) + 1 })
       const advancedCountByUser: Record<string, number> = {}
-      const statusChangeLogs = (statusChangeLogsData ?? []) as { record_id: string }[]
+      const statusChangeLogs = (statusChangeLogsData ?? []) as { lead_id: string }[]
       statusChangeLogs.forEach(log => {
-        const ownerId = leadAssignedToById.get(log.record_id)
+        const ownerId = leadAssignedToById.get(log.lead_id)
         if (ownerId) advancedCountByUser[ownerId] = (advancedCountByUser[ownerId] || 0) + 1
       })
 
@@ -553,6 +553,8 @@ export default function GestorHome() {
       // Item 2d — agregado de lembretes (todos os atendentes); a UI usa
       // getLeadReminderInfo (lib/leadReminders.ts) pra decidir o que exibir.
       setLeadReminders(allLeadsForOwnership)
+      setPastVisitsNoOutcome(pastVisitsNoOutcomeCount ?? 0)
+      refreshInteractions()
 
       // WhatsApp phone record (detection)
       setWaPhoneRecord((waPhoneRes.data as { phone_number: string; display_name: string } | null) ?? null)
@@ -732,8 +734,9 @@ export default function GestorHome() {
           })
         }
 
-        const sortedFunnel = (funnelRes.data ?? []).sort((a: FunnelMetrics, b: FunnelMetrics) => a.period.localeCompare(b.period))
-        const latestF = sortedFunnel[sortedFunnel.length - 1] as FunnelMetrics | undefined
+        // Mês atual por DATA (ver lib/funnelPeriod.ts) — antes era o último por
+        // ordem alfabética, que caía em linhas lixo/futuras e gerava alerta falso.
+        const latestF = pickCurrentFunnelRow((funnelRes.data ?? []) as FunnelMetrics[]) ?? undefined
         if (latestF) {
           const checks = [
             { key: 'registrations', val: latestF.registrations, target: latestF.registrations_target, label: 'Cadastros' },
@@ -890,7 +893,7 @@ export default function GestorHome() {
   const campaignStartMonth = activeCycle?.campaign_start_month ?? anyCycle?.campaign_start_month ?? 8
   const { monthsUntil, campaignStartMonth: campaignStartLabel, campaignYear } = calcCampaignTiming(campaignStartMonth)
 
-  const latestFunnel = funnelData.length > 0 ? [...funnelData].sort((a, b) => a.period.localeCompare(b.period))[funnelData.length - 1] : null
+  const latestFunnel = pickCurrentFunnelRow(funnelData)
   const funnelHasData = funnelData.some(f => (f.registrations || 0) > 0)
 
   useEffect(() => {
@@ -1151,8 +1154,11 @@ export default function GestorHome() {
     if (regPct < 60) alerts.push({ msg: `Cadastros ${regPct.toFixed(0)}% da meta — intensifique captação`, type: 'warning', action: 'Ver funil', path: '/reports' })
   }
   if (score >= 75) alerts.push({ msg: `Score ${score} — escola com desempenho acima da média!`, type: 'success' })
-  const leadsNoContact = leads.filter(l => getLeadReminderInfo(l)?.urgency === 'stale').length
-  if (leadsNoContact > 0) alerts.push({ msg: `${leadsNoContact} leads sem contato há mais de ${NO_CONTACT_DAYS} dias`, type: 'warning', action: 'Ver leads', path: '/leads?filter=no_contact' })
+  // Fase 0A: todos os leads em aberto da escola (antes: só os cadastrados no
+  // período do filtro), sem contato desde a última interação real.
+  const leadsNoContact = leadReminders.filter(l => getLeadReminderInfo(l, optsFor(l.id))?.urgency === 'stale').length
+  if (leadsNoContact > 0) alerts.push({ msg: `${leadsNoContact} leads sem contato há ${noContactDays} dias ou mais`, type: 'warning', action: 'Ver leads', path: '/leads?filter=no_contact' })
+  if (pastVisitsNoOutcome > 0) alerts.push({ msg: `${pastVisitsNoOutcome} ${pastVisitsNoOutcome === 1 ? 'visita já passou e está' : 'visitas já passaram e estão'} sem baixa — marque se aconteceu, faltou ou foi cancelada`, type: 'warning', action: 'Dar baixa', path: '/visits?pendentes=1' })
   if (avgSatisfaction !== null && avgSatisfaction < 2.5) alerts.push({ msg: `Satisfação média abaixo de 2.5 (${avgSatisfaction.toFixed(1)}/3) — atenção ao atendimento`, type: 'warning', action: 'Ver pesquisas', path: '/pesquisas' })
 
   const avgFee = (setupCycle?.school_data?.avg_monthly_fee as number | null | undefined) || latest?.avg_monthly_fee || latest?.fee || null
@@ -1748,7 +1754,7 @@ export default function GestorHome() {
       {(() => {
         const usersMap = new Map(allUsers.map(u => [u.id, u.full_name]))
         const withReminder = leadReminders
-          .map(l => ({ lead: l, reminder: getLeadReminderInfo(l) }))
+          .map(l => ({ lead: l, reminder: getLeadReminderInfo(l, optsFor(l.id)) }))
           .filter((x): x is { lead: typeof leadReminders[number]; reminder: NonNullable<ReturnType<typeof getLeadReminderInfo>> } => x.reminder !== null)
           .sort((a, b) => {
             const order = { overdue: 0, today: 1, stale: 2, upcoming: 3 } as const

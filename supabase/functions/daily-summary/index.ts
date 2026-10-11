@@ -17,17 +17,21 @@ serve(async () => {
 
   const results = await Promise.allSettled(
     institutions.map(async (inst: { id: string; name: string }) => {
-      const today = new Date()
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
+      // Fase 0A: "hoje" no fuso de Brasília (a função roda em UTC — antes o
+      // dia começava às 21h de Brasília) e matrícula pela data do EVENTO em
+      // enrollments (antes: lead 'enrolled' com updated_at hoje, que conta
+      // qualquer edição de um lead já matriculado).
+      const todayBR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+      const startOfDay = new Date(`${todayBR}T00:00:00-03:00`).toISOString()
 
       const [leadsRes, enrolledRes, transfersRes] = await Promise.all([
         supabase.from('leads').select('id', { count: 'exact', head: true })
           .eq('institution_id', inst.id)
           .gte('created_at', startOfDay),
-        supabase.from('leads').select('id', { count: 'exact', head: true })
+        supabase.from('enrollments').select('id', { count: 'exact', head: true })
           .eq('institution_id', inst.id)
-          .eq('status', 'enrolled')
-          .gte('updated_at', startOfDay),
+          .is('cancelled_at', null)
+          .gte('enrollment_date', startOfDay),
         // transfer_requests não existe mais — o projeto usa student_transfers
         // desde a reforma de Transferências. "Pendente" replica o mesmo
         // critério do KPI "Aguardando pesquisa" da tela de Transferências

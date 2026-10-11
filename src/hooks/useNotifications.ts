@@ -65,6 +65,7 @@ export function useNotifications(institutionId: string | null, isSuperAdmin = fa
       let query = supabase
         .from('system_notifications')
         .select('*')
+        .is('resolved_at', null)  // Fase 0A: alerta resolvido (ex.: falso) sai do sino, sem ser apagado
         .order('created_at', { ascending: false })
         .limit(20)
 

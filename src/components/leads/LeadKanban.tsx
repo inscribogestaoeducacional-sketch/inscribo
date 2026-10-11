@@ -23,7 +23,10 @@ import { createNotification } from '../../lib/notifications'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { useLeadUnits, matchesUnitFilter, UNIT_FILTER_ALL, UNIT_FILTER_NONE, type LeadUnit } from '../../lib/leadUnits'
-import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS } from '../../lib/leadReminders'
+import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS, type ReminderOptions } from '../../lib/leadReminders'
+import { useLeadInteractions } from '../../hooks/useLeadInteractions'
+import { fetchPendingVisitsByLead, isPastVisit, advanceLeadTo, type PendingVisit } from '../../lib/visitOutcome'
+import VisitOutcomeDialog from '../visits/VisitOutcomeDialog'
 import NewLeadModal from './NewLeadModal'
 import ScheduleVisitModal from './ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
@@ -321,14 +324,19 @@ interface CardContentProps {
   onReminder: (lead: Lead) => void
   onChildDecision: (child: Lead, decision: 'enrolled' | 'lost' | 'open') => void
   onReopenAll: () => void
+  // Fase 0A: base do lembrete "sem contato" (última interação real + limite da escola)
+  reminderOpts?: ReminderOptions
+  // Fase 0A: visita que já passou e está sem baixa → selo clicável
+  pendingPastVisit?: PendingVisit | null
+  onVisitOutcome?: (lead: Lead) => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, unitName, selectMode, selected, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, unitName, selectMode, selected, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll, reminderOpts, pendingPastVisit, onVisitOutcome }: CardContentProps) {
   const hasFamily = !!familyMembers && familyMembers.length > 1
   const lostReason = lead.lost_reason
   const lostLabel = lostReason ? LOST_REASONS.find(r => r.value === lostReason)?.label : null
   const temperature = lead.lead_temperature ? LEAD_TEMPERATURES.find(t => t.value === lead.lead_temperature) : null
-  const reminder = getLeadReminderInfo(lead)
+  const reminder = getLeadReminderInfo(lead, reminderOpts)
   const reminderColors = reminder ? REMINDER_COLORS[reminder.urgency] : null
   const assignedInitials = assignedUser ? assignedUser.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() : null
 
@@ -428,6 +436,20 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
               </span>
             )}
           </div>
+        )}
+
+        {/* Fase 0A — visita que já passou sem baixa */}
+        {!overlay && pendingPastVisit && onVisitOutcome && (
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onVisitOutcome(lead) }}
+            title="Dar baixa na visita"
+            style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%', padding: '4px 8px', borderRadius: 6, marginBottom: 4, background: '#FFFBEB', border: '1px solid #FDE68A', cursor: 'pointer' }}>
+            <Calendar size={11} color="#B45309" />
+            <span style={{ fontSize: 11, color: '#B45309', fontWeight: 600 }}>
+              Visita {new Date(pendingPastVisit.scheduled_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} sem baixa
+            </span>
+          </button>
         )}
 
         {/* Lembrete (item 2d) */}
@@ -763,13 +785,18 @@ export default function LeadKanban() {
   // ── Item 7 — temperatura ───────────────────────────────────────────────────
   const [temperatureFilter, setTemperatureFilter] = useState<'' | 'frio' | 'morno' | 'quente'>('')
 
-  // Filtro "sem contato" — dias configurável no FilterDrawer (default =
-  // NO_CONTACT_DAYS, o mesmo usado no badge de lembrete e no alerta do
-  // GestorHome, que navega aqui com ?filter=no_contact). O badge/lembrete em
-  // si (getLeadReminderInfo) continua fixo em NO_CONTACT_DAYS — só o filtro
-  // é ajustável, por isso a checagem abaixo não reusa mais getLeadReminderInfo.
+  // Filtro "sem contato" — dias ajustável no FilterDrawer (padrão = limite da
+  // escola em lead_reminder_settings, o mesmo do selo de lembrete e do alerta
+  // do GestorHome, que navega aqui com ?filter=no_contact).
   const [noContactFilter, setNoContactFilter] = useState(false)
   const [noContactDays, setNoContactDays] = useState(NO_CONTACT_DAYS)
+  // Fase 0A: base única do "sem contato" (última interação real) e limite da
+  // escola, que vira o padrão do filtro.
+  const { optsFor, noContactDays: schoolNoContactDays, refresh: refreshInteractions } = useLeadInteractions(user?.institution_id)
+  useEffect(() => { setNoContactDays(schoolNoContactDays) }, [schoolNoContactDays])
+  // Fase 0A: visitas sem baixa por lead + pergunta "a visita aconteceu?"
+  const [pendingVisitsByLead, setPendingVisitsByLead] = useState<Map<string, PendingVisit[]>>(new Map())
+  const [visitPrompt, setVisitPrompt] = useState<{ open: boolean; title: string; subtitle?: string; visits: PendingVisit[]; advanceLead: boolean }>({ open: false, title: '', visits: [], advanceLead: true })
 
   // ── Item 6c — drawer de filtros modernizado ────────────────────────────────
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
@@ -861,6 +888,8 @@ export default function LeadKanban() {
         supabase.from('institutions').select('city').eq('id', instId).maybeSingle(),
       ])
       setLeads(leadsData)
+      setPendingVisitsByLead(await fetchPendingVisitsByLead(instId))
+      refreshInteractions()
       setUsers((usersRes.data as SimpleUser[]) ?? [])
       setActiveCampaignCycle(campaignRes.data ? { id: campaignRes.data.id, label: campaignRes.data.label || String(campaignRes.data.year) } : null)
       setInstitutionCity(instRes.data?.city ?? '')
@@ -872,8 +901,29 @@ export default function LeadKanban() {
     }
   }
 
+  // Fase 0A — ao mover o lead pra Visita ou adiante, pergunta se a visita
+  // agendada aconteceu (visita só conta como realizada com baixa). Junta as
+  // visitas de vários leads (card de família move todos de uma vez).
+  const ADVANCED_STAGES: Lead['status'][] = ['visit', 'proposal', 'enrolled']
+  const promptVisitsFor = async (leadIds: string[]) => {
+    const map = await fetchPendingVisitsByLead(user!.institution_id)
+    setPendingVisitsByLead(map)
+    const visits = leadIds.flatMap(id => map.get(id) ?? [])
+    if (visits.length === 0) return
+    setVisitPrompt(prev => {
+      const merged = prev.open ? [...prev.visits, ...visits.filter(v => !prev.visits.some(p => p.id === v.id))] : visits
+      return { open: true, title: 'A visita aconteceu?', subtitle: 'O lead avançou de etapa e tem visita sem baixa. A visita só conta como realizada com baixa.', visits: merged, advanceLead: false }
+    })
+  }
+  const openVisitOutcome = (lead: Lead) => {
+    const visits = pendingVisitsByLead.get(lead.id) ?? []
+    if (visits.length === 0) return
+    setVisitPrompt({ open: true, title: 'Dar baixa na visita', subtitle: lead.student_name || lead.responsible_name || undefined, visits, advanceLead: true })
+  }
+
   const handleSave = async (data: Partial<Lead> & { familyMatchId?: string | null; additionalStudents?: StudentEntry[] }) => {
     setError('')
+    const statusAdvancedTo = editingLead && data.status && data.status !== editingLead.status && ADVANCED_STAGES.includes(data.status) ? editingLead.id : null
     try {
       await saveLead({
         institutionId: user!.institution_id,
@@ -891,6 +941,7 @@ export default function LeadKanban() {
 
     await loadData()
     setEditingLead(null)
+    if (statusAdvancedTo) promptVisitsFor([statusAdvancedTo])
   }
 
 
@@ -926,16 +977,9 @@ export default function LeadKanban() {
         })
         await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: leadId, action: 'status_changed', old_value: previousStatus, new_value: newStatus, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
         if (newStatus === 'enrolled') {
-          const { supabase: db2 } = await import('../../lib/supabase')
-          await db2.from('enrollments').insert({
-            institution_id: user!.institution_id,
-            lead_id: currentLead.id,
-            student_name: currentLead.student_name || currentLead.responsible_name,
-            course_grade: currentLead.grade_interest,
-            enrollment_date: new Date().toISOString(),
-            user_id: currentLead.assigned_to ?? user!.id,
-            responsible_name: currentLead.responsible_name,
-          })
+          // A matrícula formal (enrollments) é gravada pelo banco — gatilho
+          // trg_lead_status_changed, Fase 0A — em qualquer caminho (Kanban,
+          // modal, Hub, robô). Gravar aqui também duplicaria.
           createNotification({
             institution_id: user!.institution_id,
             type: 'milestone',
@@ -947,6 +991,7 @@ export default function LeadKanban() {
         }
       }
       await loadData()
+      if (previousStatus !== newStatus && ADVANCED_STAGES.includes(newStatus)) promptVisitsFor([leadId])
     } catch (err) {
       console.error('Erro ao atualizar status:', err)
       setError('Erro ao atualizar status do lead')
@@ -1048,7 +1093,7 @@ export default function LeadKanban() {
       const [year, month, day] = data.scheduled_date.split('-')
       const visitDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes), 0, 0)
       await DatabaseService.createVisit({ institution_id: user!.institution_id, lead_id: leadToSchedule.id, student_name: leadToSchedule.student_name, scheduled_date: visitDate.toISOString(), notes: data.notes, status: 'scheduled' })
-      await DatabaseService.updateLead(leadToSchedule.id, { status: 'scheduled' })
+      await advanceLeadTo(leadToSchedule.id, 'scheduled')  // Fase 0A: só avança, nunca volta
       const { supabase: db } = await import('../../lib/supabase')
       await db.from('audit_logs').insert({
         institution_id: user!.institution_id, module: 'lead', record_id: leadToSchedule.id,
@@ -1112,13 +1157,15 @@ export default function LeadKanban() {
 
   // Mesma regra de elegibilidade de getLeadReminderInfo (lib/leadReminders.ts)
   // pro critério "automático" — status aberto e sem next_followup manual
-  // (que já tem prioridade/rótulo próprio) — só com o número de dias
-  // configurável em vez do NO_CONTACT_DAYS fixo usado no badge/lembrete.
+  // (que já tem prioridade/rótulo próprio) — com o número de dias ajustável no
+  // filtro (padrão = limite da escola, o mesmo do selo de lembrete).
   const isLeadNoContact = (lead: Lead, days: number) => {
     if (lead.status === 'enrolled' || lead.status === 'lost') return false
     if (lead.next_followup) return false
-    const createdDays = Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 86400000)
-    return createdDays >= days
+    // Fase 0A: desde a última interação real (sem nenhuma, desde o cadastro)
+    const base = optsFor(lead.id).lastInteractionAt ?? lead.created_at
+    const idleDays = Math.floor((Date.now() - new Date(base).getTime()) / 86400000)
+    return idleDays >= days
   }
 
   // Item 2b/6b — filtro de responsável ("Meus leads"/"Todos"/"Sem responsável"/
@@ -1417,7 +1464,7 @@ export default function LeadKanban() {
   const clearAllFilters = () => {
     setSearchTerm(''); setFilterSource(''); setFilterStatus(''); setPeriodFilter('all')
     setCustomStart(''); setCustomEnd(''); setGradeFilter('all'); setShiftFilter('all')
-    setTemperatureFilter(''); setOwnerFilter('all'); setNoContactFilter(false); setNoContactDays(NO_CONTACT_DAYS)
+    setTemperatureFilter(''); setOwnerFilter('all'); setNoContactFilter(false); setNoContactDays(schoolNoContactDays)
     setUnitFilter(UNIT_FILTER_ALL)
   }
 
@@ -1531,8 +1578,9 @@ export default function LeadKanban() {
             </div>
           ) : mobileLeads.map(lead => {
             const cfg = statusConfig[lead.status]
-            const reminder = getLeadReminderInfo(lead)
+            const reminder = getLeadReminderInfo(lead, optsFor(lead.id))
             const reminderColors = reminder ? REMINDER_COLORS[reminder.urgency] : null
+            const pendingPast = (pendingVisitsByLead.get(lead.id) ?? []).find(isPastVisit)
             const siblings = familySiblingsMap.get(lead.id)
             return (
               <div key={lead.id} onClick={() => selectMode ? toggleSelected([lead.id]) : cardActions.onEdit(lead)}
@@ -1563,6 +1611,12 @@ export default function LeadKanban() {
                         <Bell size={10} />{reminder.label}
                       </span>
                     )}
+                    {pendingPast && !selectMode && (
+                      <button onClick={e => { e.stopPropagation(); openVisitOutcome(lead) }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '1px 6px', cursor: 'pointer' }}>
+                        <Calendar size={10} />Visita {new Date(pendingPast.scheduled_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} sem baixa
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1585,6 +1639,11 @@ export default function LeadKanban() {
           <ScheduleVisitModal isOpen={showScheduleVisitModal} onClose={() => { setShowScheduleVisitModal(false); setLeadToSchedule(null) }} lead={leadToSchedule} onSchedule={handleScheduleVisit} />
         )}
         <ReminderModal isOpen={reminderModal.open} lead={reminderModal.lead} onClose={() => setReminderModal({ open: false, lead: null })} onSave={handleSaveReminder} />
+      <VisitOutcomeDialog
+        open={visitPrompt.open} title={visitPrompt.title} subtitle={visitPrompt.subtitle}
+        visits={visitPrompt.visits} advanceLead={visitPrompt.advanceLead}
+        onClose={() => { setVisitPrompt(p => ({ ...p, open: false, visits: [] })); loadData() }}
+      />
         <LostReasonModal isOpen={lostReasonModal.open} lead={lostReasonModal.lead} count={lostReasonModal.leadIds.length} onConfirm={handleConfirmLost} onCancel={handleCancelLost} />
         {auditLeadId && <AuditModal recordId={auditLeadId} moduleName="leads" isOpen={!!auditLeadId} onClose={() => setAuditLeadId(null)} />}
         {toast && (
@@ -1708,6 +1767,9 @@ export default function LeadKanban() {
                               selected={idsForCard(lead).every(id => selectedIds.has(id))}
                               familyMembers={family?.members}
                               onReopenAll={() => handleReopenAllLost(family ? family.lostMembers.map(m => m.id) : [lead.id])}
+                              reminderOpts={optsFor(lead.id)}
+                              pendingPastVisit={(pendingVisitsByLead.get(lead.id) ?? []).find(isPastVisit) ?? null}
+                              onVisitOutcome={openVisitOutcome}
                               {...cardActions}
                             />
                           )
@@ -1734,6 +1796,7 @@ export default function LeadKanban() {
             <div className="w-[260px] rotate-1 cursor-grabbing">
               <CardContent
                 lead={activeLead} config={statusConfig[activeLead.status]} isFlashing={false} overlay
+                reminderOpts={optsFor(activeLead.id)}
                 compact={compactView}
                 assignedUser={activeLead.assigned_to ? usersById.get(activeLead.assigned_to) ?? null : null}
                 unitName={unitCfg.enabled ? unitCfg.unitName(activeLead.unit_id) : null}
@@ -1757,6 +1820,11 @@ export default function LeadKanban() {
       )}
 
       <ReminderModal isOpen={reminderModal.open} lead={reminderModal.lead} onClose={() => setReminderModal({ open: false, lead: null })} onSave={handleSaveReminder} />
+      <VisitOutcomeDialog
+        open={visitPrompt.open} title={visitPrompt.title} subtitle={visitPrompt.subtitle}
+        visits={visitPrompt.visits} advanceLead={visitPrompt.advanceLead}
+        onClose={() => { setVisitPrompt(p => ({ ...p, open: false, visits: [] })); loadData() }}
+      />
 
       {/* Modal de motivo de perda */}
       <LostReasonModal

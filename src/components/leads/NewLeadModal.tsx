@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { supabase, type Lead } from '../../lib/supabase'
 import { useLeadUnits, unitOptionsFor } from '../../lib/leadUnits'
+import LeadVisitsPanel from '../visits/LeadVisitsPanel'
 import {
   type SimpleUser, type AuditEntry, type StudentEntry, type FamilyMatch,
   statusConfig, sourceOptions, LEAD_TEMPERATURES, LEAD_STAGES,
@@ -652,6 +653,19 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                       {formData.status === 'lost' ? '🔴 Perdido' : 'Marcar como Perdido'}
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Fase 0A — visitas do lead com baixa (realizada/faltou/cancelada) */}
+              {editingLead && (
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Visitas</p>
+                  {/* "Aconteceu" pode avançar o lead pra 'visit' no banco — relê
+                      o status pro formulário não desfazer isso ao salvar. */}
+                  <LeadVisitsPanel leadId={editingLead.id} onChanged={async () => {
+                    const { data } = await supabase.from('leads').select('status').eq('id', editingLead.id).maybeSingle()
+                    if (data?.status) setFormData(f => ({ ...f, status: data.status as Lead['status'] }))
+                  }} />
                 </div>
               )}
             </div>

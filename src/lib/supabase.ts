@@ -425,6 +425,16 @@ export class DatabaseService {
   }
 
   static async createVisit(visit: Partial<Visit>): Promise<Visit> {
+    // Fase 0A: recusa ano absurdo (mesmo intervalo do gatilho no banco). O
+    // responsável (= quem agendou) é gravado pelo gatilho visits_before_write,
+    // que confere se o usuário existe em `users` (super admin não existe).
+    if (visit.scheduled_date) {
+      const d = new Date(visit.scheduled_date)
+      const max = new Date(); max.setMonth(max.getMonth() + 18)
+      if (isNaN(d.getTime()) || d.getTime() < Date.now() - 60 * 86400000 || d.getTime() > max.getTime()) {
+        throw new Error(`Data da visita fora do intervalo permitido (${isNaN(d.getTime()) ? 'inválida' : d.toLocaleDateString('pt-BR')}). Confira o ano.`)
+      }
+    }
     const { data, error } = await supabase
       .from('visits')
       .insert(visit)

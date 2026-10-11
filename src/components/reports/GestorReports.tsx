@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import CampaignGeneratorModal from './CampaignGeneratorModal'
 import LinkLeadsToCampaignModal from './LinkLeadsToCampaignModal'
 import { aiFetch } from '../../lib/authHeaders'
+import { pickCurrentFunnelRow } from '../../lib/funnelPeriod'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface CampaignCycle {
@@ -1271,9 +1272,11 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
   const calcAvgTime = async () => {
     const { data: enrollments } = await supabase
       .from('enrollments')
-      .select('lead_id, created_at')
+      .select('lead_id, created_at:enrollment_date')
       .eq('institution_id', institutionId)
       .not('lead_id', 'is', null)
+      .is('cancelled_at', null)
+      .order('enrollment_date', { ascending: false })
       .limit(50)
 
     if (!enrollments || enrollments.length === 0) return
@@ -1812,7 +1815,8 @@ export default function GestorReports({ institutionId, institutionName }: Props)
 
   // ─── MOBILE ───────────────────────────────────────────────
   if (isMobile) {
-    const latestFunnel = metrics.length > 0 ? metrics[metrics.length - 1] : null
+    // Mês atual por data — antes era o último mês do ciclo (futuro, zerado)
+    const latestFunnel = pickCurrentFunnelRow(metrics)
     const mMetrics = [
       { label: 'Cadastros',    val: latestFunnel?.registrations ?? 0,   target: latestFunnel?.registrations_target ?? 0,   color: '#3B82F6' },
       { label: 'Agendamentos', val: latestFunnel?.schedules ?? 0,        target: latestFunnel?.schedules_target ?? 0,        color: '#8B5CF6' },

@@ -4,10 +4,19 @@
 //
 // Dois sinais independentes, o manual tem prioridade quando os dois existem:
 // - manual: leads.next_followup, data que o usuário define explicitamente.
-// - automático: mesmo critério do alerta "leads sem contato" que já existia
-//   no GestorHome (status aberto + N dias desde created_at), só que agora
-//   por lead individual em vez de só contagem agregada.
+// - automático: N dias sem interação real. Fase 0A: conta desde a ÚLTIMA
+//   INTERAÇÃO (mensagem na conversa vinculada, atividade registrada no lead ou
+//   nota do contato — função SQL lead_last_interactions, carregada pelo hook
+//   useLeadInteractions); sem nenhuma interação, conta desde o cadastro.
+//   N é configurável por escola (lead_reminder_settings); 5 é o padrão.
 export const NO_CONTACT_DAYS = 5
+
+export interface ReminderOptions {
+  /** Última interação real do lead (null/undefined = nunca houve) */
+  lastInteractionAt?: string | null
+  /** Limite de dias da escola (padrão NO_CONTACT_DAYS) */
+  noContactDays?: number
+}
 
 export type ReminderUrgency = 'overdue' | 'today' | 'upcoming' | 'stale'
 
@@ -18,7 +27,7 @@ export interface LeadReminderInfo {
   date: string | null
 }
 
-export function getLeadReminderInfo(lead: { status: string; next_followup?: string | null; created_at: string }): LeadReminderInfo | null {
+export function getLeadReminderInfo(lead: { status: string; next_followup?: string | null; created_at: string }, opts: ReminderOptions = {}): LeadReminderInfo | null {
   if (lead.status === 'enrolled' || lead.status === 'lost') return null
   const now = new Date()
 
@@ -33,8 +42,13 @@ export function getLeadReminderInfo(lead: { status: string; next_followup?: stri
     return { kind: 'manual', urgency: 'upcoming', label: `Follow-up em ${dueLabel}`, date: lead.next_followup }
   }
 
-  const createdDays = Math.floor((now.getTime() - new Date(lead.created_at).getTime()) / 86400000)
-  if (createdDays >= NO_CONTACT_DAYS) return { kind: 'auto', urgency: 'stale', label: `Sem contato há ${createdDays}d`, date: null }
+  const limit = opts.noContactDays ?? NO_CONTACT_DAYS
+  const base = opts.lastInteractionAt ?? lead.created_at
+  const idleDays = Math.floor((now.getTime() - new Date(base).getTime()) / 86400000)
+  if (idleDays >= limit) {
+    const label = opts.lastInteractionAt ? `Sem contato há ${idleDays}d` : `Sem contato desde o cadastro (${idleDays}d)`
+    return { kind: 'auto', urgency: 'stale', label, date: null }
+  }
   return null
 }
 

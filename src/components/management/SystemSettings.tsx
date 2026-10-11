@@ -16,6 +16,7 @@ import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 import LeadUnitFieldEditor from './LeadUnitFieldEditor'
+import LeadReminderSettingsEditor from './LeadReminderSettingsEditor'
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
 
@@ -1895,6 +1896,7 @@ export default function SystemSettings() {
             </div>
             {institutionId && <GradeLevelsEditor institutionId={institutionId} onToast={showToast} />}
             {institutionId && <LeadUnitFieldEditor institutionId={institutionId} onToast={showToast} />}
+            {institutionId && <LeadReminderSettingsEditor institutionId={institutionId} onToast={showToast} />}
           </div>
         )}
       </div>

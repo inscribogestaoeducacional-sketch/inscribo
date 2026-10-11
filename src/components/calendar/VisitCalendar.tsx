@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Visit, Lead } from '../../lib/supabase'
 import { logAudit } from '../../hooks/useAudit'
+import { setVisitOutcome, advanceLeadTo, isPastVisit } from '../../lib/visitOutcome'
 import AuditModal from '../common/AuditModal'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -289,6 +290,28 @@ export default function VisitCalendar() {
     .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
     .slice(0, 10)
 
+  // Fase 0A — já passaram e seguem 'scheduled' (sem baixa), mais antigas primeiro
+  const pastPendingVisits = visits
+    .filter(v => v.status === 'scheduled' && isPastVisit(v))
+    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+
+  // Alerta "visitas sem baixa" do Início navega com ?pendentes=1
+  const hasPending = pastPendingVisits.length > 0
+  useEffect(() => {
+    if (hasPending && new URLSearchParams(window.location.search).get('pendentes') === '1') {
+      document.getElementById('visitas-sem-baixa')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [hasPending])
+
+  const quickOutcome = async (visit: Visit, outcome: 'completed' | 'no_show' | 'cancelled') => {
+    if (outcome === 'cancelled' && !confirm('Marcar esta visita como cancelada?')) return
+    await setVisitOutcome({
+      visit: { id: visit.id, lead_id: visit.lead_id }, outcome,
+      user: { id: user!.id, full_name: user!.full_name, role: user!.role, institution_id: user!.institution_id! },
+    })
+    await loadData()
+  }
+
   // ── Actions ─────────────────────────────────────────────────────────────────
   const handleCreateVisit = async (data: { lead_id: string; student_name: string; date: string; time: string; notes: string }) => {
     const [year, month, day] = data.date.split('-')
@@ -302,7 +325,7 @@ export default function VisitCalendar() {
       notes: data.notes || undefined,
       status: 'scheduled',
     })
-    await DatabaseService.updateLead(data.lead_id, { status: 'scheduled' })
+    await advanceLeadTo(data.lead_id, 'scheduled')  // Fase 0A: só avança, nunca volta
     if (newVisit?.id) {
       await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: newVisit.id, action: 'created', new_value: `${data.student_name} — ${data.date}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     }
@@ -312,13 +335,13 @@ export default function VisitCalendar() {
   const handleMarkCompleted = async (visitId: string) => {
     setSaving(true)
     try {
-      await DatabaseService.updateVisit(visitId, {
-        status: 'completed',
-        ...(completionNotes ? { notes: completionNotes } : {}),
-      })
+      // Fase 0A: baixa compartilhada (Kanban, modal, Hub) — só avança o lead
+      // pra 'visit' se ele ainda estiver antes da visita (antes forçava sempre).
       const visit = visits.find(v => v.id === visitId)
-      if (visit?.lead_id) await DatabaseService.updateLead(visit.lead_id, { status: 'visit' })
-      await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: visitId, action: 'status_changed', old_value: 'scheduled', new_value: 'completed', user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+      await setVisitOutcome({
+        visit: { id: visitId, lead_id: visit?.lead_id }, outcome: 'completed', notes: completionNotes || undefined,
+        user: { id: user!.id, full_name: user!.full_name, role: user!.role, institution_id: user!.institution_id! },
+      })
       setCompletingId(null)
       setCompletionNotes('')
       await loadData()
@@ -328,15 +351,19 @@ export default function VisitCalendar() {
   }
 
   const handleMarkNoShow = async (visitId: string) => {
-    await DatabaseService.updateVisit(visitId, { status: 'no_show' })
-    await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: visitId, action: 'status_changed', old_value: 'scheduled', new_value: 'no_show', user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+    await setVisitOutcome({
+      visit: { id: visitId }, outcome: 'no_show',
+      user: { id: user!.id, full_name: user!.full_name, role: user!.role, institution_id: user!.institution_id! },
+    })
     await loadData()
   }
 
   const handleCancel = async (visitId: string) => {
     if (!confirm('Cancelar esta visita?')) return
-    await DatabaseService.updateVisit(visitId, { status: 'cancelled' })
-    await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: visitId, action: 'deleted', old_value: 'scheduled', new_value: 'cancelled', user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+    await setVisitOutcome({
+      visit: { id: visitId }, outcome: 'cancelled',
+      user: { id: user!.id, full_name: user!.full_name, role: user!.role, institution_id: user!.institution_id! },
+    })
     await loadData()
   }
 
@@ -701,6 +728,35 @@ export default function VisitCalendar() {
                   </div>
                 )
               })}
+            </div>
+          )}
+
+          {/* Fase 0A — visitas que já passaram sem baixa (pendência dos Alertas) */}
+          {pastPendingVisits.length > 0 && (
+            <div id="visitas-sem-baixa" className="rounded-xl p-3" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+              <h3 className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#B45309' }}>
+                Sem baixa — {pastPendingVisits.length} {pastPendingVisits.length === 1 ? 'visita' : 'visitas'}
+              </h3>
+              <p className="text-xs mb-3" style={{ color: '#92400E' }}>Visita só conta como realizada com baixa.</p>
+              <div className="space-y-2">
+                {pastPendingVisits.map(visit => {
+                  const visitDate = new Date(visit.scheduled_date)
+                  return (
+                    <div key={visit.id} className="px-3 py-2.5 bg-white border border-gray-100 rounded-lg">
+                      <p className="text-xs font-semibold text-gray-700 truncate">{visit.student_name || 'Sem nome'}</p>
+                      <p className="text-xs text-gray-400 mb-2">
+                        {visitDate.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        {' · '}{formatTime(visit.scheduled_date)}
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
+                        <button onClick={() => quickOutcome(visit, 'completed')} className="text-xs font-semibold px-2.5 py-1 rounded-md" style={{ background: '#DCFCE7', color: '#15803D' }}>Aconteceu</button>
+                        <button onClick={() => quickOutcome(visit, 'no_show')} className="text-xs font-semibold px-2.5 py-1 rounded-md" style={{ background: '#FFEDD5', color: '#C2410C' }}>Faltou</button>
+                        <button onClick={() => quickOutcome(visit, 'cancelled')} className="text-xs font-semibold px-2.5 py-1 rounded-md" style={{ background: '#F1F5F9', color: '#475569' }}>Cancelada</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 

@@ -10,6 +10,22 @@ import {
   ArrowUpRight, ArrowDownRight,
 } from 'lucide-react'
 import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
+import { useLeadInteractions } from '../../hooks/useLeadInteractions'
+
+const REMINDERS_PAGE_SIZE = 5
+
+// Busca todas as páginas de uma consulta (PostgREST corta em ~1000 linhas).
+async function fetchAllPages<T>(build: (from: number, to: number) => PromiseLike<{ data: T[] | null }>): Promise<T[]> {
+  const PAGE = 1000
+  const all: T[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await build(from, from + PAGE - 1)
+    const rows = data ?? []
+    all.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return all
+}
 
 // ─── tipos ──────────────────────────────────────────────────────────────────
 interface Lead {
@@ -173,9 +189,11 @@ export default function AttendantHome() {
   const [enrollmentsMonth, setEnrollmentsMonth] = useState<EnrollmentRow[]>([])
   const [enrollmentsPrevMonthCount, setEnrollmentsPrevMonthCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [reminderPage, setReminderPage] = useState(0)
 
   const institutionId = user?.institution_id
   const userId = user?.id
+  const { optsFor, refresh: refreshInteractions } = useLeadInteractions(institutionId)
 
   useEffect(() => {
     if (!institutionId || !userId) return
@@ -196,8 +214,8 @@ export default function AttendantHome() {
     // Todas independentes entre si (só dependem de institutionId/userId/datas
     // já calculadas acima) — um Promise.all só, sem round-trips em cadeia.
     const [
-      leadsRecentRes, leadsTodayRes, leadsMonthRes, leadsPrevMonthRes, openLeadsRes,
-      visitsRes, waRes, transfersRes, enrollMonthRes, enrollPrevMonthRes,
+      leadsRecentRes, leadsTodayRes, leadsMonthRes, leadsPrevMonthRes, openLeadsAll,
+      visitsRes, waAll, transfersRes, enrollMonthRes, enrollPrevMonthRes, myConvsRes,
     ] = await Promise.all([
       // Leads recentes (lista) — não usado pra contagem, só preview.
       supabase.from('leads')
@@ -223,11 +241,13 @@ export default function AttendantHome() {
       // Leads em aberto (nem matriculado nem perdido) — base dos lembretes
       // (manual via next_followup + automático "sem contato", ver
       // lib/leadReminders.ts, mesma fonte usada no LeadKanban e no GestorHome).
-      supabase.from('leads')
+      // Fase 0A: TODOS os meus leads em aberto (antes: só os 20 mais antigos),
+      // lidos em páginas no banco e paginados na tela.
+      fetchAllPages<Lead>((from, to) => supabase.from('leads')
         .select('id, student_name, responsible_name, status, created_at, phone, next_followup')
         .eq('institution_id', institutionId).eq('assigned_to', userId)
         .not('status', 'in', '(enrolled,lost)')
-        .order('created_at', { ascending: true }).limit(20),
+        .order('created_at', { ascending: true }).range(from, to)),
       // Visitas de hoje — limite superior adicionado (antes só tinha .gte,
       // então visitas de amanhã em diante entravam na lista de "hoje").
       supabase.from('visits')
@@ -235,12 +255,14 @@ export default function AttendantHome() {
         .eq('institution_id', institutionId).eq('assigned_to', userId)
         .gte('scheduled_date', todayStart.toISOString()).lt('scheduled_date', tomorrowStart.toISOString())
         .order('scheduled_date', { ascending: true }),
-      // WhatsApp 24h — mesmo filtro de grupos que o GestorHome já usa.
-      supabase.from('whatsapp_messages')
+      // WhatsApp 24h — Fase 0A: só as MINHAS conversas (atribuídas a mim);
+      // antes contava a escola inteira. Filtro por conversa feito abaixo.
+      fetchAllPages<WaMessage>((from, to) => supabase.from('whatsapp_messages')
         .select('id, from_me, created_at, remote_jid')
         .eq('institution_id', institutionId)
         .gte('created_at', since24h.toISOString())
-        .not('remote_jid', 'ilike', '%@g.us'),
+        .not('remote_jid', 'ilike', '%@g.us')
+        .order('created_at', { ascending: true }).range(from, to)),
       // Transferências — feed geral da escola (student_transfers não tem
       // coluna de dono; lead_id é opcional e a maioria das transferências não
       // vem de um lead do funil, então filtrar por atendente ficaria incompleto).
@@ -248,24 +270,31 @@ export default function AttendantHome() {
         .select('id, student_name, course_grade, status, created_at, survey_token, ai_diagnosis')
         .eq('institution_id', institutionId).is('deleted_at', null)
         .order('created_at', { ascending: false }).limit(5),
-      // Matrículas fechadas por mim, no mês.
+      // Matrículas fechadas por mim, no mês — data do EVENTO (Fase 0A), sem
+      // as desfeitas. O banco grava a matrícula com o responsável do lead.
       supabase.from('enrollments')
-        .select('id, user_id, created_at')
-        .eq('institution_id', institutionId).eq('user_id', userId)
-        .gte('created_at', monthStart.toISOString()),
+        .select('id, user_id, created_at:enrollment_date')
+        .eq('institution_id', institutionId).eq('user_id', userId).is('cancelled_at', null)
+        .gte('enrollment_date', monthStart.toISOString()),
       supabase.from('enrollments')
         .select('id', { count: 'exact', head: true })
-        .eq('institution_id', institutionId).eq('user_id', userId)
-        .gte('created_at', prevMonthStart.toISOString()).lt('created_at', monthStart.toISOString()),
+        .eq('institution_id', institutionId).eq('user_id', userId).is('cancelled_at', null)
+        .gte('enrollment_date', prevMonthStart.toISOString()).lt('enrollment_date', monthStart.toISOString()),
+      supabase.from('whatsapp_conversations')
+        .select('remote_jid')
+        .eq('institution_id', institutionId).eq('assigned_user_id', userId),
     ])
 
     setLeadsRecent((leadsRecentRes.data as Lead[]) ?? [])
     setLeadsTodayCount(leadsTodayRes.count ?? 0)
     setLeadsMonth((leadsMonthRes.data as LeadStatusOnly[]) ?? [])
     setLeadsPrevMonthCount(leadsPrevMonthRes.count ?? 0)
-    setOpenLeads((openLeadsRes.data as Lead[]) ?? [])
+    setOpenLeads(openLeadsAll)
+    setReminderPage(0)
     setVisitsToday((visitsRes.data as Visit[]) ?? [])
-    setWaMessages((waRes.data as WaMessage[]) ?? [])
+    const myJids = new Set(((myConvsRes.data ?? []) as { remote_jid: string }[]).map(c => c.remote_jid))
+    setWaMessages(waAll.filter(m => myJids.has(m.remote_jid)))
+    refreshInteractions()
     setTransfers((transfersRes.data as Transfer[]) ?? [])
     setEnrollmentsMonth((enrollMonthRes.data as EnrollmentRow[]) ?? [])
     setEnrollmentsPrevMonthCount(enrollPrevMonthRes.count ?? 0)
@@ -297,7 +326,7 @@ export default function AttendantHome() {
   // antes era só uma aproximação por created_at, sem o lembrete manual.
   // Mesma lógica de lib/leadReminders.ts usada no LeadKanban e no GestorHome.
   const reminders = openLeads
-    .map(l => ({ lead: l, reminder: getLeadReminderInfo(l) }))
+    .map(l => ({ lead: l, reminder: getLeadReminderInfo(l, optsFor(l.id)) }))
     .filter((x): x is { lead: Lead; reminder: NonNullable<ReturnType<typeof getLeadReminderInfo>> } => x.reminder !== null)
     .sort((a, b) => {
       const order = { overdue: 0, today: 1, stale: 2, upcoming: 3 } as const
@@ -345,7 +374,7 @@ export default function AttendantHome() {
         <div style={{ display: 'grid', gridTemplateColumns: kpiCols, gap: 16 }}>
           <StatCard label="Leads hoje" value={leadsTodayCount} icon={<Users size={18} color="#8b5cf6" />} iconBg="#f5f3ff" onClick={() => navigate('/leads')} />
           <StatCard label="Visitas agendadas" value={visitsScheduled} icon={<Calendar size={18} color="#0F6E56" />} iconBg="#f0fdf4" onClick={() => navigate('/visits')} />
-          <StatCard label="Mensagens (24h)" value={waReceived} icon={<MessageCircle size={18} color="#10B981" />} iconBg="#d1fae5" onClick={() => navigate('/whatsapp')} />
+          <StatCard label="Mensagens recebidas (24h)" sub="nas minhas conversas" value={waReceived} icon={<MessageCircle size={18} color="#10B981" />} iconBg="#d1fae5" onClick={() => navigate('/whatsapp')} />
           <StatCard
             label="Transferências pendentes" value={transfersPending}
             icon={<ArrowRightLeft size={18} color={transfersPending > 0 ? '#dc2626' : '#64748b'} />}
@@ -514,7 +543,7 @@ export default function AttendantHome() {
             </div>
           ) : (
             <div>
-              {reminders.slice(0, 5).map(({ lead, reminder }) => {
+              {reminders.slice(reminderPage * REMINDERS_PAGE_SIZE, (reminderPage + 1) * REMINDERS_PAGE_SIZE).map(({ lead, reminder }) => {
                 const colors = REMINDER_COLORS[reminder.urgency]
                 return (
                   <div key={lead.id} style={{ padding: '10px 18px', borderBottom: '1px solid #f8fafc', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -535,6 +564,17 @@ export default function AttendantHome() {
                   </div>
                 )
               })}
+              {reminders.length > REMINDERS_PAGE_SIZE && (
+                <div style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#64748B' }}>
+                  <span>{reminderPage * REMINDERS_PAGE_SIZE + 1}–{Math.min((reminderPage + 1) * REMINDERS_PAGE_SIZE, reminders.length)} de {reminders.length}</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button disabled={reminderPage === 0} onClick={() => setReminderPage(p => p - 1)}
+                      style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: 'white', cursor: reminderPage === 0 ? 'default' : 'pointer', opacity: reminderPage === 0 ? 0.4 : 1 }}>Anterior</button>
+                    <button disabled={(reminderPage + 1) * REMINDERS_PAGE_SIZE >= reminders.length} onClick={() => setReminderPage(p => p + 1)}
+                      style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: 'white', cursor: (reminderPage + 1) * REMINDERS_PAGE_SIZE >= reminders.length ? 'default' : 'pointer', opacity: (reminderPage + 1) * REMINDERS_PAGE_SIZE >= reminders.length ? 0.4 : 1 }}>Próxima</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -542,7 +582,7 @@ export default function AttendantHome() {
         {/* WhatsApp 24h */}
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '18px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>WhatsApp últimas 24h</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>Minhas conversas — últimas 24h</span>
             <button
               onClick={() => navigate('/whatsapp')}
               style={{ fontSize: 11, color: '#10B981', background: '#d1fae5', border: 'none', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>

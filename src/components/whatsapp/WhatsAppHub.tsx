@@ -21,6 +21,8 @@ import { getAuthHeaders } from '../../lib/authHeaders'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { statusConfig } from '../leads/leadFormShared'
 import { CAPTURE_CHANNELS, type CaptureChannel } from '../../lib/captureTriggers'
+import LeadVisitsPanel from '../visits/LeadVisitsPanel'
+import { advanceLeadTo } from '../../lib/visitOutcome'
 import {
   fetchTemplateMeta, fetchHiddenTemplateNames, variableLabel, templateDisplayName, filterTemplatesForContext,
   type TemplateMeta,
@@ -1248,6 +1250,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // "Agendar Visita" na aba Lead — reaproveita o mesmo ScheduleVisitModal do
   // Kanban (src/components/leads/ScheduleVisitModal.tsx).
   const [showScheduleVisitModal, setShowScheduleVisitModal] = useState(false)
+  const [visitsReloadKey, setVisitsReloadKey] = useState(0)
   const [savingVisit, setSavingVisit] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null)
@@ -3647,8 +3650,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         notes:          data.notes,
         status:         'scheduled',
       })
-      await DatabaseService.updateLead(leadData.id, { status: 'scheduled' })
-      setLeadData((prev: any) => prev ? { ...prev, status: 'scheduled' } : prev)
+      // Fase 0A: só avança (lead em proposta/matriculado não volta pra 'scheduled')
+      const newStatus = await advanceLeadTo(leadData.id, 'scheduled')
+      if (newStatus) setLeadData((prev: any) => prev ? { ...prev, status: newStatus } : prev)
       await supabase.from('audit_logs').insert({
         institution_id: effectiveInstitutionId, module: 'lead', record_id: leadData.id,
         action: 'Visita agendada',
@@ -3736,6 +3740,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       }
 
       setShowScheduleVisitModal(false)
+      setVisitsReloadKey(k => k + 1)
       setHubToast('✅ Visita agendada!')
       setTimeout(() => setHubToast(null), 3000)
     } catch (err: any) {
@@ -6124,6 +6129,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                 <Calendar style={{ width: 12, height: 12 }} />
                                 Agendar Visita
                               </button>
+                              {/* Fase 0A — visitas do lead com baixa (realizada/faltou/cancelada) */}
+                              <div style={{ marginTop: 4 }}>
+                                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', margin: '0 0 6px' }}>Visitas</p>
+                                <LeadVisitsPanel leadId={leadData.id} reloadKey={visitsReloadKey} onChanged={async () => {
+                                  const { data } = await supabase.from('leads').select('status').eq('id', leadData.id).maybeSingle()
+                                  if (data?.status) setLeadData((prev: any) => prev ? { ...prev, status: data.status } : prev)
+                                }} />
+                              </div>
                             </div>
                           ) : (
                             <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
