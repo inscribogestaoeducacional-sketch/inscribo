@@ -5,7 +5,8 @@
 // Dois sinais independentes, o manual tem prioridade quando os dois existem:
 // - manual: leads.next_followup, data que o usuário define explicitamente.
 // - automático: N dias sem interação real. Fase 0A: conta desde a ÚLTIMA
-//   INTERAÇÃO (mensagem na conversa vinculada, atividade registrada no lead ou
+//   INTERAÇÃO (mensagem ENVIADA pela equipe na conversa vinculada — recebida e
+//   robô não contam —, atividade registrada no lead ou
 //   nota do contato — função SQL lead_last_interactions, carregada pelo hook
 //   useLeadInteractions); sem nenhuma interação, conta desde o cadastro.
 //   N é configurável por escola (lead_reminder_settings); 5 é o padrão.

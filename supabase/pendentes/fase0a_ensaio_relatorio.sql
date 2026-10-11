@@ -79,5 +79,10 @@ BEGIN
     WHERE EXISTS (SELECT 1 FROM leads l WHERE l.institution_id = i.id)
   ) x;
 
+  v_tests := v_tests || jsonb_build_object('visita_agape_2025_agora',
+    (SELECT to_char(scheduled_date AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') FROM visits WHERE id = '7503e998-21e3-4641-875d-47d884920670'));
+  v_tests := v_tests || jsonb_build_object('interacoes_calculadas',
+    (SELECT count(*) FROM institutions i, lead_last_interactions(i.id) x WHERE x.last_interaction_at IS NOT NULL));
+
   RAISE EXCEPTION 'ENSAIO_FASE0A %', jsonb_build_object('testes', v_tests, 'escolas', v_rep)::text;
 END $$;

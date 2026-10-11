@@ -29,7 +29,7 @@ import { createNotification } from '../../lib/notifications'
 import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
 import { useLeadInteractions } from '../../hooks/useLeadInteractions'
 import { aiFetch } from '../../lib/authHeaders'
-import { pickCurrentFunnelRow } from '../../lib/funnelPeriod'
+import { pickCurrentFunnelRow, currentPeriodBR, expectedSoFar } from '../../lib/funnelPeriod'
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 interface HistoricalEntry {
@@ -737,14 +737,16 @@ export default function GestorHome() {
         // Mês atual por DATA (ver lib/funnelPeriod.ts) — antes era o último por
         // ordem alfabética, que caía em linhas lixo/futuras e gerava alerta falso.
         const latestF = pickCurrentFunnelRow((funnelRes.data ?? []) as FunnelMetrics[]) ?? undefined
-        if (latestF) {
+        // Só o mês corrente, e contra a meta PROPORCIONAL aos dias corridos
+        // (decisão 11/10) — antes disparava todo começo de mês.
+        if (latestF && latestF.period === currentPeriodBR()) {
           const checks = [
             { key: 'registrations', val: latestF.registrations, target: latestF.registrations_target, label: 'Cadastros' },
             { key: 'schedules', val: latestF.schedules, target: latestF.schedules_target, label: 'Agendamentos' },
             { key: 'visits', val: latestF.visits, target: latestF.visits_target, label: 'Visitas' },
             { key: 'enrollments', val: latestF.enrollments, target: latestF.enrollments_target, label: 'Matrículas' },
-          ]
-          const underperforming = checks.find(c => (c.target ?? 0) > 0 && ((c.val ?? 0) / c.target!) * 100 < 60)
+          ].map(c => ({ ...c, expected: expectedSoFar(c.target ?? 0, latestF.period) }))
+          const underperforming = checks.find(c => c.expected > 0 && ((c.val ?? 0) / c.expected) * 100 < 60)
           if (underperforming) {
             const today = new Date(); today.setHours(0, 0, 0, 0)
             const { data: existing } = await supabase
@@ -758,8 +760,8 @@ export default function GestorHome() {
               createNotification({
                 institution_id: institutionId,
                 type: 'goal_deviation',
-                title: `Meta de ${underperforming.label} abaixo de 60%`,
-                message: `${underperforming.label}: ${underperforming.val ?? 0} de ${underperforming.target} (${Math.round(((underperforming.val ?? 0) / underperforming.target!) * 100)}% da meta).`,
+                title: `Ritmo de ${underperforming.label} abaixo de 60% da meta`,
+                message: `${underperforming.label}: ${underperforming.val ?? 0} até hoje, esperado ${underperforming.expected} pelo ritmo da meta do mês (${underperforming.target}) — ${Math.round(((underperforming.val ?? 0) / underperforming.expected) * 100)}% do esperado.`,
                 severity: 'warning',
                 action_url: '/reports',
               })
@@ -1149,9 +1151,12 @@ export default function GestorHome() {
   if (newVariation !== null && newVariation < -20) alerts.push({ msg: `Novatos caíram ${Math.abs(newVariation)}% vs ano anterior — revisar estratégia de captação`, type: 'warning' })
   if (marketSharePct !== null && marketSharePct < 5) alerts.push({ msg: 'Market share abaixo de 5% — oportunidade de crescimento expressivo na cidade', type: 'info' })
   if (!campaignUnlocked) alerts.push({ msg: 'Campanha ainda não liberada pelo administrador', type: 'info' })
-  if (activeCycle && funnelHasData && latestFunnel) {
-    const regPct = latestFunnel.registrations_target ? (latestFunnel.registrations / latestFunnel.registrations_target) * 100 : 0
-    if (regPct < 60) alerts.push({ msg: `Cadastros ${regPct.toFixed(0)}% da meta — intensifique captação`, type: 'warning', action: 'Ver funil', path: '/reports' })
+  // Ritmo proporcional aos dias corridos do mês (decisão 11/10). Sem meta no
+  // mês não há alerta (antes, meta 0 virava "0% da meta").
+  if (activeCycle && funnelHasData && latestFunnel && latestFunnel.period === currentPeriodBR()) {
+    const regExpected = expectedSoFar(latestFunnel.registrations_target ?? 0, latestFunnel.period)
+    const regPct = regExpected > 0 ? ((latestFunnel.registrations ?? 0) / regExpected) * 100 : null
+    if (regPct !== null && regPct < 60) alerts.push({ msg: `Cadastros em ${regPct.toFixed(0)}% do esperado até hoje (${latestFunnel.registrations ?? 0} de ${regExpected} pelo ritmo da meta do mês) — intensifique captação`, type: 'warning', action: 'Ver funil', path: '/reports' })
   }
   if (score >= 75) alerts.push({ msg: `Score ${score} — escola com desempenho acima da média!`, type: 'success' })
   // Fase 0A: todos os leads em aberto da escola (antes: só os cadastrados no

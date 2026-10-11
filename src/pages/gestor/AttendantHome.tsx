@@ -305,9 +305,6 @@ export default function AttendantHome() {
   const visitsScheduled = visitsToday.filter(v => v.status === 'scheduled').length
   const waSent = waMessages.filter(m => m.from_me).length
   const waReceived = waMessages.filter(m => !m.from_me).length
-  // Mesma lógica canônica de GestorTransfers.tsx (survey_token/status agora
-  // fazem parte do select — antes faltavam e o filtro virava só !ai_diagnosis).
-  const transfersPending = transfers.filter(t => !t.survey_token && !t.ai_diagnosis && t.status !== 'cancelled').length
 
   // ── Meu desempenho (mês atual vs mês anterior, onde faz sentido) ──────────
   const enrolledMonthCount = enrollmentsMonth.length
@@ -340,7 +337,9 @@ export default function AttendantHome() {
     return 'Boa noite'
   }
 
-  const kpiCols = isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)'
+  // Fase 0A (decisão 11/10): 3 cartões — "Transferências pendentes" saiu do
+  // Início do atendente (é da escola, não desempenho próprio; segue no gestor).
+  const kpiCols = isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)'
   const twoColGrid = isMobile ? '1fr' : '1fr 1fr'
 
   return (
@@ -364,7 +363,7 @@ export default function AttendantHome() {
       {/* ── KPIs ── */}
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: kpiCols, gap: 16 }}>
-          {Array(4).fill(0).map((_, i) => (
+          {Array(3).fill(0).map((_, i) => (
             <div key={i} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
               <Skeleton h="h-3" w="w-24 mb-3" /><Skeleton h="h-8" w="w-16" />
             </div>
@@ -375,12 +374,6 @@ export default function AttendantHome() {
           <StatCard label="Leads hoje" value={leadsTodayCount} icon={<Users size={18} color="#8b5cf6" />} iconBg="#f5f3ff" onClick={() => navigate('/leads')} />
           <StatCard label="Visitas agendadas" value={visitsScheduled} icon={<Calendar size={18} color="#0F6E56" />} iconBg="#f0fdf4" onClick={() => navigate('/visits')} />
           <StatCard label="Mensagens recebidas (24h)" sub="nas minhas conversas" value={waReceived} icon={<MessageCircle size={18} color="#10B981" />} iconBg="#d1fae5" onClick={() => navigate('/whatsapp')} />
-          <StatCard
-            label="Transferências pendentes" value={transfersPending}
-            icon={<ArrowRightLeft size={18} color={transfersPending > 0 ? '#dc2626' : '#64748b'} />}
-            iconBg={transfersPending > 0 ? '#fef2f2' : '#f1f5f9'}
-            onClick={() => navigate('/transferencias')}
-          />
         </div>
       )}
 

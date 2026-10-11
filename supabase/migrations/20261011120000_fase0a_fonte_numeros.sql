@@ -276,10 +276,11 @@ CREATE POLICY lead_reminder_settings_update ON public.lead_reminder_settings
   USING (lead_unit_user_can_manage(institution_id))
   WITH CHECK (lead_unit_user_can_manage(institution_id));
 
--- Última interação real de cada lead em aberto: mensagem (qualquer lado) na
--- conversa vinculada, atividade registrada no lead (Ligação/Email/WhatsApp/
--- Presencial/Outro) ou nota do contato. SECURITY INVOKER: respeita a RLS de
--- quem chama.
+-- Última interação real de cada lead em aberto (decisão 11/10): mensagem
+-- ENVIADA PELA ESCOLA (from_me, sem as automáticas do robô) na conversa
+-- vinculada, atividade registrada no lead (Ligação/Email/WhatsApp/
+-- Presencial/Outro) ou nota do contato. Mensagem recebida da família não
+-- conta. SECURITY INVOKER: respeita a RLS de quem chama.
 CREATE OR REPLACE FUNCTION public.lead_last_interactions(p_institution_id uuid)
 RETURNS TABLE (lead_id uuid, last_interaction_at timestamptz)
 LANGUAGE sql
@@ -288,8 +289,12 @@ SET search_path TO 'public'
 AS $$
   SELECT l.id,
          GREATEST(
-           (SELECT max(c.last_message_at) FROM whatsapp_conversations c
-             WHERE c.lead_id = l.id AND c.institution_id = l.institution_id),
+           (SELECT max(m.created_at)
+              FROM whatsapp_conversations c
+              JOIN whatsapp_messages m
+                ON m.institution_id = c.institution_id AND m.remote_jid = c.remote_jid
+             WHERE c.lead_id = l.id AND c.institution_id = l.institution_id
+               AND m.from_me AND NOT COALESCE(m.is_bot_message, false)),
            (SELECT max(a.created_at) FROM audit_logs a
              WHERE a.institution_id = l.institution_id AND a.module = 'lead'
                AND a.record_id = l.id

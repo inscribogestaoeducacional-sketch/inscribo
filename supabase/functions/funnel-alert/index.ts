@@ -36,7 +36,13 @@ serve(async () => {
   // month_name existem mas estão sempre NULL em todas as linhas de produção
   // (confirmado por amostragem antes de escrever este arquivo); period é a
   // chave de fato usada por quem grava a tabela (GestorReports.tsx e afins).
-  const currentPeriod = new Date().toISOString().slice(0, 7) // YYYY-MM
+  // Fase 0A: mês e dia no fuso de Brasília (a função roda em UTC) e meta
+  // PROPORCIONAL aos dias corridos do mês (decisão 11/10) — antes comparava o
+  // mês parcial com a meta do mês inteiro e alertava todo começo de mês.
+  const todayBR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) // YYYY-MM-DD
+  const currentPeriod = todayBR.slice(0, 7) // YYYY-MM
+  const [py, pm] = currentPeriod.split('-').map(Number)
+  const elapsed = Math.min(1, Number(todayBR.slice(8, 10)) / new Date(py, pm, 0).getDate())
 
   const results = await Promise.allSettled(
     institutions.map(async (inst: { id: string; name: string }) => {
@@ -58,7 +64,9 @@ serve(async () => {
           // (`if (!m.goal || m.goal === 0) return false`) — sem meta não dá
           // pra calcular % nem faz sentido alertar.
           if (!target) return null
-          const ratio = actual / target
+          const expected = Math.ceil(target * elapsed)
+          if (!expected) return null
+          const ratio = actual / expected
           if (ratio >= UNDERPERFORM_THRESHOLD) return null
           return { key, pct: Math.round(ratio * 100) }
         })
@@ -67,14 +75,14 @@ serve(async () => {
       if (underperforming.length === 0) return
 
       const stageList = underperforming
-        .map(m => `${METRIC_LABELS[m.key] ?? m.key} (${m.pct}% da meta)`)
+        .map(m => `${METRIC_LABELS[m.key] ?? m.key} (${m.pct}% do esperado até hoje)`)
         .join(', ')
 
       const { error: insertErr } = await supabase.from('system_notifications').insert({
         institution_id: inst.id,
         type: 'goal_deviation',
         title: 'Alerta de funil abaixo da meta',
-        message: `Etapas com menos de ${Math.round(UNDERPERFORM_THRESHOLD * 100)}% da meta: ${stageList}`,
+        message: `Etapas com menos de ${Math.round(UNDERPERFORM_THRESHOLD * 100)}% do esperado pelo ritmo da meta do mês: ${stageList}`,
         severity: 'warning',
         action_url: null,
         created_at: new Date().toISOString(),

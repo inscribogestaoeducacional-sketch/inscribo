@@ -23,3 +23,23 @@ export function pickCurrentFunnelRow<T extends { period: string }>(rows: T[], no
   }
   return best
 }
+
+// Fração do mês já decorrida (fuso de Brasília), contando o dia de hoje
+// inteiro: 1º dia = 1/30, último dia = 1. Mês já encerrado = 1. Usada pra
+// comparar o realizado ATÉ HOJE com a meta proporcional (decisão 11/10) — antes
+// o alerta comparava o mês parcial com a meta do mês inteiro e disparava todo
+// começo de mês.
+export function monthElapsedFraction(period: string, now: Date = new Date()): number {
+  const cur = currentPeriodBR(now)
+  if (period < cur) return 1
+  if (period > cur) return 0
+  const day = Number(now.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }).slice(8, 10))
+  const [y, m] = period.split('-').map(Number)
+  const daysInMonth = new Date(y, m, 0).getDate()
+  return Math.min(1, day / daysInMonth)
+}
+
+/** Meta esperada até hoje (proporcional aos dias corridos), arredondada pra cima. */
+export function expectedSoFar(target: number, period: string, now: Date = new Date()): number {
+  return Math.ceil((target || 0) * monthElapsedFraction(period, now))
+}

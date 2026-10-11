@@ -56,7 +56,7 @@ export default function LeadReminderSettingsEditor({ institutionId, onToast }: {
       </h3>
       <p style={{ fontSize: 13, color: '#64748B', marginBottom: 16, lineHeight: 1.6 }}>
         O lead em aberto aparece como <strong>"Sem contato"</strong> quando passa esse número de dias sem nenhuma interação:
-        mensagem na conversa de WhatsApp vinculada, atividade registrada no lead (ligação, e-mail, presencial…) ou nota do contato.
+        mensagem enviada pela equipe na conversa de WhatsApp vinculada (as automáticas do robô não contam), atividade registrada no lead (ligação, e-mail, presencial…) ou nota do contato.
         Vale para o Kanban, o Início do gestor e o do atendente.
       </p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

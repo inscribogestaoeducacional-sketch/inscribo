@@ -19,13 +19,14 @@
 --      mudança conhecida é uma edição pelo modal (para = status atual)
 --   3. visitas: responsável = quem agendou, pelo log de criação (tela Visitas)
 --      ou "Visita agendada" (Hub/Kanban) do mesmo lead até 5 min depois
+--   3b. visita da Ágape com ano 2025 digitado errado → 2026
 --   4. alertas falsos "Meta de Cadastros abaixo de 60%" vindos da linha errada
 --      do funil: resolved_at + resolved_reason (+ read_at), nada é apagado
 --   5. funil: recalcula funnel_metrics (só colunas reais) de todos os ciclos
 --      ativos/liberados com as definições novas
 -- Não mexe: registros de escola inexistente (10 enrollments, 11 leads e 4 visitas
--- de teste de 2025/abr-2026), a
--- visita da Ágape com data 10/09/2025 (lista à parte), metas (*_target).
+-- de teste de 2025/abr-2026) e metas (*_target). A visita da Ágape com ano 2025
+-- é corrigida no passo 3b.
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.fase0a_backup_rows (
@@ -129,6 +130,16 @@ UPDATE visits v SET assigned_to = q.user_id
   FROM quem q
  WHERE v.id = q.id AND q.user_id IS NOT NULL
    AND EXISTS (SELECT 1 FROM users u WHERE u.id = q.user_id);
+
+-- 3b. Visita da Ágape digitada com o ano errado (decisão 11/10): marcada pra
+--     10/09/2025 mas criada em 09/09/2026 → 10/09/2026. A linha original já
+--     está em fase0a_backup_rows (passo 0, table_name 'visits'). Só altera se
+--     ainda estiver exatamente como foi encontrada.
+UPDATE visits
+   SET scheduled_date = scheduled_date + interval '1 year'
+ WHERE id = '7503e998-21e3-4641-875d-47d884920670'
+   AND scheduled_date = '2025-09-10 20:00:00+00'
+   AND created_at::date = '2026-09-09';
 
 -- ── 4. Alertas falsos ────────────────────────────────────────────────────────
 -- "Mês atual do funil" escolhido por ordem alfabética: Ágape lia a linha
