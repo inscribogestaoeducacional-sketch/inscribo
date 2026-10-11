@@ -27,3 +27,7 @@ dist-ssr
 
 # Relatórios locais com dados sensíveis (PII de contatos/leads) — nunca commitar
 local-reports/
+
+# Artes e vídeos gerados por scripts/divulgacao-artes (refazer com produzir.mjs)
+docs/marketing/artes/
+docs/marketing/reels/
