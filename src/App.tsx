@@ -349,9 +349,9 @@ function AppContent() {
   const isGestor = user.role === 'admin' || user.role === 'manager'
 
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--bg-page)' }}>
+    <div className="h-viewport" style={{ display: 'flex', width: '100vw', overflow: 'hidden', background: 'var(--bg-page)' }}>
       <Sidebar />
-      <div style={{ flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="h-viewport" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
         {isGestor && user.institution_id && <GestorUpdatePopup institutionId={user.institution_id} />}
         <InternalChatWidget />

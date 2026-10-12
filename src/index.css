@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Altura da tela: no celular 100vh inclui a barra do navegador e corta o
+   fim da página (o composer do Hub ficava escondido); 100dvh acompanha a
+   área visível. A linha com 100vh fica de reserva pra navegador antigo. */
+.h-viewport {
+  height: 100vh;
+  height: 100dvh;
+}
+
 /* ====== RESET ====== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; min-height: 100%; }

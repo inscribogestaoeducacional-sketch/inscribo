@@ -107,8 +107,8 @@ export default function Sidebar() {
             onClick={() => setMobileOpen(false)}
           />
         )}
-        <aside style={{
-          position: 'fixed', left: 0, top: 0, height: '100vh', zIndex: 50,
+        <aside className="h-viewport" style={{
+          position: 'fixed', left: 0, top: 0, zIndex: 50,
           width: 240, background: '#FFFFFF', borderRight: '0.5px solid #D1FAE5',
           display: 'flex', flexDirection: 'column', alignItems: 'stretch',
           padding: '12px 10px', gap: 2, overflowY: 'auto', overflowX: 'hidden',
@@ -177,10 +177,9 @@ export default function Sidebar() {
   }
 
   return (
-    <aside style={{
+    <aside className="h-viewport" style={{
       width: expanded ? 220 : 64,
       minWidth: expanded ? 220 : 64,
-      height: '100vh',
       background: '#FFFFFF',
       borderRight: '0.5px solid #D1FAE5',
       display: 'flex',
