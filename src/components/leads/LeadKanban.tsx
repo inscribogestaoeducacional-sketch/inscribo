@@ -33,21 +33,11 @@ import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
 import {
   type SimpleUser, type AuditEntry, type StudentEntry,
   statusConfig, sourceOptions, LEAD_TEMPERATURES, LEAD_STAGES,
+  LOST_REASONS,
 } from './leadFormShared'
 
-// ─── Motivos de recusa ────────────────────────────────────────────────────────
-const LOST_REASONS = [
-  { value: 'preco_alto',        label: 'Valor da mensalidade alto',           fator: 'Interno', subfator: 'Administrativo' },
-  { value: 'nao_retornou',      label: 'Não retornou nosso contato',          fator: 'Externo', subfator: null },
-  { value: 'outra_escola',      label: 'Escolheu outra escola',               fator: 'Externo', subfator: null },
-  { value: 'sem_vaga',          label: 'Sem vaga na série de interesse',      fator: 'Interno', subfator: 'Administrativo' },
-  { value: 'nao_oferece_serie', label: 'Escola não oferece a série desejada', fator: 'Interno', subfator: 'Administrativo' },
-  { value: 'nao_gostou',        label: 'Não gostou da escola',                fator: 'Interno', subfator: 'Administrativo' },
-  { value: 'mudou_cidade',      label: 'Mudou de cidade',                     fator: 'Externo', subfator: null },
-  { value: 'dificuldade_fin',   label: 'Dificuldade financeira',              fator: 'Externo', subfator: null },
-  { value: 'desistiu',          label: 'Desistiu sem informar motivo',        fator: 'Externo', subfator: null },
-  { value: 'outro',             label: 'Outro motivo',                        fator: 'Interno', subfator: 'Administrativo' },
-]
+// Motivos de recusa: fonte única em leadFormShared (Fase 6.1 — antes havia
+// uma cópia aqui e outra em GestorReports.tsx).
 
 // Séries — antes existiam DUAS listas hardcoded divergentes aqui mesmo
 // (gradeOptions usada pra salvar, GRADES usada só pro filtro, com Ensino

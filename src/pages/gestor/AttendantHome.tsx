@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
 import { useLeadInteractions } from '../../hooks/useLeadInteractions'
+import { statusConfig } from '../../components/leads/leadFormShared'
 
 const REMINDERS_PAGE_SIZE = 5
 
@@ -78,15 +79,20 @@ interface EnrollmentRow {
 }
 
 // ── Status configs (mesmo enum real de leads.status/visits.status) ──────────
-const leadStatusCfg: Record<string, { label: string; color: string; bg: string }> = {
-  new:       { label: 'Novo',         color: '#3b82f6', bg: '#eff6ff' },
-  contact:   { label: 'Em contato',   color: '#f59e0b', bg: '#fffbeb' },
-  scheduled: { label: 'Agendado',     color: '#8b5cf6', bg: '#f5f3ff' },
-  visit:     { label: 'Em visita',    color: '#06b6d4', bg: '#ecfeff' },
-  proposal:  { label: 'Proposta',     color: '#f97316', bg: '#fff7ed' },
-  enrolled:  { label: 'Matriculado',  color: '#0F6E56', bg: '#f0fdf4' },
-  lost:      { label: 'Perdido',      color: '#ef4444', bg: '#fef2f2' },
+// Fase 6.1: os NOMES das etapas vêm da fonte única (statusConfig do Kanban);
+// aqui ficam só as cores desta tela.
+const LEAD_STATUS_COLORS: Record<string, { color: string; bg: string }> = {
+  new:       { color: '#3b82f6', bg: '#eff6ff' },
+  contact:   { color: '#f59e0b', bg: '#fffbeb' },
+  scheduled: { color: '#8b5cf6', bg: '#f5f3ff' },
+  visit:     { color: '#06b6d4', bg: '#ecfeff' },
+  proposal:  { color: '#f97316', bg: '#fff7ed' },
+  enrolled:  { color: '#0F6E56', bg: '#f0fdf4' },
+  lost:      { color: '#ef4444', bg: '#fef2f2' },
 }
+const leadStatusCfg: Record<string, { label: string; color: string; bg: string }> = Object.fromEntries(
+  Object.entries(LEAD_STATUS_COLORS).map(([k, c]) => [k, { label: (statusConfig as Record<string, { label: string }>)[k]?.label ?? k, ...c }])
+)
 
 const visitStatusCfg: Record<string, { label: string; color: string; bg: string }> = {
   scheduled:  { label: 'Agendada',   color: '#8b5cf6', bg: '#f5f3ff' },

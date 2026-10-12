@@ -18,6 +18,7 @@ import CampaignGeneratorModal from './CampaignGeneratorModal'
 import LinkLeadsToCampaignModal from './LinkLeadsToCampaignModal'
 import { aiFetch } from '../../lib/authHeaders'
 import { pickCurrentFunnelRow } from '../../lib/funnelPeriod'
+import { LOST_REASONS } from '../leads/leadFormShared'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface CampaignCycle {
@@ -1043,17 +1044,9 @@ function TabTransferencias({ institutionId }: { institutionId: string }) {
     reasonCounts[r] = (reasonCounts[r] || 0) + 1
   })
 
-  const LOST_REASON_LABELS: Record<string, string> = {
-    preco_alto: 'Valor alto', nao_retornou: 'Não retornou', outra_escola: 'Outra escola',
-    sem_vaga: 'Sem vaga', nao_oferece_serie: 'Série não ofertada', nao_gostou: 'Não gostou',
-    mudou_cidade: 'Mudou de cidade', dificuldade_fin: 'Dificuldade financeira',
-    desistiu: 'Desistiu', outro: 'Outro'
-  }
-  const FATOR_MAP: Record<string, string> = {
-    preco_alto: 'Interno', nao_retornou: 'Externo', outra_escola: 'Externo',
-    sem_vaga: 'Interno', nao_oferece_serie: 'Interno', nao_gostou: 'Interno',
-    mudou_cidade: 'Externo', dificuldade_fin: 'Externo', desistiu: 'Externo', outro: 'Interno'
-  }
+  // Fase 6.1: rótulos curtos e fator vêm da lista única (leadFormShared)
+  const LOST_REASON_LABELS: Record<string, string> = Object.fromEntries(LOST_REASONS.map(r => [r.value, r.short]))
+  const FATOR_MAP: Record<string, string> = Object.fromEntries(LOST_REASONS.map(r => [r.value, r.fator]))
 
   const paretoData = Object.entries(reasonCounts)
     .sort((a, b) => b[1] - a[1])

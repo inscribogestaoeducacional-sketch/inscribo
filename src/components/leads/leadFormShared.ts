@@ -44,6 +44,21 @@ export const statusConfig = {
   lost:      { label: 'Perdido',          accent: '#ef4444', headerBg: 'bg-red-50',     headerText: 'text-red-800',    badgeBg: 'bg-red-500'    },
 }
 
+// Motivos de recusa do lead — fonte ÚNICA (Fase 6.1). Kanban usa label
+// (texto completo); Relatórios usa short (Pareto) e fator (interno/externo).
+export const LOST_REASONS = [
+  { value: 'preco_alto',        label: 'Valor da mensalidade alto',           short: 'Valor alto',            fator: 'Interno', subfator: 'Administrativo' },
+  { value: 'nao_retornou',      label: 'Não retornou nosso contato',          short: 'Não retornou',          fator: 'Externo', subfator: null },
+  { value: 'outra_escola',      label: 'Escolheu outra escola',               short: 'Outra escola',          fator: 'Externo', subfator: null },
+  { value: 'sem_vaga',          label: 'Sem vaga na série de interesse',      short: 'Sem vaga',              fator: 'Interno', subfator: 'Administrativo' },
+  { value: 'nao_oferece_serie', label: 'Escola não oferece a série desejada', short: 'Série não ofertada',    fator: 'Interno', subfator: 'Administrativo' },
+  { value: 'nao_gostou',        label: 'Não gostou da escola',                short: 'Não gostou',            fator: 'Interno', subfator: 'Administrativo' },
+  { value: 'mudou_cidade',      label: 'Mudou de cidade',                     short: 'Mudou de cidade',       fator: 'Externo', subfator: null },
+  { value: 'dificuldade_fin',   label: 'Dificuldade financeira',              short: 'Dificuldade financeira', fator: 'Externo', subfator: null },
+  { value: 'desistiu',          label: 'Desistiu sem informar motivo',        short: 'Desistiu',              fator: 'Externo', subfator: null },
+  { value: 'outro',             label: 'Outro motivo',                        short: 'Outro',                 fator: 'Interno', subfator: 'Administrativo' },
+] as const
+
 // 'Concurso de Bolsas' dá sentido ao campo condicional contest_name.
 export const sourceOptions = ['Facebook', 'Instagram', 'Google', 'Site', 'Indicação', 'WhatsApp', 'Concurso de Bolsas', 'Vitrine', 'Outros']
 
@@ -53,6 +68,8 @@ export const LEAD_TEMPERATURES = [
   { value: 'frio',   label: 'Frio',   icon: Snowflake, color: '#3B82F6', bg: '#EFF6FF', border: '#BFDBFE' },
 ] as const
 
+// Rótulos CURTOS do passo a passo do modal (cabem no espaço estreito). Os
+// nomes completos das etapas são os de statusConfig, a fonte única (Fase 6.1).
 export const LEAD_STAGES = [
   { key: 'new',       label: 'Novo'      },
   { key: 'contact',   label: 'Contato'   },

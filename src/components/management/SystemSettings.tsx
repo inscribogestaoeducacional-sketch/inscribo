@@ -2,7 +2,7 @@
 import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
-  Bot, Users, X, Plus, Check, AlertCircle, GraduationCap,
+  Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
   ChevronUp, ChevronDown, Pencil, Send,
 } from 'lucide-react'
@@ -139,7 +139,7 @@ function GeralTab({ institutionId, onToast }: { institutionId: string; onToast: 
           {[
             { label: 'Plano atual', value: (data as any).plan || 'Básico' },
             { label: 'Status', value: (data as any).plan_status === 'active' ? '✅ Ativo' : (data as any).plan_status === 'trial' ? '🕐 Trial' : (data as any).plan_status || '—' },
-            { label: 'Mensalidade', value: (data as any).monthly_value ? `R$ ${Number((data as any).monthly_value).toLocaleString('pt-BR')}` : '—' },
+            { label: 'Mensalidade do plano Áion', value: (data as any).monthly_value ? `R$ ${Number((data as any).monthly_value).toLocaleString('pt-BR')}` : '—' },
           ].map(({ label, value }) => (
             <div key={label} style={{ background: '#fff', borderRadius: 10, border: '1px solid #E2E8F0', padding: '12px 16px' }}>
               <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 4px' }}>{label}</p>
@@ -211,6 +211,11 @@ function IdentidadeTab({ institutionId, onToast }: { institutionId: string; onTo
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 900, alignItems: 'start' }}>
+      {/* Fase 6.1: a Vitrine guarda logo e tema próprios (podem ser diferentes de
+          propósito); lá há o atalho "usar a logo da escola". */}
+      <p style={{ fontSize: 12, color: '#475569', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '8px 12px', margin: '0 0 12px', lineHeight: 1.5 }}>
+        A página da Vitrine tem logo e cores próprias. Para usar as daqui, abra <a href="/vitrine" style={{ color: '#00A896', fontWeight: 600 }}>Vitrine → Aparência</a> e toque em "usar a logo da escola".
+      </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {/* Logo */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
@@ -270,100 +275,6 @@ function IdentidadeTab({ institutionId, onToast }: { institutionId: string; onTo
 }
 
 // ─── Aba: WhatsApp ────────────────────────────────────────────────────────────
-// Item 4b — antes hardcoded (GRADE_OPTS), agora vem de school_grade_levels
-// via useGradeLevels, mesma fonte configurável em Configurações → Escola.
-function BotConfigModal({ institutionId, onClose }: { institutionId: string; onClose: () => void }) {
-  const { names: gradeOpts } = useGradeLevels(institutionId)
-  const [cfg, setCfg] = useState({ bot_enabled: true, school_name: '', welcome_message: 'Olá! Seja bem-vindo! 😊 Como posso te ajudar?', bot_tone: 'friendly' as any, grades_offered: [] as string[], monthly_fee_info: '', handoff_keywords: ['atendente','humano','falar com pessoa'], faq_data: {} as Record<string,string> })
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [newKw, setNewKw] = useState('')
-  const [newFaqQ, setNewFaqQ] = useState('')
-  const [newFaqA, setNewFaqA] = useState('')
-
-  const botMountedRef = useRef(true)
-  useEffect(() => {
-    botMountedRef.current = true
-    ;(async () => {
-      try {
-        const { data } = await supabase.from('whatsapp_bot_config').select('*').eq('institution_id', institutionId).single()
-        if (botMountedRef.current) { if (data) setCfg(data as any); setLoading(false) }
-      } catch {
-        if (botMountedRef.current) setLoading(false)
-      }
-    })()
-    return () => { botMountedRef.current = false }
-  }, [])
-
-  const save = async () => {
-    setSaving(true)
-    await supabase.from('whatsapp_bot_config').upsert({ ...cfg, institution_id: institutionId }, { onConflict: 'institution_id' })
-    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000)
-  }
-
-  if (loading) return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#fff', borderRadius: 20, padding: 48 }}><Loader2 size={32} color="#00A896" className="animate-spin" /></div>
-    </div>
-  )
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 640, maxHeight: '90vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Bot size={18} color="#00A896" /><span style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>Configurar Bot</span></div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
-        </div>
-        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {/* Toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#F8FAFC', borderRadius: 12, border: '1px solid #E2E8F0' }}>
-            <div><div style={{ fontSize: 14, fontWeight: 600, color: '#1A2B4A' }}>Bot ativo</div><div style={{ fontSize: 12, color: '#64748B' }}>Responde automaticamente as primeiras mensagens</div></div>
-            <button onClick={() => setCfg(c => ({ ...c, bot_enabled: !c.bot_enabled }))} style={{ width: 44, height: 24, borderRadius: 999, background: cfg.bot_enabled ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
-              <span style={{ position: 'absolute', top: 3, left: cfg.bot_enabled ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
-            </button>
-          </div>
-          <div><label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Nome da escola</label><input value={cfg.school_name} onChange={e => setCfg(c => ({ ...c, school_name: e.target.value }))} className={inputCls} placeholder="Ex: Colégio São João" /></div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Tom do bot</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {(['friendly','formal','casual'] as const).map(t => (
-                <button key={t} onClick={() => setCfg(c => ({ ...c, bot_tone: t }))} style={{ flex: 1, padding: '8px 4px', borderRadius: 10, fontSize: 12, fontWeight: 600, border: `2px solid ${cfg.bot_tone === t ? '#00A896' : '#E2E8F0'}`, background: cfg.bot_tone === t ? '#E6F7F5' : '#fff', color: cfg.bot_tone === t ? '#00A896' : '#64748B', cursor: 'pointer' }}>
-                  {t === 'friendly' ? '😊 Amigável' : t === 'formal' ? '👔 Formal' : '😎 Descontraído'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div><label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Mensagem de boas-vindas</label><textarea value={cfg.welcome_message} onChange={e => setCfg(c => ({ ...c, welcome_message: e.target.value }))} rows={3} className={inputCls} style={{ resize: 'vertical' }} /></div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Séries oferecidas</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {gradeOpts.map(g => <button key={g} onClick={() => setCfg(c => ({ ...c, grades_offered: c.grades_offered.includes(g) ? c.grades_offered.filter(x => x !== g) : [...c.grades_offered, g] }))} style={{ padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, border: `2px solid ${cfg.grades_offered.includes(g) ? '#00A896' : '#E2E8F0'}`, background: cfg.grades_offered.includes(g) ? '#E6F7F5' : '#fff', color: cfg.grades_offered.includes(g) ? '#00A896' : '#64748B', cursor: 'pointer' }}>{cfg.grades_offered.includes(g) && '✓ '}{g}</button>)}
-            </div>
-          </div>
-          <div><label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Informações de mensalidade</label><textarea value={cfg.monthly_fee_info} onChange={e => setCfg(c => ({ ...c, monthly_fee_info: e.target.value }))} rows={2} className={inputCls} placeholder="Ex: Mensalidade de R$ 800 a R$ 1.200 conforme a série." style={{ resize: 'vertical' }} /></div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Palavras para transferir ao humano</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {cfg.handoff_keywords.map(kw => <span key={kw} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 999, fontSize: 12, color: '#92400E' }}>{kw}<button onClick={() => setCfg(c => ({ ...c, handoff_keywords: c.handoff_keywords.filter(k => k !== kw) }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D97706', padding: 0 }}>×</button></span>)}
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input value={newKw} onChange={e => setNewKw(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newKw.trim()) { setCfg(c => ({ ...c, handoff_keywords: [...c.handoff_keywords, newKw.trim()] })); setNewKw('') }}} className={inputCls} placeholder="Adicionar palavra..." style={{ flex: 1 }} />
-              <button onClick={() => { if (newKw.trim()) { setCfg(c => ({ ...c, handoff_keywords: [...c.handoff_keywords, newKw.trim()] })); setNewKw('') }}} style={{ padding: '8px 14px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}><Plus size={14} /></button>
-            </div>
-          </div>
-        </div>
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={save} disabled={saving} style={{ padding: '10px 24px', borderRadius: 10, border: 'none', background: saved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.7 : 1 }}>
-            {saved ? <><Check size={14} />Salvo!</> : saving ? 'Salvando...' : 'Salvar configurações'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 const FLOW_DAYS = [
   { id: 'MON', label: 'Seg' }, { id: 'TUE', label: 'Ter' }, { id: 'WED', label: 'Qua' },
   { id: 'THU', label: 'Qui' }, { id: 'FRI', label: 'Sex' }, { id: 'SAT', label: 'Sáb' }, { id: 'SUN', label: 'Dom' },
@@ -376,15 +287,43 @@ const WA_SECTIONS = [
   { id: 'equipe',    icon: '👥', label: 'Equipe' },
   { id: 'bloqueios', icon: '🚫', label: 'Bloqueios' },
   { id: 'etiquetas', icon: '🏷️', label: 'Etiquetas' },
-  { id: 'pesquisa',  icon: '⭐', label: 'Pesquisa' },
+  { id: 'pesquisa',  icon: '⭐', label: 'Avaliação' },
 ]
+
+// Fase 6.1 — fluxo visual ligado (as 6 escolas hoje): boas-vindas, menu e a
+// mensagem genérica de fora do horário ficam sem efeito no webhook.
+function hasVisualFlow(flow: unknown): boolean {
+  const f = flow as { bot_enabled?: boolean; bot_flow?: { nodes?: unknown[] } | null }
+  return !!(f?.bot_enabled && f?.bot_flow?.nodes?.length)
+}
+
+// Fase 6.1 — mostra o timeout que o banco aplica de fato
+// (process_bot_timeouts: COALESCE(bot_timeout_*, timeout_*)), com os valores salvos.
+function EffectiveTimeoutNote({ flow, where }: { flow: Record<string, unknown>; where: 'horario' | 'equipe' }) {
+  const botMin = flow.bot_timeout_minutes as number | null | undefined
+  const eqMin = flow.timeout_minutes as number | null | undefined
+  const botMsg = flow.bot_timeout_message as string | null | undefined
+  const eqMsg = flow.timeout_message as string | null | undefined
+  const min = botMin || eqMin
+  if (!min) return null
+  const minFrom = botMin ? 'Horário' : 'Equipe'
+  const msgFrom = botMsg ? 'Horário' : eqMsg ? 'Equipe' : null
+  const mixed = minFrom !== msgFrom
+  return (
+    <div style={{ fontSize: 12, color: '#1E3A8A', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '8px 12px', marginBottom: 12, lineHeight: 1.5 }}>
+      <strong>Valendo agora:</strong> o robô transfere após <strong>{min} min</strong> (configurado em {minFrom})
+      {msgFrom ? <>, com a mensagem configurada em {msgFrom}</> : <>, sem mensagem</>}.
+      {where === 'equipe' && botMin ? <> O tempo desta seção só vale se o de Horário → "Transferir após" estiver vazio.</> : null}
+      {mixed && msgFrom ? <> Tempo e mensagem vêm de seções diferentes.</> : null}
+    </div>
+  )
+}
 
 const TAG_COLORS = ['#6366f1','#16a34a','#dc2626','#d97706','#0891b2','#ec4899','#64748b','#ea580c']
 
 function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [metaConfig, setMetaConfig]       = useState<any>(null)
   const [loading, setLoading]             = useState(true)
-  const [showBot, setShowBot]             = useState(false)
   const [usage, setUsage]                 = useState({ count: 0, limit: 1000 })
   const [phoneRecord, setPhoneRecord]     = useState<any>(null)
   const [testing, setTesting]             = useState(false)
@@ -807,7 +746,6 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   return (
     <>
       {showFlowEditor && <FlowEditor institutionId={institutionId} onClose={() => setShowFlowEditor(false)} />}
-      {showBot && <BotConfigModal institutionId={institutionId} onClose={() => setShowBot(false)} />}
       <div style={{ display: 'flex', background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden', minHeight: 520 }}>
 
         {/* Sidebar */}
@@ -926,6 +864,11 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <label style={dLabel}>Mensagem fora do horário</label>
+                  {hasVisualFlow(flow) && (
+                    <p style={{ fontSize: 11, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 10px', margin: '0 0 6px' }}>
+                      Com o fluxo visual ligado, esta mensagem só é usada se a de "transferências do bot" (abaixo) estiver vazia.
+                    </p>
+                  )}
                   <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={flow.off_hours_message} onChange={e => setFlow(f => ({ ...f, off_hours_message: e.target.value }))} />
                 </div>
                 <button onClick={handleSaveFlow} disabled={savingFlow}
@@ -939,6 +882,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>💬 Mensagens Automáticas</div>
                 <div style={{ marginBottom: 16 }}>
                   <label style={dLabel}>Mensagem fora do horário (transferências do bot)</label>
+                  {hasVisualFlow(flow) && (
+                    <p style={{ fontSize: 11, color: '#15803D', margin: '0 0 4px' }}>É esta que o fluxo visual usa ao transferir fora do horário.</p>
+                  )}
                   <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 6px' }}>Use <strong>{'{horario}'}</strong> para inserir os horários configurados automaticamente</p>
                   <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={outsideHoursMsg} onChange={e => setOutsideHoursMsg(e.target.value)} />
                 </div>
@@ -960,6 +906,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 </p>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <EffectiveTimeoutNote flow={flow as Record<string, unknown>} where="horario" />
                   <label style={dLabel}>Transferir após</label>
                   <input
                     type="number"
@@ -1259,6 +1206,10 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 </div>
               )}
 
+              {/* Fase 6.1: o banco usa COALESCE(bot_timeout_*, timeout_*) — o de
+                  Horário vale; este só entra quando aquele está vazio. Mostra o
+                  que está valendo agora (valores salvos), sem mudar a regra. */}
+              <EffectiveTimeoutNote flow={flow as Record<string, unknown>} where="equipe" />
               {/* Timeout de Inatividade */}
               <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #E2F5F3' }}>
                 <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>⏱ Timeout de Inatividade</h4>
@@ -1316,6 +1267,11 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                   <Plus size={13} /> Bloquear número
                 </button>
               </div>
+              {/* Fase 6.1: lista diferente da de Transmissões → "Não recebem" */}
+              <p style={{ fontSize: 12, color: '#475569', margin: '8px 0 0', lineHeight: 1.5 }}>
+                Mensagens de número bloqueado aqui são ignoradas: não entram no Hub e o robô não responde. Quem pediu para <strong>não receber disparos</strong> fica em outra lista,
+                em <a href="/transmissoes" style={{ color: '#00A896', fontWeight: 600 }}>Transmissões → Não recebem</a>.
+              </p>
               {showAddBlock && (
                 <div style={{ ...dCard, background: '#FEF2F2', border: '1px solid #FECACA' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1417,12 +1373,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
           {waSection === 'pesquisa' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>⭐ Pesquisa de Satisfação</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>⭐ Avaliação do atendimento</h3>
               <div style={dCard}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
                     <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A2B4A' }}>Pesquisa automática</p>
-                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748B' }}>Envia avaliação de 1 a 5 ao encerrar atendimento</p>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748B' }}>Ao encerrar o atendimento, envia uma avaliação com 3 opções (Ótimo, Regular, Ruim). Não confundir com o módulo Pesquisas, que envia questionários por link.</p>
                   </div>
                   <button onClick={() => setFlow(f => ({ ...f, satisfaction_survey_enabled: !f.satisfaction_survey_enabled }))}
                     style={{ width: 44, height: 24, borderRadius: 999, background: flow.satisfaction_survey_enabled ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
@@ -1550,7 +1506,7 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
       {/* Resumo financeiro */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
         {[
-          { label: 'Mensalidade', value: fmtBRL(institution?.monthly_value || 0), color: '#00A896', icon: '💰' },
+          { label: 'Mensalidade do plano Áion', value: fmtBRL(institution?.monthly_value || 0), color: '#00A896', icon: '💰' },
           { label: 'Pagas', value: paidMonthly.length, color: '#16A34A', icon: '✅' },
           { label: 'Pendentes', value: pendingMonthly.length + overdueMonthly.length, color: overdueMonthly.length > 0 ? '#DC2626' : '#D97706', icon: overdueMonthly.length > 0 ? '🔴' : '⏳' },
         ].map(k => (

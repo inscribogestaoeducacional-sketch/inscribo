@@ -6,6 +6,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { sendEmail } from '../../lib/email'
 import { aiFetch } from '../../lib/authHeaders'
+import { useGradeLevels } from '../../hooks/useGradeLevels'
 
 // ─── tipos ──────────────────────────────────────────────────────
 interface ProcessedFile {
@@ -51,6 +52,8 @@ interface Props {
 const STATES = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
   'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
+// Fase 6.1: só é usada quando a escola ainda não tem séries cadastradas em
+// Configurações → Escola → Séries (school_grade_levels), que é a fonte única.
 const GRADE_OPTIONS = [
   'Infantil I','Infantil II','Infantil III','Infantil IV','Infantil V',
   '1º ao 5º EF','6º ao 9º EF','Ensino Médio'
@@ -82,6 +85,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
   const [fileProgress, setFileProgress] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [existingCycle, setExistingCycle] = useState<ExistingCycle | null>(null)
+  const { names: gradeLevelNames } = useGradeLevels(institutionId)
 
   // Buscar dados da instituição ao montar
   useEffect(() => {
@@ -475,7 +479,9 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Séries oferecidas</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 6 }}>
-                  {GRADE_OPTIONS.map(g => {
+                  {/* Fase 6.1: séries da escola (fonte única); seleções antigas que não
+                      estão mais na lista continuam visíveis pra poderem ser desmarcadas. */}
+                  {Array.from(new Set([...(gradeLevelNames.length ? gradeLevelNames : GRADE_OPTIONS), ...schoolData.grades])).map(g => {
                     const active = schoolData.grades.includes(g)
                     return (
                       <button key={g} onClick={() => toggleGrade(g)} style={{
@@ -493,7 +499,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
-                  <label style={labelStyle}>Mensalidade média</label>
+                  <label style={labelStyle}>Mensalidade média da escola (famílias)</label>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: '#94A3B8' }}>R$</span>
                     <input
