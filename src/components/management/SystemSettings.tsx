@@ -4,7 +4,7 @@ import {
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
-  ChevronUp, ChevronDown, Pencil, Send,
+  ChevronUp, ChevronDown, Pencil, Send, Plug,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -17,6 +17,7 @@ import { platformAdmin } from '../../lib/platformAdmin'
 import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 import LeadUnitFieldEditor from './LeadUnitFieldEditor'
 import LeadReminderSettingsEditor from './LeadReminderSettingsEditor'
+import IntegrationsTab from './IntegrationsTab'
 import { useSearchParams } from 'react-router-dom'
 import { canSeeSettingsItem, canSeeSettingsTab, visibleWhatsAppSections, type SettingsTabId } from '../../lib/settingsAccess'
 
@@ -1778,6 +1779,8 @@ const TABS = [
   { id: 'escola',     label: 'Escola',     icon: GraduationCap },
   { id: 'identidade', label: 'Identidade', icon: Palette },
   { id: 'whatsapp',   label: 'WhatsApp',   icon: MessageCircle },
+  // Fase 2 · marco 1: base de alunos (lançamento manual, Activesoft, fonte)
+  { id: 'integracoes', label: 'Integrações', icon: Plug },
 ]
 
 export default function SystemSettings() {
@@ -1865,6 +1868,7 @@ export default function SystemSettings() {
         {activeTab === 'identidade' && <IdentidadeTab institutionId={institutionId} onToast={showToast} />}
         {activeTab === 'whatsapp' && <WhatsAppTab institutionId={institutionId} role={role} section={urlSec} onSectionChange={setWaSection} />}
         {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
+        {activeTab === 'integracoes' && institutionId && <IntegrationsTab institutionId={institutionId} onToast={showToast} />}
         {activeTab === 'transmissoes' && broadcastEnabled && <FinanceTab institutionId={institutionId} />}
         {activeTab === 'escola' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

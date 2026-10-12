@@ -45,7 +45,11 @@ export const SETTINGS_ITEMS = {
   'whatsapp.bloqueios':            { tab: 'whatsapp', section: 'bloqueios', label: 'Números bloqueados',       roles: BOTH },
   'whatsapp.etiquetas':            { tab: 'whatsapp', section: 'etiquetas', label: 'Etiquetas',                roles: BOTH },
   'whatsapp.pesquisa':             { tab: 'whatsapp', section: 'pesquisa',  label: 'Avaliação do atendimento', roles: BOTH },
-  'integracoes':                   { tab: 'integracoes',  label: 'Integrações e base de alunos', roles: ADMIN },
+  // Fase 2 · marco 1: números manuais por série (admin e gestor; o banco aceita os dois)
+  'integracoes.manual':            { tab: 'integracoes',  label: 'Lançamento manual da base (por série)', roles: BOTH },
+  // Token do ERP, fonte da base e rematrícula: só admin (o banco também exige admin)
+  'integracoes.activesoft':        { tab: 'integracoes',  label: 'Activesoft (token e carga)', roles: ADMIN },
+  'integracoes.config':            { tab: 'integracoes',  label: 'Fonte da base e rematrícula', roles: ADMIN },
 } as const satisfies Record<string, SettingsItem>
 
 export type SettingsItemId = keyof typeof SETTINGS_ITEMS
