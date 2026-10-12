@@ -1,6 +1,6 @@
 -- =============================================================================
 -- FASE 2 · MARCO 1 — testes do ENSAIO. Montagem:
---   migrations/20261012200000_fase2_base_alunos_marco1.sql + este arquivo
+--   migrations/20261013120000_fase2_base_alunos_marco1.sql + este arquivo
 -- O RAISE do fim aborta tudo: NADA fica gravado (nem o segredo de teste no Vault).
 -- Simula perfis com request.jwt.claims + SET LOCAL ROLE (mesmo jeito que o
 -- PostgREST faz), pra testar RLS e GRANT de coluna de verdade.

@@ -46,6 +46,8 @@ export interface Lead {
   lead_temperature?: 'frio' | 'morno' | 'quente' | null
   campaign_cycle_id?: string | null
   year_interest?: number | null
+  // Fase 0C: campanha = criado dentro do ciclo; herdado = criado antes do início (não conta).
+  cycle_link_kind?: 'campanha' | 'herdado' | null
   city?: string | null
   origin_school?: string | null
   referral_source?: string | null

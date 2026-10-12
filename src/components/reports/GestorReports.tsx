@@ -18,7 +18,7 @@ import CampaignGeneratorModal from './CampaignGeneratorModal'
 import LinkLeadsToCampaignModal from './LinkLeadsToCampaignModal'
 import { aiFetch } from '../../lib/authHeaders'
 import { pickCurrentFunnelRow } from '../../lib/funnelPeriod'
-import { LOST_REASONS } from '../leads/leadFormShared'
+import { LOST_REASONS } from '../leads/lostReasons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface CampaignCycle {
@@ -1044,8 +1044,12 @@ function TabTransferencias({ institutionId }: { institutionId: string }) {
     reasonCounts[r] = (reasonCounts[r] || 0) + 1
   })
 
-  // Fase 6.1: rótulos curtos e fator vêm da lista única (leadFormShared)
-  const LOST_REASON_LABELS: Record<string, string> = Object.fromEntries(LOST_REASONS.map(r => [r.value, r.short]))
+  // Fonte única (lostReasons.tsx): rótulo curto e fator. "nao_informado" =
+  // perdidos de antes do motivo ser obrigatório (backfill da Fase 0C), sem fator.
+  const LOST_REASON_LABELS: Record<string, string> = {
+    ...Object.fromEntries(LOST_REASONS.map(r => [r.value, r.short])),
+    nao_informado: 'Não informado (antes da regra)',
+  }
   const FATOR_MAP: Record<string, string> = Object.fromEntries(LOST_REASONS.map(r => [r.value, r.fator]))
 
   const paretoData = Object.entries(reasonCounts)

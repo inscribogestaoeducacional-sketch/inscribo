@@ -606,6 +606,37 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
     }
   }
 
+  // Gravação PARCIAL das seções que o gestor também usa (Equipe e Avaliação).
+  // O banco (trg_whatsapp_flows_guard_columns) só deixa o admin mudar conexão,
+  // robô e horário; gravar a linha inteira daqui faria o salvamento do gestor
+  // ser recusado se algum campo de horário viesse diferente do banco.
+  const handleSaveFlowPart = async (part: 'equipe' | 'pesquisa') => {
+    setSavingFlow(true)
+    try {
+      const fields = part === 'equipe'
+        ? {
+            timeout_minutes:       timeoutMinutes,
+            timeout_group_id:      timeoutGroupId || null,
+            timeout_assignee_id:   timeoutAssigneeId || null,
+            timeout_assignee_name: timeoutAssigneeId ? (flowUsers.find(u => u.id === timeoutAssigneeId)?.full_name || null) : null,
+            timeout_message:       timeoutMessage,
+          }
+        : {
+            satisfaction_survey_enabled: flow.satisfaction_survey_enabled,
+            satisfaction_message:        flow.satisfaction_message,
+          }
+      const { error } = await supabase.from('whatsapp_flows')
+        .upsert({ institution_id: institutionId, ...fields }, { onConflict: 'institution_id' })
+      if (error) { alert('Erro ao salvar: ' + error.message); return }
+      setFlowSaved(true)
+      setTimeout(() => setFlowSaved(false), 2500)
+    } catch (e) {
+      console.error('[SAVE FLOW PART] exception:', e)
+    } finally {
+      setSavingFlow(false)
+    }
+  }
+
   const handleToggleAgentName = async (value: boolean) => {
     setSavingAgentName(true)
     setShowAgentName(value)
@@ -1266,7 +1297,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                     style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', resize: 'none' as const, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
                 </div>
                 <div style={{ marginTop: 12 }}>
-                  <button onClick={handleSaveFlow} disabled={savingFlow}
+                  <button onClick={() => handleSaveFlowPart('equipe')} disabled={savingFlow}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
                     {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar timeout</>}
                   </button>
@@ -1420,7 +1451,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                   </div>
                 )}
                 <div style={{ marginTop: 16 }}>
-                  <button onClick={handleSaveFlow} disabled={savingFlow}
+                  <button onClick={() => handleSaveFlowPart('pesquisa')} disabled={savingFlow}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
                     {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar configuração</>}
                   </button>
