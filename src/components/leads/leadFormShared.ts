@@ -53,6 +53,8 @@ export const LEAD_TEMPERATURES = [
   { value: 'frio',   label: 'Frio',   icon: Snowflake, color: '#3B82F6', bg: '#EFF6FF', border: '#BFDBFE' },
 ] as const
 
+// Rótulos CURTOS do passo a passo do modal (cabem no espaço estreito). Os
+// nomes completos das etapas são os de statusConfig, a fonte única (Fase 6.1).
 export const LEAD_STAGES = [
   { key: 'new',       label: 'Novo'      },
   { key: 'contact',   label: 'Contato'   },

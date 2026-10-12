@@ -340,7 +340,7 @@ export default function GestorHome() {
   const [badgeTooltip, setBadgeTooltip] = useState(false)
   const [allEnrollments, setAllEnrollments] = useState<{ id: string; user_id: string; created_at: string }[]>([])
   const [npsData, setNpsData] = useState<{ id: string; title: string; created_at: string; survey_mode: string; satisfaction_responses: { answers: Record<string, number | string> | null; custom_answers: Record<string, number | string> | null }[] } | null>(null)
-  const [institutionData, setInstitutionData] = useState<{ inep_code: string | null } | null>(null)
+  const [institutionData, setInstitutionData] = useState<{ inep_code: string | null; city: string | null; state: string | null } | null>(null)
   const [marketSchools, setMarketSchools] = useState<MarketSchool[]>([])
   const [mapSchools, setMapSchools] = useState<any[]>([])
   const mapContainerRef = useRef<HTMLDivElement>(null)
@@ -448,7 +448,7 @@ export default function GestorHome() {
         // estrutura fixa — ver respondentOverallScore10() no topo do arquivo
         // e o branch de survey_mode==='custom' no card "Pesquisa de satisfação").
         supabase.from('satisfaction_surveys').select('id, title, created_at, survey_mode, satisfaction_responses(answers, custom_answers)').eq('institution_id', institutionId).neq('status', 'draft').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('institutions').select('inep_code').eq('id', institutionId).single(),
+        supabase.from('institutions').select('inep_code, city, state').eq('id', institutionId).single(),
         // Item 8 — todos os leads com responsável atual, pra "Leads
         // atribuídos"/"avançados no funil" no ranking e pro agregado de
         // lembretes (item 2d, filtrado depois via getLeadReminderInfo, que já
@@ -650,15 +650,19 @@ export default function GestorHome() {
 
       setNpsData((npsRes as typeof npsData) ?? null)
 
-      setInstitutionData((instData as { inep_code: string | null } | null) ?? null)
+      setInstitutionData((instData as { inep_code: string | null; city: string | null; state: string | null } | null) ?? null)
 
       // INEP market schools — match by city name and UF from setup cycle.
       // Depende de loadedCycles (batch acima), então continua sequencial;
       // marketSchoolsData e mapSchoolsData não dependem uma da outra, viraram
       // Promise.all em vez de 2 awaits em sequência.
+      // Fase 6.1: cidade/UF têm uma fonte só — institutions (Configurações →
+      // Geral). A cópia em campaign_cycles.school_data fica só como reserva
+      // pra escola antiga sem cidade cadastrada.
+      const instLoc = instData as { city: string | null; state: string | null } | null
       const cycleWithCity = loadedCycles.find(c => c.school_data?.city && c.school_data?.state)
-      const inepCity = cycleWithCity?.school_data?.city as string | undefined
-      const inepState = cycleWithCity?.school_data?.state as string | undefined
+      const inepCity = (instLoc?.city || cycleWithCity?.school_data?.city) as string | undefined
+      const inepState = (instLoc?.state || cycleWithCity?.school_data?.state) as string | undefined
       if (inepCity && inepState) {
         // Ano do censo mais recente disponível pra essa cidade/UF, em vez de
         // um ano fixo — a base INEP é atualizada anualmente e um valor
@@ -697,10 +701,10 @@ export default function GestorHome() {
       const alreadySetup = loadedCycles.some(c => ['setup','draft','active','completed','released'].includes(c.status ?? ''))
       if (!alreadySetup) setShowSetup(true)
 
-      const cycleWithLocation = loadedCycles.find(c => c.school_data?.city && c.school_data?.state)
-      if (cycleWithLocation) {
-        const cityLoc = cycleWithLocation.school_data!.city as string
-        const stateLoc = cycleWithLocation.school_data!.state as string
+      // Mesma fonte única da cidade/UF (institutions), com a do ciclo de reserva.
+      if (inepCity && inepState) {
+        const cityLoc = inepCity
+        const stateLoc = inepState
         // Cache real por cidade+estado (market_data_cache) — substitui a
         // tentativa antiga de gravar market_data_fetched_at em
         // campaign_cycles, coluna que nunca existiu (o UPDATE falhava
@@ -918,8 +922,8 @@ export default function GestorHome() {
     { name: 'Só cadastro', value: Math.max(0, totalLeads - totalVisitsCount), fill: '#9FE1CB' },
   ].filter(d => d.value > 0)
 
-  const marketCity = setupCycle?.school_data?.city ?? ''
-  const marketState = setupCycle?.school_data?.state ?? ''
+  const marketCity = institutionData?.city || setupCycle?.school_data?.city || ''
+  const marketState = institutionData?.state || setupCycle?.school_data?.state || ''
 
   // ── Inteligência de Mercado (INEP) ────────────────────────────────────────
   const inepMaxYear = marketSchools.length > 0 ? Math.max(...marketSchools.map(s => s.ano_censo)) : null

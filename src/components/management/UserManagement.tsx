@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions, DEFAULT_OFF_MODULES } from '../../contexts/PermissionsContext'
 import { supabase } from '../../lib/supabase'
 import { sendEmail } from '../../lib/email'
+import { useBroadcastEnabled } from '../../lib/broadcasts'
 import {
   Users, Plus, Edit, Shield, UserCheck, Search,
   Eye, EyeOff, Mail, Calendar, CheckCircle, XCircle, Key, X,
@@ -48,6 +49,11 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [permMap, setPermMap] = useState<Record<string, boolean>>({})
+  // Fase 6.1: Transmissões também depende da liberação da escola (Super Admin,
+  // broadcast_settings). Mostra quando o módulo não está liberado, pra a
+  // permissão do usuário não parecer suficiente sozinha.
+  const broadcastEnabled = useBroadcastEnabled(institutionId)
+  const schoolBlocked = (moduleId: string) => moduleId === 'transmissoes' && broadcastEnabled === false
   const [loadingPerms, setLoadingPerms] = useState(false)
 
   const isConsultor = (role: string) => role !== 'admin' && role !== 'manager'
@@ -213,6 +219,12 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                           <span style={{ fontSize: 16, flexShrink: 0 }}>{m.icon}</span>
                           <span style={{ fontSize: 12, fontWeight: 600, color: enabled ? '#1A2B4A' : '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</span>
+                          {schoolBlocked(m.id) && (
+                            <span title="A Áion ainda não liberou este módulo para a escola. Mesmo ligado aqui, o usuário não vai vê-lo."
+                              style={{ fontSize: 10, fontWeight: 700, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 999, padding: '1px 6px', whiteSpace: 'nowrap' }}>
+                              não liberado p/ a escola
+                            </span>
+                          )}
                         </div>
                         <div style={{ width: 36, height: 20, borderRadius: 999, background: enabled ? '#00A896' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s' }}>
                           <span style={{ position: 'absolute', top: 2, left: enabled ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />

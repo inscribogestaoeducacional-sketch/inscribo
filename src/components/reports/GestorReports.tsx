@@ -18,6 +18,7 @@ import CampaignGeneratorModal from './CampaignGeneratorModal'
 import LinkLeadsToCampaignModal from './LinkLeadsToCampaignModal'
 import { aiFetch } from '../../lib/authHeaders'
 import { pickCurrentFunnelRow } from '../../lib/funnelPeriod'
+import { LOST_REASONS } from '../leads/lostReasons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface CampaignCycle {
@@ -1043,19 +1044,13 @@ function TabTransferencias({ institutionId }: { institutionId: string }) {
     reasonCounts[r] = (reasonCounts[r] || 0) + 1
   })
 
+  // Fonte única (lostReasons.tsx): rótulo curto e fator. "nao_informado" =
+  // perdidos de antes do motivo ser obrigatório (backfill da Fase 0C), sem fator.
   const LOST_REASON_LABELS: Record<string, string> = {
-    preco_alto: 'Valor alto', nao_retornou: 'Não retornou', outra_escola: 'Outra escola',
-    sem_vaga: 'Sem vaga', nao_oferece_serie: 'Série não ofertada', nao_gostou: 'Não gostou',
-    mudou_cidade: 'Mudou de cidade', dificuldade_fin: 'Dificuldade financeira',
-    desistiu: 'Desistiu', outro: 'Outro',
-    // perdidos antes do motivo ser obrigatório (backfill da Fase 0C) — sem fator
+    ...Object.fromEntries(LOST_REASONS.map(r => [r.value, r.short])),
     nao_informado: 'Não informado (antes da regra)',
   }
-  const FATOR_MAP: Record<string, string> = {
-    preco_alto: 'Interno', nao_retornou: 'Externo', outra_escola: 'Externo',
-    sem_vaga: 'Interno', nao_oferece_serie: 'Interno', nao_gostou: 'Interno',
-    mudou_cidade: 'Externo', dificuldade_fin: 'Externo', desistiu: 'Externo', outro: 'Interno'
-  }
+  const FATOR_MAP: Record<string, string> = Object.fromEntries(LOST_REASONS.map(r => [r.value, r.fator]))
 
   const paretoData = Object.entries(reasonCounts)
     .sort((a, b) => b[1] - a[1])

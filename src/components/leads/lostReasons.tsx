@@ -7,17 +7,18 @@ import { X, CheckCircle, AlertTriangle } from 'lucide-react'
 import type { Lead } from '../../lib/supabase'
 
 // ─── Motivos de recusa ────────────────────────────────────────────────────────
+// Fonte ÚNICA (Fase 0C + 6.1): label no Kanban/formulário, short e fator nos Relatórios.
 export const LOST_REASONS = [
-  { value: 'preco_alto',        label: 'Valor da mensalidade alto',           fator: 'Interno', subfator: 'Administrativo' },
-  { value: 'nao_retornou',      label: 'Não retornou nosso contato',          fator: 'Externo', subfator: null },
-  { value: 'outra_escola',      label: 'Escolheu outra escola',               fator: 'Externo', subfator: null },
-  { value: 'sem_vaga',          label: 'Sem vaga na série de interesse',      fator: 'Interno', subfator: 'Administrativo' },
-  { value: 'nao_oferece_serie', label: 'Escola não oferece a série desejada', fator: 'Interno', subfator: 'Administrativo' },
-  { value: 'nao_gostou',        label: 'Não gostou da escola',                fator: 'Interno', subfator: 'Administrativo' },
-  { value: 'mudou_cidade',      label: 'Mudou de cidade',                     fator: 'Externo', subfator: null },
-  { value: 'dificuldade_fin',   label: 'Dificuldade financeira',              fator: 'Externo', subfator: null },
-  { value: 'desistiu',          label: 'Desistiu sem informar motivo',        fator: 'Externo', subfator: null },
-  { value: 'outro',             label: 'Outro motivo',                        fator: 'Interno', subfator: 'Administrativo' },
+  { value: 'preco_alto',        label: 'Valor da mensalidade alto', short: 'Valor alto',           fator: 'Interno', subfator: 'Administrativo' },
+  { value: 'nao_retornou',      label: 'Não retornou nosso contato', short: 'Não retornou',          fator: 'Externo', subfator: null },
+  { value: 'outra_escola',      label: 'Escolheu outra escola', short: 'Outra escola',               fator: 'Externo', subfator: null },
+  { value: 'sem_vaga',          label: 'Sem vaga na série de interesse', short: 'Sem vaga',      fator: 'Interno', subfator: 'Administrativo' },
+  { value: 'nao_oferece_serie', label: 'Escola não oferece a série desejada', short: 'Série não ofertada', fator: 'Interno', subfator: 'Administrativo' },
+  { value: 'nao_gostou',        label: 'Não gostou da escola', short: 'Não gostou',                fator: 'Interno', subfator: 'Administrativo' },
+  { value: 'mudou_cidade',      label: 'Mudou de cidade', short: 'Mudou de cidade',                     fator: 'Externo', subfator: null },
+  { value: 'dificuldade_fin',   label: 'Dificuldade financeira', short: 'Dificuldade financeira',              fator: 'Externo', subfator: null },
+  { value: 'desistiu',          label: 'Desistiu sem informar motivo', short: 'Desistiu',        fator: 'Externo', subfator: null },
+  { value: 'outro',             label: 'Outro motivo', short: 'Outro',                        fator: 'Interno', subfator: 'Administrativo' },
 ]
 
 
