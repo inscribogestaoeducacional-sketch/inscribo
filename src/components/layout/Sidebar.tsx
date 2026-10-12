@@ -23,7 +23,7 @@ const NAV_CFG = [
   { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias' },
   { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFF7ED', iconColor: '#F97316', Icon: ClipboardList,   roles: ['admin','manager'], module: 'pesquisas' },
   { path: '/users',           label: 'Usuários',        iconBg: '#F1F5F9', iconColor: '#64748B', Icon: UserCog,         roles: ['admin'], module: 'usuarios' },
-  { path: '/settings',        label: 'Config.',         iconBg: '#F1F5F9', iconColor: '#64748B', Icon: Settings,        roles: ['admin'], module: 'configuracoes' },
+  { path: '/settings',        label: 'Config.',         iconBg: '#F1F5F9', iconColor: '#64748B', Icon: Settings,        roles: ['admin','manager'], module: 'configuracoes' },
 ]
 
 function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {

@@ -17,6 +17,8 @@ import { platformAdmin } from '../../lib/platformAdmin'
 import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 import LeadUnitFieldEditor from './LeadUnitFieldEditor'
 import LeadReminderSettingsEditor from './LeadReminderSettingsEditor'
+import { useSearchParams } from 'react-router-dom'
+import { canSeeSettingsItem, canSeeSettingsTab, visibleWhatsAppSections, type SettingsTabId } from '../../lib/settingsAccess'
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
 
@@ -321,7 +323,15 @@ function EffectiveTimeoutNote({ flow, where }: { flow: Record<string, unknown>; 
 
 const TAG_COLORS = ['#6366f1','#16a34a','#dc2626','#d97706','#0891b2','#ec4899','#64748b','#ea580c']
 
-function WhatsAppTab({ institutionId }: { institutionId: string }) {
+function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
+  institutionId: string
+  role: string | null | undefined
+  section?: string | null
+  onSectionChange?: (sec: string) => void
+}) {
+  // Fase 6.2: seções filtradas por perfil e ligadas à URL (?sec=)
+  const allowedSections = visibleWhatsAppSections(role)
+  const sections = WA_SECTIONS.filter(s => allowedSections.includes(s.id))
   const [metaConfig, setMetaConfig]       = useState<any>(null)
   const [loading, setLoading]             = useState(true)
   const [usage, setUsage]                 = useState({ count: 0, limit: 1000 })
@@ -371,7 +381,11 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [newBlockNum, setNewBlockNum] = useState('')
   const [newBlockReason, setNewBlockReason] = useState('')
   const [savingBlock, setSavingBlock] = useState(false)
-  const [waSection, setWaSection] = useState('conexao')
+  const [waSection, setWaSectionState] = useState(() => (section && allowedSections.includes(section) ? section : allowedSections[0] ?? 'respostas'))
+  useEffect(() => {
+    if (section && allowedSections.includes(section) && section !== waSection) setWaSectionState(section)
+  }, [section])
+  const setWaSection = (sec: string) => { setWaSectionState(sec); onSectionChange?.(sec) }
 
   // Tags
   const [waTags, setWaTags]       = useState<{ id: string; name: string; color: string }[]>([])
@@ -750,7 +764,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
         {/* Sidebar */}
         <div style={{ width: 200, flexShrink: 0, background: '#F8FAFC', borderRight: '1px solid #E2E8F0', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {WA_SECTIONS.map(sec => {
+          {sections.map(sec => {
             const active = waSection === sec.id
             return (
               <button key={sec.id} onClick={() => setWaSection(sec.id)}
@@ -1065,7 +1079,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
           {waSection === 'equipe' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>👥 Horário por Atendente</h3>
-              {attendants.length === 0 ? (
+              {!canSeeSettingsItem('whatsapp.equipe.horarios', role) ? (
+                <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Só o administrador altera o horário dos atendentes.</p>
+              ) : attendants.length === 0 ? (
                 <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Nenhum atendente cadastrado.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1766,7 +1782,11 @@ const TABS = [
 
 export default function SystemSettings() {
   const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState('geral')
+  const role = user?.role
+  // Fase 6.2: aba e seção na URL (?tab=whatsapp&sec=horario). Antes ?tab= era ignorado.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlTab = searchParams.get('tab')
+  const urlSec = searchParams.get('sec')
   const [showSchoolSetup, setShowSchoolSetup] = useState(false)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -1775,9 +1795,14 @@ export default function SystemSettings() {
 
   // Aba "Transmissões" só com o módulo liberado pela Áion (mesma regra do menu).
   const broadcastEnabled = useBroadcastEnabled(institutionId)
-  const visibleTabs = broadcastEnabled
+  const visibleTabs = (broadcastEnabled
     ? [...TABS.slice(0, 2), { id: 'transmissoes', label: 'Transmissões', icon: Send }, ...TABS.slice(2)]
     : TABS
+  ).filter(t => canSeeSettingsTab(t.id as SettingsTabId, role))
+  // Aba pedida na URL vale só se o perfil vê; senão, a primeira visível.
+  const activeTab = visibleTabs.some(t => t.id === urlTab) ? (urlTab as string) : (visibleTabs[0]?.id ?? 'escola')
+  const setActiveTab = (tab: string) => setSearchParams({ tab }, { replace: true })
+  const setWaSection = (sec: string) => setSearchParams({ tab: 'whatsapp', sec }, { replace: true })
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
@@ -1838,11 +1863,12 @@ export default function SystemSettings() {
       <div style={{ padding: isMobile ? '16px 0 96px' : 0 }}>
         {activeTab === 'geral' && <GeralTab institutionId={institutionId} onToast={showToast} />}
         {activeTab === 'identidade' && <IdentidadeTab institutionId={institutionId} onToast={showToast} />}
-        {activeTab === 'whatsapp' && <WhatsAppTab institutionId={institutionId} />}
+        {activeTab === 'whatsapp' && <WhatsAppTab institutionId={institutionId} role={role} section={urlSec} onSectionChange={setWaSection} />}
         {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
         {activeTab === 'transmissoes' && broadcastEnabled && <FinanceTab institutionId={institutionId} />}
         {activeTab === 'escola' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {canSeeSettingsItem('escola.dados', role) && (
             <div style={{ background: '#fff', borderRadius: isMobile ? 0 : 16, border: isMobile ? 'none' : '1px solid #E2E8F0', padding: isMobile ? '20px 16px' : 28, maxWidth: isMobile ? '100%' : 500 }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>Configurações da Escola</h3>
               <p style={{ fontSize: 13, color: '#64748B', marginBottom: 20, lineHeight: 1.6 }}>Atualize as informações da sua escola, séries oferecidas e mensalidade média.</p>
@@ -1850,9 +1876,10 @@ export default function SystemSettings() {
                 <GraduationCap size={15} />Editar configurações da escola
               </button>
             </div>
-            {institutionId && <GradeLevelsEditor institutionId={institutionId} onToast={showToast} />}
-            {institutionId && <LeadUnitFieldEditor institutionId={institutionId} onToast={showToast} />}
-            {institutionId && <LeadReminderSettingsEditor institutionId={institutionId} onToast={showToast} />}
+            )}
+            {institutionId && canSeeSettingsItem('escola.series', role) && <GradeLevelsEditor institutionId={institutionId} onToast={showToast} />}
+            {institutionId && canSeeSettingsItem('escola.unidade', role) && <LeadUnitFieldEditor institutionId={institutionId} onToast={showToast} />}
+            {institutionId && canSeeSettingsItem('escola.lembrete', role) && <LeadReminderSettingsEditor institutionId={institutionId} onToast={showToast} />}
           </div>
         )}
       </div>
