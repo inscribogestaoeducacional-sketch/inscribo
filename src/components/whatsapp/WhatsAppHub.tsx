@@ -787,7 +787,10 @@ function MessageBubble({
         <div style={{
           position: 'absolute',
           top: '50%', transform: 'translateY(-50%)',
-          [isMe ? 'left' : 'right']: 'calc(100% - 10px)',
+          // 28px de botão: com -14px sobram 14px pra fora da linha, dentro do
+          // padding de 16px da lista (com -10px passava 2px e ligava a barra
+          // horizontal a cada hover — a "tela tremendo").
+          [isMe ? 'left' : 'right']: 'calc(100% - 14px)',
           display: 'flex', flexDirection: 'column', gap: 4, zIndex: 10,
         }}>
           <button
@@ -1360,6 +1363,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const messagesEndRef = useRef<HTMLDivElement>(null)
   // "Carregar mensagens anteriores" (scroll até o topo) — ver loadOlderMessages.
   const messagesScrollRef = useRef<HTMLDivElement>(null)
+  // Rolagem da conversa aberta: se o atendente está no fim da lista (mensagem
+  // nova rola junto) e a seta "descer para o fim" com as novas que chegaram
+  // enquanto ele lia mais acima.
+  const atBottomRef = useRef(true)
+  const lastSeenRef = useRef<{ conv: string | null; lastId: string | null }>({ conv: null, lastId: null })
+  const [showScrollDown, setShowScrollDown] = useState(false)
+  const [unseenCount, setUnseenCount] = useState(0)
   const [loadingOlderId, setLoadingOlderId] = useState<string | null>(null)
   const [exhaustedOlder, setExhaustedOlder] = useState<Set<string>>(new Set())
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -2557,10 +2567,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }
 
-  // Dispara loadOlderMessages quando o usuário rola perto do topo da lista.
+  // Rola só a lista de mensagens (scrollIntoView rolava também o <main> do App).
+  const scrollMessagesToBottom = (smooth: boolean) => {
+    const el = messagesScrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+  }
+
+  // Dispara loadOlderMessages quando o usuário rola perto do topo da lista e
+  // acompanha a distância até o fim (seta "descer para o fim").
   const handleMessagesScroll = () => {
     const el = messagesScrollRef.current
     if (!el || !activeId) return
+    const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    atBottomRef.current = fromBottom < 150
+    setShowScrollDown(fromBottom > 300)
+    if (fromBottom < 150) setUnseenCount(0)
     if (el.scrollTop < 120) loadOlderMessages(activeId)
   }
 
@@ -2772,13 +2794,38 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     window.history.replaceState({}, '', '/whatsapp')
   }, [location.state?.phone, location.key, loading])
 
-  const activeConvMsgCount = conversations.find(c => c.id === activeId)?.messages.length ?? 0
+  const activeConvMessages = conversations.find(c => c.id === activeId)?.messages
+  const activeLastMsgId = activeConvMessages?.length ? activeConvMessages[activeConvMessages.length - 1].id : null
 
+  // Rolagem automática só quando faz sentido:
+  // - abriu a conversa (ou as mensagens dela acabaram de carregar): vai direto
+  //   pro fim, sem animação;
+  // - chegou mensagem no FIM da lista: rola junto se o atendente já estava no
+  //   fim ou se foi ele quem enviou; senão conta pra seta "descer para o fim";
+  // - mensagens antigas inseridas no topo (loadOlderMessages) não mudam a
+  //   última mensagem, então não mexem na posição.
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    const prev = lastSeenRef.current
+    lastSeenRef.current = { conv: activeId, lastId: activeLastMsgId }
+    if (!activeId || !activeLastMsgId) return
+    if (prev.conv !== activeId || !prev.lastId) {
+      atBottomRef.current = true
+      setUnseenCount(0)
+      setShowScrollDown(false)
+      requestAnimationFrame(() => scrollMessagesToBottom(false))
+      return
     }
-  }, [activeId, activeConvMsgCount])
+    if (prev.lastId === activeLastMsgId) return
+    const msgs = activeConvMessages ?? []
+    const last = msgs[msgs.length - 1]
+    if (atBottomRef.current || last?.from === 'me') {
+      requestAnimationFrame(() => scrollMessagesToBottom(true))
+    } else {
+      const prevIdx = msgs.findIndex(m => m.id === prev.lastId)
+      const novas = prevIdx >= 0 ? msgs.length - 1 - prevIdx : 1
+      setUnseenCount(n => n + novas)
+    }
+  }, [activeId, activeLastMsgId])
 
   // Auto-hide send error
   useEffect(() => {
@@ -3546,9 +3593,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setTimeout(async () => {
         console.log('[RELOAD] recarregando para jid:', jidSnapshot)
         if (jidSnapshot) await reloadConversationMessages(jidSnapshot)
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-        }, 500)
+        setTimeout(() => scrollMessagesToBottom(true), 500)
       }, 2500)
     } catch (err: any) {
       setTemplateError(err.message || 'Erro ao enviar template')
@@ -5062,7 +5107,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Messages area + Composer */}
           <>
-          <div ref={messagesScrollRef} onScroll={handleMessagesScroll} className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #ccf0ec 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#f7fefe' }}>
+          <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <div ref={messagesScrollRef} onScroll={handleMessagesScroll} className="wa-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #ccf0ec 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#f7fefe' }}>
             {activeId && loadingOlderId === activeId && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 0 14px', fontSize: 12, color: '#64748B' }}>
                 <div className="animate-spin" style={{ width: 13, height: 13, border: '2px solid #94A3B8', borderTopColor: 'transparent', borderRadius: '50%' }} />
@@ -5146,6 +5192,24 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               </div>
             )}
             <div ref={messagesEndRef} />
+          </div>
+
+          {/* Seta "descer para o fim" — aparece quando o atendente rolou pra cima */}
+          {activeConv && showScrollDown && (
+            <button
+              onClick={() => { setUnseenCount(0); scrollMessagesToBottom(true) }}
+              title="Descer para a última mensagem"
+              aria-label="Descer para a última mensagem"
+              style={{ position: 'absolute', right: 20, bottom: 14, width: 40, height: 40, borderRadius: '50%', background: '#FFFFFF', border: '1px solid #B2E8E2', boxShadow: '0 2px 10px rgba(0,0,0,0.12)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d9488', zIndex: 20 }}
+            >
+              <ChevronDown style={{ width: 20, height: 20 }} />
+              {unseenCount > 0 && (
+                <span style={{ position: 'absolute', top: -6, right: -4, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: '#00A896', color: '#FFFFFF', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {unseenCount > 99 ? '99+' : unseenCount}
+                </span>
+              )}
+            </button>
+          )}
           </div>
 
           {/* Composer */}
