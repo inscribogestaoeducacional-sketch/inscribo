@@ -5075,18 +5075,25 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Limpar conversa
                   </button>
+                  {/* Fase 6 (RLS): bloquear é de admin/gestor, igual a Configurações → Bloqueios */}
+                  {isPrivilegedRole && (
                   <button onClick={async () => {
                     if (!window.confirm('Bloquear este contato? Mensagens futuras serão ignoradas.')) return
                     setShowMoreMenu(false)
                     if (!activeId || !effectiveInstitutionId) return
                     const normPhone = normalizeBrazilianInput(rawJid(activeId).replace(/@.*/, ''))
-                    try {
-                      await supabase.from('whatsapp_blacklist').insert({
-                        institution_id: effectiveInstitutionId,
-                        phone: normPhone,
-                        blocked_at: new Date().toISOString()
-                      })
-                    } catch {}
+                    // Antes gravava em colunas que não existem (phone/blocked_at): a
+                    // gravação falhava sempre e a tela dizia "bloqueado" mesmo assim.
+                    // A tabela tem phone_number (o webhook compara com o número cru).
+                    const { error: blockErr } = await supabase.from('whatsapp_blacklist').insert({
+                      institution_id: effectiveInstitutionId,
+                      phone_number: normPhone,
+                      reason: 'Bloqueado pelo Hub',
+                    })
+                    if (blockErr) {
+                      setSendError('Não foi possível bloquear: ' + (blockErr.code === '42501' ? 'só administrador ou gestor bloqueia contatos.' : blockErr.message))
+                      return
+                    }
                     setConversations(prev => prev.filter(c => c.id !== activeId))
                     setActiveId(null)
                     setHubToast('Contato bloqueado')
@@ -5097,6 +5104,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Bloquear contato
                   </button>
+                  )}
                   {activeConv?.lead_id && (
                     <button onClick={() => { navigate(`/leads?highlight=${activeConv.lead_id}`); setShowMoreMenu(false) }}
                       style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
