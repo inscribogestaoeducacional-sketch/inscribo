@@ -1047,7 +1047,9 @@ function TabTransferencias({ institutionId }: { institutionId: string }) {
     preco_alto: 'Valor alto', nao_retornou: 'Não retornou', outra_escola: 'Outra escola',
     sem_vaga: 'Sem vaga', nao_oferece_serie: 'Série não ofertada', nao_gostou: 'Não gostou',
     mudou_cidade: 'Mudou de cidade', dificuldade_fin: 'Dificuldade financeira',
-    desistiu: 'Desistiu', outro: 'Outro'
+    desistiu: 'Desistiu', outro: 'Outro',
+    // perdidos antes do motivo ser obrigatório (backfill da Fase 0C) — sem fator
+    nao_informado: 'Não informado (antes da regra)',
   }
   const FATOR_MAP: Record<string, string> = {
     preco_alto: 'Interno', nao_retornou: 'Externo', outra_escola: 'Externo',

@@ -59,7 +59,7 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
       next_followup?: string | null; lead_temperature?: 'frio' | 'morno' | 'quente' | null
       referral_source?: string | null; contest_name?: string | null
       family_id: string | null; campaign_cycle_id?: string | null; auditSuffix?: string
-      unit_id?: string | null
+      unit_id?: string | null; year_interest?: number | null
     }
   ) => {
     const { data: newLead, error } = await supabase.from('leads').insert({
@@ -89,6 +89,9 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
       contest_name:      shared.contest_name || null,
       family_id:         shared.family_id,
       campaign_cycle_id: shared.campaign_cycle_id ?? null,
+      // Ano letivo de interesse: antes era descartado aqui (100% vazio no banco).
+      // Vazio = o banco põe o ano letivo alvo do ciclo (gatilho da Fase 0C).
+      year_interest:     shared.year_interest ?? null,
       // Campo de unidade (opcional por escola): só vai no insert quando
       // preenchido — escola que não usa o campo grava exatamente como antes.
       ...(shared.unit_id ? { unit_id: shared.unit_id } : {}),
@@ -128,6 +131,9 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
       // Só quando o formulário mandou o campo (escola com unidade ligada);
       // ausente = não mexe na unidade já gravada.
       ...(leadData.unit_id !== undefined ? { unit_id: leadData.unit_id || null } : {}),
+      year_interest:     leadData.year_interest !== undefined ? (leadData.year_interest || null) : (editingLead.year_interest ?? null),
+      // Perdido exige motivo (Fase 0C): o formulário manda o motivo junto ao marcar.
+      ...(leadData.lost_reason !== undefined ? { lost_reason: leadData.lost_reason || null, lost_reason_detail: leadData.lost_reason_detail || null } : {}),
       updated_at:        new Date().toISOString(),
     }).eq('id', editingLead.id)
     if (error) throw error
@@ -187,6 +193,7 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
         family_id:        null as string | null,
         campaign_cycle_id: editingLead.campaign_cycle_id ?? null,
         unit_id:          leadData.unit_id !== undefined ? (leadData.unit_id || null) : (editingLead.unit_id ?? null),
+        year_interest:    leadData.year_interest !== undefined ? (leadData.year_interest || null) : (editingLead.year_interest ?? null),
         auditSuffix:      ` (irmão de ${editingLead.student_name})`,
       }
       if (!familyId) {
@@ -260,6 +267,7 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
       family_id:         familyId,
       campaign_cycle_id: campaignCycleId,
       unit_id:           leadData.unit_id || null,
+      year_interest:     leadData.year_interest || null,
     }
 
     const newLead = await insertStudentLead({
