@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { supabase, type Lead } from '../../lib/supabase'
+import { LostReasonModal } from './lostReasons'
 import { useLeadUnits, unitOptionsFor } from '../../lib/leadUnits'
 import LeadVisitsPanel from '../visits/LeadVisitsPanel'
 import {
@@ -35,6 +36,8 @@ export interface NewLeadModalProps {
   institutionId: string
   users: SimpleUser[]
   activeCampaignLabel?: string | null
+  // Ano letivo alvo do ciclo ativo (Fase 0C): padrão do "Ano de interesse" no lead novo.
+  activeCampaignYear?: number | null
   institutionCity?: string
   // Só aplicado no modo "novo lead" (editingLead ausente) — mescla por cima
   // dos defaults padrão do formulário.
@@ -54,8 +57,11 @@ export interface NewLeadModalProps {
 // editar o código todo ano (ex: gerado em 2026 → 2026, 2027, 2028).
 const YEAR_INTEREST_OPTIONS = [0, 1, 2].map(offset => new Date().getFullYear() + offset)
 
-export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institutionId, users, activeCampaignLabel, institutionCity, createDefaults }: NewLeadModalProps) {
+export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institutionId, users, activeCampaignLabel, activeCampaignYear, institutionCity, createDefaults }: NewLeadModalProps) {
   const { user: modalUser } = useAuth()
+  // "Marcar como Perdido" pede o motivo (o banco recusa perdido sem motivo desde a Fase 0C).
+  const [askLostReason, setAskLostReason] = useState(false)
+  const [lostReason, setLostReason] = useState<{ reason: string; detail: string } | null>(null)
   const { names: gradeNames } = useGradeLevels(institutionId)
   const unitCfg = useLeadUnits(institutionId)
   const [activeTab, setActiveTab] = useState<'dados' | 'historico' | 'anotacoes'>('dados')
@@ -92,6 +98,8 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
 
   useEffect(() => {
     if (!isOpen) return
+    setAskLostReason(false)
+    setLostReason(null)
     if (editingLead) {
       setFormData({
         student_name: editingLead.student_name ?? '',
@@ -124,7 +132,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
         assigned_to: modalUser?.id ?? '',
         next_followup: '', lead_temperature: '',
         origin_school: '', referral_source: '', contest_name: '',
-        year_interest: '',
+        year_interest: activeCampaignYear ?? '',
         unit_id: '',
         ...createDefaults,
       })
@@ -269,6 +277,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
         ...rest,
         ...(unitCfg.enabled ? { unit_id: unit_id || null } : {}),
         lead_temperature: formData.lead_temperature || null, year_interest: formData.year_interest || null, familyMatchId, additionalStudents,
+        ...(formData.status === 'lost' && lostReason ? { lost_reason: lostReason.reason, lost_reason_detail: lostReason.detail || null } : {}),
       })
       onClose()
     } finally { setSaving(false) }
@@ -632,7 +641,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                         const done = idx < curStageIdx; const active = idx === curStageIdx
                         return (
                           <React.Fragment key={stage.key}>
-                            <div onClick={() => setFormData(f => ({ ...f, status: stage.key as Lead['status'] }))} title={stage.label}
+                            <div onClick={() => { setLostReason(null); setFormData(f => ({ ...f, status: stage.key as Lead['status'] })) }} title={stage.label}
                               style={{ width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: done || active ? '#00A896' : '#E2E8F0', border: active ? '2.5px solid #007A6E' : '2px solid transparent', boxShadow: active ? '0 0 0 3px rgba(0,168,150,0.2)' : 'none', transition: 'all 0.15s' }}>
                               {done && <span style={{ fontSize: 9, color: '#fff', fontWeight: 700 }}>✓</span>}
                             </div>
@@ -648,7 +657,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                         </div>
                       ))}
                     </div>
-                    <button onClick={() => setFormData(f => ({ ...f, status: 'lost' }))}
+                    <button onClick={() => { if (formData.status !== 'lost') setAskLostReason(true) }}
                       style={{ marginTop: 4, alignSelf: 'flex-start', padding: '5px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: formData.status === 'lost' ? '#EF4444' : '#FEF2F2', color: formData.status === 'lost' ? '#fff' : '#DC2626', transition: 'all 0.15s' }}>
                       {formData.status === 'lost' ? '🔴 Perdido' : 'Marcar como Perdido'}
                     </button>
@@ -795,6 +804,16 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
           </div>
         </div>
       </div>
+      <LostReasonModal
+        isOpen={askLostReason}
+        lead={editingLead ?? null}
+        onConfirm={async (reason, detail) => {
+          setLostReason({ reason, detail })
+          setFormData(f => ({ ...f, status: 'lost' }))
+          setAskLostReason(false)
+        }}
+        onCancel={() => setAskLostReason(false)}
+      />
     </div>
   )
 }

@@ -731,9 +731,10 @@ const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
 function MessageBubble({
-  msg, onImageClick, contactName, onReply, onReact, onRetry,
+  msg, onImageClick, contactName, onReply, onReact, onRetry, gutter = 16,
 }: {
   msg: Message
+  gutter?: number
   onImageClick?: (url: string) => void
   contactName?: string
   onReply?: (m: Message) => void
@@ -787,7 +788,10 @@ function MessageBubble({
         <div style={{
           position: 'absolute',
           top: '50%', transform: 'translateY(-50%)',
-          [isMe ? 'left' : 'right']: 'calc(100% - 10px)',
+          // 28px de botão: sobram (gutter - 2)px pra fora da linha, dentro do
+          // padding lateral da lista (com -10px passava 2px e ligava a barra
+          // horizontal a cada hover — a "tela tremendo").
+          [isMe ? 'left' : 'right']: `calc(100% - ${30 - gutter}px)`,
           display: 'flex', flexDirection: 'column', gap: 4, zIndex: 10,
         }}>
           <button
@@ -1342,6 +1346,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   // Mobile responsiveness
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  // Margem lateral única das duas colunas (lista e conversa): cabeçalhos,
+  // filtros, faixas, mensagens e composer alinham pela mesma linha.
+  const GUTTER = isMobile ? 12 : 16
   const [mobilePanel, setMobilePanel] = useState<'list' | 'chat'>('list')
 
   // [FIX P3] Reply-to state
@@ -1360,6 +1367,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const messagesEndRef = useRef<HTMLDivElement>(null)
   // "Carregar mensagens anteriores" (scroll até o topo) — ver loadOlderMessages.
   const messagesScrollRef = useRef<HTMLDivElement>(null)
+  // Rolagem da conversa aberta: se o atendente está no fim da lista (mensagem
+  // nova rola junto) e a seta "descer para o fim" com as novas que chegaram
+  // enquanto ele lia mais acima.
+  const atBottomRef = useRef(true)
+  const lastSeenRef = useRef<{ conv: string | null; lastId: string | null }>({ conv: null, lastId: null })
+  const [showScrollDown, setShowScrollDown] = useState(false)
+  const [unseenCount, setUnseenCount] = useState(0)
   const [loadingOlderId, setLoadingOlderId] = useState<string | null>(null)
   const [exhaustedOlder, setExhaustedOlder] = useState<Set<string>>(new Set())
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -2557,10 +2571,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }
 
-  // Dispara loadOlderMessages quando o usuário rola perto do topo da lista.
+  // Rola só a lista de mensagens (scrollIntoView rolava também o <main> do App).
+  const scrollMessagesToBottom = (smooth: boolean) => {
+    const el = messagesScrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+  }
+
+  // Dispara loadOlderMessages quando o usuário rola perto do topo da lista e
+  // acompanha a distância até o fim (seta "descer para o fim").
   const handleMessagesScroll = () => {
     const el = messagesScrollRef.current
     if (!el || !activeId) return
+    const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    atBottomRef.current = fromBottom < 150
+    setShowScrollDown(fromBottom > 300)
+    if (fromBottom < 150) setUnseenCount(0)
     if (el.scrollTop < 120) loadOlderMessages(activeId)
   }
 
@@ -2772,13 +2798,38 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     window.history.replaceState({}, '', '/whatsapp')
   }, [location.state?.phone, location.key, loading])
 
-  const activeConvMsgCount = conversations.find(c => c.id === activeId)?.messages.length ?? 0
+  const activeConvMessages = conversations.find(c => c.id === activeId)?.messages
+  const activeLastMsgId = activeConvMessages?.length ? activeConvMessages[activeConvMessages.length - 1].id : null
 
+  // Rolagem automática só quando faz sentido:
+  // - abriu a conversa (ou as mensagens dela acabaram de carregar): vai direto
+  //   pro fim, sem animação;
+  // - chegou mensagem no FIM da lista: rola junto se o atendente já estava no
+  //   fim ou se foi ele quem enviou; senão conta pra seta "descer para o fim";
+  // - mensagens antigas inseridas no topo (loadOlderMessages) não mudam a
+  //   última mensagem, então não mexem na posição.
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    const prev = lastSeenRef.current
+    lastSeenRef.current = { conv: activeId, lastId: activeLastMsgId }
+    if (!activeId || !activeLastMsgId) return
+    if (prev.conv !== activeId || !prev.lastId) {
+      atBottomRef.current = true
+      setUnseenCount(0)
+      setShowScrollDown(false)
+      requestAnimationFrame(() => scrollMessagesToBottom(false))
+      return
     }
-  }, [activeId, activeConvMsgCount])
+    if (prev.lastId === activeLastMsgId) return
+    const msgs = activeConvMessages ?? []
+    const last = msgs[msgs.length - 1]
+    if (atBottomRef.current || last?.from === 'me') {
+      requestAnimationFrame(() => scrollMessagesToBottom(true))
+    } else {
+      const prevIdx = msgs.findIndex(m => m.id === prev.lastId)
+      const novas = prevIdx >= 0 ? msgs.length - 1 - prevIdx : 1
+      setUnseenCount(n => n + novas)
+    }
+  }, [activeId, activeLastMsgId])
 
   // Auto-hide send error
   useEffect(() => {
@@ -3058,7 +3109,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           display: 'flex',
           alignItems: 'flex-start',
           gap: 10,
-          padding: '11px 14px',
+          // a borda esquerda de 3px conta na margem
+          padding: `11px ${GUTTER}px 11px ${GUTTER - 3}px`,
           cursor: 'pointer',
           borderLeft: isActive ? '3px solid #00A896' : isStale ? '3px solid #F97316' : isFree ? '3px solid #F59E0B' : '3px solid transparent',
           borderBottom: '1px solid #F0FDFB',
@@ -3546,9 +3598,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setTimeout(async () => {
         console.log('[RELOAD] recarregando para jid:', jidSnapshot)
         if (jidSnapshot) await reloadConversationMessages(jidSnapshot)
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-        }, 500)
+        setTimeout(() => scrollMessagesToBottom(true), 500)
       }, 2500)
     } catch (err: any) {
       setTemplateError(err.message || 'Erro ao enviar template')
@@ -4693,7 +4743,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         <div style={{ width: isMobile ? '100%' : 320, flexShrink: 0, display: isMobile && mobilePanel === 'chat' ? 'none' : 'flex', flexDirection: 'column', background: '#FFFFFF', borderRight: '1px solid #D1FAE5', overflow: 'hidden' }}>
 
           {/* Header */}
-          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `12px ${GUTTER}px`, background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 32, height: 32, borderRadius: 8, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <MessageCircle style={{ width: 18, height: 18, color: '#00A896' }} />
@@ -4724,7 +4774,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           </div>
 
           {/* Search */}
-          <div style={{ padding: '8px 12px', flexShrink: 0, background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
+          <div style={{ padding: `8px ${GUTTER}px`, flexShrink: 0, background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
             <div style={{ position: 'relative' }}>
               <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
               <input
@@ -4742,7 +4792,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           {/* Filters — Botconversa style */}
           <div style={{ borderBottom: '1px solid #D1FAE5' }}>
             {/* Row 1: Status + Atendente dropdowns */}
-            <div style={{ display: 'flex', padding: '8px 12px', gap: 8 }}>
+            <div style={{ display: 'flex', padding: `8px ${GUTTER}px`, gap: 8 }}>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</span>
                 <select
@@ -4821,7 +4871,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               <>
                 {filteredWaitingConvs.length > 0 && (
                   <>
-                    <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ padding: `8px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
                       ⏳ Fila de espera · sem atendente
                       <span style={{ background: '#EF4444', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredWaitingConvs.length}</span>
                       <span
@@ -4834,7 +4884,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 )}
                 {filteredUnclassifiedConvs.length > 0 && (
                   <>
-                    <div title="Conversas num estado inesperado (em atendimento sem atendente, ou com atendente desativado). Ficam aqui para não sumirem: abra e assuma, transfira ou conclua." style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div title="Conversas num estado inesperado (em atendimento sem atendente, ou com atendente desativado). Ficam aqui para não sumirem: abra e assuma, transfira ou conclua." style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
                       ⚠️ Sem classificação
                       <span style={{ background: '#DC2626', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredUnclassifiedConvs.length}</span>
                     </div>
@@ -4843,7 +4893,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 )}
                 {filteredMyConvs.length > 0 && (
                   <>
-                    <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Minhas conversas
                     </div>
                     {filteredMyConvs.map(conv => renderConvItem(conv))}
@@ -4851,7 +4901,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 )}
                 {filteredStaleConvs.length > 0 && (
                   <>
-                    <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
                       ⏰ Conversas paradas
                       <span style={{ background: '#F97316', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredStaleConvs.length}</span>
                     </div>
@@ -4860,7 +4910,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 )}
                 {filteredOtherConvs.length > 0 && (
                   <>
-                    <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Outras conversas
                     </div>
                     {filteredOtherConvs.map(conv => renderConvItem(conv))}
@@ -4869,7 +4919,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               </>
             )}
             {hiddenByFilterCount > 0 && (
-              <div style={{ padding: '10px 14px', fontSize: 11, color: '#94A3B8', textAlign: 'center' }}>
+              <div style={{ padding: `10px ${GUTTER}px`, fontSize: 11, color: '#94A3B8', textAlign: 'center' }}>
                 {hiddenByFilterCount} {hiddenByFilterCount === 1 ? 'conversa oculta' : 'conversas ocultas'} pelo filtro ·{' '}
                 <button onClick={() => setAssignFilter('all')} style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, color: '#00A896', fontWeight: 600, cursor: 'pointer' }}>
                   Mostrar todas
@@ -4885,7 +4935,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           {activeConv && (
             <div style={{ flexShrink: 0, position: 'relative', background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDFB 100%)', borderBottom: '1px solid #D1FAE5', minHeight: 64, boxShadow: '0 2px 8px rgba(0,168,150,0.06)' }}>
               {/* Header row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', height: 64 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: `0 ${GUTTER}px`, height: 64 }}>
                 {isMobile && (
                   <button
                     onClick={() => setMobilePanel('list')}
@@ -4980,7 +5030,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   explícito pro atendente que o bot não rodou de propósito,
                   pra não parecer falha. */}
               {activeConv.capture_bot_skipped && (
-                <div style={{ flexShrink: 0, padding: '8px 16px', background: '#FDF2F8', borderTop: '1px solid #FBCFE8', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flexShrink: 0, padding: `8px ${GUTTER}px`, background: '#FDF2F8', borderTop: '1px solid #FBCFE8', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Bot style={{ width: 14, height: 14, color: '#DB2777', flexShrink: 0 }} />
                   <p style={{ margin: 0, fontSize: 12, color: '#9D174D' }}>
                     <strong>Robô não ativado — Captação Inteligente.</strong>{' '}
@@ -4993,7 +5043,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
               {/* Message search bar */}
               {showMsgSearch && (
-                <div style={{ flexShrink: 0, padding: '8px 16px', background: '#FFFFFF', borderTop: '1px solid #D1FAE5', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flexShrink: 0, padding: `8px ${GUTTER}px`, background: '#FFFFFF', borderTop: '1px solid #D1FAE5', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Search style={{ width: 14, height: 14, color: '#94A3B8', flexShrink: 0 }} />
                   <input autoFocus value={msgSearchText} onChange={e => setMsgSearchText(e.target.value)}
                     placeholder="Buscar nas mensagens..."
@@ -5025,18 +5075,25 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Limpar conversa
                   </button>
+                  {/* Fase 6 (RLS): bloquear é de admin/gestor, igual a Configurações → Bloqueios */}
+                  {isPrivilegedRole && (
                   <button onClick={async () => {
                     if (!window.confirm('Bloquear este contato? Mensagens futuras serão ignoradas.')) return
                     setShowMoreMenu(false)
                     if (!activeId || !effectiveInstitutionId) return
                     const normPhone = normalizeBrazilianInput(rawJid(activeId).replace(/@.*/, ''))
-                    try {
-                      await supabase.from('whatsapp_blacklist').insert({
-                        institution_id: effectiveInstitutionId,
-                        phone: normPhone,
-                        blocked_at: new Date().toISOString()
-                      })
-                    } catch {}
+                    // Antes gravava em colunas que não existem (phone/blocked_at): a
+                    // gravação falhava sempre e a tela dizia "bloqueado" mesmo assim.
+                    // A tabela tem phone_number (o webhook compara com o número cru).
+                    const { error: blockErr } = await supabase.from('whatsapp_blacklist').insert({
+                      institution_id: effectiveInstitutionId,
+                      phone_number: normPhone,
+                      reason: 'Bloqueado pelo Hub',
+                    })
+                    if (blockErr) {
+                      setSendError('Não foi possível bloquear: ' + (blockErr.code === '42501' ? 'só administrador ou gestor bloqueia contatos.' : blockErr.message))
+                      return
+                    }
                     setConversations(prev => prev.filter(c => c.id !== activeId))
                     setActiveId(null)
                     setHubToast('Contato bloqueado')
@@ -5047,6 +5104,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Bloquear contato
                   </button>
+                  )}
                   {activeConv?.lead_id && (
                     <button onClick={() => { navigate(`/leads?highlight=${activeConv.lead_id}`); setShowMoreMenu(false) }}
                       style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
@@ -5062,7 +5120,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Messages area + Composer */}
           <>
-          <div ref={messagesScrollRef} onScroll={handleMessagesScroll} className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #ccf0ec 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#f7fefe' }}>
+          <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <div ref={messagesScrollRef} onScroll={handleMessagesScroll} className="wa-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: `16px ${GUTTER}px`, display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #ccf0ec 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#f7fefe' }}>
             {activeId && loadingOlderId === activeId && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 0 14px', fontSize: 12, color: '#64748B' }}>
                 <div className="animate-spin" style={{ width: 13, height: 13, border: '2px solid #94A3B8', borderTopColor: 'transparent', borderRadius: '50%' }} />
@@ -5116,7 +5175,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     </span>
                   </div>
                 ) : (
-                  <MessageBubble key={item.msg.id} msg={item.msg} onImageClick={url => setLightboxUrl(url)} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} onReact={handleReact} onRetry={retryingId ? undefined : handleRetryMessage} />
+                  <MessageBubble key={item.msg.id} msg={item.msg} gutter={GUTTER} onImageClick={url => setLightboxUrl(url)} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} onReact={handleReact} onRetry={retryingId ? undefined : handleRetryMessage} />
                 ))}
               </div>
             ))}
@@ -5148,8 +5207,26 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Seta "descer para o fim" — aparece quando o atendente rolou pra cima */}
+          {activeConv && showScrollDown && (
+            <button
+              onClick={() => { setUnseenCount(0); scrollMessagesToBottom(true) }}
+              title="Descer para a última mensagem"
+              aria-label="Descer para a última mensagem"
+              style={{ position: 'absolute', right: GUTTER + 4, bottom: 14, width: 40, height: 40, borderRadius: '50%', background: '#FFFFFF', border: '1px solid #B2E8E2', boxShadow: '0 2px 10px rgba(0,0,0,0.12)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d9488', zIndex: 20 }}
+            >
+              <ChevronDown style={{ width: 20, height: 20 }} />
+              {unseenCount > 0 && (
+                <span style={{ position: 'absolute', top: -6, right: -4, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: '#00A896', color: '#FFFFFF', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {unseenCount > 99 ? '99+' : unseenCount}
+                </span>
+              )}
+            </button>
+          )}
+          </div>
+
           {/* Composer */}
-          <div style={{ flexShrink: 0, background: 'linear-gradient(to top, #FFFFFF 0%, #F8FFFE 100%)', borderTop: '1px solid #D1FAE5', padding: '10px 16px 14px', boxShadow: '0 -2px 12px rgba(0,168,150,0.06)' }}>
+          <div style={{ flexShrink: 0, background: 'linear-gradient(to top, #FFFFFF 0%, #F8FFFE 100%)', borderTop: '1px solid #D1FAE5', padding: `10px ${GUTTER}px 14px`, boxShadow: '0 -2px 12px rgba(0,168,150,0.06)' }}>
 
             {/* Template panel for new outbound conversations */}
             {showTemplatePanel && (
