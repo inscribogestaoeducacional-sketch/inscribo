@@ -1,23 +1,24 @@
 // src/components/management/IntegrationsTab.tsx
 //
-// Fase 2 · marco 1 — Configurações → Integrações. É o MESMO fluxo para todas as
-// escolas (piloto incluso), sem script nem código por escola:
-//   0. Relatório de alunos por planilha (RosterUploadCard; prévia antes de gravar);
-//   1. Lançamento manual por série (funciona já no marco 1);
-//   2. Activesoft: guardar o token (vai pro Vault; aqui só aparecem os 4 últimos
-//      dígitos). Testar conexão, mapear unidades/cursos/turmas e a primeira
-//      carga só contando chegam no marco 2 (adaptador);
-//   3. Fonte da base e rematrícula (ano-alvo e abertura).
-// Toda escrita passa por funções do banco (base_save_aggregate,
-// erp_connection_save_token, erp_connection_remove, base_save_settings);
-// o navegador não insere direto em nenhuma tabela da base.
+// Configurações → Integrações (Etapa C). Mesmo fluxo para toda escola, sem
+// script nem código por escola. A página pergunta "De onde vêm os dados dos
+// alunos?" e abre só o card da fonte escolhida, com estado (ativa / não
+// configurada / em breve):
+//   * Sistema da escola (Activesoft) — ActivesoftWizard (só admin);
+//   * Planilha ou relatório — RosterUploadCard (admin e gestor);
+//   * Lançamento manual — ManualAggregateCard (admin e gestor).
+// Planilha e Activesoft só com o módulo "Base de alunos" liberado pela Áion.
+// As demais integrações (WhatsApp, anúncios da Meta) ficam em "Outras integrações".
+// Toda escrita passa por funções do banco; o navegador não insere direto em
+// nenhuma tabela da base.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { Database, KeyRound, Plug, Save, Loader2, AlertTriangle, Trash2 } from 'lucide-react'
+import { Database, Plug, Save, Loader2, AlertTriangle, FileSpreadsheet } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { canSeeSettingsItem } from '../../lib/settingsAccess'
 import RosterUploadCard from './RosterUploadCard'
+import ActivesoftWizard from './ActivesoftWizard'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
 
 type Toast = (msg: string, ok?: boolean) => void
@@ -49,11 +50,24 @@ function isMissingTable(err: { code?: string; message?: string } | null): boolea
   return !!err && (err.code === '42P01' || err.code === 'PGRST205' || /does not exist|schema cache/i.test(err.message || ''))
 }
 
+type SourceKey = 'activesoft' | 'planilha' | 'manual'
+type SourceState = 'ativa' | 'nao_configurada' | 'em_breve'
+const STATE_BADGE: Record<SourceState, { label: string; color: string; bg: string }> = {
+  ativa:           { label: 'ativa',           color: '#047857', bg: '#ECFDF5' },
+  nao_configurada: { label: 'não configurada', color: '#B45309', bg: '#FFFBEB' },
+  em_breve:        { label: 'em breve',        color: '#64748B', bg: '#F1F5F9' },
+}
+
 export default function IntegrationsTab({ institutionId, onToast }: { institutionId: string; onToast: Toast }) {
   const { user } = useAuth()
   const role = user?.role
   const [installed, setInstalled] = useState<boolean | null>(null)
   const baseModule = useBaseModuleEnabled(institutionId)
+  const [states, setStates] = useState<Record<SourceKey, SourceState> | null>(null)
+  const [primary, setPrimary] = useState<string | null>(null)
+  const [chosen, setChosen] = useState<SourceKey | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [others, setOthers] = useState<{ whatsapp: boolean; meta: boolean } | null>(null)
 
   // Confere se a migration da base já foi aplicada neste ambiente.
   useEffect(() => {
@@ -62,6 +76,32 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
       .then(({ error }) => { if (alive) setInstalled(!isMissingTable(error)) })
     return () => { alive = false }
   }, [institutionId])
+
+  // Estado de cada fonte (ativa / não configurada / em breve) e das outras integrações
+  useEffect(() => {
+    if (!installed || baseModule === null) return
+    let alive = true
+    Promise.all([
+      supabase.from('erp_connections').select('status').eq('institution_id', institutionId).eq('provider', 'activesoft').maybeSingle(),
+      supabase.from('sync_runs').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId).eq('source', 'planilha').in('status', ['ok', 'ok_com_avisos']),
+      supabase.from('class_aggregates').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId),
+      supabase.from('student_base_settings').select('primary_source').eq('institution_id', institutionId).maybeSingle(),
+      supabase.from('whatsapp_phone_numbers').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId).eq('is_active', true),
+      supabase.from('capture_triggers').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId).eq('channel', 'meta_ads'),
+    ]).then(([erp, pl, ag, st, wa, meta]) => {
+      if (!alive) return
+      const s: Record<SourceKey, SourceState> = {
+        activesoft: !baseModule ? 'em_breve' : (erp.data as { status?: string } | null)?.status === 'ativa' ? 'ativa' : 'nao_configurada',
+        planilha:   !baseModule ? 'em_breve' : (pl.count ?? 0) > 0 ? 'ativa' : 'nao_configurada',
+        manual:     (ag.count ?? 0) > 0 ? 'ativa' : 'nao_configurada',
+      }
+      setStates(s)
+      const p = (st.data as { primary_source?: string } | null)?.primary_source ?? null
+      setPrimary(p)
+      setOthers({ whatsapp: (wa.count ?? 0) > 0, meta: (meta.count ?? 0) > 0 })
+    })
+    return () => { alive = false }
+  }, [installed, baseModule, institutionId])
 
   if (installed === null) return <div style={card}><Loader2 size={18} className="animate-spin" /></div>
   if (!installed) {
@@ -73,12 +113,81 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
     )
   }
 
+  const options: { key: SourceKey; title: string; desc: string; item: 'integracoes.activesoft' | 'integracoes.planilha' | 'integracoes.manual'; Icon: typeof Plug }[] = [
+    { key: 'activesoft', title: 'Sistema da escola (Activesoft)', desc: 'Conecta direto no sistema da secretaria e atualiza sozinho.', item: 'integracoes.activesoft', Icon: Plug },
+    { key: 'planilha',   title: 'Planilha ou relatório',          desc: 'Envia o relatório de alunos exportado do sistema da escola.', item: 'integracoes.planilha', Icon: FileSpreadsheet },
+    { key: 'manual',     title: 'Lançamento manual',              desc: 'Digita os números de cada série, sem lista de alunos.',     item: 'integracoes.manual',   Icon: Database },
+  ]
+  const visible = options.filter(o => canSeeSettingsItem(o.item, role))
+  const current: SourceKey | null = chosen
+    ?? (visible.find(o => o.key === primary && states?.[o.key] !== 'em_breve')?.key)
+    ?? (visible.find(o => states?.[o.key] === 'ativa')?.key)
+    ?? null
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {canSeeSettingsItem('integracoes.planilha', role) && baseModule === true && <RosterUploadCard institutionId={institutionId} onToast={onToast} />}
-      {canSeeSettingsItem('integracoes.manual', role) && <ManualAggregateCard institutionId={institutionId} onToast={onToast} />}
-      {canSeeSettingsItem('integracoes.activesoft', role) && <ActivesoftCard institutionId={institutionId} onToast={onToast} />}
-      {canSeeSettingsItem('integracoes.config', role) && <BaseSettingsCard institutionId={institutionId} onToast={onToast} />}
+      <div style={card}>
+        <h3 style={h3}><Database size={16} color="#00A896" /> De onde vêm os dados dos alunos?</h3>
+        <p style={hint}>Escolha uma fonte. Fontes não se somam: cada ano letivo usa uma só (somar contaria o mesmo aluno duas vezes).</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+          {visible.map(o => {
+            const st = states?.[o.key] ?? 'nao_configurada'
+            const disabled = st === 'em_breve'
+            const sel = current === o.key
+            const b = STATE_BADGE[st]
+            return (
+              <button key={o.key} disabled={disabled} onClick={() => setChosen(o.key)}
+                style={{ textAlign: 'left', padding: '14px 16px', borderRadius: 12, cursor: disabled ? 'not-allowed' : 'pointer',
+                  border: sel ? '2px solid #00A896' : '1.5px solid #E2E8F0', background: sel ? '#F0FDFA' : '#fff', opacity: disabled ? 0.6 : 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <o.Icon size={16} color="#00A896" />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', flex: 1 }}>{o.title}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.5, marginBottom: 8 }}>{o.desc}</div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, borderRadius: 999, padding: '2px 8px' }}>{b.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {current === 'activesoft' && (
+        <div style={card}>
+          <h3 style={h3}><Plug size={16} color="#00A896" /> Sistema da escola (Activesoft)</h3>
+          <p style={hint}>Só leitura: unidades, cursos, turmas, enturmação, alunos e responsáveis. Notas, frequência, ocorrências e financeiro nunca são lidos.</p>
+          <ActivesoftWizard institutionId={institutionId} onToast={onToast} />
+        </div>
+      )}
+      {current === 'planilha' && <RosterUploadCard institutionId={institutionId} onToast={onToast} />}
+      {current === 'manual' && <ManualAggregateCard institutionId={institutionId} onToast={onToast} />}
+
+      {canSeeSettingsItem('integracoes.config', role) && (
+        <div>
+          <button onClick={() => setShowSettings(!showSettings)} style={{ all: 'unset', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}>
+            {showSettings ? '▾' : '▸'} Ajustes da rematrícula (fonte principal, ano e abertura)
+          </button>
+          {showSettings && <div style={{ marginTop: 10 }}><BaseSettingsCard institutionId={institutionId} onToast={onToast} /></div>}
+        </div>
+      )}
+
+      <div style={card}>
+        <h3 style={h3}><Plug size={16} color="#64748B" /> Outras integrações</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+          {[
+            { title: 'WhatsApp (Meta)', desc: 'Número oficial da escola no WhatsApp.', on: others?.whatsapp, href: '/settings?tab=whatsapp&sec=conexao', show: role === 'admin' },
+            { title: 'Anúncios da Meta', desc: 'Gatilhos de anúncio na Captação.', on: others?.meta, href: '/captacao', show: true },
+          ].filter(x => x.show).map(x => {
+            const b = STATE_BADGE[x.on ? 'ativa' : 'nao_configurada']
+            return (
+              <a key={x.title} href={x.href} style={{ textDecoration: 'none', padding: '12px 14px', borderRadius: 12, border: '1.5px solid #E2E8F0', display: 'block' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{x.title}</div>
+                <div style={{ fontSize: 12, color: '#64748B', margin: '4px 0 8px' }}>{x.desc}</div>
+                {others && <span style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, borderRadius: 999, padding: '2px 8px' }}>{b.label}</span>}
+              </a>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
@@ -208,91 +317,6 @@ function ManualAggregateCard({ institutionId, onToast }: { institutionId: string
         <button onClick={save} disabled={saving || level === 'aluno' || gradeLevels.length === 0} style={saving ? { ...btn, opacity: 0.7 } : btn}>
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar números
         </button>
-      </div>
-    </div>
-  )
-}
-
-// ── 2. Activesoft ───────────────────────────────────────────────────────────
-interface ErpConn { status: string; token_last4: string | null; token_expires_at: string | null; last_success_at: string | null; last_error: string | null }
-
-function ActivesoftCard({ institutionId, onToast }: { institutionId: string; onToast: Toast }) {
-  const [conn, setConn] = useState<ErpConn | null>(null)
-  const [token, setToken] = useState('')
-  const [expires, setExpires] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const load = useCallback(async () => {
-    // Só colunas liberadas ao navegador (o id do segredo nunca vem)
-    const { data } = await supabase.from('erp_connections')
-      .select('status, token_last4, token_expires_at, last_success_at, last_error')
-      .eq('institution_id', institutionId).eq('provider', 'activesoft').maybeSingle()
-    setConn((data as ErpConn | null) ?? null)
-  }, [institutionId])
-  useEffect(() => { load() }, [load])
-
-  const saveToken = async () => {
-    if (token.trim().length < 8) { onToast('Cole o token completo gerado no Activesoft.', false); return }
-    setSaving(true)
-    const { error } = await supabase.rpc('erp_connection_save_token', {
-      p_institution_id: institutionId, p_provider: 'activesoft', p_token: token.trim(), p_expires_at: expires || null,
-    })
-    setSaving(false)
-    setToken('')   // o token não fica na tela nem em memória depois de enviado
-    if (error) { onToast('Não foi possível guardar o token: ' + error.message, false); return }
-    onToast('Token guardado com segurança.')
-    load()
-  }
-
-  const remove = async () => {
-    if (!confirm('Desconectar o Activesoft? O token é apagado. Os dados já carregados ficam congelados.')) return
-    const { error } = await supabase.rpc('erp_connection_remove', { p_institution_id: institutionId, p_provider: 'activesoft' })
-    if (error) { onToast('Não foi possível desconectar: ' + error.message, false); return }
-    onToast('Activesoft desconectado.')
-    load()
-  }
-
-  const hasToken = !!conn?.token_last4
-  const STATUS: Record<string, string> = { ativa: 'Conectada', pausada: 'Token guardado · aguardando teste', token_invalido: 'Token recusado pelo Activesoft', desconectada: 'Desconectada' }
-
-  return (
-    <div style={card}>
-      <h3 style={h3}><KeyRound size={16} color="#00A896" /> Activesoft (SIGA)</h3>
-      <p style={hint}>
-        A Áion só <strong>lê</strong> do Activesoft: unidades, cursos, turmas, enturmações, alunos, responsáveis e vínculos.
-        Nunca notas, boletim, frequência, ocorrências ou financeiro, e nunca grava nada lá.
-      </p>
-      <div style={{ fontSize: 13, color: '#1A2B4A', marginBottom: 14 }}>
-        Situação: <strong>{STATUS[conn?.status ?? 'desconectada'] ?? conn?.status}</strong>
-        {hasToken && <> · token terminado em <strong>{conn!.token_last4}</strong></>}
-        {conn?.token_expires_at && <> · vale até {conn.token_expires_at.split('-').reverse().join('/')}</>}
-      </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <label style={{ fontSize: 12, color: '#475569', fontWeight: 600, flex: '1 1 260px' }}>{hasToken ? 'Trocar o token' : 'Token de acesso'}<br />
-          <input type="password" autoComplete="off" spellCheck={false} value={token} onChange={e => setToken(e.target.value)}
-            placeholder="Cole aqui o token gerado no Activesoft" style={{ ...input, width: '100%', marginTop: 4 }} />
-        </label>
-        <label style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Validade (opcional)<br />
-          <input type="date" value={expires} onChange={e => setExpires(e.target.value)} style={{ ...input, marginTop: 4 }} />
-        </label>
-        <button onClick={saveToken} disabled={saving || !token} style={saving || !token ? { ...btn, opacity: 0.6 } : btn}>
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar token
-        </button>
-        {hasToken && (
-          <button onClick={remove} style={{ ...btn, background: '#FEF2F2', color: '#DC2626' }}><Trash2 size={14} /> Desconectar</button>
-        )}
-      </div>
-      <p style={{ fontSize: 11, color: '#94A3B8', margin: '8px 0 16px' }}>
-        O token vai direto para o cofre de segredos e não aparece de novo: aqui ficam só os 4 últimos caracteres.
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid #F1F5F9', paddingTop: 14 }}>
-        {['Testar conexão', 'Mapear unidades, cursos e turmas', 'Primeira carga (só contagem, nada é gravado)'].map((label, i) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#F1F5F9', color: '#64748B', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{i + 2}</span>
-            <button disabled style={btnGhost} title="Disponível na próxima etapa (adaptador do Activesoft)">{label}</button>
-            <span style={{ fontSize: 11, color: '#94A3B8' }}>em breve</span>
-          </div>
-        ))}
       </div>
     </div>
   )

@@ -21,7 +21,7 @@ type PanelRow = {
 type ListRow = {
   student_id: string; registration_code: string | null; student_name: string; guardian_name: string | null; category: string
   prev_grade: string | null; prev_status_text: string | null; dest_grade_id: string | null; dest_grade: string | null
-  cur_status_text: string | null; declared_note: string | null; declared_at: string | null
+  cur_status_text: string | null; declared_note: string | null; declared_at: string | null; origins: string[] | null
 }
 
 const CATS: { key: string; label: string; color: string }[] = [
@@ -56,6 +56,7 @@ export default function BaseAlunos() {
   const [cat, setCat] = useState('a_rematricular')
   const [grade, setGrade] = useState('')
   const [q, setQ] = useState('')
+  const [details, setDetails] = useState(false)
   const [busyId, setBusyId] = useState('')
   const [capDraft, setCapDraft] = useState<Record<string, string>>({})
   const moduleOn = useBaseModuleEnabled(institutionId)
@@ -163,29 +164,41 @@ export default function BaseAlunos() {
       ) : hasData && (
         <>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <Big label={`alunos em ${year - 1} (base)`} value={totals.base} color="#1A2B4A" />
-            <Big label="rematriculados" value={totals.re} color="#059669" sub={totals.decl > 0 ? `+ ${totals.decl} marcados pela equipe` : undefined} />
+            <Big label="rematriculados" value={totals.re + totals.decl} color="#059669"
+              sub={`de ${totals.base} alunos de ${year - 1}${totals.decl > 0 ? ` · ${totals.decl} marcados pela equipe` : ''}`} />
             <Big label="a rematricular" value={totals.pend} color="#D97706" />
             <Big label="saíram" value={totals.left} color="#DC2626" />
-            <Big label="novatos" value={totals.novos} color="#2563EB" sub={totals.ret > 0 ? `+ ${totals.ret} voltaram` : undefined} />
-            <Big label="concluintes" value={totals.conc} color="#64748B" />
-            {totals.capSet && <Big label="vagas livres" value={Math.max(totals.cap - totals.occ, 0)} color="#0D9488" sub={`de ${totals.cap}`} />}
           </div>
+          <div>
+            <button onClick={() => setDetails(!details)} style={{ all: 'unset', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}>
+              {details ? '▾ esconder detalhes' : '▸ ver detalhes'} (novatos, voltaram, concluintes, vagas)
+            </button>
+          </div>
+          {details && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            <Big label="novatos" value={totals.novos} color="#2563EB" />
+            <Big label="voltaram" value={totals.ret} color="#7C3AED" />
+            <Big label="concluintes" value={totals.conc} color="#64748B" />
+            <Big label="vagas livres" value={totals.capSet ? Math.max(totals.cap - totals.occ, 0) : 0} color="#0D9488"
+              sub={totals.capSet ? `de ${totals.cap}` : 'digite as vagas na tabela'} />
+          </div>}
 
           <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 900 }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: details ? 900 : 520 }}>
               <thead>
                 <tr style={{ background: '#F8FAFC' }}>
                   <th style={{ ...th, textAlign: 'left', paddingLeft: 16 }}>Série em {year}</th>
                   <th style={th}>Base {year - 1}</th>
                   <th style={th}>Rematriculados</th>
-                  <th style={th}>Marcados</th>
                   <th style={th}>A rematricular</th>
-                  <th style={th}>Saíram</th>
-                  <th style={th}>Novatos</th>
-                  <th style={th}>Concluintes</th>
-                  <th style={th}>Vagas</th>
-                  <th style={{ ...th, paddingRight: 16 }}>Livres</th>
+                  <th style={{ ...th, paddingRight: details ? 8 : 16 }}>Saíram</th>
+                  {details && <>
+                    <th style={th}>Marcados</th>
+                    <th style={th}>Novatos</th>
+                    <th style={th}>Voltaram</th>
+                    <th style={th}>Concluintes</th>
+                    <th style={th}>Vagas</th>
+                    <th style={{ ...th, paddingRight: 16 }}>Livres</th>
+                  </>}
                 </tr>
               </thead>
               <tbody>
@@ -197,11 +210,13 @@ export default function BaseAlunos() {
                         {r.grade_name}{r.is_terminal && <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 500 }}> · série final</span>}
                       </td>
                       <td style={td}>{r.base_prev_year || '–'}</td>
-                      <td style={{ ...td, color: '#059669', fontWeight: 600 }}>{r.reenrolled || '–'}</td>
-                      <td style={td}>{r.reenrolled_declared || '–'}</td>
+                      <td style={{ ...td, color: '#059669', fontWeight: 600 }}>{r.reenrolled + r.reenrolled_declared || '–'}</td>
                       <td style={{ ...td, color: r.pending ? '#D97706' : undefined, fontWeight: r.pending ? 700 : 400 }}>{r.pending || '–'}</td>
-                      <td style={td}>{r.left_school || '–'}</td>
-                      <td style={td}>{r.new_students + r.returning_students || '–'}</td>
+                      <td style={{ ...td, paddingRight: details ? 8 : 16 }}>{r.left_school || '–'}</td>
+                      {details && <>
+                      <td style={td}>{r.reenrolled_declared || '–'}</td>
+                      <td style={td}>{r.new_students || '–'}</td>
+                      <td style={td}>{r.returning_students || '–'}</td>
                       <td style={td}>{r.graduates || '–'}</td>
                       <td style={td}>
                         {canEdit ? (
@@ -215,6 +230,7 @@ export default function BaseAlunos() {
                       <td style={{ ...td, paddingRight: 16, color: r.capacity != null && occ > r.capacity ? '#DC2626' : undefined }}>
                         {r.capacity == null ? '–' : r.capacity - occ}
                       </td>
+                      </>}
                     </tr>
                   )
                 })}
@@ -264,7 +280,14 @@ export default function BaseAlunos() {
                 <tbody>
                   {shown.map(r => (
                     <tr key={r.student_id} style={{ borderTop: '1px solid #F1F5F9' }}>
-                      <td style={{ ...td, textAlign: 'left', color: '#64748B' }}>{r.registration_code || '–'}</td>
+                      <td style={{ ...td, textAlign: 'left', color: '#64748B' }}>{r.registration_code || '–'}
+                        {(r.origins ?? []).map(o => (
+                          <span key={o} title="origem do aluno" style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
+                            background: o === 'activesoft' ? '#EEF2FF' : '#F1F5F9', color: o === 'activesoft' ? '#4F46E5' : '#64748B' }}>
+                            {o === 'activesoft' ? 'Activesoft' : 'planilha'}
+                          </span>
+                        ))}
+                      </td>
                       <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{r.student_name}</td>
                       <td style={{ ...td, textAlign: 'left' }}>{r.guardian_name || '–'}</td>
                       <td style={{ ...td, textAlign: 'left', fontSize: 12 }}>{r.prev_grade ? `${r.prev_grade} · ${r.prev_status_text || ''}` : '–'}</td>
