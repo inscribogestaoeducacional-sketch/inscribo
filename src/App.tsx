@@ -37,6 +37,7 @@ import GestorEmbed       from './pages/gestor/GestorEmbed'
 import CaptacaoInteligente from './pages/gestor/CaptacaoInteligente'
 import Vitrine from './pages/gestor/Vitrine'
 import Transmissoes from './pages/gestor/Transmissoes'
+import BaseAlunos from './pages/gestor/BaseAlunos'
 import LeadKanban        from './components/leads/LeadKanban'
 import VisitCalendar     from './components/calendar/VisitCalendar'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
@@ -368,6 +369,8 @@ function AppContent() {
             <Route path="/captacao"       element={<PermissionRoute module="captacao"><CaptacaoInteligente /></PermissionRoute>} />
             <Route path="/vitrine"        element={<PermissionRoute module="vitrine"><Vitrine /></PermissionRoute>} />
             <Route path="/transmissoes"   element={<PermissionRoute module="transmissoes"><Transmissoes /></PermissionRoute>} />
+            {/* Etapa B passo 4: atendente só com a permissão base_alunos (o banco confere de novo) */}
+            <Route path="/base-alunos"    element={<PermissionRoute module="base_alunos"><BaseAlunos /></PermissionRoute>} />
             <Route path="/transferencias"element={<PermissionRoute module="transferencias"><GestorTransfers /></PermissionRoute>} />
             <Route path="/updates"        element={<GestorUpdates />} />
             <Route path="/pesquisas"      element={<GestorSurveys />} />

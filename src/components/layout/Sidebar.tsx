@@ -6,7 +6,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import {
   LayoutDashboard, Users, BookUser, Calendar,
-  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList, X, Megaphone, Send, Store
+  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList, X, Megaphone, Send, Store, GraduationCap
 } from 'lucide-react'
 
 const NAV_CFG = [
@@ -19,6 +19,7 @@ const NAV_CFG = [
   { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager','user'], module: 'captacao' },
   { path: '/vitrine',         label: 'Vitrine',         iconBg: '#E6F7F5', iconColor: '#00A896', Icon: Store,           roles: ['admin','manager','user'], module: 'vitrine' },
   { path: '/transmissoes',    label: 'Transmissões',    iconBg: '#E0F2FE', iconColor: '#0284C7', Icon: Send,            roles: ['admin','manager','user'], module: 'transmissoes' },
+  { path: '/base-alunos',     label: 'Base de alunos',  iconBg: '#E6F7F5', iconColor: '#0D9488', Icon: GraduationCap,   roles: ['admin','manager','user'], module: 'base_alunos' },
   { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'], module: 'relatorios' },
   { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias' },
   { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFF7ED', iconColor: '#F97316', Icon: ClipboardList,   roles: ['admin','manager'], module: 'pesquisas' },
