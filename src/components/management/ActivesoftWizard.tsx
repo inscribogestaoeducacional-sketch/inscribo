@@ -15,6 +15,10 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { KeyRound, Loader2, CheckCircle2, XCircle, Trash2, PlayCircle, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
+import ErpTokenGuide from './ErpTokenGuide'
+import { ERP_GUIDES, permissionHint } from '../../lib/erpGuides'
+
+const GUIDE = ERP_GUIDES.activesoft
 
 type Toast = (msg: string, ok?: boolean) => void
 interface Conn {
@@ -165,9 +169,10 @@ function StepConnect({ institutionId, conn, onDone, onToast }: { institutionId: 
 
   return (
     <div>
+      <ErpTokenGuide guide={GUIDE} defaultOpen={!conn?.token_last4} />
       <p style={small}>
-        Peça ao Activesoft um token <strong>somente de leitura</strong> e cole aqui. Ele vai direto para o cofre de senhas; depois de salvo,
-        nem a Áion vê o token inteiro. {conn?.token_last4 && <>Token atual: <strong>••••{conn.token_last4}</strong>.</>}
+        Cole o token abaixo. Ele vai direto para o cofre de senhas; depois de salvo, nem a Áion vê o token inteiro.
+        {conn?.token_last4 && <> Token atual: <strong>••••{conn.token_last4}</strong>.</>}
       </p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <input type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)}
@@ -264,7 +269,7 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
       {!busy && onlyOptional && (
         <p style={{ ...small, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px' }}>
           O token não tem permissão para {failed.map(([k]) => ROUTE_LABEL[k]).join(' e ')}. A carga segue sem elas: as unidades vêm das
-          próprias turmas e os vínculos só são usados quando os nomes estão liberados. Se quiser, peça ao Activesoft para incluir essas rotas no token.
+          próprias turmas e os vínculos só são usados quando os nomes estão liberados. Para liberar, veja abaixo qual caixa marcar.
         </p>
       )}
       {!busy && !onlyOptional && (error || savedError) && (
@@ -278,11 +283,16 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
           {Object.keys(ROUTE_LABEL).filter(k => routes[k]).map(k => {
             const r = routes[k]
             return (
-              <div key={k} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', borderTop: '1px solid #F1F5F9', fontSize: 12 }}>
-                {r.ok ? <CheckCircle2 size={14} color="#047857" /> : <XCircle size={14} color="#B91C1C" />}
-                <span style={{ width: 190, color: '#1A2B4A', fontWeight: 600 }}>{ROUTE_LABEL[k]}</span>
-                <span style={{ width: 54, color: r.ok ? '#047857' : '#B91C1C', fontFamily: 'monospace' }}>{r.status ?? '—'}</span>
-                <span style={{ flex: 1, color: r.ok ? '#64748B' : '#B91C1C' }}>{r.msg}</span>
+              <div key={k} style={{ padding: '6px 10px', borderTop: '1px solid #F1F5F9', fontSize: 12 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {r.ok ? <CheckCircle2 size={14} color="#047857" /> : <XCircle size={14} color="#B91C1C" />}
+                  <span style={{ width: 190, color: '#1A2B4A', fontWeight: 600 }}>{ROUTE_LABEL[k]}</span>
+                  <span style={{ width: 54, color: r.ok ? '#047857' : '#B91C1C', fontFamily: 'monospace' }}>{r.status ?? '—'}</span>
+                  <span style={{ flex: 1, color: r.ok ? '#64748B' : '#B91C1C' }}>{r.msg}</span>
+                </div>
+                {!r.ok && r.status === 403 && permissionHint(GUIDE, k) && (
+                  <div style={{ margin: '4px 0 2px 22px', color: '#B45309' }}>{ROUTE_LABEL[k]}: {permissionHint(GUIDE, k)}</div>
+                )}
               </div>
             )
           })}
