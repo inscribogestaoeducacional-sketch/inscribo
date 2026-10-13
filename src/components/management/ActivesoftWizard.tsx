@@ -39,13 +39,17 @@ type Summary = Record<string, unknown> & {
   cruzamento: { target_year: number; base_ano_anterior: number; rematriculados: number; a_rematricular: number; sairam: number; novatos: number; concluintes: number }[]
 }
 
+// Unidades: a documentação não diz a permissão; unidade_id e unidade já vêm em
+// lista_turmas. Com 403, a rota aparece com selo cinza, não como erro.
+const notNeeded = (k: string, r: { ok: boolean; status: number | null }) => k === 'unidades' && !r.ok && r.status === 403
+
 const ROUTE_LABEL: Record<string, string> = {
   unidades: 'Unidades', cursos: 'Cursos', turmas: 'Turmas', enturmacao: 'Enturmação', alunos: 'Alunos',
-  responsaveis: 'Responsáveis', vinculos: 'Vínculos aluno–responsável',
+  responsaveis: 'Responsáveis',
 }
 const STEP_LABEL: Record<string, string> = {
   unidades: 'unidades', cursos: 'cursos', turmas: 'turmas', enturmacao_A: 'enturmações ativas', enturmacao_I: 'enturmações inativas',
-  enturmacao_P: 'pré-matrículas', enturmacao_S: 'enturmações (outras)', alunos: 'alunos', responsaveis: 'responsáveis', vinculos: 'vínculos', contagem: 'contagem',
+  enturmacao_P: 'pré-matrículas', enturmacao_S: 'enturmações (outras)', alunos: 'alunos', responsaveis: 'responsáveis', contagem: 'contagem',
 }
 
 const box: CSSProperties = { border: '1px solid #E2E8F0', borderRadius: 12, padding: '14px 16px' }
@@ -97,8 +101,9 @@ export default function ActivesoftWizard({ institutionId, onToast }: { instituti
   const tested = !!conn?.auth_scheme
   const steps = [
     { n: 1, title: 'Conectar', done: !!conn?.token_last4, sub: conn?.token_last4 ? `token ••••${conn.token_last4}` : 'cole o token do Activesoft' },
-    { n: 2, title: 'Testar', done: tested && Object.entries(conn?.scopes_ok ?? {}).filter(([k]) => !k.startsWith('_'))
-        .every(([, v]) => v === true || (typeof v === 'object' && (v as { ok?: boolean })?.ok === true)), sub: conn?.last_test_at ? `testado em ${new Date(conn.last_test_at).toLocaleString('pt-BR')}` : 'confere as rotas de leitura' },
+    { n: 2, title: 'Testar', done: tested && Object.entries(conn?.scopes_ok ?? {}).filter(([k]) => k in ROUTE_LABEL)
+        .every(([k, v]) => v === true || (typeof v === 'object' && ((v as { ok?: boolean })?.ok === true
+          || notNeeded(k, { ok: false, status: (v as { status?: number })?.status ?? null })))), sub: conn?.last_test_at ? `testado em ${new Date(conn.last_test_at).toLocaleString('pt-BR')}` : 'confere as rotas de leitura' },
     { n: 3, title: 'Mapear', done: run?.status === 'aguardando_confirmacao' || run?.status === 'ok' || run?.status === 'ok_com_avisos', sub: 'unidades, cursos, turmas e séries' },
     { n: 4, title: 'Carga', done: run?.status === 'ok' || run?.status === 'ok_com_avisos', sub: conn?.last_success_at ? `última carga ${new Date(conn.last_success_at).toLocaleString('pt-BR')}` : 'contar, conferir e gravar' },
   ]
@@ -254,10 +259,9 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
   const fields = fresh?.fields ?? conn?.fields_seen ?? {}
   const savedError = !fresh && !busy ? conn?.last_error : null
   const hasResult = Object.keys(routes).length > 0
-  // Só unidades/vínculos sem permissão (403): a carga segue sem elas
-  const failed = Object.entries(routes).filter(([, r]) => !r.ok)
-  const onlyOptional = hasResult && failed.length > 0 && failed.length < Object.keys(routes).length
-    && failed.every(([k, r]) => (k === 'unidades' || k === 'vinculos') && r.status === 403)
+  // Só unidades sem permissão: não é erro (as unidades vêm das turmas)
+  const failed = Object.entries(routes).filter(([k, r]) => k in ROUTE_LABEL && !r.ok && !notNeeded(k, r))
+  const onlyOptional = hasResult && failed.length === 0
 
   return (
     <div>
@@ -265,13 +269,7 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
       <button onClick={test} disabled={busy} style={busy ? off(btn) : btn}>
         {busy ? <Loader2 size={14} className="animate-spin" /> : <PlayCircle size={14} />} {busy ? 'Testando…' : 'Testar conexão'}
       </button>
-      {busy && <p style={small}>Testando as 7 rotas… pode levar até meio minuto.</p>}
-      {!busy && onlyOptional && (
-        <p style={{ ...small, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px' }}>
-          O token não tem permissão para {failed.map(([k]) => ROUTE_LABEL[k]).join(' e ')}. A carga segue sem elas: as unidades vêm das
-          próprias turmas e os vínculos só são usados quando os nomes estão liberados. Para liberar, veja abaixo qual caixa marcar.
-        </p>
-      )}
+      {busy && <p style={small}>Testando as 6 rotas… pode levar até meio minuto.</p>}
       {!busy && !onlyOptional && (error || savedError) && (
         <p style={{ ...small, color: '#B91C1C' }}><AlertTriangle size={13} style={{ verticalAlign: -2 }} /> {error || savedError}</p>
       )}
@@ -284,13 +282,23 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
             const r = routes[k]
             return (
               <div key={k} style={{ padding: '6px 10px', borderTop: '1px solid #F1F5F9', fontSize: 12 }}>
+                {notNeeded(k, r) ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ width: 14, height: 14, borderRadius: 999, background: '#E2E8F0', display: 'inline-block' }} />
+                    <span style={{ width: 190, color: '#64748B', fontWeight: 600 }}>{ROUTE_LABEL[k]}</span>
+                    <span style={{ fontSize: 11, color: '#64748B', background: '#F1F5F9', borderRadius: 999, padding: '2px 8px' }}>
+                      não necessário: as unidades vêm das turmas
+                    </span>
+                  </div>
+                ) : (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   {r.ok ? <CheckCircle2 size={14} color="#047857" /> : <XCircle size={14} color="#B91C1C" />}
                   <span style={{ width: 190, color: '#1A2B4A', fontWeight: 600 }}>{ROUTE_LABEL[k]}</span>
                   <span style={{ width: 54, color: r.ok ? '#047857' : '#B91C1C', fontFamily: 'monospace' }}>{r.status ?? '—'}</span>
                   <span style={{ flex: 1, color: r.ok ? '#64748B' : '#B91C1C' }}>{r.msg}</span>
                 </div>
-                {!r.ok && r.status === 403 && permissionHint(GUIDE, k) && (
+                )}
+                {!r.ok && r.status === 403 && !notNeeded(k, r) && permissionHint(GUIDE, k) && (
                   <div style={{ margin: '4px 0 2px 22px', color: '#B45309' }}>{ROUTE_LABEL[k]}: {permissionHint(GUIDE, k)}</div>
                 )}
               </div>
@@ -496,6 +504,14 @@ function StepLoad({ institutionId, run, onChanged, onToast }: { institutionId: s
     <div>
       {run?.kind === 'dry_run_contagem' && waiting && (
         <p style={small}>Primeira carga: ela só conta. Nada é gravado até você conferir e confirmar.</p>
+      )}
+      {run && (waiting || summary) && run.counts?.alunos_lidos !== undefined && (
+        <p style={{ ...small, color: '#334155' }}>
+          {run.counts.responsaveis_lidos === true
+            ? <>Famílias: <strong>{String(run.counts.alunos_com_responsavel ?? 0)}</strong> aluno(s) com responsável ligado e{' '}
+                <strong>{String(run.counts.alunos_sem_responsavel ?? 0)}</strong> sem responsável (de {String(run.counts.alunos_lidos)} lidos).</>
+            : <>Famílias: responsáveis não lidos nesta carga (nomes não liberados ou "Guardar nomes" desmarcada). {String(run.counts.alunos_lidos)} aluno(s) lidos.</>}
+        </p>
       )}
       {waiting && !summary && (
         <button onClick={count} disabled={!!busy} style={busy ? off(btn) : btn}>

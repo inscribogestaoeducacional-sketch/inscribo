@@ -16,7 +16,7 @@ export type ErpGuide = {
   required: ErpPermission[]                         // marcar APENAS estas
   never: string[]                                   // lista curta do que nunca marcar
   notes: string[]                                   // avisos (ex.: "Próximo período")
-  /** rota do teste → permissão que a libera (+ observação opcional) */
+  /** rota do teste → permissão que a libera (+ observação opcional); rota fora daqui não pede caixa */
   routePermission: Record<string, { permission: string; note?: string }>
 }
 
@@ -31,7 +31,7 @@ export const ERP_GUIDES: Record<string, ErpGuide> = {
     steps: [
       'Entre no Activesoft com um usuário administrador e abra a página "Acesso via API"{menu}.',
       `Em "Parceiro", escolha "${AION}". Se não aparecer na lista, cadastre com esse nome.`,
-      'Nas permissões, marque APENAS as 3 caixas da lista "Marque" abaixo.',
+      'Nas permissões, marque APENAS as 2 caixas da lista "Marque" abaixo.',
       'Não marque nenhuma outra caixa (veja a lista "Nunca marque").',
       'Em "Este token estará ativo até", escolha 1 ano a partir de hoje.',
       'Marque a concordância com o termo e clique para gerar o token.',
@@ -40,20 +40,22 @@ export const ERP_GUIDES: Record<string, ErpGuide> = {
     required: [
       { key: 'cadastrais',    label: 'Acesso a dados cadastrais' },
       { key: 'enturmacao',    label: 'Acesso a dados do detalhe da enturmação' },
-      { key: 'complementares', label: 'Acesso a dados complementares de alunos e responsáveis' },
     ],
-    never: ['Alteração de dados', 'Frequência', 'Boletins', 'Notas', 'Ocorrências', 'Boleto', 'Usuários', 'Diários'],
+    never: [
+      'Acesso a dados complementares de alunos e responsáveis (libera dados sensíveis, como cor/raça e estado civil, que o sistema não usa)',
+      'Acesso a dados de endereço',
+      'Acesso a parâmetros do sistema',
+      'Alteração de dados', 'Frequência', 'Boletins', 'Notas', 'Ocorrências', 'Boleto', 'Usuários', 'Diários',
+    ],
     notes: [
       'A escola precisa ter preenchido o "Próximo período" no Activesoft. Sem ele, o sistema não sabe quem já está matriculado para o ano seguinte.',
     ],
     routePermission: {
-      unidades:     { permission: 'cadastrais', note: 'Se essa caixa já estava marcada, a carga segue sem esta rota: as unidades vêm das turmas.' },
       cursos:       { permission: 'cadastrais' },
       turmas:       { permission: 'cadastrais' },
       alunos:       { permission: 'cadastrais' },
       enturmacao:   { permission: 'enturmacao' },
-      responsaveis: { permission: 'complementares' },
-      vinculos:     { permission: 'complementares' },
+      responsaveis: { permission: 'cadastrais' },
     },
   },
 }
