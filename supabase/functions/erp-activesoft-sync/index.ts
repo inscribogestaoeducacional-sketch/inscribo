@@ -15,7 +15,7 @@
 // nunca vai para log, erro ou resposta.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { PAGE_SIZE, ROUTES, ForbiddenRoute, routeUrl, readPage, fieldNames, plan, normalize, apiMessage, pickScheme, unidadeFromTurma, OPTIONAL_STEPS, type RouteKey, type Probe } from './adapter.ts'
+import { PAGE_SIZE, ROUTES, ForbiddenRoute, routeUrl, readPage, fieldNames, plan, normalize, apiMessage, pickScheme, unidadeFromTurma, vinculosFromAluno, OPTIONAL_STEPS, type RouteKey, type Probe } from './adapter.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -122,7 +122,7 @@ async function probe(baseUrl: string, key: RouteKey, scheme: string, token: stri
   } finally { clearTimeout(t) }
 }
 
-// Teste: as 7 rotas com Bearer e com Token (em paralelo, 1 tentativa cada).
+// Teste: as 6 rotas com Bearer e com Token (em paralelo, 1 tentativa cada).
 // Guarda por rota { ok, status, msg }, a autenticação aceita e só os NOMES dos
 // campos. Nada de dados, nada de token.
 async function actionTest(sb: Supa, inst: string) {
@@ -145,8 +145,7 @@ async function actionTest(sb: Supa, inst: string) {
   const now = new Date().toISOString()
   const failed = Object.entries(pick.routes).filter(([, p]) => !p.ok)
   const onlyOptional = pick.okCount > 0 && failed.every(([k, p]) => OPTIONAL_STEPS.has(k) && p.status === 403)
-  const err = pick.allOk ? null
-    : onlyOptional ? `Sem permissão no token para: ${failed.map(([k]) => k).join(', ')}. A carga segue sem elas.`
+  const err = pick.allOk || onlyOptional ? null
     : pick.okCount === 0 ? `Nenhuma rota respondeu (${pick.shown}): ${Object.values(pick.routes)[0]?.msg ?? 'sem resposta'}`
     : `${pick.total - pick.okCount} de ${pick.total} rotas falharam no teste`
   await sb.from('erp_connections').update({
@@ -154,7 +153,7 @@ async function actionTest(sb: Supa, inst: string) {
     status: pick.okCount === 0 ? 'token_invalido' : 'pausada',
     last_error: err, last_error_at: err ? now : null,
   }).eq('institution_id', inst).eq('provider', 'activesoft')
-  return { ok: pick.allOk, any_ok: pick.okCount > 0, scheme: pick.scheme, shown: pick.shown, base_url: baseUrl, scopes, fields, error: err }
+  return { ok: pick.allOk || onlyOptional, any_ok: pick.okCount > 0, scheme: pick.scheme, shown: pick.shown, base_url: baseUrl, scopes, fields, error: err }
 }
 
 function errText(e: unknown) {
@@ -217,6 +216,9 @@ async function actionStep(sb: Supa, inst: string, runId: string) {
         if (step.entity === 'enturmacao' && turmaIds && turmaIds.size > 0 && n.data.turma_id && !turmaIds.has(n.data.turma_id)) continue
         if (step.entity === 'aluno' && alunoIds && !alunoIds.has(n.external_id)) continue
         byKey.set(step.entity + '|' + n.external_id, { run_id: runId, institution_id: inst, entity: step.entity, external_id: n.external_id, data: n.data })
+        if (step.entity === 'aluno' && names) {
+          for (const v of vinculosFromAluno(n)) byKey.set('vinculo|' + v.external_id, { run_id: runId, institution_id: inst, entity: 'vinculo', external_id: v.external_id, data: v.data })
+        }
         if (step.entity === 'turma') {
           const u = unidadeFromTurma(n)
           if (u) byKey.set('unidade|' + u.external_id, { run_id: runId, institution_id: inst, entity: 'unidade', external_id: u.external_id, data: u.data })
@@ -244,9 +246,32 @@ async function actionStep(sb: Supa, inst: string, runId: string) {
   }
 
   const done = idx >= steps.length
-  if (done) await sb.from('sync_runs').update({ status: 'aguardando_confirmacao', step: 'contagem', step_offset: 0 }).eq('id', runId)
+  if (done) {
+    Object.assign(counts, await familyCounts(sb, runId, names))
+    await sb.from('sync_runs').update({ status: 'aguardando_confirmacao', step: 'contagem', step_offset: 0, counts }).eq('id', runId)
+  }
   return progress({ ...run, status: done ? 'aguardando_confirmacao' : 'rodando', counts, http_calls: calls, pages },
                   { index: Math.min(idx, steps.length), total: steps.length, label: done ? 'contagem' : steps[idx].key })
+}
+
+// Famílias: aluno com responsável ligado = algum id de responsável do aluno
+// (lista_alunos) existe em lista_responsaveis. Sem nomes liberados os
+// responsáveis não são lidos e a contagem diz isso.
+async function familyCounts(sb: Supa, runId: string, names: boolean) {
+  const alunos = await stagedIds(sb, runId, 'aluno', null)
+  if (!names) return { responsaveis_lidos: false, alunos_lidos: alunos.size }
+  const resp = await stagedIds(sb, runId, 'responsavel', null)
+  const linked = new Set<string>()
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from('erp_staging').select('data').eq('run_id', runId).eq('entity', 'vinculo').range(from, from + 999)
+    if (error) throw new Error('Falha ao ler a área de espera: ' + error.message)
+    for (const r of (data ?? []) as { data: Record<string, string> }[]) {
+      if (resp.has(r.data?.responsavel_id)) linked.add(r.data.aluno_id)
+    }
+    if (!data || data.length < 1000) break
+  }
+  const com = [...alunos].filter(a => linked.has(a)).length
+  return { responsaveis_lidos: true, alunos_lidos: alunos.size, alunos_com_responsavel: com, alunos_sem_responsavel: alunos.size - com }
 }
 
 // ids já guardados na área de espera desta carga (turmas, ou alunos das enturmações)

@@ -1,7 +1,7 @@
 // supabase/functions/erp-activesoft-sync/adapter.ts
 //
 // Peças puras do adaptador Activesoft (sem Deno, sem banco), testáveis fora:
-//   * ROTAS: lista FIXA das 7 rotas de leitura. Qualquer outra é recusada antes
+//   * ROTAS: lista FIXA das 6 rotas de leitura. Qualquer outra é recusada antes
 //     da chamada (notas, boletim, frequência, ocorrências, financeiro e escrita
 //     nunca passam por aqui). Só GET.
 //   * Paginação de 25 (limit/offset), aceitando lista crua ou {count,next,results}.
@@ -18,7 +18,6 @@ export const ROUTES = {
   enturmacao:   'enturmacao_com_detalhes',
   alunos:       'lista_alunos',
   responsaveis: 'lista_responsaveis',
-  vinculos:     'acesso/vinculo_aluno_responsavel_liberado',
 } as const
 export type RouteKey = keyof typeof ROUTES
 const ALLOWED_PATHS = new Set<string>(Object.values(ROUTES))
@@ -151,15 +150,34 @@ export function normEnturmacao(o: Obj, situacaoSistema: string): Staged | null {
   }
 }
 
-// Aluno: id e matrícula sempre; nome só com `names`. Celular, data de
-// nascimento e documentos ficam de fora nesta etapa.
+// Ids dos responsáveis que vêm no próprio aluno (lista_alunos), na ordem de
+// prioridade: responsável, secundário, filiação 1 e 2, adicionais. Sem repetir.
+export function guardianIds(o: Obj): string[] {
+  const out: string[] = []
+  const add = (v: unknown) => {
+    if (v === null || v === undefined || typeof v === 'object') return
+    const t = String(v).trim()
+    if (t && t !== '0' && !out.includes(t)) out.push(t)
+  }
+  for (const k of ['responsavel_id', 'responsavel_secundario_id', 'filiacao_1_id', 'filiacao_2_id']) add(o?.[k])
+  const extra = o?.responsaveis_adicionais_ids
+  if (Array.isArray(extra)) extra.forEach(add)
+  else if (typeof extra === 'string') extra.split(/[,;\s]+/).forEach(add)
+  else add(extra)
+  return out
+}
+
+// Aluno: id e matrícula sempre; nome e ids dos responsáveis só com `names`.
+// Celular, data de nascimento, CPF e documentos ficam de fora.
 export function normAluno(o: Obj, names: boolean): Staged | null {
   const id = pick(o, 'id', 'aluno_id', 'codigo')
   if (!id) return null
+  const resp = names ? guardianIds(o) : []
   return { external_id: id, data: clean({
     id,
     matricula: pick(o, 'matricula', 'numero_matricula', 'codigo_matricula'),
     nome:      names ? pick(o, 'nome', 'nome_aluno', 'nome_completo') : undefined,
+    resp_ids:  resp.length ? resp.join(',') : undefined,
   }) }
 }
 
@@ -169,21 +187,23 @@ export function normResponsavel(o: Obj): Staged | null {
   return id ? { external_id: id, data: clean({ id, nome: pick(o, 'nome', 'nome_responsavel', 'nome_completo') }) } : null
 }
 
-export function normVinculo(o: Obj): Staged | null {
-  const aluno = pick(o, 'id_aluno', 'aluno_id', 'aluno.id', 'aluno')
-  const resp  = pick(o, 'id_responsavel', 'responsavel_id', 'responsavel.id', 'responsavel')
-  if (!aluno || !resp) return null
-  return { external_id: `${aluno}|${resp}`, data: clean({
-    aluno_id: aluno, responsavel_id: resp, principal: pick(o, 'principal', 'responsavel_principal', 'financeiro'),
-  }) }
+// Vínculos aluno → responsável a partir dos ids do aluno (a rota
+// acesso/vinculo_aluno_responsavel_liberado é a lista da portaria — quem pode
+// buscar o aluno —, não a família, e não é lida). O 1º id é o principal.
+export function vinculosFromAluno(aluno: Staged): Staged[] {
+  const ids = (aluno.data.resp_ids ?? '').split(',').filter(Boolean)
+  return ids.map((r, i) => ({ external_id: `${aluno.external_id}|${r}`, data: {
+    aluno_id: aluno.external_id, responsavel_id: r, principal: i === 0 ? 'true' : 'false', ordem: String(i + 1),
+  } }))
 }
 
 // Plano da leitura (fila retomável): cada passo é paginado de 25 em 25.
-// Responsáveis e vínculos só entram com os nomes liberados (aditivo LGPD).
+// Responsáveis só entram com os nomes liberados (aditivo LGPD). Nunca:
+// lista_*_dados_sensiveis, lista_*_endereco, vínculo da portaria.
 export type Step = { key: string; route: RouteKey; entity: string; params: Record<string, string | boolean>; situacao?: string }
-// Rotas que podem estar fora do token sem impedir a carga: unidades (vêm das
-// turmas) e vínculos (só servem com nomes liberados).
-export const OPTIONAL_STEPS = new Set(['unidades', 'vinculos'])
+// Rota que pode estar fora do token sem impedir a carga: unidades (a
+// documentação não diz a permissão; unidade_id e unidade já vêm nas turmas).
+export const OPTIONAL_STEPS = new Set(['unidades'])
 
 export function plan(names: boolean): Step[] {
   const s: Step[] = [
@@ -196,7 +216,6 @@ export function plan(names: boolean): Step[] {
   ]
   if (names) {
     s.push({ key: 'responsaveis', route: 'responsaveis', entity: 'responsavel', params: { possui_aluno_vinculado_ativo: true } })
-    s.push({ key: 'vinculos',     route: 'vinculos',     entity: 'vinculo',     params: {} })
   }
   return s
 }
@@ -209,7 +228,6 @@ export function normalize(step: Step, o: Obj, names: boolean): Staged | null {
     case 'enturmacao':  return normEnturmacao(o, step.situacao ?? '')
     case 'aluno':       return normAluno(o, names)
     case 'responsavel': return names ? normResponsavel(o) : null
-    case 'vinculo':     return names ? normVinculo(o) : null
     default:            return null
   }
 }
