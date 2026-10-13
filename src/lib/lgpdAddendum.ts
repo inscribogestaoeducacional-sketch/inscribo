@@ -30,3 +30,19 @@ export async function fetchLgpdText(version: string): Promise<{ text: string; sh
   const sha256 = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('')
   return { text: new TextDecoder().decode(buf), sha256 }
 }
+
+// Campos da escola no modelo (preenchidos pelo sistema com a escola que aceita).
+// No arquivo da versão aparecem como {{escola_nome}}, {{escola_cnpj}}, …
+export type LgpdFields = { escola_nome?: string | null; escola_cnpj?: string | null; escola_endereco?: string | null; representante?: string | null; data?: string | null }
+const FIELD_LABEL: Record<keyof LgpdFields, string> = {
+  escola_nome: 'nome da escola', escola_cnpj: 'CNPJ da escola', escola_endereco: 'endereço da escola',
+  representante: 'administrador(a) que aceita', data: 'data do aceite',
+}
+export function fillLgpdTemplate(text: string, f: LgpdFields): string {
+  return text.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (m, k: string) => {
+    const v = (f as Record<string, string | null | undefined>)[k]
+    if (v && v.trim()) return v.trim()
+    const label = FIELD_LABEL[k as keyof LgpdFields]
+    return label ? `[${label}]` : m
+  })
+}

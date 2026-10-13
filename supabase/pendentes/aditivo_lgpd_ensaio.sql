@@ -75,7 +75,8 @@ BEGIN
   r := r || jsonb_build_object('L10_chave_ligou', base_names_allowed(v_aion));
   SELECT count(*) INTO n FROM lgpd_acceptances
    WHERE institution_id = v_aion AND action = 'aceite' AND text_version = 'v1' AND text_sha256 = v_sha
-     AND ip = '203.0.113.7' AND user_agent = 'Ensaio/1.0' AND user_id = v_admin::uuid AND created_at IS NOT NULL;
+     AND ip = '203.0.113.7' AND user_agent = 'Ensaio/1.0' AND user_id = v_admin::uuid AND created_at IS NOT NULL
+     AND school_name = (SELECT name FROM institutions WHERE id = v_aion) AND representative_name = (SELECT full_name FROM users WHERE id = v_admin::uuid);
   r := r || jsonb_build_object('L11_registro_com_versao_ip_usuario_data', n = 1);
   r := r || jsonb_build_object('L12_admin_le_registro', (SELECT count(*) FROM lgpd_acceptances WHERE institution_id = v_aion) = 1);
 

@@ -2,8 +2,12 @@
 // Texto completo do Aditivo de Proteção de Dados (LGPD) — Áion Edu, lido da
 // cópia versionada em public/legal/aditivo-lgpd-<versão>.md. Página pública
 // (o texto não é sigiloso). Markdown simples: títulos, listas, tabelas e parágrafos.
+// Logado: os campos {{escola_*}} vêm preenchidos com a escola de quem lê;
+// sem login aparecem como [nome da escola] etc.
 import { useEffect, useState, type ReactNode } from 'react'
-import { fetchLgpdText } from '../lib/lgpdAddendum'
+import { fetchLgpdText, fillLgpdTemplate, type LgpdFields } from '../lib/lgpdAddendum'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 function inline(s: string): ReactNode[] {
   return s.split(/(\*\*[^*]+\*\*)/g).map((p, i) => p.startsWith('**') && p.endsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong> : p)
@@ -47,6 +51,20 @@ function render(md: string): ReactNode[] {
 export default function AditivoLgpd() {
   const version = new URLSearchParams(window.location.search).get('v') || 'v1'
   const [text, setText] = useState<string | null | undefined>(undefined)
+  const { user } = useAuth()
+  const [fields, setFields] = useState<LgpdFields>({})
+  useEffect(() => {
+    const inst = user?.institution_id
+    if (!inst) { setFields({}); return }
+    supabase.from('institutions').select('name, cnpj, address, city, state').eq('id', inst).maybeSingle().then(({ data }) => {
+      const d = data as { name?: string; cnpj?: string; address?: string; city?: string; state?: string } | null
+      setFields({
+        escola_nome: d?.name, escola_cnpj: d?.cnpj,
+        escola_endereco: [d?.address, d?.city, d?.state].filter(Boolean).join(', ') || null,
+        representante: user?.role === 'admin' ? user?.full_name : null,
+      })
+    })
+  }, [user?.institution_id, user?.role, user?.full_name])
   useEffect(() => {
     if (!/^v\d+$/.test(version)) { setText(null); return }
     fetchLgpdText(version).then(t => setText(t?.text ?? null)).catch(() => setText(null))
@@ -56,7 +74,7 @@ export default function AditivoLgpd() {
       <p style={{ fontSize: 12, color: '#94A3B8' }}>Versão {version}</p>
       {text === undefined && <p>Carregando…</p>}
       {text === null && <p>O texto desta versão do aditivo ainda não foi publicado.</p>}
-      {text && render(text)}
+      {text && render(fillLgpdTemplate(text, fields))}
     </div>
   )
 }

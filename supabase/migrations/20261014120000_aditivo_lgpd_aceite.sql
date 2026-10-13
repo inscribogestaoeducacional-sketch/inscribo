@@ -39,6 +39,12 @@ CREATE TABLE IF NOT EXISTS public.lgpd_acceptances (
   ip             text,
   user_agent     text,
   note           text,
+  -- dados da escola e de quem aceitou, como estavam no aceite (o texto é um modelo
+  -- com campos {{escola_*}} preenchidos pelo sistema; o hash é o do modelo)
+  school_name         text,
+  school_cnpj         text,
+  school_address      text,
+  representative_name text,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_lgpd_acceptances_inst ON public.lgpd_acceptances (institution_id, created_at DESC);
@@ -104,8 +110,11 @@ BEGIN
     RAISE EXCEPTION 'Versão do aditivo não publicada ou texto diferente do aprovado' USING ERRCODE = 'check_violation';
   END IF;
 
-  INSERT INTO lgpd_acceptances (institution_id, action, user_id, user_name, user_role, text_version, text_sha256, ip, user_agent)
-  VALUES (p_institution_id, 'aceite', u.id, u.full_name, u.role, p_version, lower(p_text_sha256), request_client_ip(), request_user_agent())
+  INSERT INTO lgpd_acceptances (institution_id, action, user_id, user_name, user_role, text_version, text_sha256, ip, user_agent,
+                                school_name, school_cnpj, school_address, representative_name)
+  SELECT p_institution_id, 'aceite', u.id, u.full_name, u.role, p_version, lower(p_text_sha256), request_client_ip(), request_user_agent(),
+         i.name, i.cnpj, concat_ws(', ', NULLIF(i.address, ''), NULLIF(i.city, ''), NULLIF(i.state, '')), u.full_name
+    FROM institutions i WHERE i.id = p_institution_id
   RETURNING id INTO v_id;
 
   INSERT INTO student_base_settings (institution_id, names_allowed, updated_by, updated_at)
