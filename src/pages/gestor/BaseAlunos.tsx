@@ -10,6 +10,8 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import { GraduationCap, Loader2, Search, CheckCircle2, Undo2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { Navigate } from 'react-router-dom'
+import { useBaseModuleEnabled } from '../../lib/baseModule'
 
 type PanelRow = {
   grade_level_id: string; grade_name: string; sort_order: number; is_terminal: boolean
@@ -56,6 +58,7 @@ export default function BaseAlunos() {
   const [q, setQ] = useState('')
   const [busyId, setBusyId] = useState('')
   const [capDraft, setCapDraft] = useState<Record<string, string>>({})
+  const moduleOn = useBaseModuleEnabled(institutionId)
 
   const load = useCallback(async () => {
     if (!institutionId) return
@@ -75,7 +78,7 @@ export default function BaseAlunos() {
     setCapDraft({})
   }, [institutionId, year])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { if (moduleOn) load() }, [load, moduleOn])
 
   const totals = useMemo(() => {
     const t = { base: 0, re: 0, decl: 0, pend: 0, left: 0, novos: 0, ret: 0, conc: 0, cap: 0, capSet: false, occ: 0 }
@@ -124,6 +127,7 @@ export default function BaseAlunos() {
   }
 
   const hasData = list.length > 0
+  if (moduleOn === false) return <Navigate to="/" replace />
   const rowsWithData = panel.filter(r => r.base_prev_year + r.reenrolled + r.reenrolled_declared + r.pending + r.left_school
     + r.new_students + r.returning_students + r.graduates > 0 || r.capacity != null)
 

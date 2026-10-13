@@ -79,6 +79,32 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN r := r || '{"T02_outra_escola_envia_BLOQUEADO":true}'; END;
   RESET ROLE;
 
+  -- ── 1b. Módulo por escola: desligado bloqueia; só Super Admin liga ──
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', '0c8808a5-7a78-44de-8e1f-90e06dd7ba38', 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  r := r || jsonb_build_object('M01_modulo_desligado_tela_nao_mostra', NOT base_module_enabled(v_agape));
+  BEGIN PERFORM base_import_roster(v_agape, 2025, v_2025, true, 'ensaio'); r := r || '{"M02_desligado_envio_BLOQUEADO":false}';
+  EXCEPTION WHEN insufficient_privilege THEN r := r || '{"M02_desligado_envio_BLOQUEADO":true}'; END;
+  BEGIN PERFORM * FROM base_reenrollment_list(v_agape, 2026); r := r || '{"M03_desligado_lista_BLOQUEADA":false}';
+  EXCEPTION WHEN insufficient_privilege THEN r := r || '{"M03_desligado_lista_BLOQUEADA":true}'; END;
+  BEGIN PERFORM base_set_module(v_agape, true); r := r || '{"M04_admin_da_escola_liga_modulo_BLOQUEADO":false}';
+  EXCEPTION WHEN insufficient_privilege THEN r := r || '{"M04_admin_da_escola_liga_modulo_BLOQUEADO":true}'; END;
+  RESET ROLE;
+  -- liberação só no Ágape (como o Super Admin fará; aqui direto, sem usuário)
+  INSERT INTO student_base_settings (institution_id, module_enabled) VALUES (v_agape, true)
+  ON CONFLICT (institution_id) DO UPDATE SET module_enabled = true;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', '7edcaa5a-e9cb-42e1-a608-66b86a23f8ca', 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  r := r || jsonb_build_object('M05_ligado_membro_da_escola_ve', base_module_enabled(v_agape));
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', '4dff20a1-7000-489b-b9f2-e59bd272fd7c', 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  r := r || jsonb_build_object('M06_santa_teresa_nao_ve_o_proprio', NOT base_module_enabled(v_st));
+  r := r || jsonb_build_object('M07_santa_teresa_nao_ve_o_do_agape', NOT base_module_enabled(v_agape));
+  BEGIN PERFORM base_import_roster(v_st, 2025, v_2025, true, 'ensaio'); r := r || '{"M08_santa_teresa_envia_BLOQUEADO":false}';
+  EXCEPTION WHEN insufficient_privilege THEN r := r || '{"M08_santa_teresa_envia_BLOQUEADO":true}'; END;
+  RESET ROLE;
+
   -- ── 2. Admin da Ágape: PRÉVIA não grava nada ──
   PERFORM set_config('request.jwt.claims', json_build_object('sub', '0c8808a5-7a78-44de-8e1f-90e06dd7ba38', 'role', 'authenticated')::text, true);
   SET LOCAL ROLE authenticated;

@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { canSeeSettingsItem } from '../../lib/settingsAccess'
 import RosterUploadCard from './RosterUploadCard'
+import { useBaseModuleEnabled } from '../../lib/baseModule'
 
 type Toast = (msg: string, ok?: boolean) => void
 
@@ -52,6 +53,7 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
   const { user } = useAuth()
   const role = user?.role
   const [installed, setInstalled] = useState<boolean | null>(null)
+  const baseModule = useBaseModuleEnabled(institutionId)
 
   // Confere se a migration da base já foi aplicada neste ambiente.
   useEffect(() => {
@@ -73,7 +75,7 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {canSeeSettingsItem('integracoes.planilha', role) && <RosterUploadCard institutionId={institutionId} onToast={onToast} />}
+      {canSeeSettingsItem('integracoes.planilha', role) && baseModule === true && <RosterUploadCard institutionId={institutionId} onToast={onToast} />}
       {canSeeSettingsItem('integracoes.manual', role) && <ManualAggregateCard institutionId={institutionId} onToast={onToast} />}
       {canSeeSettingsItem('integracoes.activesoft', role) && <ActivesoftCard institutionId={institutionId} onToast={onToast} />}
       {canSeeSettingsItem('integracoes.config', role) && <BaseSettingsCard institutionId={institutionId} onToast={onToast} />}

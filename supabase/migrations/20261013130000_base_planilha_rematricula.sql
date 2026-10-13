@@ -152,6 +152,7 @@ CREATE OR REPLACE FUNCTION public.base_set_capacity(p_institution_id uuid, p_aca
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 BEGIN
   IF NOT base_user_can_read(p_institution_id) THEN RAISE EXCEPTION 'Sem permissão' USING ERRCODE = '42501'; END IF;
+  PERFORM base_require_module(p_institution_id);
   IF NOT EXISTS (SELECT 1 FROM school_grade_levels WHERE id = p_grade_level_id AND institution_id = p_institution_id) THEN
     RAISE EXCEPTION 'Série não pertence à escola' USING ERRCODE = '42501';
   END IF;
@@ -171,6 +172,7 @@ CREATE OR REPLACE FUNCTION public.base_mark_reenrolled(p_institution_id uuid, p_
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 BEGIN
   IF NOT base_user_can_see_list(p_institution_id) THEN RAISE EXCEPTION 'Sem permissão' USING ERRCODE = '42501'; END IF;
+  PERFORM base_require_module(p_institution_id);
   IF NOT EXISTS (SELECT 1 FROM students WHERE id = p_student_id AND institution_id = p_institution_id) THEN
     RAISE EXCEPTION 'Aluno não pertence à escola' USING ERRCODE = '42501';
   END IF;
@@ -292,6 +294,7 @@ BEGIN
   IF NOT base_user_can_read(p_institution_id) THEN
     RAISE EXCEPTION 'Sem permissão para enviar a base desta escola' USING ERRCODE = '42501';
   END IF;
+  PERFORM base_require_module(p_institution_id);
   IF jsonb_typeof(p_rows) <> 'array' THEN RAISE EXCEPTION 'p_rows precisa ser uma lista'; END IF;
   IF jsonb_array_length(p_rows) > 20000 THEN RAISE EXCEPTION 'Planilha grande demais (máx. 20.000 linhas)'; END IF;
 
@@ -483,6 +486,7 @@ RETURNS TABLE (student_id uuid, registration_code text, student_name text, guard
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO 'public' AS $$
 BEGIN
   IF NOT base_user_can_see_list(p_institution_id) THEN RAISE EXCEPTION 'Sem permissão' USING ERRCODE = '42501'; END IF;
+  PERFORM base_require_module(p_institution_id);
   RETURN QUERY
   SELECT r.student_id, r.registration_code, r.student_name, r.guardian_name, r.category,
          pg.name, r.prev_status_text, r.dest_grade_id, dg.name, r.cur_status_text, o.note, o.marked_at
@@ -503,6 +507,7 @@ RETURNS TABLE (grade_level_id uuid, grade_name text, sort_order int, is_terminal
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO 'public' AS $$
 BEGIN
   IF NOT base_user_can_see_list(p_institution_id) THEN RAISE EXCEPTION 'Sem permissão' USING ERRCODE = '42501'; END IF;
+  PERFORM base_require_module(p_institution_id);
   RETURN QUERY
   SELECT g.id, g.name, g.sort_order, g.is_terminal,
          COALESCE(b.base_prev_year, 0), COALESCE(b.reenrolled, 0), COALESCE(b.reenrolled_declared, 0), COALESCE(b.pending, 0),
@@ -516,3 +521,42 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.base_reenrollment_panel(uuid, int) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.base_reenrollment_panel(uuid, int) TO authenticated;
+
+-- ── 6. Módulo por escola (liberado pelo Super Admin) ────────────────────────
+-- Mesmo mecanismo das Transmissões (broadcast_settings.enabled): uma chave por
+-- escola, desligada por padrão, que só o Super Admin liga. Sem ela, a escola
+-- não vê o envio da planilha nem "Matrículas › Base de alunos", e o banco
+-- recusa envio, lista, painel, vagas e marcação.
+ALTER TABLE public.student_base_settings
+  ADD COLUMN IF NOT EXISTS module_enabled boolean NOT NULL DEFAULT false;
+
+-- O que a tela pergunta: membro da escola (qualquer papel) ou Super Admin.
+CREATE OR REPLACE FUNCTION public.base_module_enabled(p_institution_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public' AS $$
+  SELECT (user_is_school_member(p_institution_id) OR is_super_admin_user())
+     AND COALESCE((SELECT module_enabled FROM student_base_settings WHERE institution_id = p_institution_id), false)
+$$;
+REVOKE ALL ON FUNCTION public.base_module_enabled(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.base_module_enabled(uuid) TO authenticated;
+
+-- Trava interna das funções da planilha/lista (sem checar papel: isso é das próprias funções).
+CREATE OR REPLACE FUNCTION public.base_require_module(p_institution_id uuid)
+RETURNS void LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO 'public' AS $$
+BEGIN
+  IF NOT COALESCE((SELECT module_enabled FROM student_base_settings WHERE institution_id = p_institution_id), false) THEN
+    RAISE EXCEPTION 'Módulo Base de alunos não liberado para esta escola' USING ERRCODE = '42501';
+  END IF;
+END $$;
+REVOKE ALL ON FUNCTION public.base_require_module(uuid) FROM PUBLIC, anon, authenticated;
+
+-- Liga/desliga: só Super Admin.
+CREATE OR REPLACE FUNCTION public.base_set_module(p_institution_id uuid, p_enabled boolean)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+BEGIN
+  IF NOT is_super_admin_user() THEN RAISE EXCEPTION 'Só o Super Admin libera módulos' USING ERRCODE = '42501'; END IF;
+  INSERT INTO student_base_settings (institution_id, module_enabled, updated_by, updated_at)
+  VALUES (p_institution_id, p_enabled, auth.uid(), now())
+  ON CONFLICT (institution_id) DO UPDATE SET module_enabled = EXCLUDED.module_enabled, updated_by = EXCLUDED.updated_by, updated_at = now();
+END $$;
+REVOKE ALL ON FUNCTION public.base_set_module(uuid, boolean) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.base_set_module(uuid, boolean) TO authenticated;
