@@ -194,3 +194,41 @@ export function normalize(step: Step, o: Obj, names: boolean): Staged | null {
     default:            return null
   }
 }
+
+// ── teste de conexão ──
+// Resultado de uma rota: passou?, status HTTP (0 = sem resposta) e mensagem
+// curta (o "detail" da API, nunca o token nem dados).
+export type Probe = { ok: boolean; status: number; msg: string; fields?: string[] }
+
+export function apiMessage(status: number, bodyText: string): string {
+  let m = ''
+  try {
+    const b = JSON.parse(bodyText)
+    m = String(b?.detail ?? b?.message ?? b?.erro ?? b?.error ?? '')
+  } catch { m = '' }
+  if (!m) m = status === 401 ? 'credencial recusada' : status === 403 ? 'sem permissão para esta rota'
+    : status === 404 ? 'rota não encontrada' : status === 0 ? 'sem resposta (tempo esgotado ou rede)' : `HTTP ${status}`
+  return m.replace(/\s+/g, ' ').trim().slice(0, 140)
+}
+
+// Escolhe a autenticação pela que mais passou (empate: a ordem dada, Bearer
+// primeiro — é o que o servidor anuncia em WWW-Authenticate).
+export function pickScheme(results: Record<string, Record<string, Probe>>, order: string[] = ['Bearer', 'Token']) {
+  let best = order[0]
+  let bestOk = -1
+  for (const s of order) {
+    const n = Object.values(results[s] ?? {}).filter(p => p.ok).length
+    if (n > bestOk) { best = s; bestOk = n }
+  }
+  const routes = results[best] ?? {}
+  const total = Object.keys(routes).length
+  return {
+    scheme: bestOk > 0 ? best : null,     // nenhuma rota passou: nenhuma autenticação aceita
+    shown: best,                          // a que aparece na tela
+    okCount: Math.max(bestOk, 0),
+    total,
+    allOk: total > 0 && bestOk === total,
+    routes,
+    tried: Object.fromEntries(order.map(s => [s, Object.values(results[s] ?? {}).filter(p => p.ok).length])),
+  }
+}

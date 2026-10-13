@@ -93,7 +93,8 @@ export default function ActivesoftWizard({ institutionId, onToast }: { instituti
   const tested = !!conn?.auth_scheme
   const steps = [
     { n: 1, title: 'Conectar', done: !!conn?.token_last4, sub: conn?.token_last4 ? `token ••••${conn.token_last4}` : 'cole o token do Activesoft' },
-    { n: 2, title: 'Testar', done: tested && Object.values(conn?.scopes_ok ?? {}).every(v => v === true), sub: conn?.last_test_at ? `testado em ${new Date(conn.last_test_at).toLocaleString('pt-BR')}` : 'confere as rotas de leitura' },
+    { n: 2, title: 'Testar', done: tested && Object.entries(conn?.scopes_ok ?? {}).filter(([k]) => !k.startsWith('_'))
+        .every(([, v]) => v === true || (typeof v === 'object' && (v as { ok?: boolean })?.ok === true)), sub: conn?.last_test_at ? `testado em ${new Date(conn.last_test_at).toLocaleString('pt-BR')}` : 'confere as rotas de leitura' },
     { n: 3, title: 'Mapear', done: run?.status === 'aguardando_confirmacao' || run?.status === 'ok' || run?.status === 'ok_com_avisos', sub: 'unidades, cursos, turmas e séries' },
     { n: 4, title: 'Carga', done: run?.status === 'ok' || run?.status === 'ok_com_avisos', sub: conn?.last_success_at ? `última carga ${new Date(conn.last_success_at).toLocaleString('pt-BR')}` : 'contar, conferir e gravar' },
   ]
@@ -117,7 +118,7 @@ export default function ActivesoftWizard({ institutionId, onToast }: { instituti
             {open === s.n && enabled && (
               <div style={{ marginTop: 12 }}>
                 {s.n === 1 && <StepConnect institutionId={institutionId} conn={conn} onDone={async () => { await load(); setOpen(2) }} onToast={onToast} />}
-                {s.n === 2 && <StepTest institutionId={institutionId} conn={conn} onDone={async () => { await load(); setOpen(3) }} />}
+                {s.n === 2 && <StepTest institutionId={institutionId} conn={conn} onDone={async (accepted) => { await load(); setOpen(accepted ? 3 : 2) }} />}
                 {s.n === 3 && <StepMap institutionId={institutionId} run={run} namesAllowed={namesAllowed} gradeLevels={gradeLevels}
                                 onChanged={load} onReady={() => setOpen(4)} />}
                 {s.n === 4 && <StepLoad institutionId={institutionId} run={run} onChanged={load} onToast={onToast} />}
@@ -197,44 +198,99 @@ function StepConnect({ institutionId, conn, onDone, onToast }: { institutionId: 
 }
 
 // ── 2. Testar ──
-function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn: Conn | null; onDone: () => void }) {
+// Resultado sempre visível: o da chamada que acabou de rodar ou, ao reabrir, o
+// que ficou gravado em erp_connections (scopes_ok). Formato por rota:
+// { ok, status, msg } (testes antigos gravavam true ou um texto).
+type RouteResult = { ok: boolean; status: number | null; msg: string }
+function readScopes(scopes: Record<string, unknown> | undefined): Record<string, RouteResult> {
+  const out: Record<string, RouteResult> = {}
+  for (const [k, v] of Object.entries(scopes ?? {})) {
+    if (k.startsWith('_')) continue
+    if (v === true) out[k] = { ok: true, status: null, msg: 'ok' }
+    else if (v && typeof v === 'object') {
+      const o = v as { ok?: boolean; status?: number; msg?: string }
+      out[k] = { ok: o.ok === true, status: o.status ?? null, msg: o.msg ?? '' }
+    } else if (typeof v === 'string') out[k] = { ok: false, status: null, msg: v }
+  }
+  return out
+}
+
+function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn: Conn | null; onDone: (accepted: boolean) => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [fresh, setFresh] = useState<{ scopes: Record<string, unknown>; fields: Record<string, string[]>; scheme: string | null; shown?: string; base_url?: string } | null>(null)
   const [showFields, setShowFields] = useState(false)
+
   const test = async () => {
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setFresh(null)
+    let accepted = false
     try {
-      const r = await invoke('test', institutionId)
-      if (!r?.ok && r?.error) setError(r.error)
-      await onDone()
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
-    finally { setBusy(false) }
+      // a função testa 14 chamadas em paralelo (15 s cada); 60 s é folga de sobra
+      const r = await Promise.race([
+        invoke('test', institutionId),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('O teste demorou mais de 60 s e foi interrompido. Tente de novo em alguns minutos.')), 60_000)),
+      ]) as { ok?: boolean; any_ok?: boolean; scheme?: string | null; shown?: string; base_url?: string; scopes?: Record<string, unknown>; fields?: Record<string, string[]>; error?: string | null }
+      if (!r || !r.scopes) throw new Error('A função de teste não devolveu resultado.')
+      setFresh({ scopes: r.scopes, fields: r.fields ?? {}, scheme: r.scheme ?? null, shown: r.shown, base_url: r.base_url })
+      if (r.error) setError(r.error)
+      accepted = !!r.any_ok
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+      onDone(accepted)
+    }
   }
-  const scopes = conn?.scopes_ok ?? {}
+
+  const scopesRaw = fresh?.scopes ?? conn?.scopes_ok ?? {}
+  const routes = readScopes(scopesRaw)
+  const auth = (scopesRaw as { _auth?: { aceita?: string | null; mostrada?: string; endereco?: string } })._auth
+  const scheme = fresh ? fresh.scheme : conn?.auth_scheme ?? null
+  const fields = fresh?.fields ?? conn?.fields_seen ?? {}
+  const savedError = !fresh && !busy ? conn?.last_error : null
+  const hasResult = Object.keys(routes).length > 0
+
   return (
     <div>
       <p style={small}>Faz uma chamada de 1 registro em cada rota de leitura permitida. Nada é gravado; guardamos só os nomes dos campos que a API devolve.</p>
       <button onClick={test} disabled={busy} style={busy ? off(btn) : btn}>
-        {busy ? <Loader2 size={14} className="animate-spin" /> : <PlayCircle size={14} />} Testar conexão
+        {busy ? <Loader2 size={14} className="animate-spin" /> : <PlayCircle size={14} />} {busy ? 'Testando…' : 'Testar conexão'}
       </button>
-      {error && <p style={{ ...small, color: '#B91C1C' }}><AlertTriangle size={13} style={{ verticalAlign: -2 }} /> {error}</p>}
-      {Object.keys(scopes).length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 6, marginTop: 12 }}>
-          {Object.keys(ROUTE_LABEL).map(k => (
-            <div key={k} style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', color: scopes[k] === true ? '#047857' : '#B91C1C' }}>
-              {scopes[k] === true ? <CheckCircle2 size={14} /> : <XCircle size={14} />} {ROUTE_LABEL[k]}
-              {scopes[k] !== true && scopes[k] !== undefined && <span style={{ color: '#94A3B8' }}>({String(scopes[k])})</span>}
-            </div>
-          ))}
+      {busy && <p style={small}>Testando as 7 rotas… pode levar até meio minuto.</p>}
+      {!busy && (error || savedError) && (
+        <p style={{ ...small, color: '#B91C1C' }}><AlertTriangle size={13} style={{ verticalAlign: -2 }} /> {error || savedError}</p>
+      )}
+      {!busy && !hasResult && conn?.last_test_at && !error && !savedError && (
+        <p style={small}>O último teste não deixou resultado por rota. Clique em "Testar conexão" para ver o detalhe.</p>
+      )}
+      {!busy && hasResult && (
+        <div style={{ marginTop: 12, border: '1px solid #F1F5F9', borderRadius: 10, overflow: 'hidden' }}>
+          {Object.keys(ROUTE_LABEL).filter(k => routes[k]).map(k => {
+            const r = routes[k]
+            return (
+              <div key={k} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', borderTop: '1px solid #F1F5F9', fontSize: 12 }}>
+                {r.ok ? <CheckCircle2 size={14} color="#047857" /> : <XCircle size={14} color="#B91C1C" />}
+                <span style={{ width: 190, color: '#1A2B4A', fontWeight: 600 }}>{ROUTE_LABEL[k]}</span>
+                <span style={{ width: 54, color: r.ok ? '#047857' : '#B91C1C', fontFamily: 'monospace' }}>{r.status ?? '—'}</span>
+                <span style={{ flex: 1, color: r.ok ? '#64748B' : '#B91C1C' }}>{r.msg}</span>
+              </div>
+            )
+          })}
         </div>
       )}
-      {conn?.auth_scheme && <p style={{ ...small, marginTop: 8 }}>Autenticação aceita: {conn.auth_scheme}.</p>}
-      {Object.keys(conn?.fields_seen ?? {}).length > 0 && (
+      {!busy && hasResult && (
+        <p style={{ ...small, marginTop: 8 }}>
+          Autenticação aceita: <strong>{scheme ?? 'nenhuma'}</strong>
+          {!scheme && (auth?.mostrada || fresh?.shown) && <> (resultado acima com {auth?.mostrada ?? fresh?.shown})</>}
+          {' · '}endereço: <span style={{ fontFamily: 'monospace' }}>{fresh?.base_url ?? auth?.endereco ?? conn?.api_base_url}</span>
+        </p>
+      )}
+      {!busy && Object.keys(fields).length > 0 && (
         <div>
           <button onClick={() => setShowFields(!showFields)} style={{ all: 'unset', cursor: 'pointer', fontSize: 12, color: '#64748B' }}>
             {showFields ? '▾' : '▸'} Campos que a API devolve (só os nomes)
           </button>
-          {showFields && Object.entries(conn!.fields_seen).map(([k, v]) => (
+          {showFields && Object.entries(fields).map(([k, v]) => (
             <p key={k} style={{ fontSize: 11, color: '#64748B', margin: '4px 0', fontFamily: 'monospace' }}><strong>{ROUTE_LABEL[k] ?? k}:</strong> {v.join(', ') || '—'}</p>
           ))}
         </div>
