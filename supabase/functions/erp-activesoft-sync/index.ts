@@ -15,7 +15,7 @@
 // nunca vai para log, erro ou resposta.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { PAGE_SIZE, ROUTES, ForbiddenRoute, routeUrl, readPage, fieldNames, plan, normalize, type RouteKey } from './adapter.ts'
+import { PAGE_SIZE, ROUTES, ForbiddenRoute, routeUrl, readPage, fieldNames, plan, normalize, apiMessage, pickScheme, type RouteKey, type Probe } from './adapter.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -75,7 +75,7 @@ async function loadConn(sb: Supa, inst: string) {
   return { baseUrl: conn.api_base_url as string, scheme: conn.auth_scheme as string | null, token: token as string }
 }
 
-class ApiError extends Error { constructor(public status: number, message: string) { super(message) } }
+class ApiError extends Error { constructor(public status: number, message: string, public detail = '') { super(message) } }
 
 // GET numa rota permitida, com 3 tentativas em 429/5xx/timeout.
 async function apiGet(baseUrl: string, route: string, params: Record<string, string | number | boolean>, scheme: string, token: string) {
@@ -89,7 +89,10 @@ async function apiGet(baseUrl: string, route: string, params: Record<string, str
       const res = await fetch(url, { method: 'GET', headers: { Authorization: `${scheme} ${token}`, Accept: 'application/json' }, signal: ctrl.signal })
       last = res.status
       if (res.status === 429 || res.status >= 500) continue
-      if (!res.ok) throw new ApiError(res.status, `Activesoft respondeu ${res.status} em ${route}`)
+      if (!res.ok) {
+        const detail = apiMessage(res.status, await res.text().catch(() => ''))
+        throw new ApiError(res.status, `Activesoft respondeu ${res.status} em ${route}: ${detail}`, detail)
+      }
       return await res.json()
     } catch (e) {
       if (e instanceof ApiError) throw e
@@ -99,39 +102,56 @@ async function apiGet(baseUrl: string, route: string, params: Record<string, str
   throw new ApiError(last, last === -1 ? `Activesoft não respondeu em ${route}` : `Activesoft respondeu ${last} em ${route}`)
 }
 
+// Uma chamada (sem repetir) para o teste: devolve status e mensagem curta.
+async function probe(baseUrl: string, key: RouteKey, scheme: string, token: string): Promise<Probe> {
+  const params: Record<string, string | number | boolean> = { limit: 1, offset: 0 }
+  if (key === 'enturmacao') params.situacao_sistema = 'A'
+  let url: string
+  try { url = routeUrl(baseUrl, ROUTES[key], params) } catch (e) { return { ok: false, status: 0, msg: errText(e) } }
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), 15_000)
+  try {
+    const res = await fetch(url, { method: 'GET', headers: { Authorization: `${scheme} ${token}`, Accept: 'application/json' }, signal: ctrl.signal })
+    const text = await res.text().catch(() => '')
+    if (!res.ok) return { ok: false, status: res.status, msg: apiMessage(res.status, text) }
+    let body: unknown = null
+    try { body = JSON.parse(text) } catch { return { ok: false, status: res.status, msg: 'resposta não é JSON' } }
+    return { ok: true, status: res.status, msg: 'ok', fields: fieldNames(readPage(body, 0).items) }   // só os nomes dos campos
+  } catch {
+    return { ok: false, status: 0, msg: apiMessage(0, '') }
+  } finally { clearTimeout(t) }
+}
+
+// Teste: as 7 rotas com Bearer e com Token (em paralelo, 1 tentativa cada).
+// Guarda por rota { ok, status, msg }, a autenticação aceita e só os NOMES dos
+// campos. Nada de dados, nada de token.
 async function actionTest(sb: Supa, inst: string) {
   const { baseUrl, token } = await loadConn(sb, inst)
+  const keys = Object.keys(ROUTES) as RouteKey[]
+  const results: Record<string, Record<string, Probe>> = {}
+  for (const scheme of ['Bearer', 'Token']) {
+    const probes = await Promise.all(keys.map(k => probe(baseUrl, k, scheme, token)))
+    results[scheme] = Object.fromEntries(keys.map((k, i) => [k, probes[i]]))
+    if (probes.every(p => p.ok)) break                    // Bearer passou em tudo: nem tenta Token
+  }
+  const pick = pickScheme(results)
   const scopes: Record<string, unknown> = {}
   const fields: Record<string, string[]> = {}
-  let scheme: string | null = null
-
-  // forma de autenticação: a que a 1ª rota aceitar
-  for (const s of ['Bearer', 'Token']) {
-    try { await apiGet(baseUrl, ROUTES.unidades, { limit: 1, offset: 0 }, s, token); scheme = s; break }
-    catch (e) { if (!(e instanceof ApiError) || (e.status !== 401 && e.status !== 403)) { scopes.unidades = errText(e); break } }
+  for (const [k, p] of Object.entries(pick.routes)) {
+    scopes[k] = { ok: p.ok, status: p.status, msg: p.msg }
+    if (p.ok && p.fields) fields[k] = p.fields
   }
-  if (!scheme) {
-    const err = scopes.unidades ? String(scopes.unidades) : 'Token recusado pelo Activesoft (401/403)'
-    await sb.from('erp_connections').update({ status: 'token_invalido', scopes_ok: scopes, last_error: err, last_error_at: new Date().toISOString(),
-      last_test_at: new Date().toISOString(), auth_scheme: null }).eq('institution_id', inst).eq('provider', 'activesoft')
-    return { ok: false, error: err, scopes }
-  }
-  for (const [key, route] of Object.entries(ROUTES) as [RouteKey, string][]) {
-    try {
-      const params: Record<string, string | number | boolean> = { limit: 1, offset: 0 }
-      if (key === 'enturmacao') params.situacao_sistema = 'A'
-      const body = await apiGet(baseUrl, route, params, scheme, token)
-      const page = readPage(body, 0)
-      scopes[key] = true
-      fields[key] = fieldNames(page.items)        // só os nomes dos campos
-    } catch (e) { scopes[key] = errText(e) }
-  }
-  const allOk = Object.values(scopes).every(v => v === true)
+  scopes._auth = { aceita: pick.scheme, mostrada: pick.shown, tentativas: pick.tried, endereco: baseUrl }
+  const now = new Date().toISOString()
+  const err = pick.allOk ? null
+    : pick.okCount === 0 ? `Nenhuma rota respondeu (${pick.shown}): ${Object.values(pick.routes)[0]?.msg ?? 'sem resposta'}`
+    : `${pick.total - pick.okCount} de ${pick.total} rotas falharam no teste`
   await sb.from('erp_connections').update({
-    auth_scheme: scheme, scopes_ok: scopes, fields_seen: fields, last_test_at: new Date().toISOString(),
-    status: 'pausada', last_error: allOk ? null : 'Algumas rotas não responderam no teste',
+    auth_scheme: pick.scheme, scopes_ok: scopes, fields_seen: fields, last_test_at: now,
+    status: pick.okCount === 0 ? 'token_invalido' : 'pausada',
+    last_error: err, last_error_at: err ? now : null,
   }).eq('institution_id', inst).eq('provider', 'activesoft')
-  return { ok: allOk, scheme, scopes, fields }
+  return { ok: pick.allOk, any_ok: pick.okCount > 0, scheme: pick.scheme, shown: pick.shown, base_url: baseUrl, scopes, fields, error: err }
 }
 
 function errText(e: unknown) {
