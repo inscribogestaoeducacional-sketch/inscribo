@@ -2,6 +2,7 @@
 //
 // Fase 2 · marco 1 — Configurações → Integrações. É o MESMO fluxo para todas as
 // escolas (piloto incluso), sem script nem código por escola:
+//   0. Relatório de alunos por planilha (RosterUploadCard; prévia antes de gravar);
 //   1. Lançamento manual por série (funciona já no marco 1);
 //   2. Activesoft: guardar o token (vai pro Vault; aqui só aparecem os 4 últimos
 //      dígitos). Testar conexão, mapear unidades/cursos/turmas e a primeira
@@ -16,6 +17,8 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { canSeeSettingsItem } from '../../lib/settingsAccess'
+import RosterUploadCard from './RosterUploadCard'
+import { useBaseModuleEnabled } from '../../lib/baseModule'
 
 type Toast = (msg: string, ok?: boolean) => void
 
@@ -50,6 +53,7 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
   const { user } = useAuth()
   const role = user?.role
   const [installed, setInstalled] = useState<boolean | null>(null)
+  const baseModule = useBaseModuleEnabled(institutionId)
 
   // Confere se a migration da base já foi aplicada neste ambiente.
   useEffect(() => {
@@ -71,6 +75,7 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {canSeeSettingsItem('integracoes.planilha', role) && baseModule === true && <RosterUploadCard institutionId={institutionId} onToast={onToast} />}
       {canSeeSettingsItem('integracoes.manual', role) && <ManualAggregateCard institutionId={institutionId} onToast={onToast} />}
       {canSeeSettingsItem('integracoes.activesoft', role) && <ActivesoftCard institutionId={institutionId} onToast={onToast} />}
       {canSeeSettingsItem('integracoes.config', role) && <BaseSettingsCard institutionId={institutionId} onToast={onToast} />}

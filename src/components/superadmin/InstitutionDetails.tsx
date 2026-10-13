@@ -9,6 +9,7 @@ import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
 import AttendeesPicker from '../shared/AttendeesPicker'
 import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError'
 import InstitutionBroadcastTab from './InstitutionBroadcastTab'
+import InstitutionBaseModuleTab from './InstitutionBaseModuleTab'
 import {
   Building2, Users, DollarSign, FileText, CheckCircle2,
   Clock, AlertTriangle, ExternalLink, Copy, RefreshCw,
@@ -418,7 +419,7 @@ export default function InstitutionDetails() {
   const [advancingPhase,     setAdvancingPhase]     = useState(false)
 
   // Gestão da escola tabs
-  const [mgmtTab, setMgmtTab] = useState<'users' | 'whatsapp' | 'financial' | 'templates' | 'campaigns' | 'broadcast'>('users')
+  const [mgmtTab, setMgmtTab] = useState<'users' | 'whatsapp' | 'financial' | 'templates' | 'campaigns' | 'broadcast' | 'base'>('users')
 
   // Templates tab state
   const [waTemplates, setWaTemplates] = useState<any[]>([])
@@ -2141,6 +2142,7 @@ export default function InstitutionDetails() {
                   { id: 'financial', label: 'Financeiro' },
                   { id: 'campaigns', label: 'Campanhas' },
                   { id: 'broadcast', label: 'Transmissões' },
+                  { id: 'base',      label: 'Base de alunos' },
                 ] as const).map(t => (
                   <button
                     key={t.id}
@@ -2575,6 +2577,9 @@ export default function InstitutionDetails() {
 
               {/* Tab: Transmissões (resumo, configuração do módulo, crédito) */}
               {mgmtTab === 'broadcast' && id && <InstitutionBroadcastTab institutionId={id} />}
+
+              {/* Tab: Base de alunos (módulo por escola) */}
+              {mgmtTab === 'base' && id && <InstitutionBaseModuleTab institutionId={id} />}
 
               {/* Tab: Campanhas */}
               {mgmtTab === 'campaigns' && (

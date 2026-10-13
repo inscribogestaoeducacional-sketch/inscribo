@@ -4,12 +4,15 @@ import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
+import { useBaseModuleEnabled } from '../../lib/baseModule'
 import {
   LayoutDashboard, Users, BookUser, Calendar,
-  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList, X, Megaphone, Send, Store
+  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList, X, Megaphone, Send, Store, GraduationCap
 } from 'lucide-react'
 
-const NAV_CFG = [
+type NavItem = { path: string; label: string; iconBg: string; iconColor: string; Icon: typeof Users; roles: string[]; module: string; group?: string }
+
+const NAV_CFG: NavItem[] = [
   { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager'],        module: 'inicio' },
   { path: '/atendente',      label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['user'],                   module: 'inicio' },
   { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: Users,           roles: ['admin','manager','user'], module: 'leads' },
@@ -19,6 +22,8 @@ const NAV_CFG = [
   { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager','user'], module: 'captacao' },
   { path: '/vitrine',         label: 'Vitrine',         iconBg: '#E6F7F5', iconColor: '#00A896', Icon: Store,           roles: ['admin','manager','user'], module: 'vitrine' },
   { path: '/transmissoes',    label: 'Transmissões',    iconBg: '#E0F2FE', iconColor: '#0284C7', Icon: Send,            roles: ['admin','manager','user'], module: 'transmissoes' },
+  // Sub-item do grupo "Matrículas" (posição final na Fase 6.3); só com o módulo liberado pela Áion
+  { path: '/base-alunos',     label: 'Base de alunos',  iconBg: '#E6F7F5', iconColor: '#0D9488', Icon: GraduationCap,   roles: ['admin','manager','user'], module: 'base_alunos', group: 'Matrículas' },
   { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'], module: 'relatorios' },
   { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias' },
   { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFF7ED', iconColor: '#F97316', Icon: ClipboardList,   roles: ['admin','manager'], module: 'pesquisas' },
@@ -89,9 +94,18 @@ export default function Sidebar() {
 
   // Transmissões só aparece com o módulo liberado pela Áion pra escola.
   const broadcastEnabled = useBroadcastEnabled(user?.institution_id)
+  // Base de alunos só com o módulo liberado pela Áion pra escola.
+  const baseEnabled = useBaseModuleEnabled(user?.institution_id)
   const navItems = NAV_CFG.filter(item =>
     item.roles.includes(user?.role || 'user') && isModuleEnabled(item.module)
     && (item.module !== 'transmissoes' || broadcastEnabled === true)
+    && (item.module !== 'base_alunos' || baseEnabled === true)
+  )
+  // Título do grupo antes do primeiro sub-item visível (sem sub-item visível, sem título)
+  const navEntries: (NavItem | { header: string })[] = navItems.flatMap((it, i) =>
+    it.group && navItems[i - 1]?.group !== it.group ? [{ header: it.group }, it] : [it])
+  const groupHeader = (h: string) => (
+    <div key={'grp-' + h} style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', padding: '10px 10px 2px', flexShrink: 0 }}>{h}</div>
   )
   const initials = (user?.full_name || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
   const userName = user?.full_name || 'Usuário'
@@ -129,7 +143,9 @@ export default function Sidebar() {
           </div>
 
           {/* Nav */}
-          {navItems.map(item => {
+          {navEntries.map(entry => {
+            if ('header' in entry) return groupHeader(entry.header)
+            const item = entry
             const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
             const Icon = item.Icon
             const badgeCount = badgeCountByPath[item.path] || 0
@@ -137,7 +153,7 @@ export default function Sidebar() {
             return (
               <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 10px', width: '100%', height: 44, borderRadius: 12,
+                padding: item.group ? '9px 10px 9px 20px' : '9px 10px', width: '100%', height: 44, borderRadius: 12,
                 background: active ? item.iconBg : 'transparent',
                 border: active ? `1.5px solid ${item.iconColor}25` : '1.5px solid transparent',
                 textDecoration: 'none', boxSizing: 'border-box', flexShrink: 0, position: 'relative',
@@ -228,7 +244,9 @@ export default function Sidebar() {
       )}
 
       {/* Nav items */}
-      {navItems.map(item => {
+      {navEntries.map(entry => {
+        if ('header' in entry) return expanded ? groupHeader(entry.header) : null
+        const item = entry
         const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
         const Icon = item.Icon
 
@@ -237,7 +255,7 @@ export default function Sidebar() {
 
         if (!expanded) {
           return (
-            <Tooltip key={item.path} text={item.label}>
+            <Tooltip key={item.path} text={item.group ? `${item.group} › ${item.label}` : item.label}>
               <Link to={item.path} style={{
                 width: 44, height: 44, borderRadius: 14,
                 background: active ? item.iconBg : 'transparent',
@@ -278,7 +296,7 @@ export default function Sidebar() {
               display: 'flex',
               alignItems: 'center',
               gap: 10,
-              padding: '9px 10px',
+              padding: item.group ? '9px 10px 9px 20px' : '9px 10px',
               width: '100%',
               height: 44,
               borderRadius: 12,
