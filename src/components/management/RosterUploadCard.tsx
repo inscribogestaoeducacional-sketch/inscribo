@@ -6,7 +6,7 @@
 // nada) e só grava depois da confirmação da escola. Reenviar o mesmo relatório
 // atualiza pela matrícula, sem duplicar.
 // LGPD: nomes só saem do navegador com a opção marcada (depois do aditivo assinado).
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, Upload } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fileToMatrix, parseRoster, textToMatrix, type RosterParse } from '../../lib/rosterImport'
@@ -40,6 +40,11 @@ export default function RosterUploadCard({ institutionId, onToast }: { instituti
   const [file, setFile] = useState<File | null>(null)
   const [pasted, setPasted] = useState('')
   const [includeNames, setIncludeNames] = useState(false)
+  // Nomes só com o aditivo LGPD registrado pela Áion (o banco também descarta sem ele)
+  const [namesAllowed, setNamesAllowed] = useState(false)
+  useEffect(() => {
+    supabase.rpc('base_names_allowed', { p_institution_id: institutionId }).then(({ data }) => setNamesAllowed(data === true))
+  }, [institutionId])
   const [parsed, setParsed] = useState<RosterParse | null>(null)
   const [summary, setSummary] = useState<Summary | null>(null)
   const [confirmed, setConfirmed] = useState(false)
@@ -60,7 +65,7 @@ export default function RosterUploadCard({ institutionId, onToast }: { instituti
       const matrix = mode === 'arquivo'
         ? (file ? await fileToMatrix(file) : [])
         : textToMatrix(pasted)
-      const p = parseRoster(matrix, { includeNames })
+      const p = parseRoster(matrix, { includeNames: includeNames && namesAllowed })
       if (p.rows.length === 0) {
         setError('Nenhum aluno encontrado. O relatório precisa ter as colunas Matrícula e Situação, e a série (no bloco "Segmento / Série / Ano / Turma" ou numa coluna).')
         return
@@ -96,6 +101,13 @@ export default function RosterUploadCard({ institutionId, onToast }: { instituti
   return (
     <div style={card}>
       <h3 style={h3}><FileSpreadsheet size={16} color="#00A896" /> Enviar relatório de alunos</h3>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '4px 0 12px' }}>
+        {['1 · Escolha o arquivo ou cole o texto', '2 · Confira o resumo', '3 · Grave'].map((t, i) => {
+          const on = i === 0 ? !summary : i === 1 ? !!summary?.previa : !!summary && !summary.previa
+          return <span key={t} style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+            background: on ? '#E6F7F5' : '#F1F5F9', color: on ? '#00A896' : '#94A3B8' }}>{t}</span>
+        })}
+      </div>
       <p style={hint}>
         Envie a relação de alunos exportada do sistema da escola (blocos <em>Segmento / Série / Ano / Turma</em> com as colunas
         Nº, Matrícula, Nome do aluno e Situação, ou uma planilha com Matrícula, Série e Situação). Envie o ano anterior e o atual:
@@ -129,12 +141,15 @@ export default function RosterUploadCard({ institutionId, onToast }: { instituti
           style={{ ...input, width: '100%', fontFamily: 'monospace', fontSize: 12, marginBottom: 12 }} />
       )}
 
-      <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: '#475569', marginBottom: 14 }}>
-        <input type="checkbox" checked={includeNames} onChange={e => { setIncludeNames(e.target.checked); reset() }} style={{ marginTop: 2 }} />
+      <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: namesAllowed ? '#475569' : '#94A3B8', marginBottom: 14 }}>
+        <input type="checkbox" checked={includeNames && namesAllowed} disabled={!namesAllowed}
+          onChange={e => { setIncludeNames(e.target.checked); reset() }} style={{ marginTop: 2 }} />
         <span>
           <strong>Guardar nomes de alunos e responsáveis.</strong> Desmarcado, só matrícula, série e situação saem do seu computador
-          (os alunos aparecem como "Matrícula 123"). Marque somente depois do aditivo de proteção de dados (LGPD) assinado. CPF nunca é
-          guardado: vira um código que não permite voltar ao número.
+          (os alunos aparecem como "Matrícula 123").{' '}
+          {namesAllowed
+            ? 'CPF nunca é guardado: vira um código que não permite voltar ao número.'
+            : 'Disponível depois do aditivo de proteção de dados (LGPD) assinado e registrado pela Áion.'}
         </span>
       </label>
 
