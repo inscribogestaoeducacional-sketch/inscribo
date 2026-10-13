@@ -8,11 +8,12 @@
 //   * Planilha ou relatório — RosterUploadCard (admin e gestor);
 //   * Lançamento manual — ManualAggregateCard (admin e gestor).
 // Planilha e Activesoft só com o módulo "Base de alunos" liberado pela Áion.
-// As demais integrações (WhatsApp, anúncios da Meta) ficam em "Outras integrações".
+// Sem WhatsApp nem Meta aqui: o WhatsApp tem a área dele nas Configurações e
+// os anúncios da Meta ficam no grupo de Campanha. Um único campo de seleção.
 // Toda escrita passa por funções do banco; o navegador não insere direto em
 // nenhuma tabela da base.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { Database, Plug, Save, Loader2, AlertTriangle, FileSpreadsheet } from 'lucide-react'
+import { Database, Plug, Save, Loader2, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
@@ -54,7 +55,7 @@ type SourceKey = 'activesoft' | 'planilha' | 'manual'
 type SourceState = 'ativa' | 'nao_configurada' | 'em_breve'
 const STATE_BADGE: Record<SourceState, { label: string; color: string; bg: string }> = {
   ativa:           { label: 'ativa',           color: '#047857', bg: '#ECFDF5' },
-  nao_configurada: { label: 'não configurada', color: '#B45309', bg: '#FFFBEB' },
+  nao_configurada: { label: 'não configurada', color: '#92400E', bg: '#FEF3C7' },
   em_breve:        { label: 'em breve',        color: '#64748B', bg: '#F1F5F9' },
 }
 
@@ -65,9 +66,8 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
   const baseModule = useBaseModuleEnabled(institutionId)
   const [states, setStates] = useState<Record<SourceKey, SourceState> | null>(null)
   const [primary, setPrimary] = useState<string | null>(null)
-  const [chosen, setChosen] = useState<SourceKey | null>(null)
+  const [chosen, setChosen] = useState<SourceKey | ''>('')
   const [showSettings, setShowSettings] = useState(false)
-  const [others, setOthers] = useState<{ whatsapp: boolean; meta: boolean } | null>(null)
 
   // Confere se a migration da base já foi aplicada neste ambiente.
   useEffect(() => {
@@ -77,7 +77,7 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
     return () => { alive = false }
   }, [institutionId])
 
-  // Estado de cada fonte (ativa / não configurada / em breve) e das outras integrações
+  // Estado de cada fonte (ativa / não configurada / em breve)
   useEffect(() => {
     if (!installed || baseModule === null) return
     let alive = true
@@ -86,19 +86,14 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
       supabase.from('sync_runs').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId).eq('source', 'planilha').in('status', ['ok', 'ok_com_avisos']),
       supabase.from('class_aggregates').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId),
       supabase.from('student_base_settings').select('primary_source').eq('institution_id', institutionId).maybeSingle(),
-      supabase.from('whatsapp_phone_numbers').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId).eq('is_active', true),
-      supabase.from('capture_triggers').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId).eq('channel', 'meta_ads'),
-    ]).then(([erp, pl, ag, st, wa, meta]) => {
+    ]).then(([erp, pl, ag, st]) => {
       if (!alive) return
-      const s: Record<SourceKey, SourceState> = {
+      setStates({
         activesoft: !baseModule ? 'em_breve' : (erp.data as { status?: string } | null)?.status === 'ativa' ? 'ativa' : 'nao_configurada',
         planilha:   !baseModule ? 'em_breve' : (pl.count ?? 0) > 0 ? 'ativa' : 'nao_configurada',
         manual:     (ag.count ?? 0) > 0 ? 'ativa' : 'nao_configurada',
-      }
-      setStates(s)
-      const p = (st.data as { primary_source?: string } | null)?.primary_source ?? null
-      setPrimary(p)
-      setOthers({ whatsapp: (wa.count ?? 0) > 0, meta: (meta.count ?? 0) > 0 })
+      })
+      setPrimary((st.data as { primary_source?: string } | null)?.primary_source ?? null)
     })
     return () => { alive = false }
   }, [installed, baseModule, institutionId])
@@ -107,54 +102,56 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
   if (!installed) {
     return (
       <div style={{ ...card, maxWidth: 640 }}>
-        <h3 style={h3}><Plug size={16} color="#00A896" /> Integrações</h3>
+        <h3 style={h3}><Database size={16} color="#00A896" /> Dados dos alunos</h3>
         <p style={hint}>A base de alunos ainda não foi instalada neste ambiente. Esta tela passa a funcionar depois que a atualização do banco for aplicada.</p>
       </div>
     )
   }
 
-  const options: { key: SourceKey; title: string; desc: string; item: 'integracoes.activesoft' | 'integracoes.planilha' | 'integracoes.manual'; Icon: typeof Plug }[] = [
-    { key: 'activesoft', title: 'Sistema da escola (Activesoft)', desc: 'Conecta direto no sistema da secretaria e atualiza sozinho.', item: 'integracoes.activesoft', Icon: Plug },
-    { key: 'planilha',   title: 'Planilha ou relatório',          desc: 'Envia o relatório de alunos exportado do sistema da escola.', item: 'integracoes.planilha', Icon: FileSpreadsheet },
-    { key: 'manual',     title: 'Lançamento manual',              desc: 'Digita os números de cada série, sem lista de alunos.',     item: 'integracoes.manual',   Icon: Database },
+  const options: { key: SourceKey; title: string; item: 'integracoes.activesoft' | 'integracoes.planilha' | 'integracoes.manual' }[] = [
+    { key: 'activesoft', title: 'Sistema da escola (Activesoft)', item: 'integracoes.activesoft' },
+    { key: 'planilha',   title: 'Planilha ou relatório',          item: 'integracoes.planilha' },
+    { key: 'manual',     title: 'Lançamento manual',              item: 'integracoes.manual' },
   ]
   const visible = options.filter(o => canSeeSettingsItem(o.item, role))
-  const current: SourceKey | null = chosen
-    ?? (visible.find(o => o.key === primary && states?.[o.key] !== 'em_breve')?.key)
-    ?? (visible.find(o => states?.[o.key] === 'ativa')?.key)
-    ?? null
+  const usable = (k: SourceKey) => states?.[k] !== 'em_breve'
+  const current: SourceKey | '' = chosen
+    || (visible.find(o => o.key === primary && usable(o.key))?.key)
+    || (visible.find(o => states?.[o.key] === 'ativa')?.key)
+    || ''
+  const badge = current && states ? STATE_BADGE[states[current]] : null
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={card}>
-        <h3 style={h3}><Database size={16} color="#00A896" /> De onde vêm os dados dos alunos?</h3>
-        <p style={hint}>Escolha uma fonte. Fontes não se somam: cada ano letivo usa uma só (somar contaria o mesmo aluno duas vezes).</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-          {visible.map(o => {
-            const st = states?.[o.key] ?? 'nao_configurada'
-            const disabled = st === 'em_breve'
-            const sel = current === o.key
-            const b = STATE_BADGE[st]
-            return (
-              <button key={o.key} disabled={disabled} onClick={() => setChosen(o.key)}
-                style={{ textAlign: 'left', padding: '14px 16px', borderRadius: 12, cursor: disabled ? 'not-allowed' : 'pointer',
-                  border: sel ? '2px solid #00A896' : '1.5px solid #E2E8F0', background: sel ? '#F0FDFA' : '#fff', opacity: disabled ? 0.6 : 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <o.Icon size={16} color="#00A896" />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', flex: 1 }}>{o.title}</span>
-                </div>
-                <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.5, marginBottom: 8 }}>{o.desc}</div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, borderRadius: 999, padding: '2px 8px' }}>{b.label}</span>
-              </button>
-            )
-          })}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 980 }}>
+      <div style={{ ...card, padding: '28px 28px 24px' }}>
+        <label htmlFor="fonte-alunos" style={{ display: 'block', fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 10 }}>
+          De onde vêm os dados dos alunos?
+        </label>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select id="fonte-alunos" value={current} onChange={e => setChosen(e.target.value as SourceKey)}
+            style={{ ...input, minWidth: 300, padding: '10px 12px', fontSize: 14 }}>
+            <option value="" disabled>Escolha uma opção</option>
+            {visible.map(o => (
+              <option key={o.key} value={o.key} disabled={!usable(o.key)}>
+                {o.title}{!usable(o.key) ? ' (em breve)' : ''}
+              </option>
+            ))}
+          </select>
+          {badge && (
+            <span style={{ fontSize: 11, fontWeight: 600, color: badge.color, background: badge.bg, borderRadius: 999, padding: '3px 10px' }}>
+              {badge.label}
+            </span>
+          )}
         </div>
+        <p style={{ fontSize: 12, color: '#94A3B8', margin: '10px 0 0' }}>
+          Uma fonte por ano letivo: fontes não se somam (somar contaria o mesmo aluno duas vezes).
+        </p>
       </div>
 
       {current === 'activesoft' && (
-        <div style={card}>
+        <div style={{ ...card, padding: 28 }}>
           <h3 style={h3}><Plug size={16} color="#00A896" /> Sistema da escola (Activesoft)</h3>
-          <p style={hint}>Só leitura: unidades, cursos, turmas, enturmação, alunos e responsáveis. Notas, frequência, ocorrências e financeiro nunca são lidos.</p>
+          <p style={hint}>Só leitura: cadastro, turmas, enturmação e alunos. Notas, frequência, ocorrências e financeiro nunca são lidos.</p>
           <ActivesoftWizard institutionId={institutionId} onToast={onToast} />
         </div>
       )}
@@ -163,31 +160,12 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
 
       {canSeeSettingsItem('integracoes.config', role) && (
         <div>
-          <button onClick={() => setShowSettings(!showSettings)} style={{ all: 'unset', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}>
-            {showSettings ? '▾' : '▸'} Ajustes da rematrícula (fonte principal, ano e abertura)
+          <button onClick={() => setShowSettings(!showSettings)} style={{ all: 'unset', cursor: 'pointer', fontSize: 12, color: '#94A3B8' }}>
+            {showSettings ? '▾' : '▸'} Ajustes da rematrícula (ano e abertura)
           </button>
           {showSettings && <div style={{ marginTop: 10 }}><BaseSettingsCard institutionId={institutionId} onToast={onToast} /></div>}
         </div>
       )}
-
-      <div style={card}>
-        <h3 style={h3}><Plug size={16} color="#64748B" /> Outras integrações</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-          {[
-            { title: 'WhatsApp (Meta)', desc: 'Número oficial da escola no WhatsApp.', on: others?.whatsapp, href: '/settings?tab=whatsapp&sec=conexao', show: role === 'admin' },
-            { title: 'Anúncios da Meta', desc: 'Gatilhos de anúncio na Captação.', on: others?.meta, href: '/captacao', show: true },
-          ].filter(x => x.show).map(x => {
-            const b = STATE_BADGE[x.on ? 'ativa' : 'nao_configurada']
-            return (
-              <a key={x.title} href={x.href} style={{ textDecoration: 'none', padding: '12px 14px', borderRadius: 12, border: '1.5px solid #E2E8F0', display: 'block' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{x.title}</div>
-                <div style={{ fontSize: 12, color: '#64748B', margin: '4px 0 8px' }}>{x.desc}</div>
-                {others && <span style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, borderRadius: 999, padding: '2px 8px' }}>{b.label}</span>}
-              </a>
-            )
-          })}
-        </div>
-      </div>
     </div>
   )
 }
@@ -357,20 +335,9 @@ function BaseSettingsCard({ institutionId, onToast }: { institutionId: string; o
 
   return (
     <div style={{ ...card, maxWidth: 640 }}>
-      <h3 style={h3}><Database size={16} color="#00A896" /> Fonte da base e rematrícula</h3>
-      <p style={hint}>Uma fonte por ano letivo: fontes não se somam (somar contaria o mesmo aluno duas vezes).</p>
+      <h3 style={h3}><Database size={16} color="#00A896" /> Ajustes da rematrícula</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <label style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Fonte principal<br />
-          <select value={source} onChange={e => setSource(e.target.value)} style={{ ...input, width: '100%', marginTop: 4 }}>
-            <option value="nenhuma">Ainda não definida</option>
-            <option value="manual">Lançamento manual</option>
-            <option value="planilha">Planilha</option>
-            <option value="activesoft">Activesoft</option>
-          </select>
-        </label>
-        <label style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>ERP que a escola usa<br />
-          <input value={erp} onChange={e => setErp(e.target.value)} placeholder="Ex.: Activesoft, Sophia…" style={{ ...input, width: '100%', marginTop: 4 }} />
-        </label>
+        {/* fonte principal e ERP: escolhidos no campo "De onde vêm os dados dos alunos?" — aqui só se mantêm os valores gravados */}
         <label style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Ano sendo rematriculado<br />
           <input type="number" value={target} onChange={e => setTarget(Number(e.target.value))} style={{ ...input, width: '100%', marginTop: 4 }} />
         </label>
