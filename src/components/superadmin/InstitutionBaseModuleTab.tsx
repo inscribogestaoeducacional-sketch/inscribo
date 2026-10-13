@@ -15,6 +15,11 @@ export default function InstitutionBaseModuleTab({ institutionId }: { institutio
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [names, setNames] = useState<boolean | null>(null)
+  const [log, setLog] = useState<{ id: string; action: string; user_name: string | null; user_role: string | null; text_version: string | null; ip: string | null; created_at: string; note: string | null }[]>([])
+  const loadLog = () => supabase.from('lgpd_acceptances')
+    .select('id, action, user_name, user_role, text_version, ip, created_at, note')
+    .eq('institution_id', institutionId).order('created_at', { ascending: false }).limit(20)
+    .then(({ data }) => setLog((data as typeof log) ?? []))
 
   useEffect(() => {
     let alive = true
@@ -26,6 +31,7 @@ export default function InstitutionBaseModuleTab({ institutionId }: { institutio
       })
     supabase.rpc('base_names_allowed', { p_institution_id: institutionId })
       .then(({ data, error: e }) => { if (alive) setNames(!e && data === true) })
+    loadLog()
     return () => { alive = false }
   }, [institutionId])
 
@@ -53,6 +59,7 @@ export default function InstitutionBaseModuleTab({ institutionId }: { institutio
     setSaving(false)
     if (e) { setError('Não foi possível salvar: ' + e.message); return }
     setNames(next)
+    loadLog()
   }
 
   return (
@@ -83,6 +90,24 @@ export default function InstitutionBaseModuleTab({ institutionId }: { institutio
           className={`px-3 py-1.5 rounded-lg text-xs font-bold ${names ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
           {names === null || saving ? <Loader2 size={14} className="animate-spin" /> : names ? 'Assinado' : 'Não assinado'}
         </button>
+      </div>
+      <div className="p-4 rounded-xl border border-gray-200">
+        <p className="text-sm font-bold text-gray-900 mb-2">Registro do aditivo</p>
+        {log.length === 0 ? <p className="text-xs text-gray-500">Nenhum aceite ou liberação registrado.</p> : (
+          <table className="w-full text-xs">
+            <tbody>
+              {log.map(l => (
+                <tr key={l.id} className="border-t border-gray-100">
+                  <td className="py-1 pr-2 text-gray-500 whitespace-nowrap">{new Date(l.created_at).toLocaleString('pt-BR')}</td>
+                  <td className="py-1 pr-2 font-semibold text-gray-800">{l.action === 'aceite' ? 'Aceite na tela' : l.action === 'liberado_manual' ? 'Liberado à mão' : 'Revogado'}</td>
+                  <td className="py-1 pr-2 text-gray-700">{l.user_name ?? '—'}{l.user_role ? ` (${l.user_role})` : ''}</td>
+                  <td className="py-1 pr-2 text-gray-500">{l.text_version ?? '—'}</td>
+                  <td className="py-1 text-gray-500 font-mono">{l.ip ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )

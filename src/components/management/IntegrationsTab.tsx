@@ -19,6 +19,7 @@ import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { canSeeSettingsItem } from '../../lib/settingsAccess'
 import RosterUploadCard from './RosterUploadCard'
 import ActivesoftWizard from './ActivesoftWizard'
+import LgpdAddendumBlock from './LgpdAddendumBlock'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
 
 type Toast = (msg: string, ok?: boolean) => void
@@ -68,6 +69,7 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
   const [chosen, setChosen] = useState<SourceKey | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [others, setOthers] = useState<{ whatsapp: boolean; meta: boolean } | null>(null)
+  const [lgpdKey, setLgpdKey] = useState(0)   // aceite do aditivo → remonta os cards com "Guardar nomes"
 
   // Confere se a migration da base já foi aplicada neste ambiente.
   useEffect(() => {
@@ -126,6 +128,7 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {baseModule === true && <LgpdAddendumBlock institutionId={institutionId} onAccepted={() => setLgpdKey(k => k + 1)} />}
       <div style={card}>
         <h3 style={h3}><Database size={16} color="#00A896" /> De onde vêm os dados dos alunos?</h3>
         <p style={hint}>Escolha uma fonte. Fontes não se somam: cada ano letivo usa uma só (somar contaria o mesmo aluno duas vezes).</p>
@@ -155,10 +158,10 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
         <div style={card}>
           <h3 style={h3}><Plug size={16} color="#00A896" /> Sistema da escola (Activesoft)</h3>
           <p style={hint}>Só leitura: unidades, cursos, turmas, enturmação, alunos e responsáveis. Notas, frequência, ocorrências e financeiro nunca são lidos.</p>
-          <ActivesoftWizard institutionId={institutionId} onToast={onToast} />
+          <ActivesoftWizard key={lgpdKey} institutionId={institutionId} onToast={onToast} />
         </div>
       )}
-      {current === 'planilha' && <RosterUploadCard institutionId={institutionId} onToast={onToast} />}
+      {current === 'planilha' && <RosterUploadCard key={lgpdKey} institutionId={institutionId} onToast={onToast} />}
       {current === 'manual' && <ManualAggregateCard institutionId={institutionId} onToast={onToast} />}
 
       {canSeeSettingsItem('integracoes.config', role) && (

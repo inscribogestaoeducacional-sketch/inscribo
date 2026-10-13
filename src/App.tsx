@@ -20,6 +20,7 @@ import { NOVIDADE_TRANSMISSOES } from './pages/novidadeTransmissoesContent'
 import Landing            from './pages/Landing'
 import ResetPassword      from './pages/ResetPassword'
 import Privacidade        from './pages/Privacidade'
+import AditivoLgpd        from './pages/AditivoLgpd'
 import Termos             from './pages/Termos'
 import SobreNos           from './pages/SobreNos'
 import Parceiros          from './pages/Parceiros'
@@ -261,6 +262,7 @@ function AppContent() {
       <Routes>
         <Route path="/"               element={<Landing />} />
         <Route path="/privacidade"    element={<Privacidade />} />
+        <Route path="/aditivo-lgpd"   element={<AditivoLgpd />} />
         <Route path="/termos"         element={<Termos />} />
         <Route path="/sobre"          element={<SobreNos />} />
         <Route path="/parceiros"      element={<Parceiros />} />
@@ -380,6 +382,7 @@ function AppContent() {
             {/* Fase 6.2: gestor também abre; cada item é filtrado por perfil em lib/settingsAccess.ts */}
             <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin','manager']}><SystemSettings /></ProtectedRoute>} />
             <Route path="/profile"      element={<UserProfile />} />
+            <Route path="/aditivo-lgpd" element={<AditivoLgpd />} />
             <Route path="/setup"        element={<InitialSetup />} />
             <Route path="/login"        element={<Navigate to={schoolDefault} replace />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
