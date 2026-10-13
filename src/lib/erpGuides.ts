@@ -26,7 +26,7 @@ export const ERP_GUIDES: Record<string, ErpGuide> = {
   activesoft: {
     id: 'activesoft',
     name: 'Activesoft',
-    menuPath: null,
+    menuPath: 'Administrativo › Configurações › Controle de acesso › Acesso via API',
     partnerName: AION,
     steps: [
       'Entre no Activesoft com um usuário administrador e abra a página "Acesso via API"{menu}.',
@@ -59,7 +59,7 @@ export const ERP_GUIDES: Record<string, ErpGuide> = {
 }
 
 export function guideStepText(guide: ErpGuide, step: string): string {
-  return step.replace('{menu}', guide.menuPath ? ` (menu: ${guide.menuPath})` : '')
+  return step.replace('{menu}', guide.menuPath ? `, no menu ${guide.menuPath}` : '')
 }
 
 // Texto para um 403: "marque 'X' e gere um novo token"
