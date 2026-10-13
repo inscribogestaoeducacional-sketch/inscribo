@@ -80,6 +80,13 @@ const yearOf = (...vals: (string | undefined)[]) => {
   for (const v of vals) { const m = v?.match(/(?:19|20)\d{2}/); if (m) return m[0] }
   return undefined
 }
+// sigla_periodo do Activesoft: "2026", "2026/1" ou "26"
+const yearFromSigla = (v: string | undefined) => {
+  if (!v) return undefined
+  const full = yearOf(v); if (full) return full
+  const m = v.trim().match(/^(\d{2})(?:\D.*)?$/)
+  return m ? '20' + m[1] : undefined
+}
 const clean = (o: Record<string, string | undefined>) =>
   Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Record<string, string>
 
@@ -92,13 +99,14 @@ export function normUnidade(o: Obj): Staged | null {
 
 export function normCurso(o: Obj): Staged | null {
   const id = pick(o, 'id', 'curso_id', 'codigo')
-  return id ? { external_id: id, data: clean({ id, nome: pick(o, 'nome', 'descricao', 'nome_curso') }) } : null
+  return id ? { external_id: id, data: clean({ id, nome: pick(o, 'curso_nome', 'nome', 'descricao', 'nome_curso') }) } : null
 }
 
 export function normTurma(o: Obj): Staged | null {
   const id = pick(o, 'id', 'turma_id', 'codigo')
   if (!id) return null
   const periodo = pick(o, 'periodo_nome', 'periodo.nome', 'periodo_letivo', 'periodo', 'ano_letivo', 'ano')
+  const unidade = o?.unidade
   return { external_id: id, data: clean({
     id,
     nome:       pick(o, 'nome', 'descricao', 'nome_turma', 'turma'),
@@ -106,9 +114,16 @@ export function normTurma(o: Obj): Staged | null {
     serie_nome: pick(o, 'serie_nome', 'nome_serie', 'serie.nome', 'serie'),
     curso_id:   pick(o, 'curso_id', 'curso.id', 'id_curso'),
     curso_nome: pick(o, 'curso_nome', 'nome_curso', 'curso.nome', 'curso'),
-    unidade_id: pick(o, 'unidade_id', 'unidade.id', 'id_unidade', 'unidade'),
-    ano:        yearOf(pick(o, 'ano', 'ano_letivo'), periodo),
+    unidade_id: pick(o, 'unidade_id', 'unidade.id', 'id_unidade'),
+    unidade_nome: pick(o, 'unidade_nome', 'unidade.nome') ?? (typeof unidade === 'string' && !/^\d+$/.test(unidade.trim()) ? unidade.trim() : undefined),
+    ano:        yearOf(pick(o, 'ano', 'ano_letivo'), periodo) ?? yearFromSigla(pick(o, 'sigla_periodo')) ?? yearOf(pick(o, 'nome')),
   }) }
+}
+
+// lista_unidades pode estar sem permissão no token: a unidade sai da própria turma
+export function unidadeFromTurma(t: Staged): Staged | null {
+  const id = t.data.unidade_id
+  return id ? { external_id: id, data: clean({ id, nome: t.data.unidade_nome }) } : null
 }
 
 export function normEnturmacao(o: Obj, situacaoSistema: string): Staged | null {
@@ -122,14 +137,14 @@ export function normEnturmacao(o: Obj, situacaoSistema: string): Staged | null {
     data: clean({
       aluno_id:         aluno,
       turma_id:         turma,
-      turma_nome:       pick(o, 'turma_nome', 'nome_turma', 'turma.nome'),
+      turma_nome:       pick(o, 'nome_turma_completo', 'turma_nome', 'nome_turma', 'turma.nome'),
       matricula:        pick(o, 'matricula', 'aluno_matricula', 'aluno.matricula', 'numero_matricula'),
       serie_id:         pick(o, 'serie_id', 'serie.id', 'id_serie'),
       serie_nome:       pick(o, 'serie_nome', 'nome_serie', 'serie.nome', 'serie'),
       curso_nome:       pick(o, 'curso_nome', 'nome_curso', 'curso.nome', 'curso'),
       unidade_id:       pick(o, 'unidade_id', 'unidade.id', 'id_unidade'),
       ano,
-      situacao:         pick(o, 'situacao', 'situacao_descricao', 'situacao_nome', 'descricao_situacao', 'status'),
+      situacao:         pick(o, 'situacao_aluno_turma', 'situacao', 'situacao_descricao', 'situacao_nome', 'descricao_situacao', 'status'),
       situacao_sistema: situacaoSistema,
       novato:           pick(o, 'novato_considerando_periodo_anterior'),
     }),
@@ -166,6 +181,10 @@ export function normVinculo(o: Obj): Staged | null {
 // Plano da leitura (fila retomável): cada passo é paginado de 25 em 25.
 // Responsáveis e vínculos só entram com os nomes liberados (aditivo LGPD).
 export type Step = { key: string; route: RouteKey; entity: string; params: Record<string, string | boolean>; situacao?: string }
+// Rotas que podem estar fora do token sem impedir a carga: unidades (vêm das
+// turmas) e vínculos (só servem com nomes liberados).
+export const OPTIONAL_STEPS = new Set(['unidades', 'vinculos'])
+
 export function plan(names: boolean): Step[] {
   const s: Step[] = [
     { key: 'unidades', route: 'unidades', entity: 'unidade', params: {} },
