@@ -249,6 +249,10 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
   const fields = fresh?.fields ?? conn?.fields_seen ?? {}
   const savedError = !fresh && !busy ? conn?.last_error : null
   const hasResult = Object.keys(routes).length > 0
+  // Só unidades/vínculos sem permissão (403): a carga segue sem elas
+  const failed = Object.entries(routes).filter(([, r]) => !r.ok)
+  const onlyOptional = hasResult && failed.length > 0 && failed.length < Object.keys(routes).length
+    && failed.every(([k, r]) => (k === 'unidades' || k === 'vinculos') && r.status === 403)
 
   return (
     <div>
@@ -257,7 +261,13 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
         {busy ? <Loader2 size={14} className="animate-spin" /> : <PlayCircle size={14} />} {busy ? 'Testando…' : 'Testar conexão'}
       </button>
       {busy && <p style={small}>Testando as 7 rotas… pode levar até meio minuto.</p>}
-      {!busy && (error || savedError) && (
+      {!busy && onlyOptional && (
+        <p style={{ ...small, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px' }}>
+          O token não tem permissão para {failed.map(([k]) => ROUTE_LABEL[k]).join(' e ')}. A carga segue sem elas: as unidades vêm das
+          próprias turmas e os vínculos só são usados quando os nomes estão liberados. Se quiser, peça ao Activesoft para incluir essas rotas no token.
+        </p>
+      )}
+      {!busy && !onlyOptional && (error || savedError) && (
         <p style={{ ...small, color: '#B91C1C' }}><AlertTriangle size={13} style={{ verticalAlign: -2 }} /> {error || savedError}</p>
       )}
       {!busy && !hasResult && conn?.last_test_at && !error && !savedError && (

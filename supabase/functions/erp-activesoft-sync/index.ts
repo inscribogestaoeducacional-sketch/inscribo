@@ -15,7 +15,7 @@
 // nunca vai para log, erro ou resposta.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { PAGE_SIZE, ROUTES, ForbiddenRoute, routeUrl, readPage, fieldNames, plan, normalize, apiMessage, pickScheme, type RouteKey, type Probe } from './adapter.ts'
+import { PAGE_SIZE, ROUTES, ForbiddenRoute, routeUrl, readPage, fieldNames, plan, normalize, apiMessage, pickScheme, unidadeFromTurma, OPTIONAL_STEPS, type RouteKey, type Probe } from './adapter.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -143,7 +143,10 @@ async function actionTest(sb: Supa, inst: string) {
   }
   scopes._auth = { aceita: pick.scheme, mostrada: pick.shown, tentativas: pick.tried, endereco: baseUrl }
   const now = new Date().toISOString()
+  const failed = Object.entries(pick.routes).filter(([, p]) => !p.ok)
+  const onlyOptional = pick.okCount > 0 && failed.every(([k, p]) => OPTIONAL_STEPS.has(k) && p.status === 403)
   const err = pick.allOk ? null
+    : onlyOptional ? `Sem permissão no token para: ${failed.map(([k]) => k).join(', ')}. A carga segue sem elas.`
     : pick.okCount === 0 ? `Nenhuma rota respondeu (${pick.shown}): ${Object.values(pick.routes)[0]?.msg ?? 'sem resposta'}`
     : `${pick.total - pick.okCount} de ${pick.total} rotas falharam no teste`
   await sb.from('erp_connections').update({
@@ -180,25 +183,51 @@ async function actionStep(sb: Supa, inst: string, runId: string) {
   const started = Date.now()
   await sb.from('sync_runs').update({ status: 'rodando', started_at: run.status === 'na_fila' ? new Date().toISOString() : undefined }).eq('id', runId)
 
+  // Só o que interessa à base (menos dados pessoais): enturmações de turmas que
+  // ficaram (ano anterior em diante) e alunos que aparecem nessas enturmações.
+  let turmaIds: Set<string> | null = null
+  let alunoIds: Set<string> | null = null
+
   try {
     while (idx < steps.length && Date.now() - started < TIME_BUDGET_MS) {
       const step = steps[idx]
-      const body = await apiGet(baseUrl, ROUTES[step.route], { ...step.params, limit: PAGE_SIZE, offset }, scheme, token)
+      let body: unknown
+      try {
+        body = await apiGet(baseUrl, ROUTES[step.route], { ...step.params, limit: PAGE_SIZE, offset }, scheme, token)
+      } catch (e) {
+        // rota opcional fora do token (403): segue sem ela e registra
+        if (e instanceof ApiError && e.status === 403 && OPTIONAL_STEPS.has(step.key)) {
+          counts[`${step.key}_sem_permissao`] = true
+          idx++; offset = 0
+          await sb.from('sync_runs').update({ step: idx < steps.length ? steps[idx].key : 'contagem', step_offset: 0, counts }).eq('id', runId)
+          continue
+        }
+        throw e
+      }
       calls++; pages++
       const page = readPage(body, offset)
-      const rows = []
+      if (step.entity === 'enturmacao' && !turmaIds) turmaIds = await stagedIds(sb, runId, 'turma', null)
+      if (step.entity === 'aluno' && !alunoIds) alunoIds = await stagedIds(sb, runId, 'enturmacao', 'aluno_id')
+      const byKey = new Map<string, { run_id: string; institution_id: string; entity: string; external_id: string; data: Record<string, string> }>()
       for (const it of page.items) {
         const n = normalize(step, it, names)
         if (!n) continue
         const ano = n.data.ano ? Number(n.data.ano) : null
         if ((step.entity === 'turma' || step.entity === 'enturmacao') && ano !== null && ano < KEEP_FROM_YEAR) continue
-        rows.push({ run_id: runId, institution_id: inst, entity: step.entity, external_id: n.external_id, data: n.data })
+        if (step.entity === 'enturmacao' && turmaIds && turmaIds.size > 0 && n.data.turma_id && !turmaIds.has(n.data.turma_id)) continue
+        if (step.entity === 'aluno' && alunoIds && !alunoIds.has(n.external_id)) continue
+        byKey.set(step.entity + '|' + n.external_id, { run_id: runId, institution_id: inst, entity: step.entity, external_id: n.external_id, data: n.data })
+        if (step.entity === 'turma') {
+          const u = unidadeFromTurma(n)
+          if (u) byKey.set('unidade|' + u.external_id, { run_id: runId, institution_id: inst, entity: 'unidade', external_id: u.external_id, data: u.data })
+        }
       }
+      const rows = [...byKey.values()]
       if (rows.length) {
         const { error } = await sb.from('erp_staging').upsert(rows, { onConflict: 'run_id,entity,external_id' })
         if (error) throw new Error('Falha ao guardar a página: ' + error.message)
       }
-      counts[step.key] = Number(counts[step.key] ?? 0) + rows.length
+      counts[step.key] = Number(counts[step.key] ?? 0) + rows.filter(r => r.entity === step.entity).length
       if (page.hasMore && page.items.length > 0) offset += PAGE_SIZE
       else { idx++; offset = 0 }
       await sb.from('sync_runs').update({
@@ -218,6 +247,21 @@ async function actionStep(sb: Supa, inst: string, runId: string) {
   if (done) await sb.from('sync_runs').update({ status: 'aguardando_confirmacao', step: 'contagem', step_offset: 0 }).eq('id', runId)
   return progress({ ...run, status: done ? 'aguardando_confirmacao' : 'rodando', counts, http_calls: calls, pages },
                   { index: Math.min(idx, steps.length), total: steps.length, label: done ? 'contagem' : steps[idx].key })
+}
+
+// ids já guardados na área de espera desta carga (turmas, ou alunos das enturmações)
+async function stagedIds(sb: Supa, runId: string, entity: string, field: string | null): Promise<Set<string>> {
+  const out = new Set<string>()
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from('erp_staging').select('external_id, data').eq('run_id', runId).eq('entity', entity).range(from, from + 999)
+    if (error) throw new Error('Falha ao ler a área de espera: ' + error.message)
+    for (const r of (data ?? []) as { external_id: string; data: Record<string, string> }[]) {
+      const v = field ? r.data?.[field] : r.external_id
+      if (v) out.add(v)
+    }
+    if (!data || data.length < 1000) break
+  }
+  return out
 }
 
 function progress(run: Record<string, unknown>, pos: { index: number; total: number; label: string } | null) {
