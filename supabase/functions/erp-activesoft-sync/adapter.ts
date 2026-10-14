@@ -181,10 +181,11 @@ export function normAluno(o: Obj, names: boolean): Staged | null {
   }) }
 }
 
-// Responsável: só existe com `names` (é só o nome; CPF não entra nesta etapa).
+// Responsável: só existe com `names` — nome e celular (para a equipe ligar).
+// CPF, e-mail, login, digitais, foto e o resto ficam de fora.
 export function normResponsavel(o: Obj): Staged | null {
   const id = pick(o, 'id', 'responsavel_id', 'codigo')
-  return id ? { external_id: id, data: clean({ id, nome: pick(o, 'nome', 'nome_responsavel', 'nome_completo') }) } : null
+  return id ? { external_id: id, data: clean({ id, nome: pick(o, 'nome', 'nome_responsavel', 'nome_completo'), telefone: pick(o, 'celular', 'telefone', 'telefone_celular') }) } : null
 }
 
 // Vínculos aluno → responsável a partir dos ids do aluno (a rota

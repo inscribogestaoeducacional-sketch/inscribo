@@ -21,7 +21,7 @@ type PanelRow = {
 type ListRow = {
   student_id: string; registration_code: string | null; student_name: string; guardian_name: string | null; category: string
   prev_grade: string | null; prev_status_text: string | null; dest_grade_id: string | null; dest_grade: string | null
-  cur_status_text: string | null; declared_note: string | null; declared_at: string | null; origins: string[] | null
+  cur_status_text: string | null; declared_note: string | null; declared_at: string | null; origins: string[] | null; guardian_phone: string | null
 }
 
 const CATS: { key: string; label: string; color: string }[] = [
@@ -289,7 +289,9 @@ export default function BaseAlunos() {
                         ))}
                       </td>
                       <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{r.student_name}</td>
-                      <td style={{ ...td, textAlign: 'left' }}>{r.guardian_name || '–'}</td>
+                      <td style={{ ...td, textAlign: 'left' }}>{r.guardian_name || '–'}
+                        {r.guardian_phone && <div style={{ fontSize: 12, color: '#64748B' }}>{fmtPhone(r.guardian_phone)}</div>}
+                      </td>
                       <td style={{ ...td, textAlign: 'left', fontSize: 12 }}>{r.prev_grade ? `${r.prev_grade} · ${r.prev_status_text || ''}` : '–'}</td>
                       <td style={{ ...td, textAlign: 'left', fontSize: 12 }}>
                         {r.cur_status_text ? `${r.dest_grade || ''} · ${r.cur_status_text}` : r.dest_grade ? <span style={{ color: '#94A3B8' }}>{r.dest_grade} (esperada)</span> : '–'}
@@ -321,6 +323,14 @@ export default function BaseAlunos() {
       )}
     </div>
   )
+}
+
+// 5583999990000 → (83) 99999-0000; o resto como veio
+function fmtPhone(p: string) {
+  const d = p.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return p
 }
 
 function Big({ label, value, color, sub }: { label: string; value: number; color: string; sub?: string }) {
