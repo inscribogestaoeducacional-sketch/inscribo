@@ -8,6 +8,8 @@
 --   * Activesoft: o telefone vem de lista_responsaveis (celular); nada de
 --     rotas de dados sensíveis ou endereço.
 --   * lista "a rematricular": devolve também o telefone do responsável principal.
+--   * sync_runs.warnings: motivo das linhas que não entram (ignoradas por
+--     motivo, séries/situações não reconhecidas, divergências) — sem dados pessoais.
 -- Irmãos com o mesmo responsável ainda geram um registro por aluno (não
 -- corrigido aqui, a pedido).
 -- ============================================================================
@@ -57,6 +59,7 @@ DECLARE
   v_cross      jsonb;
   v_run        uuid;
   v_key        text;
+  v_warn       jsonb;
 BEGIN
   IF p_source NOT IN ('planilha', 'activesoft') THEN RAISE EXCEPTION 'Fonte inválida: %', p_source; END IF;
   IF jsonb_typeof(p_rows) <> 'array' THEN RAISE EXCEPTION 'p_rows precisa ser uma lista'; END IF;
@@ -71,7 +74,9 @@ BEGIN
       v_ext  := NULLIF(btrim(r->>'external_id'), '');
       v_year := COALESCE(substring(r->>'ano' from '(20[0-9]{2})')::int, p_default_year);
       IF v_mat IS NULL OR NULLIF(btrim(r->>'serie'), '') IS NULL OR NULLIF(btrim(r->>'situacao'), '') IS NULL OR v_year IS NULL THEN
-        v_ignored := v_ignored || jsonb_build_object('linha', r->'linha', 'motivo', 'falta matrícula, série, situação ou ano');
+        v_ignored := v_ignored || jsonb_strip_nulls(jsonb_build_object('linha', r->'linha', 'aluno_id', NULLIF(r->>'external_id', ''),
+          'motivo', CASE WHEN v_mat IS NULL THEN 'sem matrícula' WHEN NULLIF(btrim(r->>'serie'), '') IS NULL THEN 'sem série'
+                         WHEN NULLIF(btrim(r->>'situacao'), '') IS NULL THEN 'sem situação' ELSE 'sem ano' END));
         CONTINUE;
       END IF;
 
@@ -275,6 +280,18 @@ BEGIN
       'ignoradas', v_ignored, 'series_nao_reconhecidas', v_unk_grade, 'situacoes_nao_reconhecidas', v_unk_status,
       'cpf_ignorado_sem_segredo', v_cpf_skip, 'cruzamento', v_cross, 'previa', p_dry_run);
 
+    -- motivo das linhas que não entram (só ids, contagens e nomes de série; nada pessoal)
+    v_warn := jsonb_build_object(
+      'linhas_ignoradas', jsonb_array_length(v_ignored),
+      'ignoradas_por_motivo', (SELECT COALESCE(jsonb_object_agg(m, n), '{}'::jsonb) FROM (
+          SELECT x->>'motivo' AS m, count(*) AS n FROM jsonb_array_elements(v_ignored) x GROUP BY 1) q),
+      'ignoradas_amostra', (SELECT COALESCE(jsonb_agg(x), '[]'::jsonb) FROM (SELECT x FROM jsonb_array_elements(v_ignored) x LIMIT 50) q),
+      'series_nao_reconhecidas', v_unk_grade,
+      'situacoes_nao_reconhecidas', v_unk_status,
+      'divergencias', v_div,
+      'divergencias_amostra', v_div_sample);
+    v_summary := v_summary || jsonb_build_object('avisos', v_warn);
+
     IF p_dry_run THEN RAISE EXCEPTION 'BASE_PREVIA' USING ERRCODE = 'P0099'; END IF;
 
     IF p_run_id IS NOT NULL THEN
@@ -284,18 +301,19 @@ BEGIN
         finished_at = now(), step = 'gravado',
         counts = counts || jsonb_build_object('lidas', v_read, 'novos', v_new, 'atualizados', v_upd, 'sem_mudanca', v_same,
                                               'divergencias', v_div, 'cruzados_pela_matricula', v_crossed),
-        summary = v_cross
+        summary = v_cross,
+        warnings = v_warn
        WHERE id = p_run_id;
       v_run := p_run_id;
     ELSE
-      INSERT INTO sync_runs (institution_id, source, kind, status, triggered_by, started_at, finished_at, counts, summary)
+      INSERT INTO sync_runs (institution_id, source, kind, status, triggered_by, started_at, finished_at, counts, summary, warnings)
       VALUES (p_institution_id, p_source, 'planilha',
               CASE WHEN jsonb_array_length(v_ignored) > 0 OR v_unk_grade <> '{}'::jsonb OR v_unk_status <> '{}'::jsonb OR v_div > 0
                    THEN 'ok_com_avisos' ELSE 'ok' END,
               COALESCE(auth.uid()::text, 'sistema'), now(), now(),
               jsonb_build_object('lidas', v_read, 'novos', v_new, 'atualizados', v_upd, 'sem_mudanca', v_same,
                                  'divergencias', v_div, 'arquivo', p_file_name),
-              v_cross)
+              v_cross, v_warn)
       RETURNING id INTO v_run;
     END IF;
     v_summary := v_summary || jsonb_build_object('run_id', v_run);

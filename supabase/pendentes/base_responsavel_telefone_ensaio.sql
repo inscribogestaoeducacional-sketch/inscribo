@@ -41,7 +41,13 @@ BEGIN
     (v_run, v_aion, 'vinculo', 'A4|40', '{"aluno_id":"A4","responsavel_id":"40","principal":"true"}'),
     (v_run, v_aion, 'vinculo', 'A5|40', '{"aluno_id":"A5","responsavel_id":"40","principal":"true"}'),
     (v_run, v_aion, 'responsavel', '20', '{"id":"20","nome":"Resp Vinte","telefone":"(83) 99999-0000"}'),
-    (v_run, v_aion, 'responsavel', '40', '{"id":"40","nome":"Resp Quarenta","telefone":"83 8888-7777"}');
+    (v_run, v_aion, 'responsavel', '40', '{"id":"40","nome":"Resp Quarenta","telefone":"83 8888-7777"}'),
+    -- linhas que não entram: série extracurricular e aluno sem matrícula
+    (v_run, v_aion, 'turma', 'T9', '{"id":"T9","nome":"Robótica X","serie_id":"SR","serie_nome":"Robótica","curso_nome":"Extra","unidade_id":"1","ano":"2026"}'),
+    (v_run, v_aion, 'enturmacao', 'E6', '{"aluno_id":"A6","turma_id":"T9","situacao":"Cursando","situacao_sistema":"A"}'),
+    (v_run, v_aion, 'aluno', 'A6', '{"id":"A6","matricula":"F6"}'),
+    (v_run, v_aion, 'enturmacao', 'E7', '{"aluno_id":"A7","turma_id":"T1","situacao":"Cursando","situacao_sistema":"A"}'),
+    (v_run, v_aion, 'aluno', 'A7', '{"id":"A7"}');
 
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin, 'role', 'authenticated')::text, true);
   SET LOCAL ROLE authenticated;
@@ -51,6 +57,11 @@ BEGIN
               AND guardian_name = 'Resp Vinte' AND guardian_phone = '5583999990000'));
   r := r || jsonb_build_object('L02_navegador_nao_le_cpf', NOT has_column_privilege('authenticated', 'public.guardians', 'cpf_hmac', 'SELECT'));
   RESET ROLE;
+  r := r || jsonb_build_object('W01_motivos_registrados', (SELECT warnings FROM sync_runs WHERE id = v_run) - 'ignoradas_amostra' - 'divergencias_amostra');
+  r := r || jsonb_build_object('W02_motivos_certos',
+    ((SELECT warnings FROM sync_runs WHERE id = v_run)->'series_nao_reconhecidas') ? 'Extra / Robótica'
+    AND ((SELECT warnings FROM sync_runs WHERE id = v_run)->'ignoradas_por_motivo'->>'sem matrícula')::int = 1
+    AND ((SELECT warnings FROM sync_runs WHERE id = v_run)->'ignoradas_amostra'->0->>'aluno_id') = 'A7');
   r := r || jsonb_build_object('G01_telefones_gravados', (SELECT count(*) FROM guardians WHERE institution_id = v_aion AND phone_norm IS NOT NULL AND phone_raw IS NOT NULL));
   r := r || jsonb_build_object('G02_irmaos_responsavel_duplicado', (SELECT count(*) FROM guardians WHERE institution_id = v_aion AND full_name = 'Resp Quarenta'));
   r := r || jsonb_build_object('Z01_agape_intocado', v_agape_before IS NOT DISTINCT FROM (SELECT md5(string_agg(id::text || full_name, ',' ORDER BY id)) FROM students WHERE institution_id = v_agape));
