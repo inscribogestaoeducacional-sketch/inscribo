@@ -444,7 +444,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
           .eq('institution_id', institutionId).eq('month_year', monthYear).maybeSingle()
         if (waMountedRef.current && u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
         const { data: pr } = await supabase.from('whatsapp_phone_numbers')
-          .select('phone_number,display_name,phone_number_id')
+          .select('phone_number,display_name,phone_number_id,waba_id')
           .eq('institution_id', institutionId)
           .eq('is_active', true)
           .maybeSingle()
@@ -865,6 +865,26 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                   </button>
                 </div>
               </div>
+
+              {/* Reconexão em coexistência — só admin da escola, só escola que já tem número */}
+              {role === 'admin' && metaConfig?.whatsapp_phone_id && (
+                <div style={{ ...dCard, border: '1px solid #FDE68A', background: '#FFFBEB' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#92400E' }}>Reconectar WhatsApp (coexistência)</div>
+                  <div style={{ fontSize: 12, color: '#78350F', margin: '4px 0 12px', lineHeight: 1.6 }}>
+                    Use só se a Áion parou de enviar e receber mensagens, mas o app WhatsApp Business continua funcionando no celular da escola. Religa a conta atual — não cria número nem conta nova.
+                  </div>
+                  <EmbeddedSignupButton
+                    institutionId={institutionId}
+                    onConnected={loadConfig}
+                    mode="reconnect"
+                    reconnectTarget={{
+                      wabaId: phoneRecord?.waba_id ?? null,
+                      phoneNumber: phoneRecord?.phone_number || metaConfig.whatsapp_phone_number || null,
+                      displayName: phoneRecord?.display_name || metaConfig.whatsapp_display_name || null,
+                    }}
+                  />
+                </div>
+              )}
 
               <div style={dCard}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>

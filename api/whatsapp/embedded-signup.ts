@@ -7,6 +7,7 @@ import {
   WA_APP_ID,
   WA_APP_SECRET,
 } from '../_lib/whatsappAuth.js'
+import { handleReconnect, handleReconnectEvent } from '../_lib/whatsappReconnect.js'
 
 const META_FETCH_TIMEOUT_MS = 30000
 // Fallback caso a resposta da Meta não traga expires_in (não deveria acontecer
@@ -38,6 +39,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return errorResponse(res, 403, 'Apenas o admin da escola pode conectar o WhatsApp desta instituição')
   }
   const institutionId = auth.institutionId // única fonte de verdade — não usar req.body.institution_id
+
+  // Reconexão em coexistência de escola que já tem número (api/_lib/whatsappReconnect.ts)
+  const ctx = { institutionId, userId: auth.userId }
+  if (req.body?.event) return handleReconnectEvent(res, ctx, req.body)
+  if (req.body?.mode === 'reconnect') return handleReconnect(res, ctx, req.body)
 
   const { code, phone_number_id, waba_id } = req.body || {}
   if (!code || !phone_number_id || !waba_id) {
