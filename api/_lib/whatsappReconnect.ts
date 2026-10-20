@@ -1,6 +1,7 @@
 import type { VercelResponse } from '@vercel/node'
 import { getSupabaseAdmin, errorResponse, GRAPH_URL, WA_APP_ID, WA_APP_SECRET } from './whatsappAuth.js'
 import { requestSmbAppSync, summarizeSmbSync, type SmbSyncResult } from './whatsappSmbSync.js'
+import type { ConnectActor, ConnectContext } from './whatsappConnectAuth.js'
 
 // ── Reconexão em modo coexistência (app WhatsApp Business + API) ────────────
 // Usado por api/whatsapp/embedded-signup.ts quando o body traz
@@ -38,6 +39,8 @@ interface CurrentPhone {
 interface AuditInput {
   institutionId: string
   userId: string
+  // Quem agiu: Super Admin (equipe Áion, pela ficha da escola) ou admin da escola
+  actor?: ConnectActor
   recordId?: string | null
   action: string
   fieldChanged?: string | null
@@ -48,7 +51,12 @@ interface AuditInput {
 export async function writeAudit(input: AuditInput): Promise<void> {
   const supabase = getSupabaseAdmin()
   const { data: u } = await supabase.from('users')
-    .select('full_name, role').eq('id', input.userId).maybeSingle()
+    .select('full_name, role, user_type').eq('id', input.userId).maybeSingle()
+  // Super Admin não é usuário da escola: o papel gravado deixa claro que foi
+  // a equipe Áion (user_type admin_geral/consultant).
+  const userRole = input.actor === 'superadmin'
+    ? `superadmin (${u?.user_type ?? 'admin_geral'})`
+    : (u?.role ?? null)
   const { error } = await supabase.from('audit_logs').insert({
     institution_id: input.institutionId,
     module:         AUDIT_MODULE,
@@ -59,7 +67,7 @@ export async function writeAudit(input: AuditInput): Promise<void> {
     new_value:      input.newValue ?? null,
     user_id:        input.userId,
     user_name:      u?.full_name ?? null,
-    user_role:      u?.role ?? null,
+    user_role:      userRole,
   })
   if (error) console.error('[reconnect] falha ao gravar audit_logs:', error.message)
 }
@@ -116,25 +124,29 @@ const isCoexistenceConnected = (m: MetaPhoneState) =>
   m.status === 'CONNECTED' && m.platform_type === 'CLOUD_API' && m.is_on_biz_app === true
 
 // ── Eventos só de registro: clique no botão e resultado do popup ──
+// reconnect_* = escola que já tem número; connect_* = primeira conexão em
+// coexistência (hoje feita pela equipe Áion na ficha da escola).
 export async function handleReconnectEvent(
-  res: VercelResponse, ctx: { institutionId: string; userId: string }, body: any,
+  res: VercelResponse, ctx: ConnectContext, body: any,
 ) {
   const current = await loadCurrentPhone(ctx.institutionId)
-  if (body.event === 'reconnect_click') {
+  const isConnect = typeof body.event === 'string' && body.event.startsWith('connect_')
+  const prefix = isConnect ? 'Conexão WhatsApp (coexistência)' : 'Reconexão WhatsApp (coexistência)'
+  if (body.event === 'reconnect_click' || body.event === 'connect_click') {
     await writeAudit({
       ...ctx, recordId: current?.id,
-      action: 'Reconexão WhatsApp (coexistência): botão clicado',
+      action: `${prefix}: botão clicado`,
       fieldChanged: 'popup_meta',
       newValue: current ? `numero=${current.phone_number} waba=${current.waba_id}` : 'sem numero cadastrado',
     })
     return res.status(200).json({ ok: true })
   }
-  if (body.event === 'reconnect_popup_result') {
+  if (body.event === 'reconnect_popup_result' || body.event === 'connect_popup_result') {
     const result = POPUP_RESULTS.includes(body.result) ? body.result : 'erro_meta'
     const detail = typeof body.detail === 'string' ? body.detail.slice(0, 300) : ''
     await writeAudit({
       ...ctx, recordId: current?.id,
-      action: 'Reconexão WhatsApp (coexistência): popup não concluído',
+      action: `${prefix}: popup não concluído`,
       fieldChanged: result,
       newValue: detail || null,
     })
@@ -168,7 +180,7 @@ export async function handleReconnectEvent(
 // ── Conclusão da reconexão (depois do popup da Meta) ──
 // Qualquer erro inesperado também vai pro audit_logs como falha.
 export async function handleReconnect(
-  res: VercelResponse, ctx: { institutionId: string; userId: string },
+  res: VercelResponse, ctx: ConnectContext,
   input: { code?: string; phone_number_id?: string; waba_id?: string },
 ) {
   try {
@@ -187,14 +199,14 @@ export async function handleReconnect(
 }
 
 async function reconnect(
-  res: VercelResponse, ctx: { institutionId: string; userId: string },
+  res: VercelResponse, ctx: ConnectContext,
   input: { code?: string; phone_number_id?: string; waba_id?: string },
 ) {
-  const { institutionId, userId } = ctx
+  const { institutionId, userId, actor } = ctx
   const current = await loadCurrentPhone(institutionId)
   const fail = async (status: number, motivo: string, message: string) => {
     await writeAudit({
-      institutionId, userId, recordId: current?.id,
+      institutionId, userId, actor, recordId: current?.id,
       action: 'Reconexão WhatsApp (coexistência): recusada',
       fieldChanged: motivo,
       oldValue: current ? `phone_id=${current.phone_number_id} waba=${current.waba_id}` : null,
@@ -286,11 +298,12 @@ async function reconnect(
   }
 
   await writeAudit({
-    institutionId, userId, recordId: current.id,
+    institutionId, userId, actor, recordId: current.id,
     action: 'Reconexão WhatsApp (coexistência): concluída',
     fieldChanged: phoneIdChanged ? 'phone_number_id' : 'sem_alteracao_no_cadastro',
     oldValue: `phone_id=${current.phone_number_id} waba=${current.waba_id}`,
     newValue: JSON.stringify({
+      tipo: 'coexistencia', por: actor ?? 'school_admin',
       phone_id: input.phone_number_id, code_trocado: codeExchanged, app_inscrito: subscribed, meta,
       sincronizacao: sync.length ? summarizeSmbSync(sync) : 'não pedida (número fora da coexistência)',
     }),

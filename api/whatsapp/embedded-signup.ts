@@ -2,13 +2,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import {
   getSupabaseAdmin,
   errorResponse,
-  authenticateSchoolAdmin,
   GRAPH_URL,
   WA_APP_ID,
   WA_APP_SECRET,
 } from '../_lib/whatsappAuth.js'
 import { handleReconnect, handleReconnectEvent, readMetaPhoneState, writeAudit } from '../_lib/whatsappReconnect.js'
 import { requestSmbAppSync, summarizeSmbSync } from '../_lib/whatsappSmbSync.js'
+import { resolveConnectContext, checkPopupWaba, type ConnectAuthDeps } from '../_lib/whatsappConnectAuth.js'
 
 const META_FETCH_TIMEOUT_MS = 30000
 // Fallback caso a resposta da Meta não traga expires_in (não deveria acontecer
@@ -18,31 +18,37 @@ const DEFAULT_LONG_LIVED_TOKEN_TTL_SECONDS = 60 * 24 * 60 * 60 // 60 dias
 // ── Cadastro Incorporado (Embedded Signup) da Meta ──────────────────────────
 // Segunda forma de conectar o WhatsApp de uma escola, além do formulário
 // manual que só o superadmin usa (handleSaveWa em AdminSchools.tsx). Chamado
-// pelo próprio painel do gestor da escola (Configurações → WhatsApp).
+// pelo painel do gestor da escola (Configurações → WhatsApp) e pela ficha da
+// escola no Super Admin (InstitutionDetails → WhatsApp), onde a equipe Áion
+// conecta a escola em chamada de vídeo, com a escola lendo o QR code.
 //
-// Body esperado: { code, phone_number_id, waba_id }
+// Body esperado: { code, phone_number_id, waba_id, institution_id? }
 //   - code: retornado pelo popup FB.login() no frontend.
 //   - phone_number_id / waba_id: capturados pelo frontend a partir do evento
 //     `WA_EMBEDDED_SIGNUP` que a Meta manda via postMessage durante o fluxo
 //     (evita uma chamada extra pra descobrir isso depois).
+//   - institution_id: só vale para Super Admin.
 //
-// IMPORTANTE — invariante de segurança: `institution_id` NUNCA é lido de
-// req.body. A única fonte de verdade é o retorno de authenticateSchoolAdmin(),
-// resolvido a partir do token de sessão do usuário autenticado. Isso é o que
-// impede uma escola de gravar/sobrescrever a conexão de WhatsApp de outra —
-// ver api/whatsapp/embedded-signup.SECURITY_TEST.md para o roteiro de teste
-// manual que verifica isso.
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return errorResponse(res, 405, 'Method not allowed')
+// IMPORTANTE — invariante de segurança (api/_lib/whatsappConnectAuth.ts):
+// admin de escola conecta só a própria escola, resolvida pelo token de sessão;
+// `institution_id` do corpo só é aceito de Super Admin. Roteiro e teste
+// automático em embedded-signup.SECURITY_TEST.md.
+export function createEmbeddedSignupHandler(authDeps?: ConnectAuthDeps) {
+  return async function handler(req: VercelRequest, res: VercelResponse) {
+    if (req.method !== 'POST') return errorResponse(res, 405, 'Method not allowed')
 
-  const auth = await authenticateSchoolAdmin(req)
-  if (!auth) {
-    return errorResponse(res, 403, 'Apenas o admin da escola pode conectar o WhatsApp desta instituição')
+    const auth = await resolveConnectContext(req, authDeps)
+    if ('status' in auth) return errorResponse(res, auth.status, auth.message)
+    return connect(req, res, auth.ctx)
   }
-  const institutionId = auth.institutionId // única fonte de verdade — não usar req.body.institution_id
+}
+
+export default createEmbeddedSignupHandler()
+
+async function connect(req: VercelRequest, res: VercelResponse, ctx: Parameters<typeof handleReconnect>[1]) {
+  const { institutionId, userId, actor } = ctx
 
   // Reconexão em coexistência de escola que já tem número (api/_lib/whatsappReconnect.ts)
-  const ctx = { institutionId, userId: auth.userId }
   if (req.body?.event) return handleReconnectEvent(res, ctx, req.body)
   if (req.body?.mode === 'reconnect') return handleReconnect(res, ctx, req.body)
 
@@ -53,6 +59,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!WA_APP_ID || !WA_APP_SECRET) {
     return errorResponse(res, 500, 'WA_APP_ID/WA_APP_SECRET não configurados')
+  }
+
+  // Conta (WABA) do popup: nunca troca a já salva da escola nem aceita a de
+  // teste da plataforma. Recusa antes de qualquer chamada à Meta ou gravação.
+  {
+    const supabase = getSupabaseAdmin()
+    const [{ data: saved }, { data: platformWaba }] = await Promise.all([
+      supabase.from('whatsapp_phone_numbers').select('id, waba_id, phone_number_id')
+        .eq('institution_id', institutionId).maybeSingle(),
+      supabase.from('platform_settings').select('value').eq('key', 'wa_waba_id').maybeSingle(),
+    ])
+    const check = checkPopupWaba(String(waba_id), saved?.waba_id, platformWaba?.value)
+    if ('motivo' in check) {
+      await writeAudit({
+        institutionId, userId, actor, recordId: saved?.id ?? null,
+        action: 'Conexão WhatsApp (Meta): recusada',
+        fieldChanged: check.motivo,
+        oldValue: saved ? `phone_id=${saved.phone_number_id} waba=${saved.waba_id}` : 'sem cadastro anterior',
+        newValue: `phone_id=${phone_number_id} waba=${waba_id}`,
+      })
+      return errorResponse(res, 409, check.message)
+    }
   }
 
   try {
@@ -145,10 +173,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : []
 
     await writeAudit({
-      institutionId, userId: auth.userId,
+      institutionId, userId, actor,
       action: 'Conexão WhatsApp (Meta): concluída',
       fieldChanged: 'whatsapp_phone_numbers',
       newValue: JSON.stringify({
+        tipo: meta.is_on_biz_app === true ? 'coexistencia' : 'cloud_api', por: actor,
         phone_id: phone_number_id, waba: waba_id, numero: verifiedPhone, meta,
         sincronizacao: sync.length ? summarizeSmbSync(sync) : 'não pedida (número fora da coexistência)',
       }),
@@ -165,7 +194,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[embedded-signup] erro:', message)
     await writeAudit({
-      institutionId, userId: auth.userId,
+      institutionId, userId, actor,
       action: 'Conexão WhatsApp (Meta): falhou',
       fieldChanged: 'erro',
       oldValue: `phone_id=${phone_number_id} waba=${waba_id}`,

@@ -11,6 +11,7 @@ import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError'
 import InstitutionBroadcastTab from './InstitutionBroadcastTab'
 import InstitutionBaseModuleTab from './InstitutionBaseModuleTab'
 import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
+import EmbeddedSignupButton from '../whatsapp/EmbeddedSignupButton'
 import {
   Building2, Users, DollarSign, FileText, CheckCircle2,
   Clock, AlertTriangle, ExternalLink, Copy, RefreshCw,
@@ -369,6 +370,8 @@ export default function InstitutionDetails() {
 
   // WhatsApp form
   const [waForm,   setWaForm]   = useState({ phone_id: '', phone_number: '', display_name: '', waba_id: '' })
+  // Cadastro salvo no banco (não o formulário editável) — decide entre conectar e reconectar
+  const [waSaved,  setWaSaved]  = useState<{ waba_id: string | null; phone_number_id: string | null; phone_number: string | null; display_name: string | null } | null>(null)
   const [savingWa, setSavingWa] = useState(false)
 
   // Campanhas — antes havia um mini-formulário (mês + liberar) direto na fase
@@ -453,7 +456,7 @@ export default function InstitutionDetails() {
         supabase.from('onboarding_processes').select('*').eq('institution_id', id).maybeSingle(),
         supabase.from('campaign_cycles').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
         supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant').order('full_name'),
-        supabase.from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', id).maybeSingle(),
+        supabase.from('whatsapp_phone_numbers').select('waba_id, phone_number_id, phone_number, display_name').eq('institution_id', id).maybeSingle(),
         supabase.from('campaign_change_requests').select('*').eq('institution_id', id).eq('status', 'pending').order('created_at', { ascending: false }),
         // RPC (não select+join direto): a RLS de `users` só libera a linha se
         // users.institution_id (cache da instituição ATIVA) bater com a desta
@@ -497,6 +500,7 @@ export default function InstitutionDetails() {
           display_name: inst.whatsapp_display_name || '',
           waba_id:      (waPhoneRes as any)?.data?.waba_id || '',
         })
+        setWaSaved((waPhoneRes as any)?.data ?? null)
         setContractForm(p => ({
           ...p,
           signer_email: inst.email || '',
@@ -2275,6 +2279,41 @@ export default function InstitutionDetails() {
                       : <><WifiOff className="w-5 h-5 text-gray-400 shrink-0" /><div><p className="text-sm font-bold text-gray-600">Não conectado</p><p className="text-xs text-gray-400">Configure o WhatsApp Business abaixo.</p></div></>
                     }
                   </div>
+
+                  {/* Conexão pela Meta em coexistência, feita pela equipe Áion em
+                      chamada com a escola (QR code no celular dela). Escola com
+                      número salvo → reconexão (só aceita a mesma conta/WABA);
+                      sem número → primeira conexão. Nunca chama /register. Só
+                      admin_geral vê (consultor não conecta; o servidor também recusa). */}
+                  {id && isSuperAdmin && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                      <div>
+                        <p className="text-sm font-bold text-amber-800">
+                          {waSaved?.phone_number_id ? 'Reconectar WhatsApp (coexistência)' : 'Conectar WhatsApp (coexistência)'}
+                        </p>
+                        <p className="text-xs text-amber-900/80 mt-1 leading-relaxed">
+                          {waSaved?.phone_number_id
+                            ? <>Religa a conta atual{waSaved.waba_id ? <> (WABA {waSaved.waba_id})</> : null} mantendo o app WhatsApp Business no celular da escola. Outra conta é recusada sem alterar nada.</>
+                            : <>Liga o app WhatsApp Business da escola à Áion sem tirar o número do celular. A escola lê o QR code durante a chamada.</>}
+                        </p>
+                      </div>
+                      {waSaved?.phone_number_id && !waSaved.waba_id
+                        ? <p className="text-xs font-semibold text-red-700">Este número não tem a conta (WABA) salva. Corrija o cadastro antes de reconectar.</p>
+                        : (
+                          <EmbeddedSignupButton
+                            institutionId={id}
+                            superAdminInstitutionId={id}
+                            onConnected={() => loadAll(true)}
+                            mode={waSaved?.phone_number_id ? 'reconnect' : 'connect'}
+                            reconnectTarget={waSaved?.phone_number_id ? {
+                              wabaId: waSaved.waba_id,
+                              phoneNumber: waSaved.phone_number || institution.whatsapp_phone_number || null,
+                              displayName: waSaved.display_name || institution.whatsapp_display_name || null,
+                            } : undefined}
+                          />
+                        )}
+                    </div>
+                  )}
 
                   {/* Usage section */}
                   <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 space-y-3">
