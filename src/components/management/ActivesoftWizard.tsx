@@ -5,7 +5,8 @@
 //   1. Conectar: o admin digita o token AQUI (vai direto ao Vault; a tela só
 //      mostra os 4 últimos caracteres). Nunca por chat ou arquivo.
 //   2. Testar: uma chamada em cada rota de leitura permitida (edge function
-//      erp-activesoft-sync, action test).
+//      erp-activesoft-sync, action test) e a forma de pedir o ano seguinte.
+//      "Conferir períodos" (action periodos) conta por ano e situação SEM gravar.
 //   3. Mapear: lê unidades, turmas, enturmações e alunos (25 por página, fila
 //      que continua de onde parou) e mostra unidades e séries para conferir.
 //   4. Carga: contagem do que vai mudar (não grava) → confirmação → grava.
@@ -50,6 +51,12 @@ const ROUTE_LABEL: Record<string, string> = {
 const STEP_LABEL: Record<string, string> = {
   unidades: 'unidades', cursos: 'cursos', turmas: 'turmas', enturmacao_A: 'enturmações ativas', enturmacao_I: 'enturmações inativas',
   enturmacao_P: 'pré-matrículas', enturmacao_S: 'enturmações (outras)', alunos: 'alunos', responsaveis: 'responsáveis', contagem: 'contagem',
+}
+// etapas por ano: turmas_2027, enturmacao_2027_P, enturmacao_2027_t413_P
+const stepLabel = (k: string) => {
+  const t = k.match(/^turmas_(\d{4})$/); if (t) return `turmas de ${t[1]}`
+  const e = k.match(/^enturmacao_(\d{4})(?:_t\w+)?_([AIPS])$/); if (e) return `${STEP_LABEL['enturmacao_' + e[2]]} de ${e[1]}`
+  return STEP_LABEL[k] ?? k
 }
 
 const box: CSSProperties = { border: '1px solid #E2E8F0', borderRadius: 12, padding: '14px 16px' }
@@ -235,10 +242,10 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
     setBusy(true); setError(''); setFresh(null)
     let accepted = false
     try {
-      // a função testa 14 chamadas em paralelo (15 s cada); 60 s é folga de sobra
+      // rotas em paralelo (15 s cada) + períodos (até 45 s); 120 s é folga de sobra
       const r = await Promise.race([
         invoke('test', institutionId),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('O teste demorou mais de 60 s e foi interrompido. Tente de novo em alguns minutos.')), 60_000)),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('O teste demorou mais de 2 minutos e foi interrompido. Tente de novo em alguns minutos.')), 120_000)),
       ]) as { ok?: boolean; any_ok?: boolean; scheme?: string | null; shown?: string; base_url?: string; scopes?: Record<string, unknown>; fields?: Record<string, string[]>; error?: string | null }
       if (!r || !r.scopes) throw new Error('A função de teste não devolveu resultado.')
       setFresh({ scopes: r.scopes, fields: r.fields ?? {}, scheme: r.scheme ?? null, shown: r.shown, base_url: r.base_url })
@@ -269,7 +276,7 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
       <button onClick={test} disabled={busy} style={busy ? off(btn) : btn}>
         {busy ? <Loader2 size={14} className="animate-spin" /> : <PlayCircle size={14} />} {busy ? 'Testando…' : 'Testar conexão'}
       </button>
-      {busy && <p style={small}>Testando as 6 rotas… pode levar até meio minuto.</p>}
+      {busy && <p style={small}>Testando as 6 rotas e os períodos… pode levar até um minuto.</p>}
       {!busy && !onlyOptional && (error || savedError) && (
         <p style={{ ...small, color: '#B91C1C' }}><AlertTriangle size={13} style={{ verticalAlign: -2 }} /> {error || savedError}</p>
       )}
@@ -313,6 +320,8 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
           {' · '}endereço: <span style={{ fontFamily: 'monospace' }}>{fresh?.base_url ?? auth?.endereco ?? conn?.api_base_url}</span>
         </p>
       )}
+      {!busy && hasResult && <PeriodSaved p={(scopesRaw as { _periodos?: SavedPeriods })._periodos} />}
+      {!busy && scheme && <PeriodCheck institutionId={institutionId} />}
       {!busy && Object.keys(fields).length > 0 && (
         <div>
           <button onClick={() => setShowFields(!showFields)} style={{ all: 'unset', cursor: 'pointer', fontSize: 12, color: '#64748B' }}>
@@ -320,6 +329,122 @@ function StepTest({ institutionId, conn, onDone }: { institutionId: string; conn
           </button>
           {showFields && Object.entries(fields).map(([k, v]) => (
             <p key={k} style={{ fontSize: 11, color: '#64748B', margin: '4px 0', fontFamily: 'monospace' }}><strong>{ROUTE_LABEL[k] ?? k}:</strong> {v.join(', ') || '—'}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 2b. Períodos ──
+// Resumo gravado pelo teste (só a forma que funcionou, sem dados) e a
+// conferência completa, que não grava nada.
+type SavedPeriods = { atual?: string; seguinte?: string; modo?: string; valor?: string | null; detalhe?: string; falta_proximo_periodo?: boolean
+  turmas?: Record<string, number>; erro?: string }
+const MODO_LABEL: Record<string, string> = { sigla: 'período pela sigla', id: 'período pelo número (id)', turma: 'uma turma por vez', nenhum: 'só o ano atual' }
+
+function PeriodSaved({ p }: { p?: SavedPeriods }) {
+  if (!p) return <p style={small}>Períodos: ainda não testados. Teste a conexão de novo para a carga ler também o ano seguinte.</p>
+  if (p.erro) return <p style={{ ...small, color: '#B91C1C' }}>Períodos: o teste falhou ({p.erro}). A carga lê só o ano atual.</p>
+  const warn = p.falta_proximo_periodo || p.modo === 'nenhum'
+  return (
+    <p style={{ ...small, color: warn ? '#B45309' : '#334155' }}>
+      Períodos: turmas {Object.entries(p.turmas ?? {}).map(([a, n]) => `${a}: ${n}`).join(' · ')}. A carga lê{' '}
+      <strong>{p.modo === 'nenhum' ? `só ${p.atual}` : `${p.atual} e ${p.seguinte}`}</strong> ({MODO_LABEL[p.modo ?? 'nenhum']}
+      {p.valor ? `: periodo=${p.valor}` : ''}). {p.detalhe}
+    </p>
+  )
+}
+
+type Tentativa = { forma: string; parametro: string; http: number; itens: number; total?: number; resultado: string; msg?: string
+  turmas: { seguinte: number; atual: number; outras: number }; cru: Record<string, unknown>[]; envelope?: string[] }
+type YearCount = { enturmacoes: number; alunos: number; parcial: boolean; por_situacao: Record<string, number>; por_status: Record<string, number>
+  turmas_de_outro_ano: number; erros: string[] }
+type PeriodsResult = SavedPeriods & {
+  turmas: Record<string, { n: number; parcial: boolean; siglas: Record<string, number>; http: number; msg?: string }>
+  tentativas: Tentativa[]; segundos: number
+  contagem: { anos: Record<string, YearCount>; chamadas: number
+    rematricula: { ano: string; base: number; rematriculados: number; pre_matriculados: number; sairam: number; a_rematricular: number; novatos: number } | null }
+}
+const RESULT_LABEL: Record<string, [string, string]> = {
+  funciona: ['funciona', '#047857'], ignorou_o_filtro: ['ignorou o filtro (veio o ano atual)', '#B45309'], misturado: ['misturado', '#B45309'],
+  vazio: ['vazio', '#64748B'], erro: ['erro', '#B91C1C'],
+}
+const STATUS_LABEL: Record<string, string> = { ativo: 'cursando', pre_matricula: 'pré-matrícula', concluido: 'concluído', transferido: 'transferido',
+  cancelado: 'cancelado', desistente: 'desistente', remanejado: 'remanejado', desconhecido: 'não reconhecida' }
+
+function PeriodCheck({ institutionId }: { institutionId: string }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [r, setR] = useState<PeriodsResult | null>(null)
+  const [raw, setRaw] = useState(false)
+  const run = async () => {
+    setBusy(true); setError(''); setR(null)
+    try {
+      const d = await Promise.race([
+        invoke('periodos', institutionId),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('A conferência demorou mais de 3 minutos e foi interrompida.')), 180_000)),
+      ]) as PeriodsResult
+      if (!d?.contagem) throw new Error('A função não devolveu a contagem.')
+      setR(d)
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setBusy(false) }
+  }
+  const anos = r ? Object.entries(r.contagem.anos) : []
+  const rm = r?.contagem.rematricula
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+      <p style={small}>Conferir os períodos: lê as turmas e enturmações deste ano e do seguinte e conta por situação.
+        <strong> Nada é gravado</strong> (nem na base, nem na leitura em espera).</p>
+      <button onClick={run} disabled={busy} style={busy ? off(btnSec) : btnSec}>
+        {busy ? <Loader2 size={14} className="animate-spin" /> : <PlayCircle size={14} />} {busy ? 'Conferindo… (até 2 minutos)' : 'Conferir períodos (não grava nada)'}
+      </button>
+      {error && <p style={{ ...small, color: '#B91C1C' }}><AlertTriangle size={13} style={{ verticalAlign: -2 }} /> {error}</p>}
+      {r && (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ ...small, color: r.falta_proximo_periodo || r.modo === 'nenhum' ? '#B45309' : '#047857', fontWeight: 600 }}>{r.detalhe}</p>
+          <div style={{ border: '1px solid #F1F5F9', borderRadius: 10, overflow: 'hidden', fontSize: 12 }}>
+            {anos.map(([ano, y]) => (
+              <div key={ano} style={{ padding: '8px 10px', borderTop: '1px solid #F1F5F9', color: '#334155', lineHeight: 1.6 }}>
+                <strong style={{ color: '#1A2B4A' }}>{ano}</strong> · {r.turmas[ano]?.n ?? 0} turmas · {y.enturmacoes} enturmações · {y.alunos} alunos
+                {y.parcial && <span style={{ color: '#B45309' }}> (parcial: o tempo acabou)</span>}
+                <div>{Object.entries(y.por_status).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${STATUS_LABEL[k] ?? k}: ${n}`).join(' · ') || '—'}</div>
+                {y.turmas_de_outro_ano > 0 && <div style={{ color: '#B45309' }}>{y.turmas_de_outro_ano} enturmação(ões) de turmas de outro ano ficaram de fora.</div>}
+                {y.erros.length > 0 && <div style={{ color: '#B91C1C' }}>{y.erros.join('; ')}</div>}
+              </div>
+            ))}
+            {r.seguinte && !r.contagem.anos[r.seguinte] && (
+              <div style={{ padding: '8px 10px', borderTop: '1px solid #F1F5F9', color: '#B45309' }}><strong>{r.seguinte}</strong> · não lido ({MODO_LABEL.nenhum}).</div>
+            )}
+          </div>
+          {rm && (
+            <p style={{ fontSize: 12, color: '#1A2B4A', margin: '8px 0', lineHeight: 1.6 }}>
+              <strong>Rematrícula {rm.ano}</strong> (base {r.atual}: {rm.base} alunos cursando, concluídos ou em pré-matrícula):{' '}
+              {rm.rematriculados} rematriculados (cursando em {rm.ano}) · {rm.pre_matriculados} pré-matriculados · {rm.a_rematricular} a rematricular ·{' '}
+              {rm.sairam} saíram · {rm.novatos} novatos
+            </p>
+          )}
+          <p style={{ ...small, marginTop: 4 }}>{r.contagem.chamadas} chamadas de leitura · {r.segundos} s · contagem por aluno (concluintes da última série ainda aparecem como "a rematricular").</p>
+          <button onClick={() => setRaw(!raw)} style={{ all: 'unset', cursor: 'pointer', fontSize: 12, color: '#64748B' }}>
+            {raw ? '▾' : '▸'} Tentativas de período (resultado cru, sem dados pessoais)
+          </button>
+          {raw && r.tentativas.map((t, i) => {
+            const [lbl, color] = RESULT_LABEL[t.resultado] ?? [t.resultado, '#64748B']
+            return (
+              <div key={i} style={{ border: '1px solid #F1F5F9', borderRadius: 8, padding: '6px 10px', marginTop: 6, fontSize: 11, color: '#475569' }}>
+                <div><strong>{t.forma === 'id' ? 'periodo como id' : t.forma === 'sigla' ? 'periodo como sigla' : 'por turma'}</strong>{' '}
+                  <span style={{ fontFamily: 'monospace' }}>{t.parametro}</span> → HTTP {t.http || '—'} · <span style={{ color, fontWeight: 700 }}>{lbl}</span>
+                  {' '}· {t.itens} na 1ª página{t.total !== undefined ? ` de ${t.total}` : ''} · turmas: {t.turmas.seguinte} de {r.seguinte}, {t.turmas.atual} de {r.atual}, {t.turmas.outras} outras
+                  {t.msg ? ` · ${t.msg}` : ''}</div>
+                {t.cru.length > 0 && <pre style={{ margin: '4px 0 0', whiteSpace: 'pre-wrap', fontSize: 10.5, color: '#64748B' }}>{JSON.stringify(t.cru, null, 1)}</pre>}
+                {t.envelope && <div style={{ color: '#94A3B8' }}>envelope: {t.envelope.join(', ')}</div>}
+              </div>
+            )
+          })}
+          {raw && Object.entries(r.turmas).map(([ano, t]) => (
+            <div key={ano} style={{ fontSize: 11, color: '#64748B', marginTop: 4, fontFamily: 'monospace' }}>
+              lista_turmas periodo_sigla={ano} → HTTP {t.http || '—'} · {t.n} turmas · siglas: {Object.entries(t.siglas).map(([s, n]) => `${s} (${n})`).join(', ') || '—'}{t.msg ? ` · ${t.msg}` : ''}
+            </div>
           ))}
         </div>
       )}
@@ -358,7 +483,7 @@ function StepMap({ institutionId, run, namesAllowed, gradeLevels, onChanged, onR
         const r = await invoke('step', institutionId, { run_id: runId })
         if (r?.status === 'erro') { setError(r.error || 'Erro na leitura'); break }
         const label = r?.position?.label
-        setProgress(label ? `Lendo ${STEP_LABEL[label] ?? label} (passo ${Math.min(r.position.index + 1, r.position.total)} de ${r.position.total}) · ${r.pages ?? 0} páginas` : '')
+        setProgress(label ? `Lendo ${stepLabel(label)} (passo ${Math.min(r.position.index + 1, r.position.total)} de ${r.position.total}) · ${r.pages ?? 0} páginas` : '')
         if (r?.status !== 'rodando' && r?.status !== 'na_fila') break
       }
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }

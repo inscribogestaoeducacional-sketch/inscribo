@@ -201,18 +201,43 @@ export function vinculosFromAluno(aluno: Staged): Staged[] {
 // Plano da leitura (fila retomável): cada passo é paginado de 25 em 25.
 // Responsáveis só entram com os nomes liberados (aditivo LGPD). Nunca:
 // lista_*_dados_sensiveis, lista_*_endereco, vínculo da portaria.
-export type Step = { key: string; route: RouteKey; entity: string; params: Record<string, string | boolean>; situacao?: string }
+export type Step = { key: string; route: RouteKey; entity: string; params: Record<string, string | boolean>; situacao?: string; ano?: string }
+
+// Períodos lidos: o atual e o seguinte (rematrícula). Documentação do Activesoft:
+//   * lista_turmas aceita periodo_sigla ("2027"); sem ele, só o ano atual;
+//   * enturmacao_com_detalhes aceita periodo e turma. O modo do período seguinte
+//     vem do teste de conexão (periods.ts): 'sigla' (periodo=2027), 'id'
+//     (periodo=<número>), 'turma' (uma chamada por turma de 2027) ou 'nenhum'. A enturmação NÃO recebe ano: herda o da turma
+//     (sigla_periodo). Se a API ignorar o filtro e devolver 2026, as linhas caem
+//     no mesmo registro (mesmo id) e nada vira 2027 por engano.
+export type PeriodMode = 'sigla' | 'id' | 'turma' | 'nenhum'
+export type PeriodPlan = { atual: string; seguinte: string; modo: PeriodMode; valor?: string | null; turmasSeguinte?: string[] }
+export function periodYears(now = new Date()): { atual: string; seguinte: string } {
+  const y = now.getFullYear()
+  return { atual: String(y), seguinte: String(y + 1) }
+}
+const SITUACOES = ['A', 'I', 'P', 'S']
 // Rota que pode estar fora do token sem impedir a carga: unidades (a
 // documentação não diz a permissão; unidade_id e unidade já vêm nas turmas).
 export const OPTIONAL_STEPS = new Set(['unidades'])
 
-export function plan(names: boolean): Step[] {
+export function plan(names: boolean, p: PeriodPlan = { ...periodYears(), modo: 'nenhum' }): Step[] {
+  const { atual, seguinte, modo } = p
+  const valor = p.valor ?? (modo === 'sigla' ? seguinte : null)
+  const ent = (ano: string, sit: string, extra: Record<string, string>, keySuffix = ''): Step => ({
+    key: `enturmacao_${ano}${keySuffix}_${sit}`, route: 'enturmacao', entity: 'enturmacao',
+    params: { situacao_sistema: sit, ...extra }, situacao: sit, ano,
+  })
   const s: Step[] = [
     { key: 'unidades', route: 'unidades', entity: 'unidade', params: {} },
     { key: 'cursos',   route: 'cursos',   entity: 'curso',   params: {} },
-    { key: 'turmas',   route: 'turmas',   entity: 'turma',   params: { mostrar_todas_as_turmas: true } },
-    ...['A', 'I', 'P', 'S'].map(sit => ({ key: `enturmacao_${sit}`, route: 'enturmacao' as RouteKey, entity: 'enturmacao',
-      params: { situacao_sistema: sit }, situacao: sit })),
+    { key: `turmas_${atual}`,    route: 'turmas', entity: 'turma', params: { mostrar_todas_as_turmas: true, periodo_sigla: atual },    ano: atual },
+    { key: `turmas_${seguinte}`, route: 'turmas', entity: 'turma', params: { mostrar_todas_as_turmas: true, periodo_sigla: seguinte }, ano: seguinte },
+    // período atual: sem filtro (é o padrão da API, já validado)
+    ...SITUACOES.map(sit => ent(atual, sit, {})),
+    // período seguinte: pelo modo descoberto no teste
+    ...((modo === 'sigla' || modo === 'id') && valor ? SITUACOES.map(sit => ent(seguinte, sit, { periodo: valor })) : []),
+    ...(modo === 'turma' ? (p.turmasSeguinte ?? []).flatMap(t => SITUACOES.map(sit => ent(seguinte, sit, { turma: t }, `_t${t}`))) : []),
     { key: 'alunos',   route: 'alunos',   entity: 'aluno',   params: {} },
   ]
   if (names) {
