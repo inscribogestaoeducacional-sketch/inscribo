@@ -51,11 +51,15 @@ interface EmbeddedSignupButtonProps {
   // aviso antes do popup e o servidor só aceita o mesmo WABA cadastrado.
   mode?: 'connect' | 'reconnect'
   reconnectTarget?: ReconnectTarget
+  // Super Admin conectando pela ficha da escola: todo pedido leva o id desta
+  // escola (o servidor só aceita isso de Super Admin). Sempre mostra o aviso
+  // + checkbox antes do popup, inclusive na primeira conexão.
+  superAdminInstitutionId?: string
 }
 
 // Registro no audit_logs (clique / popup não concluído). Fire-and-forget:
 // nunca pode atrasar a abertura do popup, senão o navegador o bloqueia.
-async function logReconnectEvent(payload: { event: string; result?: string; detail?: string }) {
+async function logSignupEvent(payload: { event: string; result?: string; detail?: string; institution_id?: string }) {
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) return
@@ -65,19 +69,23 @@ async function logReconnectEvent(payload: { event: string; result?: string; deta
       body: JSON.stringify(payload),
     })
   } catch (e) {
-    console.warn(LOG_PREFIX, 'falha ao registrar evento de reconexão:', e)
+    console.warn(LOG_PREFIX, 'falha ao registrar evento da conexão:', e)
   }
 }
 
-export default function EmbeddedSignupButton({ institutionId, onConnected, mode = 'connect', reconnectTarget }: EmbeddedSignupButtonProps) {
+export default function EmbeddedSignupButton({ institutionId, onConnected, mode = 'connect', reconnectTarget, superAdminInstitutionId }: EmbeddedSignupButtonProps) {
   const isReconnect = mode === 'reconnect'
+  const isSuperAdmin = !!superAdminInstitutionId
+  const requireConfirm = isReconnect || isSuperAdmin
+  const eventPrefix = isReconnect ? 'reconnect' : 'connect'
+  const targetBody = isSuperAdmin ? { institution_id: superAdminInstitutionId } : {}
   const [status, setStatus] = useState<Status>(WA_APP_ID && WA_CONFIG_ID ? 'loading-sdk' : 'not-configured')
   const [errorMessage, setErrorMessage] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmChecked, setConfirmChecked] = useState(false)
   const [reconnectResult, setReconnectResult] = useState<ReconnectResult | null>(null)
   const logPopupFailure = (result: string, detail?: string) => {
-    if (isReconnect) void logReconnectEvent({ event: 'reconnect_popup_result', result, detail })
+    if (requireConfirm) void logSignupEvent({ event: `${eventPrefix}_popup_result`, result, detail, ...targetBody })
   }
   const signupDataRef = useRef<EmbeddedSignupData>({})
   const statusRef = useRef<Status>(status)
@@ -225,6 +233,7 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
         body: JSON.stringify({
           code, phone_number_id: phoneNumberId, waba_id: wabaId,
           ...(isReconnect ? { mode: 'reconnect' } : {}),
+          ...targetBody,
         }),
       })
       const result = await res.json()
@@ -251,7 +260,7 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
   const handleConfirmReconnect = () => {
     if (!confirmChecked) return
     setConfirmOpen(false)
-    void logReconnectEvent({ event: 'reconnect_click' })
+    void logSignupEvent({ event: `${eventPrefix}_click`, ...targetBody })
     handleConnectClick()
   }
 
@@ -269,7 +278,7 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
         setErrorMessage('Não foi possível abrir a conexão com a Meta. Verifique se o navegador não está bloqueando pop-ups e tente novamente.')
         logPopupFailure('sem_resposta')
       }
-    }, isReconnect ? RECONNECT_LOGIN_TIMEOUT_MS : LOGIN_TIMEOUT_MS)
+    }, requireConfirm ? RECONNECT_LOGIN_TIMEOUT_MS : LOGIN_TIMEOUT_MS)
 
     try {
       console.log(LOG_PREFIX, 'chamando FB.login() com config_id:', WA_CONFIG_ID)
@@ -331,7 +340,8 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
     status === 'loading-sdk' ? 'Carregando…' :
     status === 'connecting'  ? 'Aguardando confirmação…' :
     status === 'submitting'  ? 'Conectando…' :
-    isReconnect ? 'Reconectar (coexistência)' : 'Conectar via Meta'
+    isReconnect ? 'Reconectar (coexistência)' :
+    isSuperAdmin ? 'Conectar WhatsApp (coexistência)' : 'Conectar via Meta'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -341,20 +351,28 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: 14, maxWidth: 520, width: '100%', padding: 22, boxShadow: '0 20px 50px rgba(0,0,0,0.25)', fontSize: 13, color: '#334155', lineHeight: 1.6, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700, color: '#B45309', marginBottom: 10 }}>
-              <AlertCircle size={18} />Antes de reconectar, leia com atenção
+              <AlertCircle size={18} />{isReconnect ? 'Antes de reconectar, leia com atenção' : 'Antes de conectar, leia com atenção'}
             </div>
             <p style={{ margin: '0 0 10px' }}>
-              Vai abrir a janela da Meta para religar o WhatsApp da escola à Áion, <strong>mantendo o app WhatsApp Business no celular</strong>. Deixe o celular da escola por perto: ele vai pedir para ler um QR code ou confirmar.
+              Vai abrir a janela da Meta para {isReconnect ? 'religar' : 'ligar'} o WhatsApp da escola à Áion, <strong>mantendo o app WhatsApp Business no celular</strong>. {isSuperAdmin ? 'A escola precisa estar na chamada com o celular em mãos' : 'Deixe o celular da escola por perto'}: ele vai pedir para ler um QR code ou confirmar.
             </p>
             <div style={{ padding: '10px 12px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, margin: '0 0 10px' }}>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Na janela da Meta:</div>
               <div>1. Escolha <strong>conectar um app WhatsApp Business existente</strong>.</div>
-              <div>2. Escolha a conta que já existe: <strong>{reconnectTarget?.displayName || 'a conta atual da escola'}</strong>{reconnectTarget?.wabaId ? <> (ID {reconnectTarget.wabaId})</> : null}.</div>
-              <div>3. Número: <strong>{reconnectTarget?.phoneNumber || '—'}</strong>.</div>
-              <div style={{ marginTop: 6, color: '#B91C1C', fontWeight: 600 }}>Nunca escolha "número novo", "criar nova conta" nem "migrar o número" — isso pode tirar o número do app do celular.</div>
+              {isReconnect ? (
+                <>
+                  <div>2. Escolha a conta que já existe: <strong>{reconnectTarget?.displayName || 'a conta atual da escola'}</strong>{reconnectTarget?.wabaId ? <> (ID {reconnectTarget.wabaId})</> : null}.</div>
+                  <div>3. Número: <strong>{reconnectTarget?.phoneNumber || '—'}</strong>.</div>
+                </>
+              ) : (
+                <div>2. Escolha ou crie a conta da <strong>própria escola</strong> — nunca a conta de teste da Áion.</div>
+              )}
+              <div style={{ marginTop: 6, color: '#B91C1C', fontWeight: 600 }}>Nunca escolha "número novo", "criar nova conta"{isReconnect ? '' : ' para um número que já está no app'} nem "migrar o número" — isso pode tirar o número do app do celular.</div>
             </div>
             <p style={{ margin: '0 0 10px', fontSize: 12, color: '#64748B' }}>
-              Se a conta escolhida não for a desta escola, a Áion recusa e não altera nada. As mensagens trocadas pelo celular enquanto a ligação estava caída não entram na Áion.
+              {isReconnect
+                ? 'Se a conta escolhida não for a desta escola, a Áion recusa e não altera nada. As mensagens trocadas pelo celular enquanto a ligação estava caída não entram na Áion.'
+                : 'Se a conta escolhida for a de teste da Áion, a Áion recusa e não altera nada. Depois de conectar, a Áion pede à Meta os contatos e o histórico do app.'}
             </p>
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', margin: '0 0 14px' }}>
               <input type="checkbox" checked={confirmChecked} onChange={e => setConfirmChecked(e.target.checked)} style={{ marginTop: 3 }} />
@@ -374,7 +392,7 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
         </div>
       )}
       <button
-        onClick={isReconnect ? handleReconnectClick : handleConnectClick}
+        onClick={requireConfirm ? handleReconnectClick : handleConnectClick}
         disabled={busy || status === 'sdk-error'}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
