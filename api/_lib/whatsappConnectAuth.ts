@@ -102,7 +102,9 @@ export async function resolveConnectContext(
 // Mesma regra de src/lib/whatsappSaveGuard.ts (resolveWabaForSave), repetida
 // aqui porque api/ não importa de src/: a conta já salva da escola nunca é
 // trocada, e o WABA da plataforma (platform_settings.wa_waba_id, que é o de
-// TESTE — caso Universo 19/10/2026) nunca vira o WABA de uma escola.
+// TESTE — caso Universo 19/10/2026) nunca vira o WABA de uma escola. A de
+// teste também fica fixa aqui, caso platform_settings mude ou venha vazio.
+export const TEST_WABA_ID = '2812701862456294'
 export function checkPopupWaba(
   popupWabaId: string, savedWabaId: string | null | undefined, platformWabaId: string | null | undefined,
 ): { ok: true } | { ok: false; motivo: string; message: string } {
@@ -112,7 +114,7 @@ export function checkPopupWaba(
   if (!popup) {
     return { ok: false, motivo: 'sem_waba', message: 'A Meta não devolveu a conta (WABA). Nada foi alterado.' }
   }
-  if (platform && popup === platform) {
+  if (popup === TEST_WABA_ID || (platform && popup === platform)) {
     return {
       ok: false, motivo: 'waba_da_plataforma',
       message: `A conta escolhida (${popup}) é a conta de teste da Áion, não a da escola. Nada foi alterado.`,

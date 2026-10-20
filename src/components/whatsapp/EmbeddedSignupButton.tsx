@@ -7,7 +7,7 @@ declare global {
     FB?: {
       init: (params: { appId: string; version: string }) => void
       login: (
-        callback: (response: { authResponse?: { code?: string } }) => void,
+        callback: (response: { status?: string; authResponse?: { code?: string } }) => void,
         options: Record<string, unknown>
       ) => void
     }
@@ -18,18 +18,21 @@ const WA_APP_ID    = import.meta.env.VITE_WA_APP_ID as string | undefined
 const WA_CONFIG_ID = import.meta.env.VITE_WA_CONFIG_ID as string | undefined
 const SDK_SCRIPT_ID = 'meta-embedded-signup-sdk'
 const LOG_PREFIX = '[EmbeddedSignup]'
-// Tempo máximo esperando o callback do FB.login() (popup travado, bloqueado
-// pelo navegador, ou o handshake interno do SDK nunca completando).
-const LOGIN_TIMEOUT_MS = 45000
-// Na reconexão em coexistência a escola ainda lê o QR code no celular dentro
-// do popup — o callback do FB.login() só chega quando o popup fecha.
-const RECONNECT_LOGIN_TIMEOUT_MS = 10 * 60 * 1000
+// Tempo máximo esperando o callback do FB.login(), em todos os modos: a escola
+// lê o QR code no celular dentro do popup e o callback só chega quando ele fecha.
+const LOGIN_TIMEOUT_MS = 10 * 60 * 1000
+// Depois do FINISH da Meta, quanto esperar o callback do FB.login() antes de
+// concluir só com os ids (caso "sem resposta": o popup some sem callback).
+const FINISH_GRACE_MS = 20_000
+// Callback sem code: quanto esperar o FINISH chegar (a ordem dos dois varia).
+const CODELESS_WAIT_MS = 3_000
 
 type Status = 'loading-sdk' | 'sdk-error' | 'not-configured' | 'idle' | 'connecting' | 'submitting' | 'success' | 'error'
 
 interface EmbeddedSignupData {
   phoneNumberId?: string
   wabaId?: string
+  businessId?: string
 }
 
 interface ReconnectTarget {
@@ -44,6 +47,12 @@ interface ReconnectResult {
   meta?: { status?: string | null; platform_type?: string | null; is_on_biz_app?: boolean | null; erro?: string }
 }
 
+interface Precheck {
+  state: 'checking' | 'connected' | 'not_connected' | 'unknown'
+  meta?: ReconnectResult['meta']
+  phone?: string | null
+}
+
 interface EmbeddedSignupButtonProps {
   institutionId: string
   onConnected: () => void
@@ -53,24 +62,26 @@ interface EmbeddedSignupButtonProps {
   reconnectTarget?: ReconnectTarget
   // Super Admin conectando pela ficha da escola: todo pedido leva o id desta
   // escola (o servidor só aceita isso de Super Admin). Sempre mostra o aviso
-  // + checkbox antes do popup, inclusive na primeira conexão.
+  // + checkbox antes do popup, inclusive na primeira conexão. Só aqui a
+  // conexão conclui sem o code da Meta (com os ids do FINISH).
   superAdminInstitutionId?: string
 }
 
-// Registro no audit_logs (clique / popup não concluído). Fire-and-forget:
-// nunca pode atrasar a abertura do popup, senão o navegador o bloqueia.
-async function logSignupEvent(payload: { event: string; result?: string; detail?: string; institution_id?: string }) {
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return
-    await fetch('/api/whatsapp/embedded-signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify(payload),
-    })
-  } catch (e) {
-    console.warn(LOG_PREFIX, 'falha ao registrar evento da conexão:', e)
-  }
+// Registro no audit_logs (clique, verificação, FINISH, popup não concluído).
+// Fire-and-forget: nunca pode atrasar a abertura do popup, senão o navegador
+// o bloqueia.
+type SignupEvent = { event: string; result?: string; detail?: string; meta?: Record<string, unknown>; institution_id?: string }
+async function postSignup(payload: Record<string, unknown>): Promise<Response | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) return null
+  return fetch('/api/whatsapp/embedded-signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(payload),
+  })
+}
+async function logSignupEvent(payload: SignupEvent) {
+  try { await postSignup(payload) } catch (e) { console.warn(LOG_PREFIX, 'falha ao registrar evento da conexão:', e) }
 }
 
 export default function EmbeddedSignupButton({ institutionId, onConnected, mode = 'connect', reconnectTarget, superAdminInstitutionId }: EmbeddedSignupButtonProps) {
@@ -83,22 +94,25 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
   const [errorMessage, setErrorMessage] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmChecked, setConfirmChecked] = useState(false)
+  const [precheck, setPrecheck] = useState<Precheck | null>(null)
   const [reconnectResult, setReconnectResult] = useState<ReconnectResult | null>(null)
-  const logPopupFailure = (result: string, detail?: string) => {
-    if (requireConfirm) void logSignupEvent({ event: `${eventPrefix}_popup_result`, result, detail, ...targetBody })
+  // Registro do resultado do popup, sempre (todos os modos), com os detalhes da Meta
+  const logPopupFailure = (result: string, meta?: Record<string, unknown>, detail?: string) => {
+    void logSignupEvent({ event: `${eventPrefix}_popup_result`, result, detail, meta, ...targetBody })
   }
   const signupDataRef = useRef<EmbeddedSignupData>({})
   const statusRef = useRef<Status>(status)
   const loginTimeoutRef = useRef<number | null>(null)
+  const finishTimerRef = useRef<number | null>(null)
+  const submittedRef = useRef(false)
 
   useEffect(() => {
     statusRef.current = status
   }, [status])
 
-  const clearLoginTimeout = () => {
-    if (loginTimeoutRef.current !== null) {
-      window.clearTimeout(loginTimeoutRef.current)
-      loginTimeoutRef.current = null
+  const clearTimers = () => {
+    for (const r of [loginTimeoutRef, finishTimerRef]) {
+      if (r.current !== null) { window.clearTimeout(r.current); r.current = null }
     }
   }
 
@@ -146,96 +160,22 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Captura phone_number_id/waba_id do evento WA_EMBEDDED_SIGNUP que a
-  // Meta manda via postMessage durante o fluxo do popup ──
-  useEffect(() => {
-    function handleMessage(event: MessageEvent) {
-      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return
-      let data: any
-      try {
-        data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-      } catch {
-        return
-      }
-      if (data?.type !== 'WA_EMBEDDED_SIGNUP') return
-      console.log(LOG_PREFIX, 'mensagem WA_EMBEDDED_SIGNUP recebida:', data.event, data.data)
-
-      if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
-        signupDataRef.current = {
-          phoneNumberId: data.data?.phone_number_id,
-          wabaId: data.data?.waba_id,
-        }
-      } else if (data.event === 'CANCEL') {
-        clearLoginTimeout()
-        setStatus('error')
-        setErrorMessage('Conexão cancelada antes de terminar. Tente novamente quando quiser.')
-        logPopupFailure('cancelado', data.data?.current_step)
-      } else if (data.event === 'ERROR') {
-        clearLoginTimeout()
-        setStatus('error')
-        setErrorMessage(data.data?.error_message || 'A Meta retornou um erro durante a conexão.')
-        logPopupFailure('erro_meta', data.data?.error_message)
-      }
-    }
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Limpa o timeout pendente se o componente desmontar no meio da espera.
-  useEffect(() => {
-    return () => clearLoginTimeout()
-  }, [])
-
-  // Lógica assíncrona de pós-login, isolada do callback passado ao
-  // FB.login(). O SDK do Facebook valida o tipo do callback em runtime
-  // (Closure Compiler) e rejeita uma função async diretamente — o
-  // constructor dela é AsyncFunction, não Function — com o erro síncrono
-  // "Expression is of type asyncfunction, not function", travando antes
-  // de abrir o popup. Por isso o callback em si precisa ser uma função
-  // comum, que só dispara esta função async sem esperar por ela (fire
-  // and forget) — ver handleConnectClick abaixo.
-  const handleFbLoginResponse = async (response: { authResponse?: { code?: string } }) => {
-    console.log(LOG_PREFIX, 'callback do FB.login() recebido:', response)
-    clearLoginTimeout()
-
-    const code = response.authResponse?.code
-    if (!code) {
-      // CANCEL/ERROR já registraram e mostraram a mensagem — não sobrescreve
-      if (statusRef.current === 'error') return
-      setStatus('error')
-      setErrorMessage('Não foi concedida autorização. Tente novamente.')
-      logPopupFailure('sem_codigo')
-      return
-    }
-
+  // ── Envia ao servidor. `code` pode faltar: só a equipe Áion (Super Admin)
+  // conclui assim, com os ids do FINISH; o servidor confere a conta. ──
+  const submit = async (code: string | undefined) => {
+    if (submittedRef.current) return
     const { phoneNumberId, wabaId } = signupDataRef.current
-    if (!phoneNumberId || !wabaId) {
-      setStatus('error')
-      setErrorMessage('Não foi possível identificar o número conectado. Tente novamente.')
-      logPopupFailure('sem_numero')
-      return
-    }
-
+    if (!phoneNumberId || !wabaId) return
+    submittedRef.current = true
+    clearTimers()
     setStatus('submitting')
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        throw new Error('Sessão expirada — faça login novamente e tente reconectar.')
-      }
-
-      const res = await fetch('/api/whatsapp/embedded-signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          code, phone_number_id: phoneNumberId, waba_id: wabaId,
-          ...(isReconnect ? { mode: 'reconnect' } : {}),
-          ...targetBody,
-        }),
+      const res = await postSignup({
+        ...(code ? { code } : {}), phone_number_id: phoneNumberId, waba_id: wabaId,
+        ...(isReconnect ? { mode: 'reconnect' } : {}),
+        ...targetBody,
       })
+      if (!res) throw new Error('Sessão expirada — faça login novamente e tente reconectar.')
       const result = await res.json()
       if (!res.ok) throw new Error(result?.error || 'Falha ao concluir a conexão com o WhatsApp')
 
@@ -251,34 +191,159 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
     }
   }
 
-  // Reconexão: primeiro o aviso; o popup só abre no clique de "Continuar"
+  // Popup fechou sem code: com os ids, a equipe Áion conclui; a escola não.
+  const handleCodeless = (fbStatus: string | undefined) => {
+    const ids = signupDataRef.current
+    const meta = { fb_status: fbStatus, waba_id: ids.wabaId, phone_number_id: ids.phoneNumberId, business_id: ids.businessId }
+    if (ids.phoneNumberId && ids.wabaId) {
+      if (isSuperAdmin) {
+        logPopupFailure('sem_codigo_com_ids', meta, 'concluindo só com os ids do FINISH')
+        void submit(undefined)
+        return
+      }
+      setStatus('error')
+      setErrorMessage('A Meta terminou mas não devolveu a autorização. Peça à equipe Áion para concluir pela ficha da escola — o número não precisa ser refeito.')
+      logPopupFailure('sem_codigo_com_ids', meta)
+      return
+    }
+    setStatus('error')
+    setErrorMessage('A janela da Meta fechou sem concluir. Tente novamente.')
+    logPopupFailure('sem_codigo', meta)
+  }
+
+  // ── Captura phone_number_id/waba_id do evento WA_EMBEDDED_SIGNUP que a
+  // Meta manda via postMessage durante o fluxo do popup ──
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return
+      let data: any
+      try {
+        data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+      } catch {
+        return
+      }
+      if (data?.type !== 'WA_EMBEDDED_SIGNUP') return
+      console.log(LOG_PREFIX, 'mensagem WA_EMBEDDED_SIGNUP recebida:', data.event, data.data)
+      const meta = { event: data.event, ...(data.data && typeof data.data === 'object' ? data.data : {}) }
+
+      if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+        signupDataRef.current = {
+          phoneNumberId: data.data?.phone_number_id,
+          wabaId: data.data?.waba_id,
+          businessId: data.data?.business_id,
+        }
+        void logSignupEvent({ event: `${eventPrefix}_popup_finish`, meta, ...targetBody })
+        // Se o callback do FB.login() não vier (popup some sem resposta), a
+        // equipe Áion conclui só com os ids depois de um tempo.
+        if (isSuperAdmin && finishTimerRef.current === null) {
+          finishTimerRef.current = window.setTimeout(() => {
+            finishTimerRef.current = null
+            if (statusRef.current === 'connecting' && !submittedRef.current) {
+              logPopupFailure('finish_sem_retorno', meta, `sem callback do FB.login() ${FINISH_GRACE_MS / 1000}s após o FINISH`)
+              void submit(undefined)
+            }
+          }, FINISH_GRACE_MS)
+        }
+      } else if (data.event === 'CANCEL') {
+        clearTimers()
+        setStatus('error')
+        setErrorMessage(data.data?.error_message
+          ? `A Meta interrompeu: ${data.data.error_message}`
+          : 'Conexão cancelada antes de terminar. Tente novamente quando quiser.')
+        logPopupFailure('cancelado', meta, data.data?.current_step)
+      } else if (data.event === 'ERROR') {
+        clearTimers()
+        setStatus('error')
+        setErrorMessage(data.data?.error_message || 'A Meta retornou um erro durante a conexão.')
+        logPopupFailure('erro_meta', meta, data.data?.error_message)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Limpa os timers pendentes se o componente desmontar no meio da espera.
+  useEffect(() => {
+    return () => clearTimers()
+  }, [])
+
+  // Lógica assíncrona de pós-login, isolada do callback passado ao
+  // FB.login(). O SDK do Facebook valida o tipo do callback em runtime
+  // (Closure Compiler) e rejeita uma função async diretamente — o
+  // constructor dela é AsyncFunction, não Function — com o erro síncrono
+  // "Expression is of type asyncfunction, not function", travando antes
+  // de abrir o popup. Por isso o callback em si precisa ser uma função
+  // comum, que só dispara esta função async sem esperar por ela (fire
+  // and forget) — ver handleConnectClick abaixo.
+  const handleFbLoginResponse = async (response: { status?: string; authResponse?: { code?: string } }) => {
+    console.log(LOG_PREFIX, 'callback do FB.login() recebido:', response)
+    if (loginTimeoutRef.current !== null) { window.clearTimeout(loginTimeoutRef.current); loginTimeoutRef.current = null }
+    if (submittedRef.current) return
+
+    const code = response.authResponse?.code
+    if (!code) {
+      // CANCEL/ERROR já registraram e mostraram a mensagem — não sobrescreve
+      if (statusRef.current === 'error') return
+      // o FINISH pode chegar logo depois do callback
+      if (!signupDataRef.current.wabaId) await new Promise(r => setTimeout(r, CODELESS_WAIT_MS))
+      // relê o ref: CANCEL/ERROR podem ter chegado durante a espera
+      const current = (): Status => statusRef.current
+      if (current() === 'error' || submittedRef.current) return
+      handleCodeless(response.status)
+      return
+    }
+
+    const { phoneNumberId, wabaId } = signupDataRef.current
+    if (!phoneNumberId || !wabaId) {
+      setStatus('error')
+      setErrorMessage('Não foi possível identificar o número conectado. Tente novamente.')
+      logPopupFailure('sem_numero', { fb_status: response.status })
+      return
+    }
+    await submit(code)
+  }
+
+  // Aviso antes do popup; com número salvo, confere na Meta se já está
+  // conectado (o popup só abre no clique de "Continuar", nunca depois de await).
   const handleReconnectClick = () => {
     setConfirmChecked(false)
     setConfirmOpen(true)
+    setPrecheck({ state: 'checking' })
+    void (async () => {
+      try {
+        const res = await postSignup({ event: `${eventPrefix}_precheck`, ...targetBody })
+        const d = res ? await res.json() : null
+        if (!res?.ok || !d) { setPrecheck({ state: 'unknown' }); return }
+        if (d.sem_numero) { setPrecheck(null); return }
+        setPrecheck({ state: d.connected ? 'connected' : d.meta?.erro ? 'unknown' : 'not_connected', meta: d.meta, phone: d.phone_number })
+      } catch { setPrecheck({ state: 'unknown' }) }
+    })()
   }
 
   const handleConfirmReconnect = () => {
-    if (!confirmChecked) return
+    if (!confirmChecked || precheck?.state === 'connected' || precheck?.state === 'checking') return
     setConfirmOpen(false)
-    void logSignupEvent({ event: `${eventPrefix}_click`, ...targetBody })
     handleConnectClick()
   }
 
   const handleConnectClick = () => {
     if (!window.FB) return
+    void logSignupEvent({ event: `${eventPrefix}_click`, ...targetBody })
     setStatus('connecting')
     setErrorMessage('')
     signupDataRef.current = {}
+    submittedRef.current = false
 
-    clearLoginTimeout()
+    clearTimers()
     loginTimeoutRef.current = window.setTimeout(() => {
-      if (statusRef.current === 'connecting') {
-        console.error(LOG_PREFIX, `nenhuma resposta do FB.login() em ${LOGIN_TIMEOUT_MS / 1000}s — provável popup bloqueado ou handshake do SDK travado`)
+      if (statusRef.current === 'connecting' && !submittedRef.current) {
+        console.error(LOG_PREFIX, `nenhuma resposta do FB.login() em ${LOGIN_TIMEOUT_MS / 60000} min`)
         setStatus('error')
-        setErrorMessage('Não foi possível abrir a conexão com a Meta. Verifique se o navegador não está bloqueando pop-ups e tente novamente.')
+        setErrorMessage('A janela da Meta ficou aberta 10 minutos sem terminar. Se ela fechou ou travou, tente novamente.')
         logPopupFailure('sem_resposta')
       }
-    }, requireConfirm ? RECONNECT_LOGIN_TIMEOUT_MS : LOGIN_TIMEOUT_MS)
+    }, LOGIN_TIMEOUT_MS)
 
     try {
       console.log(LOG_PREFIX, 'chamando FB.login() com config_id:', WA_CONFIG_ID)
@@ -296,10 +361,11 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
         }
       )
     } catch (e) {
-      clearLoginTimeout()
+      clearTimers()
       console.error(LOG_PREFIX, 'erro ao chamar FB.login():', e)
       setStatus('error')
       setErrorMessage('Não foi possível abrir a janela de conexão com a Meta. Tente novamente.')
+      logPopupFailure('erro_meta', { error_message: e instanceof Error ? e.message : String(e) }, 'FB.login() lançou erro')
     }
   }
 
@@ -338,10 +404,12 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
   const busy = status === 'loading-sdk' || status === 'connecting' || status === 'submitting'
   const label =
     status === 'loading-sdk' ? 'Carregando…' :
-    status === 'connecting'  ? 'Aguardando confirmação…' :
+    status === 'connecting'  ? 'Aguardando a janela da Meta…' :
     status === 'submitting'  ? 'Conectando…' :
     isReconnect ? 'Reconectar (coexistência)' :
     isSuperAdmin ? 'Conectar WhatsApp (coexistência)' : 'Conectar via Meta'
+  const blocked = precheck?.state === 'connected' || precheck?.state === 'checking'
+  const canContinue = confirmChecked && !blocked
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -350,9 +418,40 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
           style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: 14, maxWidth: 520, width: '100%', padding: 22, boxShadow: '0 20px 50px rgba(0,0,0,0.25)', fontSize: 13, color: '#334155', lineHeight: 1.6, maxHeight: '90vh', overflowY: 'auto' }}>
+            {precheck?.state === 'connected' ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700, color: '#16a34a', marginBottom: 10 }}>
+                  <CheckCircle size={18} />Este número já está conectado
+                </div>
+                <p style={{ margin: '0 0 10px' }}>
+                  A Meta mostra o número <strong>{precheck.phone || reconnectTarget?.phoneNumber || '—'}</strong> conectado em coexistência
+                  (estado <strong>{precheck.meta?.status ?? '—'}</strong> · app do celular <strong>ligado</strong>). Não é preciso abrir a janela da Meta.
+                </p>
+                <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748B' }}>
+                  Se as mensagens não estão chegando, o problema não é a conexão do número: fale com a equipe Áion.
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={() => setConfirmOpen(false)}
+                    style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#64748B', cursor: 'pointer' }}>
+                    Fechar
+                  </button>
+                </div>
+              </>
+            ) : (
+            <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700, color: '#B45309', marginBottom: 10 }}>
               <AlertCircle size={18} />{isReconnect ? 'Antes de reconectar, leia com atenção' : 'Antes de conectar, leia com atenção'}
             </div>
+            {precheck?.state === 'checking' && (
+              <p style={{ margin: '0 0 10px', fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Loader2 size={13} className="animate-spin" />Conferindo na Meta se o número já está conectado…
+              </p>
+            )}
+            {precheck?.state === 'unknown' && (
+              <p style={{ margin: '0 0 10px', fontSize: 12, color: '#B45309' }}>
+                Não foi possível conferir agora se o número já está conectado. Pode continuar.
+              </p>
+            )}
             <p style={{ margin: '0 0 10px' }}>
               Vai abrir a janela da Meta para {isReconnect ? 'religar' : 'ligar'} o WhatsApp da escola à Áion, <strong>mantendo o app WhatsApp Business no celular</strong>. {isSuperAdmin ? 'A escola precisa estar na chamada com o celular em mãos' : 'Deixe o celular da escola por perto'}: ele vai pedir para ler um QR code ou confirmar.
             </p>
@@ -383,11 +482,13 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
                 style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#64748B', cursor: 'pointer' }}>
                 Cancelar
               </button>
-              <button onClick={handleConfirmReconnect} disabled={!confirmChecked}
-                style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: confirmChecked ? '#00A896' : '#94A3B8', fontSize: 13, fontWeight: 700, color: '#fff', cursor: confirmChecked ? 'pointer' : 'default' }}>
+              <button onClick={handleConfirmReconnect} disabled={!canContinue}
+                style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: canContinue ? '#00A896' : '#94A3B8', fontSize: 13, fontWeight: 700, color: '#fff', cursor: canContinue ? 'pointer' : 'default' }}>
                 Continuar para a Meta
               </button>
             </div>
+            </>
+            )}
           </div>
         </div>
       )}
