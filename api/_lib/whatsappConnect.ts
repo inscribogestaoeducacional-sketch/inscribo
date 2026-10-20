@@ -13,8 +13,9 @@ import { checkPopupWaba, type ConnectContext } from './whatsappConnectAuth.js'
 // Nos dois casos, com o token de sistema da plataforma:
 //   1. travas da conta: nunca troca a WABA já salva, nunca aceita a WABA de
 //      teste (checkPopupWaba);
-//   2. a WABA tem de estar no portfólio da Áion (compartilhada com ele pelo
-//      cadastro incorporado ou dele mesmo); senão recusa;
+//   2. a WABA tem de estar no portfólio da Áion (dona da WABA = Áion; ou,
+//      fallback, nas listas do portfólio); senão recusa
+//      (checkWabaInAionPortfolio);
 //   3. o número tem de ser desta WABA;
 //   4. inscreve o app nos webhooks (subscribed_apps), lê o número, grava e,
 //      em coexistência, pede contatos e histórico (smb_app_data).
@@ -179,7 +180,8 @@ export async function runConnect(ctx: ConnectContext, input: ConnectInput, deps:
 
 // ── Implementação real (banco + Graph API) ──
 // Só os campos da resposta da Graph API que este arquivo lê
-type GraphBody = { error?: { message?: string }; data?: { id?: string }[]; paging?: { next?: string }; success?: boolean; display_phone_number?: string; verified_name?: string }
+type GraphBody = { error?: { message?: string }; data?: { id?: string }[]; paging?: { next?: string }; success?: boolean; display_phone_number?: string; verified_name?: string; owner_business_info?: { id?: string } }
+type GraphFn = (path: string, token: string) => Promise<{ ok: boolean; body: GraphBody }>
 async function graph(path: string, token: string, init: RequestInit = {}): Promise<{ ok: boolean; body: GraphBody }> {
   try {
     const r = await fetch(`${GRAPH_URL}/${path}`, {
@@ -194,16 +196,38 @@ async function graph(path: string, token: string, init: RequestInit = {}): Promi
 const gErr = (b: GraphBody | undefined) => String(b?.error?.message || 'falha na Meta').slice(0, 200)
 
 // Percorre uma lista paginada da Graph API (até 20 páginas) procurando um id.
-async function listHas(path: string, id: string, token: string): Promise<{ found: boolean; erro?: string }> {
+async function listHas(path: string, id: string, token: string, get: GraphFn = graph): Promise<{ found: boolean; erro?: string }> {
   let next: string | null = `${path}${path.includes('?') ? '&' : '?'}fields=id&limit=100`
   for (let i = 0; i < 20 && next; i++) {
-    const r = await graph(next, token)
+    const r = await get(next, token)
     if (!r.ok) return { found: false, erro: gErr(r.body) }
     if ((r.body?.data ?? []).some(x => String(x?.id) === id)) return { found: true }
     const n: string | undefined = r.body?.paging?.next
     next = n ? n.replace(/^https:\/\/graph\.facebook\.com\/v[\d.]+\//, '') : null
   }
   return { found: false }
+}
+
+// A WABA está no portfólio da Áion? 1º lê a DONA da própria WABA
+// (owner_business_info) e exige o id da Áion — o token de sistema da plataforma
+// lê isso. As listas do portfólio (client_/owned_whatsapp_business_accounts)
+// ficam como fallback: pedem business_management, que o token não tem hoje
+// (conferido 20/10/2026: 403 #200), mas cobrem a WABA de outro dono
+// compartilhada com a Áion, se a permissão for dada um dia.
+export async function checkWabaInAionPortfolio(
+  wabaId: string, token: string, get: GraphFn = graph,
+): Promise<{ ok: boolean; via?: string; erro?: string }> {
+  const own = await get(`${wabaId}?fields=owner_business_info`, token)
+  const ownerId = own.ok ? String(own.body?.owner_business_info?.id ?? '') : ''
+  if (ownerId === AION_BUSINESS_ID) return { ok: true, via: 'dona' }
+  const client = await listHas(`${AION_BUSINESS_ID}/client_whatsapp_business_accounts`, wabaId, token, get)
+  if (client.found) return { ok: true, via: 'compartilhada' }
+  const owned = await listHas(`${AION_BUSINESS_ID}/owned_whatsapp_business_accounts`, wabaId, token, get)
+  if (owned.found) return { ok: true, via: 'propria' }
+  // Dona lida e diferente da Áion = outro portfólio (mesmo com as listas sem
+  // permissão). Só é "não conferido" se nem a dona deu para ler.
+  if (ownerId) return { ok: false }
+  return { ok: false, erro: own.ok ? 'a Meta não informou a dona da conta' : gErr(own.body) }
 }
 
 export const defaultConnectDeps: ConnectDeps = {
@@ -230,14 +254,7 @@ export const defaultConnectDeps: ConnectDeps = {
       return { erro: e instanceof Error ? e.message : String(e) }
     }
   },
-  wabaInAionPortfolio: async (wabaId, token) => {
-    const client = await listHas(`${AION_BUSINESS_ID}/client_whatsapp_business_accounts`, wabaId, token)
-    if (client.found) return { ok: true, via: 'compartilhada' }
-    const owned = await listHas(`${AION_BUSINESS_ID}/owned_whatsapp_business_accounts`, wabaId, token)
-    if (owned.found) return { ok: true, via: 'propria' }
-    const erro = client.erro && owned.erro ? client.erro : undefined
-    return { ok: false, erro }
-  },
+  wabaInAionPortfolio: (wabaId, token) => checkWabaInAionPortfolio(wabaId, token),
   wabaHasPhone: async (wabaId, phoneNumberId, tokens) => {
     let erro: string | undefined
     for (const t of tokens) {

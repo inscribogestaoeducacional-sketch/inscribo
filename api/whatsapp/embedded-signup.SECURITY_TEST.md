@@ -17,9 +17,13 @@ Travas da conta (`api/_lib/whatsappConnect.ts`, com ou sem `code`), nesta ordem:
 1. nunca troca a WABA já salva da escola; nunca aceita a WABA de teste
    `2812701862456294` (nem a de `platform_settings.wa_waba_id`) — antes de
    chamar a Meta;
-2. a WABA tem de estar no portfólio da Áion `1009021325175669`
-   (`client_whatsapp_business_accounts` ou `owned_whatsapp_business_accounts`),
-   conferido com o token da plataforma; senão 409 `waba_de_outro_portfolio`;
+2. a WABA tem de estar no portfólio da Áion `1009021325175669`, conferido com
+   o token da plataforma: primeiro a dona da própria WABA
+   (`GET /{waba}?fields=owner_business_info`, tem de ser esse id); se não for,
+   as listas `client_whatsapp_business_accounts` / `owned_whatsapp_business_accounts`
+   (fallback — pedem `business_management`, que o token não tem hoje); senão
+   409 `waba_de_outro_portfolio` (ou `portfolio_nao_conferido` se nem a dona
+   deu para ler);
 3. o número tem de ser dessa WABA (`/{waba}/phone_numbers`);
 4. só então: `subscribed_apps`, leitura do número, gravação e `smb_app_data`.
    **Nunca** `/register` e **nunca** `fb_exchange_token`.

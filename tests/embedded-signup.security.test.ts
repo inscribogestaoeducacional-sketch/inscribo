@@ -286,3 +286,35 @@ test('detalhes da Meta no audit: só os campos da lista, nada de token', async (
   assert.equal(metaDetail(null), null)
   assert.equal(metaDetail({ access_token: 'segredo' }), null)
 })
+
+test('portfólio: lê a dona da WABA; listas só como fallback', async () => {
+  const { checkWabaInAionPortfolio } = await import('../api/_lib/whatsappConnect.js')
+  const SEM_PERM = { ok: false, body: { error: { message: '(#200) Requires business_management permission' } } }
+  // Meta simulada: token sem business_management (como hoje) → listas 403
+  const meta = (dona: string | null, lerDona = true, listas: string[] | null = null) => {
+    const calls: string[] = []
+    const get = async (path: string) => {
+      calls.push(path.split('?')[0])
+      if (path.includes('owner_business_info')) {
+        return lerDona ? { ok: true, body: dona ? { owner_business_info: { id: dona } } : {} } : SEM_PERM
+      }
+      return listas ? { ok: true, body: { data: listas.map(id => ({ id })) } } : SEM_PERM
+    }
+    return { get, calls }
+  }
+  // dona = Áion → aceita sem tocar nas listas
+  let m = meta('1009021325175669')
+  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: true, via: 'dona' })
+  assert.deepEqual(m.calls, ['2226058870759667'])
+  // dona = outro portfólio, listas sem permissão → outro portfólio (não "não conferido")
+  m = meta('555')
+  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: false })
+  // dona = outro, mas a WABA está compartilhada com a Áion (lista) → aceita
+  m = meta('555', true, ['2226058870759667'])
+  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: true, via: 'compartilhada' })
+  // nem a dona nem as listas dão para ler → não conferido (com erro)
+  m = meta(null, false)
+  const r = await checkWabaInAionPortfolio('2226058870759667', 't', m.get)
+  assert.equal(r.ok, false)
+  assert.match(r.erro ?? '', /business_management/)
+})
