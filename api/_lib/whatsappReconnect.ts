@@ -24,7 +24,21 @@ import type { ConnectActor, ConnectContext } from './whatsappConnectAuth.js'
 
 const META_FETCH_TIMEOUT_MS = 30000
 const AUDIT_MODULE = 'whatsapp'
-const POPUP_RESULTS = ['cancelado', 'erro_meta', 'sem_resposta', 'sem_codigo', 'sem_numero'] as const
+const POPUP_RESULTS = ['cancelado', 'erro_meta', 'sem_resposta', 'sem_codigo', 'sem_numero', 'sem_codigo_com_ids', 'finish_sem_retorno'] as const
+// Detalhes da Meta que vão para o audit_logs (o resto do objeto é descartado):
+// código e mensagem do erro, sessão, etapa, portfólio e os ids devolvidos.
+const META_KEYS = ['event', 'fb_status', 'error_code', 'error_id', 'error_message', 'error_type', 'session_id', 'current_step',
+                   'business_id', 'waba_id', 'phone_number_id', 'ad_account_ids', 'page_ids', 'dataset_ids', 'timestamp'] as const
+export function metaDetail(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== 'object') return null
+  const out: Record<string, string> = {}
+  for (const k of META_KEYS) {
+    const v = (raw as Record<string, unknown>)[k]
+    if (v === null || v === undefined || v === '') continue
+    out[k] = (typeof v === 'object' ? JSON.stringify(v) : String(v)).slice(0, 500)
+  }
+  return Object.keys(out).length ? out : null
+}
 // Resultados em que o fluxo da Meta pode ter terminado sem o code chegar até
 // nós — nesses vale conferir o número na Meta.
 const POPUP_RESULTS_CHECK_META = ['sem_codigo', 'sem_numero']
@@ -83,7 +97,7 @@ async function loadCurrentPhone(institutionId: string): Promise<CurrentPhone | n
 }
 
 // Token de sistema da plataforma — o mesmo que send.ts/webhook.ts usam.
-async function getPlatformToken(): Promise<string> {
+export async function getPlatformToken(): Promise<string> {
   const supabase = getSupabaseAdmin()
   const { data } = await supabase.from('platform_settings')
     .select('value').eq('key', 'wa_access_token').maybeSingle()
@@ -123,15 +137,43 @@ export async function readMetaPhoneState(phoneNumberId: string, token: string): 
 const isCoexistenceConnected = (m: MetaPhoneState) =>
   m.status === 'CONNECTED' && m.platform_type === 'CLOUD_API' && m.is_on_biz_app === true
 
-// ── Eventos só de registro: clique no botão e resultado do popup ──
-// reconnect_* = escola que já tem número; connect_* = primeira conexão em
-// coexistência (hoje feita pela equipe Áion na ficha da escola).
+// ── Eventos só de registro: clique, verificação antes do popup, FINISH da
+// Meta e resultado do popup — em TODOS os modos ──
+// reconnect_* = escola que já tem número; connect_* = primeira conexão.
 export async function handleReconnectEvent(
   res: VercelResponse, ctx: ConnectContext, body: any,
 ) {
   const current = await loadCurrentPhone(ctx.institutionId)
   const isConnect = typeof body.event === 'string' && body.event.startsWith('connect_')
   const prefix = isConnect ? 'Conexão WhatsApp (coexistência)' : 'Reconexão WhatsApp (coexistência)'
+  const detailJson = () => {
+    const meta = metaDetail(body.meta)
+    const detail = typeof body.detail === 'string' ? body.detail.slice(0, 300) : ''
+    return meta ? JSON.stringify(detail ? { ...meta, detalhe: detail } : meta) : (detail || null)
+  }
+
+  // Antes de abrir o popup: o número salvo já está conectado em coexistência?
+  if (body.event === 'reconnect_precheck' || body.event === 'connect_precheck') {
+    if (!current) return res.status(200).json({ connected: false, sem_numero: true })
+    const meta = await readMetaPhoneState(current.phone_number_id, await getPlatformToken())
+    const connected = isCoexistenceConnected(meta)
+    await writeAudit({
+      ...ctx, recordId: current.id,
+      action: `${prefix}: verificação antes do popup`,
+      fieldChanged: connected ? 'ja_conectado' : meta.erro ? 'nao_conferido' : 'nao_conectado',
+      newValue: JSON.stringify({ numero: current.phone_number, waba: current.waba_id, meta }),
+    })
+    return res.status(200).json({ connected, meta, phone_number: current.phone_number })
+  }
+  if (body.event === 'reconnect_popup_finish' || body.event === 'connect_popup_finish') {
+    await writeAudit({
+      ...ctx, recordId: current?.id,
+      action: `${prefix}: Meta avisou o fim (FINISH)`,
+      fieldChanged: 'finish',
+      newValue: detailJson(),
+    })
+    return res.status(200).json({ ok: true })
+  }
   if (body.event === 'reconnect_click' || body.event === 'connect_click') {
     await writeAudit({
       ...ctx, recordId: current?.id,
@@ -143,12 +185,11 @@ export async function handleReconnectEvent(
   }
   if (body.event === 'reconnect_popup_result' || body.event === 'connect_popup_result') {
     const result = POPUP_RESULTS.includes(body.result) ? body.result : 'erro_meta'
-    const detail = typeof body.detail === 'string' ? body.detail.slice(0, 300) : ''
     await writeAudit({
       ...ctx, recordId: current?.id,
       action: `${prefix}: popup não concluído`,
       fieldChanged: result,
-      newValue: detail || null,
+      newValue: detailJson(),
     })
 
     // O popup pode fechar sem devolver o code depois de a Meta já ter
@@ -221,7 +262,9 @@ async function reconnect(
   if (!current.waba_id) {
     return fail(409, 'sem_waba_cadastrado', 'O número desta escola não tem a conta (WABA) cadastrada. Fale com a equipe Áion antes de reconectar.')
   }
-  if (!input.code || !input.phone_number_id || !input.waba_id) {
+  // Sem code (popup fechou sem a autorização) só a equipe Áion conclui: a
+  // conta tem de ser a já salva, conferida abaixo, e o resto usa o token da plataforma.
+  if (!input.phone_number_id || !input.waba_id || (!input.code && actor !== 'superadmin')) {
     return fail(400, 'dados_incompletos', 'A Meta não devolveu os dados da conexão. Nada foi alterado. Tente de novo.')
   }
   if (String(input.waba_id) !== String(current.waba_id)) {
@@ -247,7 +290,7 @@ async function reconnect(
   //    envio usa o token de sistema da plataforma, não este.
   let codeExchanged = false
   let businessToken = ''
-  if (WA_APP_ID && WA_APP_SECRET) {
+  if (input.code && WA_APP_ID && WA_APP_SECRET) {
     try {
       const r = await fetch(
         `${GRAPH_URL}/oauth/access_token?client_id=${WA_APP_ID}&client_secret=${WA_APP_SECRET}&code=${encodeURIComponent(input.code)}`,
@@ -304,7 +347,7 @@ async function reconnect(
     oldValue: `phone_id=${current.phone_number_id} waba=${current.waba_id}`,
     newValue: JSON.stringify({
       tipo: 'coexistencia', por: actor ?? 'school_admin',
-      phone_id: input.phone_number_id, code_trocado: codeExchanged, app_inscrito: subscribed, meta,
+      phone_id: input.phone_number_id, sem_code: !input.code, code_trocado: codeExchanged, app_inscrito: subscribed, meta,
       sincronizacao: sync.length ? summarizeSmbSync(sync) : 'não pedida (número fora da coexistência)',
     }),
   })
