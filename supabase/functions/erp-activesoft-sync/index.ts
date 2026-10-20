@@ -6,6 +6,9 @@
 //   test  → uma chamada limit=1 em cada rota permitida: descobre a forma de
 //           autenticação (Bearer/Token), marca o que respondeu (scopes_ok) e
 //           guarda só os NOMES dos campos (fields_seen). Nenhum dado é guardado.
+//   periodos → SÓ LEITURA, nada gravado: descobre como pedir o ano seguinte
+//           (periodo como sigla, como id ou por turma), devolve o resultado cru de
+//           cada tentativa (sem dado pessoal) e conta por ano e situação.
 //   step  → avança a leitura de uma carga (sync_runs criada por base_erp_start)
 //           por ~40 s, 25 itens por página, e para; a próxima chamada continua
 //           de onde parou (step/step_offset). Ao terminar, a carga fica
@@ -15,7 +18,8 @@
 // nunca vai para log, erro ou resposta.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { PAGE_SIZE, ROUTES, ForbiddenRoute, routeUrl, readPage, fieldNames, plan, normalize, apiMessage, pickScheme, unidadeFromTurma, vinculosFromAluno, OPTIONAL_STEPS, type RouteKey, type Probe } from './adapter.ts'
+import { PAGE_SIZE, ROUTES, ForbiddenRoute, routeUrl, readPage, fieldNames, plan, normalize, apiMessage, pickScheme, unidadeFromTurma, vinculosFromAluno, OPTIONAL_STEPS, periodYears, type RouteKey, type Probe, type PeriodMode } from './adapter.ts'
+import { periodProbe, periodCount, type Getter, type PeriodProbe } from './periods.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -55,8 +59,9 @@ serve(async (req) => {
     const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     switch (body?.action) {
       case 'test': return json(200, await actionTest(sb, inst))
+      case 'periodos': return json(200, await actionPeriods(sb, inst))
       case 'step': return json(200, await actionStep(sb, inst, String(body?.run_id || '')))
-      default: throw new HttpError(400, 'action deve ser test ou step')
+      default: throw new HttpError(400, 'action deve ser test, periodos ou step')
     }
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500
@@ -68,11 +73,15 @@ serve(async (req) => {
 
 async function loadConn(sb: Supa, inst: string) {
   const { data: conn } = await sb.from('erp_connections')
-    .select('api_base_url, auth_scheme, token_secret_id').eq('institution_id', inst).eq('provider', 'activesoft').maybeSingle()
+    .select('api_base_url, auth_scheme, token_secret_id, scopes_ok').eq('institution_id', inst).eq('provider', 'activesoft').maybeSingle()
   if (!conn?.token_secret_id) throw new HttpError(400, 'Cadastre o token do Activesoft primeiro')
   const { data: token, error } = await sb.rpc('erp_connection_token', { p_institution_id: inst, p_provider: 'activesoft' })
   if (error || !token) throw new HttpError(500, 'Não foi possível ler o token guardado')
-  return { baseUrl: conn.api_base_url as string, scheme: conn.auth_scheme as string | null, token: token as string }
+  // forma de pedir o ano seguinte, descoberta no teste; sem teste, só o ano atual
+  const periodos = ((conn.scopes_ok ?? {}) as Record<string, unknown>)._periodos as { modo?: PeriodMode; valor?: string | null; seguinte?: string } | undefined
+  const fresh = periodos?.seguinte === periodYears().seguinte
+  return { baseUrl: conn.api_base_url as string, scheme: conn.auth_scheme as string | null, token: token as string,
+           periodMode: (fresh ? periodos?.modo ?? 'nenhum' : 'nenhum') as PeriodMode, periodValue: fresh ? periodos?.valor ?? null : null }
 }
 
 class ApiError extends Error { constructor(public status: number, message: string, public detail = '') { super(message) } }
@@ -142,6 +151,13 @@ async function actionTest(sb: Supa, inst: string) {
     if (p.ok && p.fields) fields[k] = p.fields
   }
   scopes._auth = { aceita: pick.scheme, mostrada: pick.shown, tentativas: pick.tried, endereco: baseUrl }
+  // períodos: grava só a forma que funcionou e o resumo (sem o cru, sem ids)
+  if (pick.scheme) {
+    try {
+      const p = await periodProbe(getter(baseUrl, pick.scheme, token), periodYears(), { deadline: Date.now() + 45_000 })
+      scopes._periodos = { ...probeSummary(p), testado_em: new Date().toISOString() }
+    } catch (e) { scopes._periodos = { erro: errText(e) } }
+  }
   const now = new Date().toISOString()
   const failed = Object.entries(pick.routes).filter(([, p]) => !p.ok)
   const onlyOptional = pick.okCount > 0 && failed.every(([k, p]) => OPTIONAL_STEPS.has(k) && p.status === 403)
@@ -156,6 +172,29 @@ async function actionTest(sb: Supa, inst: string) {
   return { ok: pick.allOk || onlyOptional, any_ok: pick.okCount > 0, scheme: pick.scheme, shown: pick.shown, base_url: baseUrl, scopes, fields, error: err }
 }
 
+const getter = (baseUrl: string, scheme: string, token: string): Getter =>
+  (route, params) => apiGet(baseUrl, route, params, scheme, token)
+
+const probeSummary = (p: PeriodProbe) => ({
+  atual: p.atual, seguinte: p.seguinte, modo: p.modo, valor: p.valor, detalhe: p.detalhe, falta_proximo_periodo: p.falta_proximo_periodo,
+  turmas: Object.fromEntries(Object.entries(p.turmas).map(([a, t]) => [a, t.n])),
+  tentativas: p.tentativas.map(t => ({ forma: t.forma, parametro: t.parametro, http: t.http, resultado: t.resultado })),
+})
+
+// Conferir períodos: SÓ LEITURA. Nenhuma linha em erp_staging, sync_runs ou
+// erp_connections; tudo fica em memória e volta na resposta (contagens e o cru
+// sem dado pessoal). Os ids de turma não voltam.
+async function actionPeriods(sb: Supa, inst: string) {
+  const { baseUrl, scheme, token } = await loadConn(sb, inst)
+  if (!scheme) throw new HttpError(400, 'Faça o teste de conexão antes')
+  const get = getter(baseUrl, scheme, token)
+  const t0 = Date.now()
+  const p = await periodProbe(get, periodYears(), { deadline: t0 + 40_000, comparar: 3 })
+  const c = await periodCount(get, p, { deadline: t0 + 120_000 })
+  const { turmas_atual_ids: _a, turmas_seguinte_ids: _s, ...probe } = p
+  return { ...probe, contagem: c, segundos: Math.round((Date.now() - t0) / 1000) }
+}
+
 function errText(e: unknown) {
   if (e instanceof ForbiddenRoute) return e.message
   if (e instanceof ApiError) return e.message
@@ -168,12 +207,16 @@ async function actionStep(sb: Supa, inst: string, runId: string) {
   if (!run) throw new HttpError(404, 'Carga não encontrada')
   if (!['na_fila', 'rodando'].includes(run.status)) return progress(run, null)
 
-  const { baseUrl, scheme, token } = await loadConn(sb, inst)
+  const { baseUrl, scheme, token, periodMode, periodValue } = await loadConn(sb, inst)
   if (!scheme) throw new HttpError(400, 'Faça o teste de conexão antes da carga')
   // nomes (aluno/responsável): aditivo LGPD registrado pelo Super Admin E caixa marcada na carga
   const { data: settings } = await sb.from('student_base_settings').select('names_allowed').eq('institution_id', inst).maybeSingle()
   const names = settings?.names_allowed === true && (run.counts as Record<string, unknown> | null)?.guardar_nomes === true
-  const steps = plan(names)
+  const years = periodYears()
+  // modo 'turma': as etapas do ano seguinte saem das turmas de 2027 já guardadas
+  const buildPlan = async () => plan(names, { ...years, modo: periodMode, valor: periodValue,
+    turmasSeguinte: periodMode === 'turma' ? [...await stagedTurmasDoAno(sb, runId, years.seguinte)].sort() : [] })
+  let steps = await buildPlan()
   let idx = Math.max(0, steps.findIndex(s => s.key === run.step))
   let offset = run.step_offset ?? 0
   const counts: Record<string, unknown> = { ...(run.counts ?? {}) }
@@ -231,7 +274,13 @@ async function actionStep(sb: Supa, inst: string, runId: string) {
       }
       counts[step.key] = Number(counts[step.key] ?? 0) + rows.filter(r => r.entity === step.entity).length
       if (page.hasMore && page.items.length > 0) offset += PAGE_SIZE
-      else { idx++; offset = 0 }
+      else {
+        idx++; offset = 0
+        if (periodMode === 'turma' && step.key === `turmas_${years.seguinte}`) {
+          steps = await buildPlan()
+          idx = steps.findIndex(s => s.key === step.key) + 1
+        }
+      }
       await sb.from('sync_runs').update({
         step: idx < steps.length ? steps[idx].key : 'contagem', step_offset: offset, counts, http_calls: calls, pages,
       }).eq('id', runId)
@@ -272,6 +321,18 @@ async function familyCounts(sb: Supa, runId: string, names: boolean) {
   }
   const com = [...alunos].filter(a => linked.has(a)).length
   return { responsaveis_lidos: true, alunos_lidos: alunos.size, alunos_com_responsavel: com, alunos_sem_responsavel: alunos.size - com }
+}
+
+// turmas de um ano já guardadas nesta carga
+async function stagedTurmasDoAno(sb: Supa, runId: string, ano: string): Promise<Set<string>> {
+  const out = new Set<string>()
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from('erp_staging').select('external_id, data').eq('run_id', runId).eq('entity', 'turma').range(from, from + 999)
+    if (error) throw new Error('Falha ao ler a área de espera: ' + error.message)
+    for (const r of (data ?? []) as { external_id: string; data: Record<string, string> }[]) if (r.data?.ano === ano) out.add(r.external_id)
+    if (!data || data.length < 1000) break
+  }
+  return out
 }
 
 // ids já guardados na área de espera desta carga (turmas, ou alunos das enturmações)
