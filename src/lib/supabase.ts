@@ -261,6 +261,8 @@ export interface WhatsappMessage {
   quoted_from_me?: boolean
   reaction?: string | null
   reaction_attendant?: string | null
+  // Mensagem antiga trazida pela sincronização de histórico da coexistência
+  is_history_sync?: boolean
 }
 
 export interface WhatsappConversation {

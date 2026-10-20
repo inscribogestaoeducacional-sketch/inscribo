@@ -1633,8 +1633,16 @@ function extractMessageContent(msg: any): string {
 // mensagem" de uma conversa com atividade real mais recente, e nenhuma
 // conversa deve voltar a 'waiting' por causa de um evento de sincronização.
 // Só cria (com o status que o chamador decidir) quando ainda não existe.
+//
+// Nome: usa o já salvo em whatsapp_contacts. O trigger
+// sync_contact_from_conversation copia contact_name da conversa pro contato
+// (ON CONFLICT ... name = EXCLUDED.name) — criar a conversa com o telefone
+// apagava o nome real do contato. Horário: `at` (horário original da
+// mensagem mais antiga/mais nova) em vez de agora, pra conversa de histórico
+// não contar como "nova hoje" nos números do Início.
 async function ensureConversation(
-  institutionId: string, remoteJid: string, contactName: string, defaultStatus: string
+  institutionId: string, remoteJid: string, defaultStatus: string,
+  at?: { createdAt: string; lastMessageAt: string }
 ): Promise<string | null> {
   const { data: existing } = await supabase
     .from('whatsapp_conversations')
@@ -1644,9 +1652,20 @@ async function ensureConversation(
     .maybeSingle()
   if (existing) return existing.id
 
+  const { data: contact } = await supabase
+    .from('whatsapp_contacts')
+    .select('name')
+    .eq('institution_id', institutionId)
+    .eq('phone', normalizeBrazilianInput(remoteJid))
+    .maybeSingle()
+  const contactName = contact?.name && !looksLikePhone(contact.name) ? contact.name : remoteJid
+
   const { data: created, error } = await supabase
     .from('whatsapp_conversations')
-    .insert({ institution_id: institutionId, remote_jid: remoteJid, contact_name: contactName, status: defaultStatus })
+    .insert({
+      institution_id: institutionId, remote_jid: remoteJid, contact_name: contactName, status: defaultStatus,
+      ...(at ? { created_at: at.createdAt, last_message_at: at.lastMessageAt } : {}),
+    })
     .select('id')
     .single()
   if (error) {
@@ -1654,6 +1673,20 @@ async function ensureConversation(
     return null
   }
   return created?.id ?? null
+}
+
+// Nome que na verdade é só o telefone (vazio, ou sem letras e com 8+ dígitos:
+// "558433121699", "+55 84 3312-1699"). Nome assim pode ser substituído.
+function looksLikePhone(name: string | null | undefined): boolean {
+  const s = String(name ?? '').trim()
+  if (!s) return true
+  return !/\p{L}/u.test(s) && s.replace(/\D/g, '').length >= 8
+}
+
+// Horário original de uma mensagem da Meta (timestamp em segundos).
+function metaTimestampIso(ts: unknown): string {
+  const n = parseInt(String(ts ?? ''), 10)
+  return Number.isFinite(n) ? new Date(n * 1000).toISOString() : new Date().toISOString()
 }
 
 // Direção de uma mensagem do histórico, sem depender do número formatado da
@@ -1700,10 +1733,16 @@ async function handleHistorySync(institutionId: string, value: any): Promise<voi
       const remoteJid = normalizePhone(String(thread.id || ''))
       if (!remoteJid) continue
 
-      const conversationId = await ensureConversation(institutionId, remoteJid, remoteJid, 'closed')
+      // Conversa nova nasce com o horário da mensagem mais antiga e "última
+      // mensagem" na mais nova da thread — nunca com o horário de agora.
+      const messages = thread.messages || []
+      const times = messages.map((m: any) => metaTimestampIso(m.timestamp)).sort()
+      const at = times.length ? { createdAt: times[0], lastMessageAt: times[times.length - 1] } : undefined
+      const conversationId = await ensureConversation(institutionId, remoteJid, 'closed', at)
 
-      for (const message of thread.messages || []) {
+      for (const message of messages) {
         const fromMe = isHistoryMessageFromBusiness(message, thread.id)
+        const sentAt = metaTimestampIso(message.timestamp)
         const { error } = await supabase.from('whatsapp_messages').upsert(
           {
             institution_id:  institutionId,
@@ -1714,7 +1753,12 @@ async function handleHistorySync(institutionId: string, value: any): Promise<voi
             from_me:         fromMe,
             message_type:    message.type || 'text',
             content:         extractMessageContent(message),
-            timestamp:       new Date(parseInt(message.timestamp, 10) * 1000).toISOString(),
+            timestamp:       sentAt,
+            // created_at = horário original: Início, tela do atendente,
+            // "última interação" do lead e o timeout do robô contam por
+            // created_at — com "agora", histórico antigo parecia atividade
+            // de hoje.
+            created_at:      sentAt,
             status:          fromMe ? historyStatus(message.history_context?.status) : 'received',
             is_history_sync: true,
             raw_data:        message,
@@ -1727,8 +1771,34 @@ async function handleHistorySync(institutionId: string, value: any): Promise<voi
   }
 }
 
+// Nome vindo da agenda do app: só entra se o contato não existe ou ainda está
+// com o telefone como nome. Nome editado pela equipe nunca é sobrescrito.
+async function applyAgendaContactName(institutionId: string, remoteJid: string, agendaName: string): Promise<void> {
+  const phone = normalizeBrazilianInput(remoteJid)
+  const { data: existing, error } = await supabase
+    .from('whatsapp_contacts')
+    .select('id, name')
+    .eq('institution_id', institutionId)
+    .eq('phone', phone)
+    .maybeSingle()
+  if (error) {
+    console.error('❌ [SMB_STATE_SYNC] leitura do contato falhou:', error.message)
+    return
+  }
+  if (!existing) {
+    await upsertContact(institutionId, remoteJid, agendaName)
+    return
+  }
+  if (!looksLikePhone(existing.name) || looksLikePhone(agendaName)) return
+  const { error: updErr } = await supabase
+    .from('whatsapp_contacts')
+    .update({ name: agendaName, updated_at: new Date().toISOString() })
+    .eq('id', existing.id)
+  if (updErr) console.error('❌ [SMB_STATE_SYNC] nome não gravado:', updErr.message)
+}
+
 // field: 'smb_app_state_sync' — contatos da agenda do WhatsApp Business App.
-// Reaproveita upsertContact() já existente; 'remove' só loga por ora.
+// 'remove' só loga por ora.
 async function handleSmbAppStateSync(institutionId: string, value: any): Promise<void> {
   for (const entry of value.state_sync || []) {
     if (entry.type !== 'contact') {
@@ -1744,7 +1814,7 @@ async function handleSmbAppStateSync(institutionId: string, value: any): Promise
     if (!rawPhone) continue
     const remoteJid = normalizePhone(String(rawPhone))
     const name = entry.contact?.full_name || entry.contact?.first_name || remoteJid
-    await upsertContact(institutionId, remoteJid, name)
+    await applyAgendaContactName(institutionId, remoteJid, name)
   }
 }
 
@@ -1763,7 +1833,7 @@ async function handleSmbMessageEchoes(institutionId: string, value: any): Promis
     const remoteJid = normalizePhone(String(echo.to || ''))
     if (!remoteJid) continue
 
-    const conversationId = await ensureConversation(institutionId, remoteJid, remoteJid, 'open')
+    const conversationId = await ensureConversation(institutionId, remoteJid, 'open')
 
     const { error } = await supabase.from('whatsapp_messages').upsert(
       {

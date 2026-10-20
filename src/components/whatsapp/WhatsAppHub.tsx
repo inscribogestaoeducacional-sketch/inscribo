@@ -1750,8 +1750,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       visibleConvRow = data
     }
 
+    // Mensagem antiga da sincronização de histórico (coexistência): entra na
+    // conversa, mas sem bipe, notificação, não lida nem mudança de status —
+    // senão cada uma das milhares de mensagens antigas parecia nova.
+    const isHistory = newMsg.is_history_sync === true
+
     // Briefly show typing indicator for incoming messages
-    if (!newMsg.from_me) {
+    if (!newMsg.from_me && !isHistory) {
       const typingJid = normalizeJid(newMsg.remote_jid)
       setTypingConvIds(prev => new Set(prev).add(typingJid))
       setTimeout(() => setTypingConvIds(prev => {
@@ -1836,6 +1841,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           ? existing.messages.map((m, i) => i === optimisticIdx ? msg : m)
           : [...existing.messages, msg]
 
+        if (isHistory) {
+          // Só encaixa a mensagem na ordem certa; prévia e horário da
+          // conversa só mudam se ela for mais nova que a última conhecida.
+          const isNewer = msg.ts.getTime() > existing.lastTime.getTime()
+          return prev.map(c => c.id === normJid
+            ? {
+                ...c,
+                messages: [...newMessages].sort((a, b) => a.ts.getTime() - b.ts.getTime()),
+                ...(isNewer ? { lastMessage: newMsg.content, lastTime: msg.ts } : {}),
+              }
+            : c
+          ).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
+        }
+
         return prev.map(c => c.id === normJid
           ? {
               ...c,
@@ -1860,7 +1879,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         avatarColor: jidToColor(normJid),
         lastMessage: newMsg.content,
         lastTime: new Date(newMsg.timestamp),
-        unreadCount: visibleConvRow?.unread_count ?? (newMsg.from_me ? 0 : 1),
+        unreadCount: visibleConvRow?.unread_count ?? (newMsg.from_me || isHistory ? 0 : 1),
         status: (visibleConvRow?.status ?? 'waiting') as ConvStatus,
         online: false, labels: [],
         isGroup,
@@ -2265,6 +2284,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         filter: msgFilter
       }, (payload: any) => {
         const msgJid = payload.new?.remote_jid || ''
+        // Histórico antigo não mexe na prévia nem no horário da conversa —
+        // addMessageToConversations (canal irmão) já cuida disso.
+        if (payload.new?.is_history_sync === true) return
         // Não recarrega mais aqui — o canal irmão (wamsg-*, listener de INSERT
         // logo acima) já usa addMessageToConversations(msg) pra inserir a
         // mensagem certa direto do payload do Realtime, sem round-trip ao
