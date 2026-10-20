@@ -11,24 +11,28 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createEmbeddedSignupHandler } from '../api/whatsapp/embedded-signup.js'
-import { resolveConnectContext, checkPopupWaba, type ConnectAuthDeps } from '../api/_lib/whatsappConnectAuth.js'
+import { resolveConnectContext, checkPopupWaba, canConnectAnySchool, type ConnectAuthDeps } from '../api/_lib/whatsappConnectAuth.js'
 
 const ESCOLA_A = '11111111-1111-4111-8111-111111111111'
 const ESCOLA_B = '22222222-2222-4222-8222-222222222222'
 const ESCOLA_INEXISTENTE = '33333333-3333-4333-8333-333333333333'
 
-// Tokens simulados → papel de quem chama
-const USERS: Record<string, { superAdmin?: boolean; schoolAdminOf?: string }> = {
-  'tok-superadmin': { superAdmin: true },
-  'tok-admin-a':    { schoolAdminOf: ESCOLA_A },
-  'tok-admin-b':    { schoolAdminOf: ESCOLA_B },
-  'tok-atendente-a': {}, // usuário ativo da escola A, role 'user' → não é admin
+// Tokens simulados → linha de `users` de quem chama (user_type/active) e, se
+// for admin de escola, qual escola.
+const USERS: Record<string, { user_type: string; active?: boolean; schoolAdminOf?: string }> = {
+  'tok-superadmin':        { user_type: 'admin_geral' },
+  'tok-superadmin-inativo': { user_type: 'admin_geral', active: false },
+  'tok-consultor':         { user_type: 'consultant' }, // Super Admin do painel, mas NÃO conecta WhatsApp
+  'tok-admin-a':           { user_type: 'school_user', schoolAdminOf: ESCOLA_A },
+  'tok-admin-b':           { user_type: 'school_user', schoolAdminOf: ESCOLA_B },
+  'tok-atendente-a':       { user_type: 'school_user' }, // usuário ativo da escola A, role 'user' → não é admin
 }
 
 const tokenOf = (req: VercelRequest) => String(req.headers.authorization || '').replace(/^Bearer /, '')
 
 const deps: ConnectAuthDeps = {
-  authenticateSuperAdmin: async req => (USERS[tokenOf(req)]?.superAdmin ? { userId: 'u-super' } : null),
+  // Mesma decisão do servidor (canConnectAnySchool) sobre a linha simulada
+  authenticateAdminGeral: async req => (canConnectAnySchool(USERS[tokenOf(req)] ?? null) ? { userId: 'u-super' } : null),
   authenticateSchoolAdmin: async req => {
     const inst = USERS[tokenOf(req)]?.schoolAdminOf
     return inst ? { userId: `u-${tokenOf(req)}`, institutionId: inst } : null
@@ -108,6 +112,26 @@ test('superadmin conecta a escola B → passa', async () => {
 test('superadmin com escola inexistente ou id inválido → 404', async () => {
   assert.equal((await call('tok-superadmin', { ...SEM_CODE, institution_id: ESCOLA_INEXISTENTE })).status, 404)
   assert.equal((await call('tok-superadmin', { ...SEM_CODE, institution_id: "x' or 1=1" })).status, 404)
+})
+
+test('consultor NÃO conecta nenhuma escola (conexão, reconexão, evento) → 403', async () => {
+  assert.equal((await call('tok-consultor', { ...SEM_CODE, institution_id: ESCOLA_A })).status, 403)
+  assert.equal((await call('tok-consultor', { mode: 'reconnect', code: 'x', phone_number_id: '1', waba_id: '2', institution_id: ESCOLA_B })).status, 403)
+  assert.equal((await call('tok-consultor', { event: 'connect_click', institution_id: ESCOLA_A })).status, 403)
+  assert.equal((await call('tok-consultor', SEM_CODE)).status, 403)
+})
+
+test('superadmin inativo → 403', async () => {
+  assert.equal((await call('tok-superadmin-inativo', { ...SEM_CODE, institution_id: ESCOLA_A })).status, 403)
+})
+
+test('regra do servidor: só admin_geral ativo conecta qualquer escola', () => {
+  assert.equal(canConnectAnySchool({ user_type: 'admin_geral', active: true }), true)
+  assert.equal(canConnectAnySchool({ user_type: 'admin_geral', active: null }), true)
+  assert.equal(canConnectAnySchool({ user_type: 'admin_geral', active: false }), false)
+  assert.equal(canConnectAnySchool({ user_type: 'consultant', active: true }), false)
+  assert.equal(canConnectAnySchool({ user_type: 'school_user', active: true }), false)
+  assert.equal(canConnectAnySchool(null), false)
 })
 
 test('superadmin sem escola no body não ganha escola nenhuma → 403', async () => {

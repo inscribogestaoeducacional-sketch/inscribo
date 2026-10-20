@@ -2283,8 +2283,9 @@ export default function InstitutionDetails() {
                   {/* Conexão pela Meta em coexistência, feita pela equipe Áion em
                       chamada com a escola (QR code no celular dela). Escola com
                       número salvo → reconexão (só aceita a mesma conta/WABA);
-                      sem número → primeira conexão. Nunca chama /register. */}
-                  {id && (
+                      sem número → primeira conexão. Nunca chama /register. Só
+                      admin_geral vê (consultor não conecta; o servidor também recusa). */}
+                  {id && isSuperAdmin && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
                       <div>
                         <p className="text-sm font-bold text-amber-800">

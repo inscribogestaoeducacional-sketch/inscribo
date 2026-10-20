@@ -5,7 +5,8 @@ endpoint (conexão, reconexão e eventos do popup):
 
 | Quem chama | Pode conectar |
 |---|---|
-| Super Admin (`users.user_type` = `admin_geral` ou `consultant`) | **qualquer** escola, informando `institution_id` no corpo |
+| Super Admin `admin_geral` (ativo) | **qualquer** escola, informando `institution_id` no corpo |
+| Consultor (`user_type` = `consultant`) | **nenhuma** → 403 (nem vê o botão na ficha) |
 | Admin da escola (`role` = `admin`) | **só a própria** escola (resolvida pelo token); `institution_id` de outra escola → 403 |
 | Atendente (`role` ≠ `admin`), sem login, token inválido | **nenhuma** → 403 |
 
@@ -22,7 +23,8 @@ Usa o handler real com a autenticação simulada (sem banco, sem Meta). Cobre:
 sem login, token inválido, atendente (com e sem `institution_id`), admin da
 própria escola, admin tentando a escola B (conexão, reconexão e evento),
 superadmin nas escolas A e B, superadmin com escola inexistente/id inválido,
-superadmin sem escola, e a regra de WABA (`checkPopupWaba`: nunca troca a
+superadmin sem escola, consultor (conexão, reconexão e evento → 403),
+superadmin inativo, a regra `canConnectAnySchool` e a regra de WABA (`checkPopupWaba`: nunca troca a
 conta salva nem aceita a conta de teste da plataforma).
 
 **Critério de aceite:** todos passam.
@@ -31,7 +33,8 @@ conta salva nem aceita a conta de teste da plataforma).
 
 Pré-requisitos: Escola A e Escola B de teste; tokens de sessão
 (`supabase.auth.getSession()` no console do navegador logado) de:
-`TOKEN_SUPER` (Super Admin), `TOKEN_ADMIN_A` (admin da A), `TOKEN_USER_A`
+`TOKEN_SUPER` (Super Admin admin_geral), `TOKEN_CONSULTOR` (consultor),
+`TOKEN_ADMIN_A` (admin da A), `TOKEN_USER_A`
 (atendente da A). IDs `INSTITUTION_A_ID` e `INSTITUTION_B_ID`.
 
 Os testes abaixo mandam corpo **sem `code`** de propósito: quem passa pela
@@ -54,6 +57,7 @@ post() { curl -s -o /dev/stderr -w "%{http_code}\n" -X POST $URL \
 | 7 | `post $TOKEN_SUPER '{"phone_number_id":"1","waba_id":"2","institution_id":"'$INSTITUTION_A_ID'"}'` | 400 obrigatórios |
 | 8 | `post $TOKEN_SUPER '{"phone_number_id":"1","waba_id":"2","institution_id":"'$INSTITUTION_B_ID'"}'` | 400 obrigatórios |
 | 9 | `post $TOKEN_SUPER '{"phone_number_id":"1","waba_id":"2","institution_id":"00000000-0000-4000-8000-000000000000"}'` | 404 |
+| 10 | `post $TOKEN_CONSULTOR '{"phone_number_id":"1","waba_id":"2","institution_id":"'$INSTITUTION_A_ID'"}'` | **403** (consultor não conecta) |
 
 Depois dos testes, conferir com a service role que nada mudou:
 
@@ -73,5 +77,5 @@ tipo (`tipo: coexistencia | cloud_api` no `new_value` da conclusão).
 
 ## Critério de aceite
 
-Teste automático verde e, em produção, os casos 3, 5 e 6 respondendo 403. O
+Teste automático verde e, em produção, os casos 3, 5, 6 e 10 respondendo 403. O
 ponto não-negociável é o **caso 5**: admin de uma escola nunca conecta outra.
