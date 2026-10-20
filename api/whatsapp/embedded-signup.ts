@@ -7,7 +7,8 @@ import {
   WA_APP_ID,
   WA_APP_SECRET,
 } from '../_lib/whatsappAuth.js'
-import { handleReconnect, handleReconnectEvent } from '../_lib/whatsappReconnect.js'
+import { handleReconnect, handleReconnectEvent, readMetaPhoneState, writeAudit } from '../_lib/whatsappReconnect.js'
+import { requestSmbAppSync, summarizeSmbSync } from '../_lib/whatsappSmbSync.js'
 
 const META_FETCH_TIMEOUT_MS = 30000
 // Fallback caso a resposta da Meta não traga expires_in (não deveria acontecer
@@ -136,15 +137,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       whatsapp_connected:    true,
     }).eq('id', institutionId)
 
+    // ── 6. Coexistência (número também no app WhatsApp Business) → pede os
+    // contatos e o histórico à Meta (api/_lib/whatsappSmbSync.ts) ──
+    const meta = await readMetaPhoneState(phone_number_id, longLivedToken)
+    const sync = meta.is_on_biz_app === true
+      ? await requestSmbAppSync(phone_number_id, [longLivedToken])
+      : []
+
+    await writeAudit({
+      institutionId, userId: auth.userId,
+      action: 'Conexão WhatsApp (Meta): concluída',
+      fieldChanged: 'whatsapp_phone_numbers',
+      newValue: JSON.stringify({
+        phone_id: phone_number_id, waba: waba_id, numero: verifiedPhone, meta,
+        sincronizacao: sync.length ? summarizeSmbSync(sync) : 'não pedida (número fora da coexistência)',
+      }),
+    })
+
     return res.status(200).json({
       phone_number_id,
       waba_id,
       phone_number: verifiedPhone,
       display_name: verifiedName,
+      sync,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[embedded-signup] erro:', message)
+    await writeAudit({
+      institutionId, userId: auth.userId,
+      action: 'Conexão WhatsApp (Meta): falhou',
+      fieldChanged: 'erro',
+      oldValue: `phone_id=${phone_number_id} waba=${waba_id}`,
+      newValue: message.slice(0, 300),
+    })
     return errorResponse(res, 500, message)
   }
 }

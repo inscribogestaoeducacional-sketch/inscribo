@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase, WHATSAPP_PHONE_COLUMNS } from '../../lib/supabase'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { toReenrollFraction } from '../../lib/campaignApply'
+import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
 import SuperAdminLayout from './SuperAdminLayout'
 import {
   Building2, Search, Megaphone, Edit2, AlertTriangle,
@@ -965,25 +966,31 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       const testData: any = await platformAdmin('phone_info', { phone_id: waForm.phone_id })
       const verifiedName  = (testData as any).verified_name || waForm.display_name
       const verifiedPhone = waForm.phone_number || (testData as any).display_phone_number || ''
+      const AION_WABA_ID = settingsMap['wa_waba_id'] || ''
+      const wabaToSubscribe = waForm.waba_id?.trim() || ''
+      // Lido antes de gravar qualquer coisa: se o WABA for recusado, nada muda.
+      const saved = await loadSavedWhatsApp(inst.id)
+      const effectiveWabaId = resolveWabaForSave(wabaToSubscribe, saved, AION_WABA_ID)
+
       await supabase.from('institutions').update({
         whatsapp_phone_id:     waForm.phone_id,
         whatsapp_phone_number: verifiedPhone,
         whatsapp_display_name: verifiedName,
         whatsapp_connected:    true,
       }).eq('id', inst.id)
-      const AION_WABA_ID = settingsMap['wa_waba_id'] || ''
-      const wabaToSubscribe = waForm.waba_id?.trim() || ''
-      const effectiveWabaId = wabaToSubscribe || AION_WABA_ID
 
-      await supabase.from('whatsapp_phone_numbers').upsert({
-        institution_id:  inst.id,
+      const waRow = {
         phone_number_id: waForm.phone_id,
         phone_number:    verifiedPhone,
         display_name:    verifiedName,
         waba_id:         effectiveWabaId,
         is_active:       true,
         use_meta_api:    true,
-      }, { onConflict: 'institution_id' })
+      }
+      const { error: waErr } = await supabase.from('whatsapp_phone_numbers')
+        .upsert({ institution_id: inst.id, ...waRow }, { onConflict: 'institution_id' })
+      if (waErr) throw new Error(waErr.message)
+      await auditWhatsAppSave(inst.id, saved, waRow)
 
       if (wabaToSubscribe && wabaToSubscribe !== AION_WABA_ID) {
         try {
@@ -1104,7 +1111,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
                       { label: 'Phone Number ID (Meta)',                        key: 'phone_id',     type: 'text', placeholder: '1007880222413531' },
                       { label: 'Número de telefone',                            key: 'phone_number', type: 'text', placeholder: '5583999990001' },
                       { label: 'Nome de exibição no WhatsApp',                  key: 'display_name', type: 'text', placeholder: 'Colégio São João' },
-                      { label: 'WABA ID (deixe vazio se usar o WABA da Áion)', key: 'waba_id',      type: 'text', placeholder: 'Deixe vazio, ou informe o WABA ID desta escola' },
+                      { label: WABA_FIELD_LABEL, key: 'waba_id',      type: 'text', placeholder: WABA_FIELD_PLACEHOLDER },
                     ].map(f => (
                       <div key={f.key}>
                         <label className={lbl}>{f.label}</label>

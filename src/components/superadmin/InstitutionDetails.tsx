@@ -10,6 +10,7 @@ import AttendeesPicker from '../shared/AttendeesPicker'
 import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError'
 import InstitutionBroadcastTab from './InstitutionBroadcastTab'
 import InstitutionBaseModuleTab from './InstitutionBaseModuleTab'
+import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
 import {
   Building2, Users, DollarSign, FileText, CheckCircle2,
   Clock, AlertTriangle, ExternalLink, Copy, RefreshCw,
@@ -965,6 +966,7 @@ export default function InstitutionDetails() {
   }
 
   const handleSaveWhatsApp = async () => {
+    if (!id) return
     if (!waForm.phone_id) { showToast('Phone Number ID é obrigatório.', false); return }
     setSavingWa(true)
     try {
@@ -975,25 +977,31 @@ export default function InstitutionDetails() {
       const settingsMap: Record<string, string> = {}
       wabaSetting?.forEach((r: any) => { settingsMap[r.key] = r.value })
       const testData: any = await platformAdmin('phone_info', { phone_id: waForm.phone_id })
+      const AION_WABA_ID = settingsMap['wa_waba_id'] || ''
+      const wabaToSubscribe = waForm.waba_id?.trim() || ''
+      // Lido antes de gravar qualquer coisa: se o WABA for recusado, nada muda.
+      const saved = await loadSavedWhatsApp(id)
+      const effectiveWabaId = resolveWabaForSave(wabaToSubscribe, saved, AION_WABA_ID)
+
       await supabase.from('institutions').update({
         whatsapp_phone_id: waForm.phone_id,
         whatsapp_phone_number: waForm.phone_number || testData.display_phone_number || '',
         whatsapp_display_name: waForm.display_name || testData.verified_name || '',
         whatsapp_connected: true,
       }).eq('id', id)
-      const AION_WABA_ID = settingsMap['wa_waba_id'] || ''
-      const wabaToSubscribe = waForm.waba_id?.trim() || ''
-      const effectiveWabaId = wabaToSubscribe || AION_WABA_ID
 
-      await supabase.from('whatsapp_phone_numbers').upsert({
-        institution_id:  id,
+      const waRow = {
         phone_number_id: waForm.phone_id,
         phone_number:    waForm.phone_number || testData.display_phone_number || '',
         display_name:    waForm.display_name || testData.verified_name || '',
         waba_id:         effectiveWabaId,
         is_active:       true,
         use_meta_api:    true,
-      }, { onConflict: 'institution_id' })
+      }
+      const { error: waErr } = await supabase.from('whatsapp_phone_numbers')
+        .upsert({ institution_id: id, ...waRow }, { onConflict: 'institution_id' })
+      if (waErr) throw new Error(waErr.message)
+      await auditWhatsAppSave(id, saved, waRow)
 
       if (wabaToSubscribe && wabaToSubscribe !== AION_WABA_ID) {
         try {
@@ -2069,7 +2077,7 @@ export default function InstitutionDetails() {
                                 { k: 'phone_id',     l: 'Phone Number ID',   placeholder: '1007880222413531' },
                                 { k: 'phone_number', l: 'Número',            placeholder: '+55 83 99999-9999' },
                                 { k: 'display_name', l: 'Nome de exibição',  placeholder: 'Colégio São João' },
-                                { k: 'waba_id',      l: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: '2812701862456294' },
+                                { k: 'waba_id',      l: WABA_FIELD_LABEL, placeholder: WABA_FIELD_PLACEHOLDER },
                               ].map(f => (
                                 <div key={f.k}>
                                   <label className={lbl}>{f.l}</label>
@@ -2320,7 +2328,7 @@ export default function InstitutionDetails() {
                         { k: 'phone_id',     label: 'Phone ID',     placeholder: 'ID do número (Meta)' },
                         { k: 'phone_number', label: 'Telefone',     placeholder: '+55 (00) 00000-0000' },
                         { k: 'display_name', label: 'Nome exibido', placeholder: 'Nome da conta WA' },
-                        { k: 'waba_id',      label: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: '2812701862456294' },
+                        { k: 'waba_id',      label: WABA_FIELD_LABEL, placeholder: WABA_FIELD_PLACEHOLDER },
                       ].map(f => (
                         <div key={f.k}>
                           <label className={lbl}>{f.label}</label>

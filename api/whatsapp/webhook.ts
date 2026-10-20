@@ -1656,6 +1656,33 @@ async function ensureConversation(
   return created?.id ?? null
 }
 
+// Direção de uma mensagem do histórico, sem depender do número formatado da
+// escola (metadata.display_phone_number vem como "+55 84 3312-1699" e o
+// `from` como "558433121699" — a comparação direta dava sempre "cliente").
+// Cada thread é a conversa com UM cliente e thread.id é o número dele: quem
+// mandou e não é o cliente é a escola. A Meta só põe `to` quando quem mandou
+// foi a escola — usado primeiro.
+function isHistoryMessageFromBusiness(message: any, threadId: unknown): boolean {
+  if (message?.to) return true
+  const digits = (s: unknown) => String(s ?? '').replace(/\D/g, '')
+  const from = digits(message?.from)
+  const customer = digits(threadId)
+  if (!from || !customer) return false
+  return normalizePhone(from) !== normalizePhone(customer)
+}
+
+// history_context.status (READ, DELIVERED, PLAYED, ERROR, PENDING…) → os
+// mesmos valores que o Hub já usa pras mensagens enviadas.
+function historyStatus(raw: unknown): string {
+  switch (String(raw ?? '').toUpperCase()) {
+    case 'READ':
+    case 'PLAYED':    return 'read'
+    case 'DELIVERED': return 'delivered'
+    case 'ERROR':     return 'failed'
+    default:          return 'sent'
+  }
+}
+
 // field: 'history' — backfill de mensagens antigas que a escola aceitou
 // compartilhar ao ativar a coexistência (até 180 dias). Conversas novas
 // nascem 'closed' — nunca aparecem na fila "Aguardando" (reservada pra
@@ -1676,6 +1703,7 @@ async function handleHistorySync(institutionId: string, value: any): Promise<voi
       const conversationId = await ensureConversation(institutionId, remoteJid, remoteJid, 'closed')
 
       for (const message of thread.messages || []) {
+        const fromMe = isHistoryMessageFromBusiness(message, thread.id)
         const { error } = await supabase.from('whatsapp_messages').upsert(
           {
             institution_id:  institutionId,
@@ -1683,11 +1711,11 @@ async function handleHistorySync(institutionId: string, value: any): Promise<voi
             remote_jid:      remoteJid,
             message_id:      message.id,
             instance_name:   'cloud-api',
-            from_me:         message.from === value.metadata?.display_phone_number,
+            from_me:         fromMe,
             message_type:    message.type || 'text',
             content:         extractMessageContent(message),
             timestamp:       new Date(parseInt(message.timestamp, 10) * 1000).toISOString(),
-            status:          message.history_context?.status || 'received',
+            status:          fromMe ? historyStatus(message.history_context?.status) : 'received',
             is_history_sync: true,
             raw_data:        message,
           },

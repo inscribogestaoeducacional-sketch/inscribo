@@ -369,7 +369,7 @@ function SchoolGroupDetail({ id }: { id: string }) {
                 { k: 'phone_id',     label: 'Phone ID',     placeholder: 'ID do número (Meta)' },
                 { k: 'phone_number', label: 'Telefone',     placeholder: '+55 (00) 00000-0000' },
                 { k: 'display_name', label: 'Nome exibido', placeholder: 'Nome da conta WA' },
-                { k: 'waba_id',      label: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: '2812701862456294' },
+                { k: 'waba_id',      label: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: 'Vazio = WABA da Áion' },
               ].map(f => (
                 <div key={f.k}>
                   <label className={lbl}>{f.label}</label>

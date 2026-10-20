@@ -1,5 +1,6 @@
 import type { VercelResponse } from '@vercel/node'
 import { getSupabaseAdmin, errorResponse, GRAPH_URL, WA_APP_ID, WA_APP_SECRET } from './whatsappAuth.js'
+import { requestSmbAppSync, summarizeSmbSync, type SmbSyncResult } from './whatsappSmbSync.js'
 
 // ── Reconexão em modo coexistência (app WhatsApp Business + API) ────────────
 // Usado por api/whatsapp/embedded-signup.ts quando o body traz
@@ -14,11 +15,18 @@ import { getSupabaseAdmin, errorResponse, GRAPH_URL, WA_APP_ID, WA_APP_SECRET } 
 //     tira o número do celular;
 //   - não troca token nem connection_method; só atualiza o phone_number_id se
 //     a Meta devolver outro id para o MESMO número, no MESMO WABA;
-//   - tudo vai pro audit_logs (clique, resultado do popup, resultado final).
+//   - tudo vai pro audit_logs (clique, resultado do popup, resultado final,
+//     inclusive erro inesperado);
+//   - número de volta em coexistência → pede contatos e histórico à Meta
+//     (smb_app_data). Se o popup fechou sem devolver o code mas a Meta mostra
+//     o número reconectado (caso Universo 19/10), registra isso e pede também.
 
 const META_FETCH_TIMEOUT_MS = 30000
 const AUDIT_MODULE = 'whatsapp'
 const POPUP_RESULTS = ['cancelado', 'erro_meta', 'sem_resposta', 'sem_codigo', 'sem_numero'] as const
+// Resultados em que o fluxo da Meta pode ter terminado sem o code chegar até
+// nós — nesses vale conferir o número na Meta.
+const POPUP_RESULTS_CHECK_META = ['sem_codigo', 'sem_numero']
 
 interface CurrentPhone {
   id: string
@@ -37,7 +45,7 @@ interface AuditInput {
   newValue?: string | null
 }
 
-async function writeAudit(input: AuditInput): Promise<void> {
+export async function writeAudit(input: AuditInput): Promise<void> {
   const supabase = getSupabaseAdmin()
   const { data: u } = await supabase.from('users')
     .select('full_name, role').eq('id', input.userId).maybeSingle()
@@ -88,6 +96,25 @@ async function graphGet(path: string, token: string): Promise<{ ok: boolean; bod
   }
 }
 
+export interface MetaPhoneState {
+  status?: string | null
+  platform_type?: string | null
+  is_on_biz_app?: boolean | null
+  erro?: string
+}
+
+export async function readMetaPhoneState(phoneNumberId: string, token: string): Promise<MetaPhoneState> {
+  const state = await graphGet(`${phoneNumberId}?fields=status,platform_type,is_on_biz_app`, token)
+  return state.ok ? {
+    status: state.body.status ?? null,
+    platform_type: state.body.platform_type ?? null,
+    is_on_biz_app: state.body.is_on_biz_app ?? null,
+  } : { erro: state.body?.error?.message ?? 'falha ao consultar a Meta' }
+}
+
+const isCoexistenceConnected = (m: MetaPhoneState) =>
+  m.status === 'CONNECTED' && m.platform_type === 'CLOUD_API' && m.is_on_biz_app === true
+
 // ── Eventos só de registro: clique no botão e resultado do popup ──
 export async function handleReconnectEvent(
   res: VercelResponse, ctx: { institutionId: string; userId: string }, body: any,
@@ -111,13 +138,55 @@ export async function handleReconnectEvent(
       fieldChanged: result,
       newValue: detail || null,
     })
+
+    // O popup pode fechar sem devolver o code depois de a Meta já ter
+    // reconectado o número. Confere e, se for o caso, registra e pede o
+    // histórico — senão ninguém fica sabendo e a janela de 24h se perde.
+    if (current && POPUP_RESULTS_CHECK_META.includes(result)) {
+      try {
+        const platformToken = await getPlatformToken()
+        const meta = await readMetaPhoneState(current.phone_number_id, platformToken)
+        if (isCoexistenceConnected(meta)) {
+          const sync = await requestSmbAppSync(current.phone_number_id, [platformToken])
+          await writeAudit({
+            ...ctx, recordId: current.id,
+            action: 'Reconexão WhatsApp (coexistência): concluída na Meta sem retorno do popup',
+            fieldChanged: 'smb_app_data',
+            oldValue: `phone_id=${current.phone_number_id} waba=${current.waba_id}`,
+            newValue: JSON.stringify({ meta, sincronizacao: summarizeSmbSync(sync) }),
+          })
+        }
+      } catch (e) {
+        console.warn('[reconnect] conferência pós-popup falhou:', e)
+      }
+    }
     return res.status(200).json({ ok: true })
   }
   return errorResponse(res, 400, 'Evento inválido')
 }
 
 // ── Conclusão da reconexão (depois do popup da Meta) ──
+// Qualquer erro inesperado também vai pro audit_logs como falha.
 export async function handleReconnect(
+  res: VercelResponse, ctx: { institutionId: string; userId: string },
+  input: { code?: string; phone_number_id?: string; waba_id?: string },
+) {
+  try {
+    return await reconnect(res, ctx, input)
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    console.error('[reconnect] erro inesperado:', message)
+    await writeAudit({
+      ...ctx,
+      action: 'Reconexão WhatsApp (coexistência): falhou',
+      fieldChanged: 'erro_inesperado',
+      newValue: message.slice(0, 300),
+    })
+    return errorResponse(res, 500, `Erro ao concluir a reconexão: ${message}`)
+  }
+}
+
+async function reconnect(
   res: VercelResponse, ctx: { institutionId: string; userId: string },
   input: { code?: string; phone_number_id?: string; waba_id?: string },
 ) {
@@ -208,22 +277,23 @@ export async function handleReconnect(
   }
 
   // 4. Lê o estado do número na Meta pra mostrar e registrar.
-  const state = await graphGet(
-    `${input.phone_number_id}?fields=status,platform_type,is_on_biz_app,display_phone_number`,
-    platformToken,
-  )
-  const meta = state.ok ? {
-    status: state.body.status ?? null,
-    platform_type: state.body.platform_type ?? null,
-    is_on_biz_app: state.body.is_on_biz_app ?? null,
-  } : { erro: state.body?.error?.message ?? 'falha ao consultar a Meta' }
+  const meta = await readMetaPhoneState(input.phone_number_id, platformToken)
+
+  // 5. De volta em coexistência → pede contatos e histórico (smb_app_data).
+  let sync: SmbSyncResult[] = []
+  if (meta.is_on_biz_app === true) {
+    sync = await requestSmbAppSync(input.phone_number_id, [businessToken, platformToken])
+  }
 
   await writeAudit({
     institutionId, userId, recordId: current.id,
     action: 'Reconexão WhatsApp (coexistência): concluída',
     fieldChanged: phoneIdChanged ? 'phone_number_id' : 'sem_alteracao_no_cadastro',
     oldValue: `phone_id=${current.phone_number_id} waba=${current.waba_id}`,
-    newValue: JSON.stringify({ phone_id: input.phone_number_id, code_trocado: codeExchanged, app_inscrito: subscribed, meta }),
+    newValue: JSON.stringify({
+      phone_id: input.phone_number_id, code_trocado: codeExchanged, app_inscrito: subscribed, meta,
+      sincronizacao: sync.length ? summarizeSmbSync(sync) : 'não pedida (número fora da coexistência)',
+    }),
   })
 
   return res.status(200).json({
@@ -233,5 +303,6 @@ export async function handleReconnect(
     phone_id_changed: phoneIdChanged,
     app_subscribed: subscribed,
     meta,
+    sync,
   })
 }
