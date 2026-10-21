@@ -70,7 +70,7 @@ interface EmbeddedSignupButtonProps {
 // Registro no audit_logs (clique, verificação, FINISH, popup não concluído).
 // Fire-and-forget: nunca pode atrasar a abertura do popup, senão o navegador
 // o bloqueia.
-type SignupEvent = { event: string; result?: string; detail?: string; meta?: Record<string, unknown>; institution_id?: string }
+type SignupEvent = { event: string; result?: string; detail?: string; meta?: Record<string, unknown>; institution_id?: string; motivo?: string }
 async function postSignup(payload: Record<string, unknown>): Promise<Response | null> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) return null
@@ -321,6 +321,23 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
     })()
   }
 
+  // "Já conectado", mas a coexistência ficou incompleta (o app pede "Termine a
+  // configuração" e nada chega): só a equipe Áion (ficha da escola, admin_geral
+  // — o servidor recusa os demais) abre a janela mesmo assim, só na reconexão;
+  // a conclusão continua aceitando só a conta já salva. O registro sai sem
+  // await: o popup tem de abrir neste clique, senão o navegador bloqueia.
+  const canOverride = isReconnect && isSuperAdmin
+  const handleOverridePrecheck = () => {
+    if (!canOverride) return
+    void logSignupEvent({
+      event: 'reconnect_precheck_override',
+      motivo: 'coexistência incompleta (app pede "Termine a configuração"; mensagens não chegam)',
+      ...targetBody,
+    })
+    setConfirmOpen(false)
+    handleConnectClick()
+  }
+
   const handleConfirmReconnect = () => {
     if (!confirmChecked || precheck?.state === 'connected' || precheck?.state === 'checking') return
     setConfirmOpen(false)
@@ -428,13 +445,24 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
                   (estado <strong>{precheck.meta?.status ?? '—'}</strong> · app do celular <strong>ligado</strong>). Não é preciso abrir a janela da Meta.
                 </p>
                 <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748B' }}>
-                  Se as mensagens não estão chegando, o problema não é a conexão do número: fale com a equipe Áion.
+                  Se as mensagens não chegam e o celular pede "Termine a configuração", a coexistência ficou incompleta: use "Abrir a janela da Meta mesmo assim".
                 </p>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                {canOverride && (
+                  <div style={{ padding: '10px 12px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, margin: '0 0 14px', fontSize: 12 }}>
+                    Use só se as mensagens não estão chegando e a coexistência ficou incompleta (o app do celular pede "Termine a configuração"). Nunca chama /register; o número continua no app.
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   <button onClick={() => setConfirmOpen(false)}
                     style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#64748B', cursor: 'pointer' }}>
                     Fechar
                   </button>
+                  {canOverride && (
+                    <button onClick={handleOverridePrecheck}
+                      style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: '#B45309', fontSize: 13, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
+                      Abrir a janela da Meta mesmo assim
+                    </button>
+                  )}
                 </div>
               </>
             ) : (

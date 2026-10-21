@@ -38,6 +38,12 @@ vem PRIMEIRO de `platform_settings.wa_app_secret` (o mesmo do webhook) e
 `WA_APP_SECRET` da Vercel é só reserva; o audit registra de onde veio
 (`segredo do app: banco | vercel`), nunca o valor.
 
+"Abrir a janela da Meta mesmo assim" (reconexão com a verificação dizendo "já
+conectado", coexistência incompleta): evento `reconnect_precheck_override`,
+**só admin_geral** (demais → 403 antes de ler qualquer coisa); grava
+`Reconexão WhatsApp (coexistência): verificação ignorada de propósito` com
+quem e o motivo; a conclusão continua aceitando só a conta já salva.
+
 "Conta salva da escola" é só a PRÓPRIA (linha dela em `whatsapp_phone_numbers`
 com WABA que não é a da plataforma/teste). Uma conta de teste gravada por
 engano não trava o vínculo da conta certa; o "Salvar WhatsApp" manual nunca
