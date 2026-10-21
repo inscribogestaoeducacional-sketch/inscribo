@@ -10,7 +10,7 @@ import AttendeesPicker from '../shared/AttendeesPicker'
 import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError'
 import InstitutionBroadcastTab from './InstitutionBroadcastTab'
 import InstitutionBaseModuleTab from './InstitutionBaseModuleTab'
-import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
+import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, assertIsPhoneNumber, ownSchoolWaba, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
 import EmbeddedSignupButton from '../whatsapp/EmbeddedSignupButton'
 import LinkAionWabaPanel from './LinkAionWabaPanel'
 import {
@@ -374,6 +374,13 @@ export default function InstitutionDetails() {
   // Cadastro salvo no banco (não o formulário editável) — decide entre conectar e reconectar
   const [waSaved,  setWaSaved]  = useState<{ waba_id: string | null; phone_number_id: string | null; phone_number: string | null; display_name: string | null } | null>(null)
   const [savingWa, setSavingWa] = useState(false)
+  // WABA da plataforma (platform_settings.wa_waba_id = conta de TESTE): nunca
+  // é conta da escola. Lido só para reconhecer um cadastro errado com ela.
+  const [platformWabaId, setPlatformWabaId] = useState<string | null>(null)
+  useEffect(() => {
+    supabase.from('platform_settings').select('value').eq('key', 'wa_waba_id').maybeSingle()
+      .then(({ data }) => setPlatformWabaId((data as { value?: string } | null)?.value ?? null))
+  }, [])
 
   // Campanhas — antes havia um mini-formulário (mês + liberar) direto na fase
   // "campaign" do onboarding; consolidado na aba Campanhas nova (evita duas
@@ -970,6 +977,16 @@ export default function InstitutionDetails() {
     }
   }
 
+  // Conta PRÓPRIA da escola = a linha dela em whatsapp_phone_numbers com WABA
+  // que não é a da plataforma/teste (whatsappOwnAccount.ts). Só com número
+  // próprio a ficha mostra "Conectado" e "Reconectar". Caso Colégio Áion
+  // 21/10/2026: cadastro manual gravou a conta de teste e o ID da conta no
+  // lugar do número → institutions.whatsapp_connected = true sem conta real.
+  const ownWaba = ownSchoolWaba(waSaved, platformWabaId)
+  const hasOwnNumber = !!(waSaved?.phone_number_id && ownWaba)
+  const waConnected = !!institution?.whatsapp_connected && hasOwnNumber
+  const waInvalidRecord = !!institution?.whatsapp_connected && !hasOwnNumber
+
   const handleSaveWhatsApp = async () => {
     if (!id) return
     if (!waForm.phone_id) { showToast('Phone Number ID é obrigatório.', false); return }
@@ -982,6 +999,7 @@ export default function InstitutionDetails() {
       const settingsMap: Record<string, string> = {}
       wabaSetting?.forEach((r: any) => { settingsMap[r.key] = r.value })
       const testData: any = await platformAdmin('phone_info', { phone_id: waForm.phone_id })
+      assertIsPhoneNumber(waForm.phone_id, testData)
       const AION_WABA_ID = settingsMap['wa_waba_id'] || ''
       const wabaToSubscribe = waForm.waba_id?.trim() || ''
       // Lido antes de gravar qualquer coisa: se o WABA for recusado, nada muda.
@@ -2071,10 +2089,10 @@ export default function InstitutionDetails() {
                           {/* WhatsApp status */}
                           <div className="p-5">
                             <p className="text-sm font-semibold text-gray-700 mb-3">WhatsApp</p>
-                            <div className={`flex items-center gap-3 p-4 rounded-xl border ${institution.whatsapp_connected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-                              {institution.whatsapp_connected
+                            <div className={`flex items-center gap-3 p-4 rounded-xl border ${waConnected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                              {waConnected
                                 ? <><Wifi className="w-5 h-5 text-green-600 flex-shrink-0" /><div><p className="font-bold text-green-700 text-sm">Conectado</p>{institution.whatsapp_display_name && <p className="text-xs text-green-600">{institution.whatsapp_display_name}</p>}</div><div className="ml-auto text-right"><p className="text-xs text-gray-400">Este mês</p><p className="font-bold text-gray-900">{waUsage.count}<span className="text-xs font-normal text-gray-400">/{waUsage.limit}</span></p></div></>
-                                : <><WifiOff className="w-5 h-5 text-gray-400 flex-shrink-0" /><p className="text-sm font-semibold text-gray-500">Não configurado</p></>
+                                : <><WifiOff className="w-5 h-5 text-gray-400 flex-shrink-0" /><p className="text-sm font-semibold text-gray-500">{waInvalidRecord ? 'Cadastro inválido (sem conta própria)' : 'Não configurado'}</p></>
                               }
                             </div>
                             <div className="mt-3 space-y-3">
@@ -2274,52 +2292,52 @@ export default function InstitutionDetails() {
               {mgmtTab === 'whatsapp' && (
                 <div className="space-y-5">
                   {/* Connection status */}
-                  <div className={`flex items-center gap-3 p-4 rounded-xl border ${institution.whatsapp_connected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-                    {institution.whatsapp_connected
+                  <div className={`flex items-center gap-3 p-4 rounded-xl border ${waConnected ? 'bg-green-50 border-green-200' : waInvalidRecord ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+                    {waConnected
                       ? <><Wifi className="w-5 h-5 text-green-600 shrink-0" /><div><p className="text-sm font-bold text-green-700">Conectado</p><p className="text-xs text-green-600">{institution.whatsapp_phone_number || institution.whatsapp_display_name || ''}</p></div></>
-                      : <><WifiOff className="w-5 h-5 text-gray-400 shrink-0" /><div><p className="text-sm font-bold text-gray-600">Não conectado</p><p className="text-xs text-gray-400">Configure o WhatsApp Business abaixo.</p></div></>
+                      : waInvalidRecord
+                        ? <><WifiOff className="w-5 h-5 text-red-500 shrink-0" /><div><p className="text-sm font-bold text-red-700">Não conectado — cadastro inválido</p><p className="text-xs text-red-600">A escola está marcada como conectada, mas sem número e conta próprios{waSaved?.waba_id ? <> (cadastro aponta para a conta de teste da Áion {waSaved.waba_id})</> : null}. Vincular a conta abaixo substitui esse cadastro.</p></div></>
+                        : <><WifiOff className="w-5 h-5 text-gray-400 shrink-0" /><div><p className="text-sm font-bold text-gray-600">Não conectado</p><p className="text-xs text-gray-400">Configure o WhatsApp Business abaixo.</p></div></>
                     }
                   </div>
 
-                  {/* Conexão pela Meta em coexistência, feita pela equipe Áion em
-                      chamada com a escola (QR code no celular dela). Escola com
-                      número salvo → reconexão (só aceita a mesma conta/WABA);
-                      sem número → primeira conexão. Nunca chama /register. Só
-                      admin_geral vê (consultor não conecta; o servidor também recusa). */}
-                  {id && isSuperAdmin && (
+                  {/* Reconexão pela Meta em coexistência (popup), feita pela equipe
+                      Áion em chamada com a escola. Só aparece com número PRÓPRIO
+                      da escola (só aceita a mesma conta/WABA). Sem número próprio
+                      não há popup aqui: conta da escola nasce no WhatsApp Manager
+                      da Áion e entra por "Vincular conta da Áion" — o popup tenta
+                      compartilhar a conta com a própria dona e a Meta recusa
+                      (#1690130). Nunca chama /register. Só admin_geral vê. */}
+                  {id && isSuperAdmin && hasOwnNumber && waSaved && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
                       <div>
-                        <p className="text-sm font-bold text-amber-800">
-                          {waSaved?.phone_number_id ? 'Reconectar WhatsApp (coexistência)' : 'Conectar WhatsApp (coexistência)'}
+                        <p className="text-sm font-bold text-amber-800">Reconectar WhatsApp (coexistência)</p>
+                        <p className="text-xs text-amber-900/80 mt-1 leading-relaxed">
+                          Religa a conta atual (WABA {ownWaba}) mantendo o app WhatsApp Business no celular da escola. Outra conta é recusada sem alterar nada.
                         </p>
                         <p className="text-xs text-amber-900/80 mt-1 leading-relaxed">
-                          {waSaved?.phone_number_id
-                            ? <>Religa a conta atual{waSaved.waba_id ? <> (WABA {waSaved.waba_id})</> : null} mantendo o app WhatsApp Business no celular da escola. Outra conta é recusada sem alterar nada.</>
-                            : <>Liga o app WhatsApp Business da escola à Áion sem tirar o número do celular. A escola lê o QR code durante a chamada.</>}
+                          <strong>Atenção:</strong> o popup não serve para conta criada no WhatsApp Manager da Áion — a Meta tenta compartilhar a conta com a própria dona e recusa (erro #1690130). Para essas contas, use "Vincular conta da Áion" abaixo.
                         </p>
                       </div>
-                      {waSaved?.phone_number_id && !waSaved.waba_id
-                        ? <p className="text-xs font-semibold text-red-700">Este número não tem a conta (WABA) salva. Corrija o cadastro antes de reconectar.</p>
-                        : (
-                          <EmbeddedSignupButton
-                            institutionId={id}
-                            superAdminInstitutionId={id}
-                            onConnected={() => loadAll(true)}
-                            mode={waSaved?.phone_number_id ? 'reconnect' : 'connect'}
-                            reconnectTarget={waSaved?.phone_number_id ? {
-                              wabaId: waSaved.waba_id,
-                              phoneNumber: waSaved.phone_number || institution.whatsapp_phone_number || null,
-                              displayName: waSaved.display_name || institution.whatsapp_display_name || null,
-                            } : undefined}
-                          />
-                        )}
+                      <EmbeddedSignupButton
+                        institutionId={id}
+                        superAdminInstitutionId={id}
+                        onConnected={() => loadAll(true)}
+                        mode="reconnect"
+                        reconnectTarget={{
+                          wabaId: ownWaba,
+                          phoneNumber: waSaved.phone_number || institution.whatsapp_phone_number || null,
+                          displayName: waSaved.display_name || institution.whatsapp_display_name || null,
+                        }}
+                      />
                     </div>
                   )}
 
                   {/* Conta criada no WhatsApp Manager da Áion (o popup não deixa
-                      usar o portfólio dona do app): vincula pelo ID da conta. */}
+                      usar o portfólio dona do app): vincula pelo ID da conta.
+                      Campo vazio e editável se a escola não tem conta própria. */}
                   {id && isSuperAdmin && (
-                    <LinkAionWabaPanel institutionId={id} savedWabaId={waSaved?.waba_id ?? null} onLinked={() => loadAll(true)} />
+                    <LinkAionWabaPanel institutionId={id} savedWabaId={ownWaba} onLinked={() => loadAll(true)} />
                   )}
 
                   {/* Usage section */}

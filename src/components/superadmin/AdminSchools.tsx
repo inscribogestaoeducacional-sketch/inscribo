@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase, WHATSAPP_PHONE_COLUMNS } from '../../lib/supabase'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { toReenrollFraction } from '../../lib/campaignApply'
-import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
+import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, assertIsPhoneNumber, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
 import SuperAdminLayout from './SuperAdminLayout'
 import {
   Building2, Search, Megaphone, Edit2, AlertTriangle,
@@ -964,6 +964,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       const settingsMap: Record<string, string> = {}
       wabaSetting?.forEach((r: any) => { settingsMap[r.key] = r.value })
       const testData: any = await platformAdmin('phone_info', { phone_id: waForm.phone_id })
+      assertIsPhoneNumber(waForm.phone_id, testData)
       const verifiedName  = (testData as any).verified_name || waForm.display_name
       const verifiedPhone = waForm.phone_number || (testData as any).display_phone_number || ''
       const AION_WABA_ID = settingsMap['wa_waba_id'] || ''

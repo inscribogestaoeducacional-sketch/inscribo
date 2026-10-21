@@ -456,3 +456,50 @@ test('vincular: conta da Áion → inscreve webhook, pede histórico, grava e au
   db.saved.set(ESCOLA_A, { id: 'p1', waba_id: WABA_OK, phone_number_id: PHONE_OK })
   assert.equal((await call('tok-superadmin', VINCULAR(WABA_OK, PHONE_OK))).status, 200)
 })
+
+// ── Conta própria da escola x conta da plataforma (caso Colégio Áion 21/10) ──
+test('conta da plataforma/teste salva na escola não conta como "conta salva"', () => {
+  // cadastro errado com a conta de teste não trava o vínculo da conta certa
+  assert.equal(checkPopupWaba('877913328502884', TEST_WABA_ID, PLAT_WABA).ok, true)
+  assert.equal(checkPopupWaba('877913328502884', '999000', '999000').ok, true)
+  // conta própria salva continua travando a troca
+  assert.equal(checkPopupWaba('877913328502884', '2226058870759667', PLAT_WABA).ok, false)
+})
+
+test('vincular substitui o cadastro errado com a conta de teste', async () => {
+  resetDb()
+  db.saved.set(ESCOLA_A, { id: 'p-errado', waba_id: TEST_WABA_ID, phone_number_id: '877913328502884' })
+  const r = await call('tok-superadmin', { action: 'vincular', institution_id: ESCOLA_A, waba_id: WABA_OK, phone_number_id: PHONE_OK })
+  assert.equal(r.status, 200)
+  assert.equal(db.rows[0].waba_id, WABA_OK)
+  assert.equal(db.rows[0].phone_number_id, PHONE_OK)
+  // e a listagem também não trava
+  resetDb()
+  db.saved.set(ESCOLA_A, { id: 'p-errado', waba_id: TEST_WABA_ID, phone_number_id: '877913328502884' })
+  assert.equal((await call('tok-superadmin', { action: 'vincular_listar', institution_id: ESCOLA_A, waba_id: WABA_OK })).status, 200)
+})
+
+test('salvar manual: nunca grava a conta da plataforma; ID da conta no campo do número é recusado', async () => {
+  const { resolveWabaForSave, ownSchoolWaba, assertIsPhoneNumber, isPlatformWaba } = await import('../src/lib/whatsappOwnAccount.js')
+  const PLAT = '2812701862456294'
+  // sem conta própria e campo vazio → recusa (antes caía na conta da plataforma)
+  assert.throws(() => resolveWabaForSave('', null, PLAT), /não tem conta \(WABA\) própria/)
+  assert.throws(() => resolveWabaForSave('', { waba_id: PLAT }, PLAT), /não tem conta \(WABA\) própria/)
+  // digitar a conta da plataforma/teste → recusa sempre (mesmo com platform_settings vazio)
+  assert.throws(() => resolveWabaForSave(PLAT, null, PLAT), /conta de teste da Áion/)
+  assert.throws(() => resolveWabaForSave(PLAT, null, ''), /conta de teste da Áion/)
+  assert.throws(() => resolveWabaForSave(PLAT, { waba_id: '2226058870759667' }, PLAT), /conta de teste da Áion/)
+  // conta própria: vazio mantém, digitado vale
+  assert.equal(resolveWabaForSave('', { waba_id: '2226058870759667' }, PLAT), '2226058870759667')
+  assert.equal(resolveWabaForSave('877913328502884', null, PLAT), '877913328502884')
+  // conta própria só se não for a da plataforma
+  assert.equal(ownSchoolWaba({ waba_id: PLAT }, null), null)
+  assert.equal(ownSchoolWaba({ waba_id: '555' }, '555'), null)
+  assert.equal(ownSchoolWaba({ waba_id: '877913328502884' }, PLAT), '877913328502884')
+  assert.equal(ownSchoolWaba(null, PLAT), null)
+  assert.equal(isPlatformWaba(PLAT, null), true)
+  // "Phone Number ID" que não volta telefone na Meta (era o ID da conta) → recusa
+  assert.throws(() => assertIsPhoneNumber('877913328502884', { display_phone_number: '' }), /não é de um número/)
+  assert.throws(() => assertIsPhoneNumber('877913328502884', null), /não é de um número/)
+  assert.doesNotThrow(() => assertIsPhoneNumber('982315638300107', { display_phone_number: '+55 83 9603-5018' }))
+})

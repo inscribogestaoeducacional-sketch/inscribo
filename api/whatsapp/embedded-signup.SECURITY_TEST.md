@@ -38,6 +38,12 @@ vem PRIMEIRO de `platform_settings.wa_app_secret` (o mesmo do webhook) e
 `WA_APP_SECRET` da Vercel é só reserva; o audit registra de onde veio
 (`segredo do app: banco | vercel`), nunca o valor.
 
+"Conta salva da escola" é só a PRÓPRIA (linha dela em `whatsapp_phone_numbers`
+com WABA que não é a da plataforma/teste). Uma conta de teste gravada por
+engano não trava o vínculo da conta certa; o "Salvar WhatsApp" manual nunca
+grava a conta da plataforma e recusa ID de conta no campo do número
+(`src/lib/whatsappOwnAccount.ts`).
+
 "Vincular conta da Áion" (ficha da escola → WhatsApp): `action:
 'vincular_listar'` (`waba_id`) lista os números da conta e `action:
 'vincular'` (`waba_id`, `phone_number_id`) vincula pelo caminho sem code.

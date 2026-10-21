@@ -99,7 +99,7 @@ export async function resolveConnectContext(
 }
 
 // ── Conta (WABA) devolvida pelo popup numa conexão nova ─────────────────────
-// Mesma regra de src/lib/whatsappSaveGuard.ts (resolveWabaForSave), repetida
+// Mesma regra de src/lib/whatsappOwnAccount.ts (resolveWabaForSave), repetida
 // aqui porque api/ não importa de src/: a conta já salva da escola nunca é
 // trocada, e o WABA da plataforma (platform_settings.wa_waba_id, que é o de
 // TESTE — caso Universo 19/10/2026) nunca vira o WABA de uma escola. A de
@@ -109,12 +109,17 @@ export function checkPopupWaba(
   popupWabaId: string, savedWabaId: string | null | undefined, platformWabaId: string | null | undefined,
 ): { ok: true } | { ok: false; motivo: string; message: string } {
   const popup = String(popupWabaId || '').trim()
-  const saved = String(savedWabaId || '').trim()
   const platform = String(platformWabaId || '').trim()
+  const isPlatform = (w: string) => w === TEST_WABA_ID || (!!platform && w === platform)
+  // "Conta salva da escola" = só a PRÓPRIA. A da plataforma/teste gravada por
+  // engano (caso Colégio Áion 21/10/2026, salvar manual com WABA vazio) não
+  // conta: não trava o vínculo da conta certa.
+  const savedRaw = String(savedWabaId || '').trim()
+  const saved = savedRaw && !isPlatform(savedRaw) ? savedRaw : ''
   if (!popup) {
     return { ok: false, motivo: 'sem_waba', message: 'A Meta não devolveu a conta (WABA). Nada foi alterado.' }
   }
-  if (popup === TEST_WABA_ID || (platform && popup === platform)) {
+  if (isPlatform(popup)) {
     return {
       ok: false, motivo: 'waba_da_plataforma',
       message: `A conta escolhida (${popup}) é a conta de teste da Áion, não a da escola. Nada foi alterado.`,
