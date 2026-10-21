@@ -141,9 +141,16 @@ const isCoexistenceConnected = (m: MetaPhoneState) =>
 // ── Eventos só de registro: clique, verificação antes do popup, FINISH da
 // Meta e resultado do popup — em TODOS os modos ──
 // reconnect_* = escola que já tem número; connect_* = primeira conexão.
+// Ignorar a verificação "já conectado" (popup mesmo assim): só admin_geral.
+export const canOverridePrecheck = (actor: ConnectActor | undefined) => actor === 'superadmin'
+
 export async function handleReconnectEvent(
   res: VercelResponse, ctx: ConnectContext, body: any,
 ) {
+  // Antes de qualquer leitura: só a equipe Áion ignora a verificação.
+  if (body.event === 'reconnect_precheck_override' && !canOverridePrecheck(ctx.actor)) {
+    return errorResponse(res, 403, 'Só a equipe Áion (admin geral) pode ignorar a verificação')
+  }
   const current = await loadCurrentPhone(ctx.institutionId)
   const isConnect = typeof body.event === 'string' && body.event.startsWith('connect_')
   const prefix = isConnect ? 'Conexão WhatsApp (coexistência)' : 'Reconexão WhatsApp (coexistência)'
@@ -165,6 +172,24 @@ export async function handleReconnectEvent(
       newValue: JSON.stringify({ numero: current.phone_number, waba: current.waba_id, meta }),
     })
     return res.status(200).json({ connected, meta, phone_number: current.phone_number })
+  }
+  // A verificação disse "já conectado", mas a equipe Áion abre a janela da
+  // Meta mesmo assim (coexistência incompleta: o app pede "Termine a
+  // configuração" e nada chega). Só admin_geral; só reconexão (a conclusão
+  // continua aceitando só a conta já salva). Fica no audit com quem e o motivo.
+  if (body.event === 'reconnect_precheck_override') {
+    if (!current) return errorResponse(res, 409, 'Esta escola não tem número cadastrado para reconectar')
+    const motivo = typeof body.motivo === 'string' && body.motivo.trim()
+      ? body.motivo.trim().slice(0, 300)
+      : 'coexistência incompleta (app pede "Termine a configuração"; mensagens não chegam)'
+    await writeAudit({
+      ...ctx, recordId: current.id,
+      action: `${prefix}: verificação ignorada de propósito`,
+      fieldChanged: 'precheck_ignorado',
+      oldValue: `phone_id=${current.phone_number_id} waba=${current.waba_id}`,
+      newValue: JSON.stringify({ por: ctx.actor, motivo }),
+    })
+    return res.status(200).json({ ok: true })
   }
   if (body.event === 'reconnect_popup_finish' || body.event === 'connect_popup_finish') {
     await writeAudit({

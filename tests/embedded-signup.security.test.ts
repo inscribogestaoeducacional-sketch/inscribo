@@ -503,3 +503,20 @@ test('salvar manual: nunca grava a conta da plataforma; ID da conta no campo do 
   assert.throws(() => assertIsPhoneNumber('877913328502884', null), /não é de um número/)
   assert.doesNotThrow(() => assertIsPhoneNumber('982315638300107', { display_phone_number: '+55 83 9603-5018' }))
 })
+
+// ── "Abrir a janela da Meta mesmo assim" (ignorar a verificação "já conectado") ──
+test('ignorar a verificação: só admin_geral; os demais 403 antes de ler qualquer coisa', async () => {
+  const { canOverridePrecheck } = await import('../api/_lib/whatsappReconnect.js')
+  assert.equal(canOverridePrecheck('superadmin'), true)
+  assert.equal(canOverridePrecheck('school_admin'), false)
+  assert.equal(canOverridePrecheck(undefined), false)
+  resetDb()
+  const ev = { event: 'reconnect_precheck_override', motivo: 'teste' }
+  assert.equal((await call('tok-admin-a', ev)).status, 403)                                  // admin da própria escola
+  assert.equal((await call('tok-admin-a', { ...ev, institution_id: ESCOLA_A })).status, 403) // idem, com o próprio id
+  assert.equal((await call('tok-consultor', { ...ev, institution_id: ESCOLA_A })).status, 403)
+  assert.equal((await call('tok-atendente-a', ev)).status, 403)
+  assert.equal((await call(null, { ...ev, institution_id: ESCOLA_A })).status, 403)
+  assert.equal(db.audits.length, 0)
+  assert.equal(db.metaCalls.length, 0)
+})
