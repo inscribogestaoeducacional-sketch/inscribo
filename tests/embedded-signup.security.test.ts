@@ -69,7 +69,14 @@ const connectDeps: ConnectDeps = {
   },
   wabaInAionPortfolio: async waba => {
     db.metaCalls.push('portfolio')
-    return META_WABAS[waba]?.aion ? { ok: true, via: 'dona' } : { ok: false, dona: '1421448176836112' }
+    return META_WABAS[waba]?.aion ? { ok: true, via: 'dona', dona: '1009021325175669', donaNome: 'Aion Solucoes Tecnologicas' }
+      : { ok: false, dona: '1421448176836112', donaNome: 'Victor Almeida' }
+  },
+  listPhones: async waba => {
+    db.metaCalls.push('listar_numeros')
+    return { ok: true, phones: (META_WABAS[waba]?.phones ?? []).map(id => ({
+      id, display_phone_number: '+55 83 9603-5018', verified_name: 'Escola', status: 'CONNECTED', platform_type: 'CLOUD_API', is_on_biz_app: true,
+    })) }
   },
   wabaHasPhone: async (waba, phone) => { db.metaCalls.push('phone_numbers'); return { ok: !!META_WABAS[waba]?.phones.includes(phone) } },
   readPhone: async () => { db.metaCalls.push('read'); return { ok: true, display_phone_number: '+55 84 3000-0000', verified_name: 'Escola' } },
@@ -200,7 +207,7 @@ test('WABA de outro portfólio é recusada, sem gravar, e auditada', async () =>
   assert.equal(db.audits[0].fieldChanged, 'waba_de_outro_portfolio')
   assert.equal(r.payload.error,
     'A conta ficou em outro portfólio. No popup, escolha o portfólio Aion Solucoes Tecnologicas e tente de novo.')
-  assert.match(String(db.audits[0].newValue), /dona da conta na Meta: 1421448176836112 \(exigido 1009021325175669\)/)
+  assert.match(String(db.audits[0].newValue), /dona da conta na Meta: 1421448176836112 "Victor Almeida" \(exigido 1009021325175669\)/)
 })
 
 test('WABA de teste da plataforma é recusada antes de chamar a Meta', async () => {
@@ -304,7 +311,7 @@ test('detalhes da Meta no audit: só os campos da lista, nada de token', async (
   assert.equal(metaDetail({ access_token: 'segredo' }), null)
 })
 
-test('portfólio: lê a dona da WABA; listas só como fallback', async () => {
+test('portfólio: só dona = Áion; compartilhada é recusada; lista de próprias só como fallback', async () => {
   const { checkWabaInAionPortfolio } = await import('../api/_lib/whatsappConnect.js')
   const SEM_PERM = { ok: false, body: { error: { message: '(#200) Requires business_management permission' } } }
   // Meta simulada: token sem business_management (como hoje) → listas 403
@@ -313,7 +320,7 @@ test('portfólio: lê a dona da WABA; listas só como fallback', async () => {
     const get = async (path: string) => {
       calls.push(path.split('?')[0])
       if (path.includes('owner_business_info')) {
-        return lerDona ? { ok: true, body: dona ? { owner_business_info: { id: dona } } : {} } : SEM_PERM
+        return lerDona ? { ok: true, body: dona ? { owner_business_info: { id: dona, name: 'Portfólio ' + dona } } : {} } : SEM_PERM
       }
       return listas ? { ok: true, body: { data: listas.map(id => ({ id })) } } : SEM_PERM
     }
@@ -321,14 +328,19 @@ test('portfólio: lê a dona da WABA; listas só como fallback', async () => {
   }
   // dona = Áion → aceita sem tocar nas listas
   let m = meta('1009021325175669')
-  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: true, via: 'dona' })
+  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get),
+    { ok: true, via: 'dona', dona: '1009021325175669', donaNome: 'Portfólio 1009021325175669' })
   assert.deepEqual(m.calls, ['2226058870759667'])
   // dona = outro portfólio, listas sem permissão → outro portfólio (não "não conferido")
   m = meta('555')
-  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: false, dona: '555' })
-  // dona = outro, mas a WABA está compartilhada com a Áion (lista) → aceita
+  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: false, dona: '555', donaNome: 'Portfólio 555' })
+  // dona = outro, mesmo compartilhada com a Áion (aparece em lista) → RECUSA, sem consultar listas
   m = meta('555', true, ['2226058870759667'])
-  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: true, via: 'compartilhada' })
+  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: false, dona: '555', donaNome: 'Portfólio 555' })
+  assert.deepEqual(m.calls, ['2226058870759667'])
+  // dona ilegível, mas a conta está na lista de próprias da Áion → aceita
+  m = meta(null, false, ['2226058870759667'])
+  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: true, via: 'propria' })
   // nem a dona nem as listas dão para ler → não conferido (com erro)
   m = meta(null, false)
   const r = await checkWabaInAionPortfolio('2226058870759667', 't', m.get)
@@ -353,4 +365,94 @@ test('erro da Meta: só código, mensagem e fbtrace_id, sem tokens', async () =>
   assert.doesNotMatch(m.message, /abc123|EAAx/)
   assert.equal(metaErrorText(m), 'Error validating client secret. client_secret=<oculto> access_token=<oculto> (código 1/33, fbtrace AEPSz)')
   assert.deepEqual(metaError({}, 'HTTP 500'), { message: 'HTTP 500' })
+})
+
+// ── Vincular conta da Áion (ficha da escola, só admin_geral) ──
+const VINC_LISTAR = (waba: string) => ({ action: 'vincular_listar', institution_id: ESCOLA_A, waba_id: waba })
+const VINCULAR = (waba: string, phone: string) => ({ action: 'vincular', institution_id: ESCOLA_A, waba_id: waba, phone_number_id: phone })
+
+test('vincular: consultor, admin da escola (mesmo a própria) e atendente → 403, sem tocar na Meta', async () => {
+  resetDb()
+  assert.equal((await call('tok-consultor', VINC_LISTAR(WABA_OK))).status, 403)
+  assert.equal((await call('tok-admin-a', VINC_LISTAR(WABA_OK))).status, 403)
+  assert.equal((await call('tok-admin-a', VINCULAR(WABA_OK, PHONE_OK))).status, 403)
+  assert.equal((await call('tok-admin-a', { action: 'vincular', waba_id: WABA_OK, phone_number_id: PHONE_OK })).status, 403)
+  assert.equal((await call('tok-atendente-a', VINCULAR(WABA_OK, PHONE_OK))).status, 403)
+  assert.equal((await call(null, VINCULAR(WABA_OK, PHONE_OK))).status, 403)
+  assert.equal(db.metaCalls.length, 0)
+  assert.equal(db.rows.length, 0)
+})
+
+test('vincular: listar números da conta da Áion (só leitura, não grava)', async () => {
+  resetDb()
+  const r = await call('tok-superadmin', VINC_LISTAR(WABA_OK))
+  assert.equal(r.status, 200)
+  assert.equal(r.payload.dona, '1009021325175669')
+  assert.deepEqual(r.payload.phones.map((p: { id: string }) => p.id), [PHONE_OK])
+  assert.equal(db.rows.length, 0)
+  assert.ok(!db.metaCalls.includes('subscribed_apps') && !db.metaCalls.includes('smb_app_data'))
+  // ID que não é número → 400, sem Meta
+  resetDb()
+  assert.equal((await call('tok-superadmin', VINC_LISTAR('abc'))).status, 400)
+  assert.equal(db.metaCalls.length, 0)
+})
+
+test('vincular: conta de outro dono (mesmo compartilhada) é recusada com mensagem clara e auditada', async () => {
+  resetDb()
+  const r = await call('tok-superadmin', VINC_LISTAR(WABA_OUTRA))
+  assert.equal(r.status, 409)
+  assert.equal(r.payload.motivo, 'waba_de_outro_portfolio')
+  assert.match(r.payload.error, /pertence ao portfólio Victor Almeida \(1421448176836112\), não à Aion Solucoes Tecnologicas/)
+  assert.match(r.payload.error, /WhatsApp Manager da Áion/)
+  assert.equal(db.audits[0].action, 'Vincular conta da Áion: recusada')
+  assert.ok(!db.metaCalls.includes('listar_numeros'))
+  // e direto no vincular também
+  resetDb()
+  const v = await call('tok-superadmin', VINCULAR(WABA_OUTRA, PHONE_DA_OUTRA))
+  assert.equal(v.status, 409)
+  assert.equal(v.payload.motivo, 'waba_de_outro_portfolio')
+  assert.equal(db.rows.length, 0)
+})
+
+test('vincular: conta de teste e conta diferente da salva → recusadas antes da Meta', async () => {
+  resetDb()
+  const t = await call('tok-superadmin', VINC_LISTAR(TEST_WABA_ID))
+  assert.equal(t.status, 409)
+  assert.equal(t.payload.motivo, 'waba_da_plataforma')
+  resetDb()
+  db.saved.set(ESCOLA_A, { id: 'p1', waba_id: '700000000000555', phone_number_id: '800000000000555' })
+  const d = await call('tok-superadmin', VINCULAR(WABA_OK, PHONE_OK))
+  assert.equal(d.status, 409)
+  assert.equal(d.payload.motivo, 'waba_diferente')
+  assert.equal(db.metaCalls.length, 0)
+  assert.equal(db.rows.length, 0)
+})
+
+test('vincular: número fora da conta é recusado', async () => {
+  resetDb()
+  const r = await call('tok-superadmin', VINCULAR(WABA_OK, PHONE_DA_OUTRA))
+  assert.equal(r.status, 409)
+  assert.equal(r.payload.motivo, 'numero_fora_da_waba')
+  assert.equal(db.rows.length, 0)
+})
+
+test('vincular: conta da Áion → inscreve webhook, pede histórico, grava e audita; sem /register', async () => {
+  resetDb()
+  const r = await call('tok-superadmin', VINCULAR(WABA_OK, PHONE_OK))
+  assert.equal(r.status, 200)
+  assert.equal(r.payload.app_subscribed, true)
+  assert.match(r.payload.historico, /history=pedido/)
+  assert.equal(db.rows.length, 1)
+  assert.equal(db.rows[0].institution_id, ESCOLA_A)
+  assert.equal(db.rows[0].waba_id, WABA_OK)
+  assert.equal(db.rows[0].access_token, null)
+  assert.ok(db.metaCalls.includes('subscribed_apps') && db.metaCalls.includes('smb_app_data'))
+  assert.ok(!db.metaCalls.includes('oauth'))
+  assert.ok(!db.metaCalls.some(c => /register/.test(c)))
+  const fim = db.audits.at(-1)!
+  assert.equal(fim.action, 'Vincular conta da Áion: concluída')
+  assert.match(String(fim.newValue), /"modo":"vincular"/)
+  // mesma conta já salva → aceita de novo (idempotente)
+  db.saved.set(ESCOLA_A, { id: 'p1', waba_id: WABA_OK, phone_number_id: PHONE_OK })
+  assert.equal((await call('tok-superadmin', VINCULAR(WABA_OK, PHONE_OK))).status, 200)
 })

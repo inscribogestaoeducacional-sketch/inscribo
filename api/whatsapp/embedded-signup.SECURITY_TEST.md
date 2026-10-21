@@ -19,13 +19,15 @@ Travas da conta (`api/_lib/whatsappConnect.ts`, com ou sem `code`), nesta ordem:
    chamar a Meta;
 2. a WABA tem de estar no portfólio da Áion `1009021325175669`, conferido com
    o token da plataforma: primeiro a dona da própria WABA
-   (`GET /{waba}?fields=owner_business_info`, tem de ser esse id); se não for,
-   as listas `client_whatsapp_business_accounts` / `owned_whatsapp_business_accounts`
-   (fallback — pedem `business_management`, que o token não tem hoje); senão
-   409 `waba_de_outro_portfolio` (ou `portfolio_nao_conferido` se nem a dona
-   deu para ler). A regra NÃO aceita conta de outro dono; a tela diz "A conta
+   (`GET /{waba}?fields=owner_business_info`, tem de ser esse id). Conta de
+   outro dono é recusada **mesmo compartilhada com a Áion** (409
+   `waba_de_outro_portfolio`); só se a dona não der para ler entra o fallback
+   `owned_whatsapp_business_accounts` (pede `business_management`, que o token
+   não tem hoje), senão `portfolio_nao_conferido`. No popup a tela diz "A conta
    ficou em outro portfólio. No popup, escolha o portfólio Aion Solucoes
-   Tecnologicas e tente de novo." e o audit grava a dona encontrada;
+   Tecnologicas e tente de novo."; no vínculo, que a conta pertence a outro
+   portfólio e tem de ser criada no WhatsApp Manager da Áion. O audit grava a
+   dona encontrada (id e nome);
 3. o número tem de ser dessa WABA (`/{waba}/phone_numbers`);
 4. só então: `subscribed_apps`, leitura do número, gravação e `smb_app_data`.
    **Nunca** `/register` e **nunca** `fb_exchange_token`.
@@ -35,6 +37,13 @@ Troca do `code` (conexão e reconexão, `api/_lib/metaApp.ts`): o segredo do app
 vem PRIMEIRO de `platform_settings.wa_app_secret` (o mesmo do webhook) e
 `WA_APP_SECRET` da Vercel é só reserva; o audit registra de onde veio
 (`segredo do app: banco | vercel`), nunca o valor.
+
+"Vincular conta da Áion" (ficha da escola → WhatsApp): `action:
+'vincular_listar'` (`waba_id`) lista os números da conta e `action:
+'vincular'` (`waba_id`, `phone_number_id`) vincula pelo caminho sem code.
+**Só admin_geral** com `institution_id`: consultor, atendente e admin da
+escola (mesmo da própria) → 403 antes de tocar na Meta. Mesmas travas 1–4
+acima; o audit usa `Vincular conta da Áion: recusada | concluída | falhou`.
 
 ## 1. Teste automático (rodar antes de todo deploy que mexa nisso)
 
@@ -89,6 +98,8 @@ post() { curl -s -o /dev/stderr -w "%{http_code}\n" -X POST $URL \
 | 8 | `post $TOKEN_SUPER '{"phone_number_id":"1","waba_id":"2812701862456294","institution_id":"'$INSTITUTION_B_ID'"}'` | 409 (conta de teste) |
 | 9 | `post $TOKEN_SUPER '{"phone_number_id":"1","waba_id":"2","institution_id":"00000000-0000-4000-8000-000000000000"}'` | 404 |
 | 10 | `post $TOKEN_CONSULTOR '{"phone_number_id":"1","waba_id":"2","institution_id":"'$INSTITUTION_A_ID'"}'` | **403** (consultor não conecta) |
+| 11 | `post $TOKEN_ADMIN_A '{"action":"vincular_listar","waba_id":"2","institution_id":"'$INSTITUTION_A_ID'"}'` | **403** (vínculo só admin_geral) |
+| 12 | `post $TOKEN_CONSULTOR '{"action":"vincular","waba_id":"2","phone_number_id":"1","institution_id":"'$INSTITUTION_A_ID'"}'` | **403** |
 
 Depois dos testes, conferir com a service role que nada mudou:
 
