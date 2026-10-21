@@ -1,5 +1,6 @@
 import type { VercelResponse } from '@vercel/node'
-import { getSupabaseAdmin, errorResponse, GRAPH_URL, WA_APP_ID, WA_APP_SECRET } from './whatsappAuth.js'
+import { getSupabaseAdmin, errorResponse, GRAPH_URL } from './whatsappAuth.js'
+import { exchangeCodeForToken, metaError, metaErrorText, errorFromException } from './metaApp.js'
 import { requestSmbAppSync, summarizeSmbSync, type SmbSyncResult } from './whatsappSmbSync.js'
 import type { ConnectActor, ConnectContext } from './whatsappConnectAuth.js'
 
@@ -131,7 +132,7 @@ export async function readMetaPhoneState(phoneNumberId: string, token: string): 
     status: state.body.status ?? null,
     platform_type: state.body.platform_type ?? null,
     is_on_biz_app: state.body.is_on_biz_app ?? null,
-  } : { erro: state.body?.error?.message ?? 'falha ao consultar a Meta' }
+  } : { erro: metaErrorText(metaError(state.body, 'falha ao consultar a Meta')) }
 }
 
 const isCoexistenceConnected = (m: MetaPhoneState) =>
@@ -288,24 +289,21 @@ async function reconnect(
 
   // 1. Troca o code (confirma a autorização). Falha aqui não bloqueia: o
   //    envio usa o token de sistema da plataforma, não este.
+  //    Segredo do app: primeiro o do banco (api/_lib/metaApp.ts).
   let codeExchanged = false
   let businessToken = ''
-  if (input.code && WA_APP_ID && WA_APP_SECRET) {
-    try {
-      const r = await fetch(
-        `${GRAPH_URL}/oauth/access_token?client_id=${WA_APP_ID}&client_secret=${WA_APP_SECRET}&code=${encodeURIComponent(input.code)}`,
-        { signal: AbortSignal.timeout(META_FETCH_TIMEOUT_MS) },
-      )
-      const d = await r.json()
-      if (r.ok && d.access_token) { codeExchanged = true; businessToken = d.access_token }
-      else console.warn('[reconnect] troca do code falhou:', d?.error?.message)
-    } catch (e) {
-      console.warn('[reconnect] troca do code falhou:', e)
-    }
+  let codeErro: string | null = null
+  let segredo: string | null = null
+  if (input.code) {
+    const ex = await exchangeCodeForToken(input.code)
+    segredo = ex.segredo
+    if (ex.token) { codeExchanged = true; businessToken = ex.token }
+    else { codeErro = ex.erro ?? 'falha ao trocar o code'; console.warn('[reconnect] troca do code falhou:', codeErro) }
   }
 
   // 2. Garante o app inscrito no WABA (idempotente). Sem /register.
   let subscribed = false
+  let subscribeErro: string | null = null
   for (const token of [businessToken, platformToken].filter(Boolean)) {
     try {
       const r = await fetch(`${GRAPH_URL}/${current.waba_id}/subscribed_apps`, {
@@ -313,11 +311,13 @@ async function reconnect(
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(META_FETCH_TIMEOUT_MS),
       })
-      const d = await r.json()
-      if (d?.success) { subscribed = true; break }
-      console.warn('[reconnect] subscribed_apps sem sucesso:', d?.error?.message)
+      const d = await r.json().catch(() => ({}))
+      if (d?.success) { subscribed = true; subscribeErro = null; break }
+      subscribeErro = metaErrorText(metaError(d, `HTTP ${r.status}`))
+      console.warn('[reconnect] subscribed_apps sem sucesso:', subscribeErro)
     } catch (e) {
-      console.warn('[reconnect] subscribed_apps falhou:', e)
+      subscribeErro = errorFromException(e).message
+      console.warn('[reconnect] subscribed_apps falhou:', subscribeErro)
     }
   }
 
@@ -347,7 +347,8 @@ async function reconnect(
     oldValue: `phone_id=${current.phone_number_id} waba=${current.waba_id}`,
     newValue: JSON.stringify({
       tipo: 'coexistencia', por: actor ?? 'school_admin',
-      phone_id: input.phone_number_id, sem_code: !input.code, code_trocado: codeExchanged, app_inscrito: subscribed, meta,
+      phone_id: input.phone_number_id, sem_code: !input.code, code_trocado: codeExchanged, code_erro: codeErro,
+      segredo_do_app: segredo, app_inscrito: subscribed, app_inscrito_erro: subscribeErro, meta,
       sincronizacao: sync.length ? summarizeSmbSync(sync) : 'não pedida (número fora da coexistência)',
     }),
   })

@@ -61,11 +61,19 @@ const connectDeps: ConnectDeps = {
   loadSaved: async inst => db.saved.get(inst) ?? null,
   platformWabaId: async () => PLAT_WABA,
   platformToken: async () => 'tok-plataforma',
-  exchangeCode: async code => { db.metaCalls.push('oauth'); return code === 'code-bom' ? { token: 'tok-empresa' } : { erro: 'code inválido' } },
-  wabaInAionPortfolio: async waba => { db.metaCalls.push('portfolio'); return { ok: !!META_WABAS[waba]?.aion, via: 'compartilhada' } },
+  // Resposta da Meta já no formato de metaErrorText (código + fbtrace_id)
+  exchangeCode: async code => {
+    db.metaCalls.push('oauth')
+    return code === 'code-bom' ? { token: 'tok-empresa', segredo: 'banco' }
+      : { erro: 'Error validating client secret. (código 1, fbtrace AbC123)', segredo: 'banco' }
+  },
+  wabaInAionPortfolio: async waba => {
+    db.metaCalls.push('portfolio')
+    return META_WABAS[waba]?.aion ? { ok: true, via: 'dona' } : { ok: false, dona: '1421448176836112' }
+  },
   wabaHasPhone: async (waba, phone) => { db.metaCalls.push('phone_numbers'); return { ok: !!META_WABAS[waba]?.phones.includes(phone) } },
   readPhone: async () => { db.metaCalls.push('read'); return { ok: true, display_phone_number: '+55 84 3000-0000', verified_name: 'Escola' } },
-  subscribe: async () => { db.metaCalls.push('subscribed_apps'); return true },
+  subscribe: async () => { db.metaCalls.push('subscribed_apps'); return { ok: true } },
   metaState: async () => ({ status: 'CONNECTED', platform_type: 'CLOUD_API', is_on_biz_app: true }),
   smbSync: async () => {
     db.metaCalls.push('smb_app_data')
@@ -135,6 +143,12 @@ test('admin da escola A com code válido grava; code recusado não grava', async
   assert.equal(bad.status, 400)
   assert.equal(db.rows.length, 0)
   assert.equal(db.audits[0].fieldChanged, 'code_recusado')
+  // resposta da Meta (código, mensagem, fbtrace_id) e origem do segredo no audit; nada de token/code
+  const v = String(db.audits[0].newValue)
+  assert.match(v, /Error validating client secret\. \(código 1, fbtrace AbC123\)/)
+  assert.match(v, /segredo do app: banco/)
+  assert.doesNotMatch(v, /code-ruim|tok-/)
+  assert.match(bad.payload.error, /^A Meta recusou a autorização: Error validating client secret/)
 })
 
 test('admin da escola A NÃO conecta a escola B via body → 403', async () => {
@@ -184,6 +198,9 @@ test('WABA de outro portfólio é recusada, sem gravar, e auditada', async () =>
   assert.ok(!db.metaCalls.includes('subscribed_apps'))
   assert.equal(db.audits[0].action, 'Conexão WhatsApp (Meta): recusada')
   assert.equal(db.audits[0].fieldChanged, 'waba_de_outro_portfolio')
+  assert.equal(r.payload.error,
+    'A conta ficou em outro portfólio. No popup, escolha o portfólio Aion Solucoes Tecnologicas e tente de novo.')
+  assert.match(String(db.audits[0].newValue), /dona da conta na Meta: 1421448176836112 \(exigido 1009021325175669\)/)
 })
 
 test('WABA de teste da plataforma é recusada antes de chamar a Meta', async () => {
@@ -308,7 +325,7 @@ test('portfólio: lê a dona da WABA; listas só como fallback', async () => {
   assert.deepEqual(m.calls, ['2226058870759667'])
   // dona = outro portfólio, listas sem permissão → outro portfólio (não "não conferido")
   m = meta('555')
-  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: false })
+  assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: false, dona: '555' })
   // dona = outro, mas a WABA está compartilhada com a Áion (lista) → aceita
   m = meta('555', true, ['2226058870759667'])
   assert.deepEqual(await checkWabaInAionPortfolio('2226058870759667', 't', m.get), { ok: true, via: 'compartilhada' })
@@ -317,4 +334,23 @@ test('portfólio: lê a dona da WABA; listas só como fallback', async () => {
   const r = await checkWabaInAionPortfolio('2226058870759667', 't', m.get)
   assert.equal(r.ok, false)
   assert.match(r.erro ?? '', /business_management/)
+})
+
+test('segredo do app: primeiro o do banco, o da Vercel só como reserva', async () => {
+  const { pickAppSecret } = await import('../api/_lib/metaApp.js')
+  assert.deepEqual(pickAppSecret('do-banco', 'da-vercel'), { secret: 'do-banco', origem: 'banco' })
+  assert.deepEqual(pickAppSecret('  ', 'da-vercel'), { secret: 'da-vercel', origem: 'vercel' })
+  assert.deepEqual(pickAppSecret(null, undefined), null)
+})
+
+test('erro da Meta: só código, mensagem e fbtrace_id, sem tokens', async () => {
+  const { metaError, metaErrorText } = await import('../api/_lib/metaApp.js')
+  const m = metaError({ error: {
+    message: 'Error validating client secret. client_secret=abc123 access_token=EAAxxxxxxxxxxxxxxxxx',
+    type: 'OAuthException', code: 1, error_subcode: 33, fbtrace_id: 'AEPSz', error_user_msg: 'x', access_token: 'EAAyyyyyyyyyyyyyyyy',
+  } })
+  assert.deepEqual(Object.keys(m).sort(), ['code', 'fbtrace_id', 'message', 'subcode', 'type'])
+  assert.doesNotMatch(m.message, /abc123|EAAx/)
+  assert.equal(metaErrorText(m), 'Error validating client secret. client_secret=<oculto> access_token=<oculto> (código 1/33, fbtrace AEPSz)')
+  assert.deepEqual(metaError({}, 'HTTP 500'), { message: 'HTTP 500' })
 })
