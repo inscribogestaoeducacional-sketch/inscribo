@@ -12,6 +12,7 @@ import InstitutionBroadcastTab from './InstitutionBroadcastTab'
 import InstitutionBaseModuleTab from './InstitutionBaseModuleTab'
 import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
 import EmbeddedSignupButton from '../whatsapp/EmbeddedSignupButton'
+import LinkAionWabaPanel from './LinkAionWabaPanel'
 import {
   Building2, Users, DollarSign, FileText, CheckCircle2,
   Clock, AlertTriangle, ExternalLink, Copy, RefreshCw,
@@ -2313,6 +2314,12 @@ export default function InstitutionDetails() {
                           />
                         )}
                     </div>
+                  )}
+
+                  {/* Conta criada no WhatsApp Manager da Áion (o popup não deixa
+                      usar o portfólio dona do app): vincula pelo ID da conta. */}
+                  {id && isSuperAdmin && (
+                    <LinkAionWabaPanel institutionId={id} savedWabaId={waSaved?.waba_id ?? null} onLinked={() => loadAll(true)} />
                   )}
 
                   {/* Usage section */}

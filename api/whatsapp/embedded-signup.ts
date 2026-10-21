@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { errorResponse } from '../_lib/whatsappAuth.js'
 import { handleReconnect, handleReconnectEvent } from '../_lib/whatsappReconnect.js'
 import { resolveConnectContext, type ConnectAuthDeps, type ConnectContext } from '../_lib/whatsappConnectAuth.js'
-import { runConnect, defaultConnectDeps, type ConnectDeps } from '../_lib/whatsappConnect.js'
+import { runConnect, listAionWabaPhones, defaultConnectDeps, type ConnectDeps } from '../_lib/whatsappConnect.js'
 
 // ── Cadastro Incorporado (Embedded Signup) da Meta ──────────────────────────
 // Segunda forma de conectar o WhatsApp de uma escola, além do formulário
@@ -19,6 +19,9 @@ import { runConnect, defaultConnectDeps, type ConnectDeps } from '../_lib/whatsa
 //   - institution_id: só vale para Super Admin.
 //   - event: só registro (clique, resultado do popup, FINISH, verificação antes
 //     do popup) — api/_lib/whatsappReconnect.ts.
+//   - action 'vincular_listar' { institution_id, waba_id } → números da conta;
+//     action 'vincular' { institution_id, waba_id, phone_number_id } → vincula.
+//     Só admin_geral (botão "Vincular conta da Áion" na ficha da escola).
 //
 // IMPORTANTE — invariante de segurança (api/_lib/whatsappConnectAuth.ts):
 // admin de escola conecta só a própria escola, resolvida pelo token de sessão;
@@ -37,6 +40,18 @@ export function createEmbeddedSignupHandler(authDeps?: ConnectAuthDeps, connectD
 export default createEmbeddedSignupHandler()
 
 async function connect(req: VercelRequest, res: VercelResponse, ctx: ConnectContext, deps: ConnectDeps) {
+  // "Vincular conta da Áion" (ficha da escola): conta criada no WhatsApp
+  // Manager da Áion, vinculada pelo waba_id colado. Só admin_geral — admin da
+  // escola mandando o próprio institution_id também é recusado aqui.
+  const action = req.body?.action
+  if (action === 'vincular_listar' || action === 'vincular') {
+    if (ctx.actor !== 'superadmin') return errorResponse(res, 403, 'Só a equipe Áion (admin geral) vincula conta da Áion')
+    const out = action === 'vincular_listar'
+      ? await listAionWabaPhones(ctx, req.body?.waba_id, deps)
+      : await runConnect(ctx, { phone_number_id: req.body?.phone_number_id, waba_id: req.body?.waba_id, modo: 'vincular' }, deps)
+    return res.status(out.status).json(out.body)
+  }
+
   // Reconexão em coexistência de escola que já tem número (api/_lib/whatsappReconnect.ts)
   if (req.body?.event) return handleReconnectEvent(res, ctx, req.body)
   if (req.body?.mode === 'reconnect') return handleReconnect(res, ctx, req.body)
