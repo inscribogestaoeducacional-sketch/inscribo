@@ -1,4 +1,5 @@
 import { GRAPH_URL } from './whatsappAuth.js'
+import { metaError, metaErrorText, errorFromException } from './metaApp.js'
 
 // ── Pede à Meta os contatos e o histórico do app WhatsApp Business ─────────
 // Depois de uma conexão em coexistência, a Meta só manda os webhooks
@@ -36,13 +37,13 @@ async function requestOne(phoneNumberId: string, syncType: SmbSyncType, tokens: 
       if (r.ok && !d?.error) {
         return { sync_type: syncType, ok: true, request_id: d?.request_id ?? null, erro: null }
       }
-      lastError = d?.error?.message || `HTTP ${r.status}`
+      lastError = metaErrorText(metaError(d, `HTTP ${r.status}`))
     } catch (e) {
-      lastError = e instanceof Error ? e.message : String(e)
+      lastError = errorFromException(e).message
     }
   }
   console.warn(`[smb_app_data] ${syncType} falhou:`, lastError)
-  return { sync_type: syncType, ok: false, request_id: null, erro: lastError.slice(0, 200) }
+  return { sync_type: syncType, ok: false, request_id: null, erro: lastError.slice(0, 400) }
 }
 
 // Tokens em ordem de preferência (o da empresa recém-autorizada primeiro,

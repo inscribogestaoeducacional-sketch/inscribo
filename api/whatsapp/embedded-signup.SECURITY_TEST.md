@@ -23,11 +23,18 @@ Travas da conta (`api/_lib/whatsappConnect.ts`, com ou sem `code`), nesta ordem:
    as listas `client_whatsapp_business_accounts` / `owned_whatsapp_business_accounts`
    (fallback — pedem `business_management`, que o token não tem hoje); senão
    409 `waba_de_outro_portfolio` (ou `portfolio_nao_conferido` se nem a dona
-   deu para ler);
+   deu para ler). A regra NÃO aceita conta de outro dono; a tela diz "A conta
+   ficou em outro portfólio. No popup, escolha o portfólio Aion Solucoes
+   Tecnologicas e tente de novo." e o audit grava a dona encontrada;
 3. o número tem de ser dessa WABA (`/{waba}/phone_numbers`);
 4. só então: `subscribed_apps`, leitura do número, gravação e `smb_app_data`.
    **Nunca** `/register` e **nunca** `fb_exchange_token`.
 Toda recusa grava `Conexão WhatsApp (Meta): recusada` com o motivo.
+
+Troca do `code` (conexão e reconexão, `api/_lib/metaApp.ts`): o segredo do app
+vem PRIMEIRO de `platform_settings.wa_app_secret` (o mesmo do webhook) e
+`WA_APP_SECRET` da Vercel é só reserva; o audit registra de onde veio
+(`segredo do app: banco | vercel`), nunca o valor.
 
 ## 1. Teste automático (rodar antes de todo deploy que mexa nisso)
 
@@ -101,6 +108,10 @@ a escola (`institution_id`), quem fez (`user_id`, `user_name`; `user_role` =
 coexistencia | cloud_api` e `sem_code` no `new_value` da conclusão). Em todos os
 modos (inclusive o botão comum da escola). Detalhes da Meta (código e mensagem
 do erro, `session_id`, etapa, `business_id`, ids) vão em JSON no `new_value`.
+Quando a Meta recusa uma chamada do servidor (troca do code, dona da conta,
+números da conta, leitura do número, `subscribed_apps`, `smb_app_data`), a
+resposta dela vai no `new_value` como `mensagem (código X/sub, fbtrace Y)` —
+só código, mensagem e `fbtrace_id`; tokens, codes e segredos são apagados.
 
 ## Critério de aceite
 

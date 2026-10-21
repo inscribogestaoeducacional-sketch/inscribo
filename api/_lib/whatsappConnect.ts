@@ -1,4 +1,5 @@
-import { getSupabaseAdmin, GRAPH_URL, WA_APP_ID, WA_APP_SECRET } from './whatsappAuth.js'
+import { getSupabaseAdmin, GRAPH_URL } from './whatsappAuth.js'
+import { exchangeCodeForToken, metaError, metaErrorText, errorFromException } from './metaApp.js'
 import { readMetaPhoneState, writeAudit, getPlatformToken, type MetaPhoneState } from './whatsappReconnect.js'
 import { requestSmbAppSync, summarizeSmbSync, type SmbSyncResult } from './whatsappSmbSync.js'
 import { checkPopupWaba, type ConnectContext } from './whatsappConnectAuth.js'
@@ -50,11 +51,12 @@ export interface ConnectDeps {
   loadSaved: (institutionId: string) => Promise<SavedPhone | null>
   platformWabaId: () => Promise<string | null>
   platformToken: () => Promise<string>
-  exchangeCode: (code: string) => Promise<{ token?: string; erro?: string }>
-  wabaInAionPortfolio: (wabaId: string, token: string) => Promise<{ ok: boolean; via?: string; erro?: string }>
+  // erro = texto da Meta com código e fbtrace_id (metaErrorText); segredo = de onde veio o segredo do app
+  exchangeCode: (code: string) => Promise<{ token?: string; erro?: string; segredo?: string | null }>
+  wabaInAionPortfolio: (wabaId: string, token: string) => Promise<{ ok: boolean; via?: string; dona?: string; erro?: string }>
   wabaHasPhone: (wabaId: string, phoneNumberId: string, tokens: string[]) => Promise<{ ok: boolean; erro?: string }>
   readPhone: (phoneNumberId: string, tokens: string[]) => Promise<{ ok: boolean; display_phone_number?: string; verified_name?: string; erro?: string }>
-  subscribe: (wabaId: string, tokens: string[]) => Promise<boolean>
+  subscribe: (wabaId: string, tokens: string[]) => Promise<{ ok: boolean; erro?: string }>
   metaState: (phoneNumberId: string, token: string) => Promise<MetaPhoneState>
   smbSync: (phoneNumberId: string, tokens: string[]) => Promise<SmbSyncResult[]>
   save: (row: PhoneRow) => Promise<string | null>          // mensagem de erro ou null
@@ -76,13 +78,15 @@ export async function runConnect(ctx: ConnectContext, input: ConnectInput, deps:
   }
 
   const saved = await deps.loadSaved(institutionId)
-  const refuse = async (status: number, motivo: string, message: string) => {
+  // detalhe = o que vai para o audit além dos ids (resposta da Meta etc.);
+  // sem detalhe, grava a própria mensagem da tela.
+  const refuse = async (status: number, motivo: string, message: string, detalhe?: string) => {
     await deps.audit({
       institutionId, userId, actor, recordId: saved?.id ?? null,
       action: 'Conexão WhatsApp (Meta): recusada',
       fieldChanged: motivo,
       oldValue: saved ? `phone_id=${saved.phone_number_id} waba=${saved.waba_id}` : 'sem cadastro anterior',
-      newValue: `phone_id=${phoneId} waba=${wabaId}${semCode ? ' (sem code)' : ''}`,
+      newValue: `phone_id=${phoneId} waba=${wabaId}${semCode ? ' (sem code)' : ''} | ${detalhe ?? message}`.slice(0, 1000),
     })
     return { status, body: { error: message, motivo } }
   }
@@ -95,13 +99,16 @@ export async function runConnect(ctx: ConnectContext, input: ConnectInput, deps:
     // 2. Token da empresa pelo code (quando vier). Sem fb_exchange_token.
     let businessToken = ''
     let codeErro: string | null = null
+    let segredo: string | null = null
     if (code) {
       const ex = await deps.exchangeCode(code)
+      segredo = ex.segredo ?? null
       if (ex.token) businessToken = ex.token
       else codeErro = ex.erro || 'falha ao trocar o code'
       // admin da escola: o code é a única prova de que ele autorizou na Meta
       if (!businessToken && actor !== 'superadmin') {
-        return refuse(400, 'code_recusado', `A Meta recusou a autorização: ${codeErro}. Nada foi alterado.`)
+        return refuse(400, 'code_recusado', `A Meta recusou a autorização: ${codeErro}. Nada foi alterado.`,
+          `Meta: ${codeErro} | segredo do app: ${segredo ?? 'nenhum'}`)
       }
     }
     const platformToken = await deps.platformToken()
@@ -111,9 +118,14 @@ export async function runConnect(ctx: ConnectContext, input: ConnectInput, deps:
     // 3. A WABA está no portfólio da Áion?
     const owner = await deps.wabaInAionPortfolio(wabaId, platformToken)
     if (!owner.ok) {
-      return refuse(409, owner.erro ? 'portfolio_nao_conferido' : 'waba_de_outro_portfolio', owner.erro
-        ? `Não foi possível conferir na Meta se a conta ${wabaId} está ligada à Áion (${owner.erro}). Nada foi alterado.`
-        : `A conta ${wabaId} não está ligada ao portfólio da Áion. Nada foi alterado.`)
+      if (owner.erro) {
+        return refuse(409, 'portfolio_nao_conferido',
+          `Não foi possível conferir na Meta se a conta ${wabaId} está ligada à Áion (${owner.erro}). Nada foi alterado.`,
+          `Meta: ${owner.erro}`)
+      }
+      return refuse(409, 'waba_de_outro_portfolio',
+        'A conta ficou em outro portfólio. No popup, escolha o portfólio Aion Solucoes Tecnologicas e tente de novo.',
+        `dona da conta na Meta: ${owner.dona ?? 'não informada'} (exigido ${AION_BUSINESS_ID})`)
     }
 
     // 4. O número é desta WABA?
@@ -121,12 +133,16 @@ export async function runConnect(ctx: ConnectContext, input: ConnectInput, deps:
     if (!hasPhone.ok) {
       return refuse(409, 'numero_fora_da_waba', hasPhone.erro
         ? `Não foi possível conferir o número na conta ${wabaId} (${hasPhone.erro}). Nada foi alterado.`
-        : `O número ${phoneId} não pertence à conta ${wabaId}. Nada foi alterado.`)
+        : `O número ${phoneId} não pertence à conta ${wabaId}. Nada foi alterado.`,
+        hasPhone.erro ? `Meta: ${hasPhone.erro}` : undefined)
     }
 
     // 5. Lê o número
     const phone = await deps.readPhone(phoneId, tokens)
-    if (!phone.ok) return refuse(409, 'numero_ilegivel', `Não foi possível ler o número na Meta (${phone.erro}). Nada foi alterado.`)
+    if (!phone.ok) {
+      return refuse(409, 'numero_ilegivel', `Não foi possível ler o número na Meta (${phone.erro}). Nada foi alterado.`,
+        `Meta: ${phone.erro}`)
+    }
     const verifiedPhone = phone.display_phone_number || ''
     const verifiedName = phone.verified_name || ''
 
@@ -153,8 +169,8 @@ export async function runConnect(ctx: ConnectContext, input: ConnectInput, deps:
       newValue: JSON.stringify({
         tipo: meta.is_on_biz_app === true ? 'coexistencia' : 'cloud_api', por: actor,
         phone_id: phoneId, waba: wabaId, numero: verifiedPhone,
-        sem_code: semCode, code_trocado: !!businessToken, code_erro: codeErro,
-        portfolio: owner.via ?? null, app_inscrito: subscribed, meta,
+        sem_code: semCode, code_trocado: !!businessToken, code_erro: codeErro, segredo_do_app: segredo,
+        portfolio: owner.via ?? null, app_inscrito: subscribed.ok, app_inscrito_erro: subscribed.erro ?? null, meta,
         sincronizacao: sync.length ? summarizeSmbSync(sync) : 'não pedida (número fora da coexistência)',
       }),
     })
@@ -162,7 +178,7 @@ export async function runConnect(ctx: ConnectContext, input: ConnectInput, deps:
     return {
       status: 200,
       body: { phone_number_id: phoneId, waba_id: wabaId, phone_number: verifiedPhone, display_name: verifiedName,
-              sem_code: semCode, app_subscribed: subscribed, meta, sync },
+              sem_code: semCode, app_subscribed: subscribed.ok, meta, sync },
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
@@ -180,7 +196,7 @@ export async function runConnect(ctx: ConnectContext, input: ConnectInput, deps:
 
 // ── Implementação real (banco + Graph API) ──
 // Só os campos da resposta da Graph API que este arquivo lê
-type GraphBody = { error?: { message?: string }; data?: { id?: string }[]; paging?: { next?: string }; success?: boolean; display_phone_number?: string; verified_name?: string; owner_business_info?: { id?: string } }
+type GraphBody = { error?: { message?: string; code?: number; error_subcode?: number; fbtrace_id?: string }; data?: { id?: string }[]; paging?: { next?: string }; success?: boolean; display_phone_number?: string; verified_name?: string; owner_business_info?: { id?: string } }
 type GraphFn = (path: string, token: string) => Promise<{ ok: boolean; body: GraphBody }>
 async function graph(path: string, token: string, init: RequestInit = {}): Promise<{ ok: boolean; body: GraphBody }> {
   try {
@@ -190,10 +206,11 @@ async function graph(path: string, token: string, init: RequestInit = {}): Promi
     })
     return { ok: r.ok, body: await r.json().catch(() => ({})) }
   } catch (e) {
-    return { ok: false, body: { error: { message: e instanceof Error ? e.message : String(e) } } }
+    return { ok: false, body: { error: errorFromException(e) } }
   }
 }
-const gErr = (b: GraphBody | undefined) => String(b?.error?.message || 'falha na Meta').slice(0, 200)
+// Resposta da Meta com código e fbtrace_id, sem tokens (api/_lib/metaApp.ts)
+const gErr = (b: GraphBody | undefined) => metaErrorText(metaError(b))
 
 // Percorre uma lista paginada da Graph API (até 20 páginas) procurando um id.
 async function listHas(path: string, id: string, token: string, get: GraphFn = graph): Promise<{ found: boolean; erro?: string }> {
@@ -216,7 +233,7 @@ async function listHas(path: string, id: string, token: string, get: GraphFn = g
 // compartilhada com a Áion, se a permissão for dada um dia.
 export async function checkWabaInAionPortfolio(
   wabaId: string, token: string, get: GraphFn = graph,
-): Promise<{ ok: boolean; via?: string; erro?: string }> {
+): Promise<{ ok: boolean; via?: string; dona?: string; erro?: string }> {
   const own = await get(`${wabaId}?fields=owner_business_info`, token)
   const ownerId = own.ok ? String(own.body?.owner_business_info?.id ?? '') : ''
   if (ownerId === AION_BUSINESS_ID) return { ok: true, via: 'dona' }
@@ -226,7 +243,7 @@ export async function checkWabaInAionPortfolio(
   if (owned.found) return { ok: true, via: 'propria' }
   // Dona lida e diferente da Áion = outro portfólio (mesmo com as listas sem
   // permissão). Só é "não conferido" se nem a dona deu para ler.
-  if (ownerId) return { ok: false }
+  if (ownerId) return { ok: false, dona: ownerId }
   return { ok: false, erro: own.ok ? 'a Meta não informou a dona da conta' : gErr(own.body) }
 }
 
@@ -241,19 +258,7 @@ export const defaultConnectDeps: ConnectDeps = {
     return data?.value ?? null
   },
   platformToken: getPlatformToken,
-  exchangeCode: async code => {
-    if (!WA_APP_ID || !WA_APP_SECRET) return { erro: 'WA_APP_ID/WA_APP_SECRET não configurados' }
-    try {
-      const r = await fetch(
-        `${GRAPH_URL}/oauth/access_token?client_id=${WA_APP_ID}&client_secret=${WA_APP_SECRET}&code=${encodeURIComponent(code)}`,
-        { signal: AbortSignal.timeout(META_FETCH_TIMEOUT_MS) },
-      )
-      const d = await r.json().catch(() => ({}))
-      return r.ok && d?.access_token ? { token: d.access_token } : { erro: gErr(d) }
-    } catch (e) {
-      return { erro: e instanceof Error ? e.message : String(e) }
-    }
-  },
+  exchangeCode: exchangeCodeForToken,
   wabaInAionPortfolio: (wabaId, token) => checkWabaInAionPortfolio(wabaId, token),
   wabaHasPhone: async (wabaId, phoneNumberId, tokens) => {
     let erro: string | undefined
@@ -275,12 +280,14 @@ export const defaultConnectDeps: ConnectDeps = {
     return { ok: false, erro }
   },
   subscribe: async (wabaId, tokens) => {
+    let erro = 'sem token'
     for (const t of tokens) {
       const r = await graph(`${wabaId}/subscribed_apps`, t, { method: 'POST' })
-      if (r.body?.success) return true
-      console.warn('[embedded-signup] subscribed_apps sem sucesso:', gErr(r.body))
+      if (r.body?.success) return { ok: true }
+      erro = gErr(r.body)
+      console.warn('[embedded-signup] subscribed_apps sem sucesso:', erro)
     }
-    return false
+    return { ok: false, erro }
   },
   metaState: readMetaPhoneState,
   smbSync: requestSmbAppSync,
