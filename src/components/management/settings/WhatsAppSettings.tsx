@@ -8,12 +8,13 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Wifi, RefreshCw, Loader2, Check, X, Plus, Trash2, Pencil, Bot, Zap, Clock, Coffee, Timer, Star,
-  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History, CalendarDays, BellRing,
+  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History, CalendarDays, BellRing, FileText,
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { platformAdmin } from '../../../lib/platformAdmin'
 import FlowEditor from '../../whatsapp/FlowEditor'
 import SpecialDatesSettings from './SpecialDatesSettings'
+import TemplatesSettings from './TemplatesSettings'
 import EmbeddedSignupButton from '../../whatsapp/EmbeddedSignupButton'
 import { canSeeSettingsItem, visibleWhatsAppSections } from '../../../lib/settingsAccess'
 import { BRAND, GRAD } from '../../../lib/brand'
@@ -66,6 +67,7 @@ export const WA_SECTION_INFO: Record<string, { label: string; desc: string }> = 
   bloqueios:  { label: 'Números bloqueados', desc: 'Números que o sistema ignora.' },
   pesquisa:   { label: 'Avaliação do atendimento', desc: 'Pergunta ao cliente como foi o atendimento, ao encerrar.' },
   parada:     { label: 'Conversa parada', desc: 'Lembra o cliente que sumiu depois de ser atendido.' },
+  modelos:    { label: 'Modelos da Meta', desc: 'Os modelos de mensagem da escola e os padrões, com o status de cada um na Meta.' },
 }
 
 // Fluxo visual ligado (as 6 escolas hoje): boas-vindas, menu e a mensagem
@@ -475,6 +477,11 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         ...(allowed.includes('horario') ? [{ id: 'horario', Icon: Clock, title: 'Horário de atendimento', desc: 'Quando a escola atende e o que o robô responde fora do horário.', open: () => go('horario') }] : []),
         ...(allowed.includes('equipe') ? [{ id: 'equipe', Icon: Users, title: 'Equipe e distribuição', desc: 'Grupos de atendimento e quem recebe cada conversa.', open: () => go('equipe') }] : []),
         ...(allowed.includes('respostas') ? [{ id: 'respostas', Icon: MessageSquareText, title: 'Respostas rápidas', desc: 'Textos prontos para a equipe usar com "/" no chat.', open: () => go('respostas') }] : []),
+      ],
+    },
+    {
+      title: 'Mensagens', items: [
+        ...(allowed.includes('modelos') ? [{ id: 'modelos', Icon: FileText, title: 'Modelos da Meta', desc: 'Modelos de mensagem aprovados pela Meta: os da escola e os padrões.', open: () => go('modelos') }] : []),
       ],
     },
     {
@@ -1137,7 +1144,9 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
 
   const datas = <SpecialDatesSettings institutionId={institutionId} horarioTxt={horarioTxt} onChanged={setSpecialCount} />
 
-  const content: Record<string, React.ReactNode> = { conexao, automacoes, datas, horario, respostas, equipe, bloqueios, etiquetas, pesquisa, parada }
+  const modelos = <TemplatesSettings institutionId={institutionId} />
+
+  const content: Record<string, React.ReactNode> = { conexao, automacoes, datas, horario, respostas, equipe, bloqueios, etiquetas, pesquisa, parada, modelos }
 
   return (
     <>
