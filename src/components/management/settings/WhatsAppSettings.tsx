@@ -8,11 +8,12 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Wifi, RefreshCw, Loader2, Check, X, Plus, Trash2, Pencil, Bot, Zap, Clock, Coffee, Timer, Star,
-  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History,
+  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History, CalendarDays,
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { platformAdmin } from '../../../lib/platformAdmin'
 import FlowEditor from '../../whatsapp/FlowEditor'
+import SpecialDatesSettings from './SpecialDatesSettings'
 import EmbeddedSignupButton from '../../whatsapp/EmbeddedSignupButton'
 import { canSeeSettingsItem, visibleWhatsAppSections } from '../../../lib/settingsAccess'
 import { BRAND, GRAD } from '../../../lib/brand'
@@ -46,6 +47,7 @@ const TAG_COLORS = ['#6366f1', '#16a34a', '#dc2626', '#d97706', '#0891b2', '#ec4
 export const WA_SECTION_INFO: Record<string, { label: string; desc: string }> = {
   conexao:    { label: 'Conexão', desc: 'Número conectado, reconexão e nome do atendente nas mensagens.' },
   automacoes: { label: 'Automações', desc: 'Tudo que o sistema manda sozinho, num lugar só.' },
+  datas:      { label: 'Feriados e datas especiais', desc: 'Mensagens próprias para os dias em que a escola muda o atendimento.' },
   horario:    { label: 'Horário de atendimento', desc: 'Dias e horários, mensagens de fora do horário e almoço, e o tempo do robô.' },
   respostas:  { label: 'Respostas rápidas', desc: 'Textos prontos para a equipe usar com "/" no chat.' },
   equipe:     { label: 'Equipe e distribuição', desc: 'Grupos de atendimento, horário de cada atendente e transferência por inatividade.' },
@@ -137,6 +139,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const [timeoutMessage, setTimeoutMessage] = useState('Um momento, estou te conectando com um atendente! 👋')
   const [surveyMsg, setSurveyMsg] = useState('Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊')
   const [surveyOn, setSurveyOn] = useState(false)
+  const [specialCount, setSpecialCount] = useState<number | null>(null)
   const [scheduleMode, setScheduleMode] = useState<'general' | 'individual'>('general')
   const [sv, setSv] = useState<SurveyForm>(SURVEY_DEFAULTS)
   const [lunchStart, setLunchStart] = useState('')
@@ -237,6 +240,10 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
     try {
       const { data: users } = await supabase.from('users').select('id,full_name').eq('institution_id', institutionId)
       if (mounted.current) setFlowUsers(users || [])
+    } catch {}
+    try {
+      const { data: sd } = await supabase.from('whatsapp_special_dates').select('id').eq('institution_id', institutionId).eq('active', true)
+      if (mounted.current && sd) setSpecialCount(sd.length)
     } catch {}
     try {
       const { data: qr } = await supabase.from('whatsapp_quick_replies').select('id,title,message,order_index').eq('institution_id', institutionId).order('order_index', { ascending: true })
@@ -439,6 +446,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
     },
     {
       title: 'Atendimento', items: [
+        ...(allowed.includes('datas') ? [{ id: 'datas', Icon: CalendarDays, title: 'Feriados e datas especiais', desc: 'Avisos nos dias em que a escola não atende ou atende menos.', open: () => go('datas') }] : []),
         ...(allowed.includes('horario') ? [{ id: 'horario', Icon: Clock, title: 'Horário de atendimento', desc: 'Quando a escola atende e o que o robô responde fora do horário.', open: () => go('horario') }] : []),
         ...(allowed.includes('equipe') ? [{ id: 'equipe', Icon: Users, title: 'Equipe e distribuição', desc: 'Grupos de atendimento e quem recebe cada conversa.', open: () => go('equipe') }] : []),
         ...(allowed.includes('respostas') ? [{ id: 'respostas', Icon: MessageSquareText, title: 'Respostas rápidas', desc: 'Textos prontos para a equipe usar com "/" no chat.', open: () => go('respostas') }] : []),
@@ -591,6 +599,10 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
           desc={timeoutNow ? `Depois de ${timeoutNow} min sem resposta ao robô, a conversa passa para a equipe.` : 'Passa a conversa para a equipe quando o cliente para de responder ao robô.'}
           previewText={preview((flow.bot_timeout_message as string) || (flow.timeout_message as string))} editLabel="Editar tempo e mensagem" onEdit={() => go('horario')}
           now={!autoOn('parou_responder') ? <WarnNote>Desligada: a conversa fica com o robô e não é passada para a equipe por falta de resposta.</WarnNote> : undefined} />
+        <AutoCard Icon={CalendarDays} title="Feriados e datas especiais" on={autoOn('data_especial')} status={sentTxt('data_especial', autoOn('data_especial'))} saving={savingKey === 'auto-data_especial'} toggle={v => toggleAuto('data_especial', v)}
+          desc="Mensagem própria nos dias em que a escola não atende ou atende menos."
+          extra={specialCount !== null ? <span style={{ alignSelf: 'flex-start', fontSize: 12, fontWeight: 700, color: BRAND.primaryDark, background: BRAND.soft, borderRadius: 999, padding: '4px 12px' }}>{specialCount === 0 ? 'Nenhuma data ativa' : `${specialCount} ${specialCount === 1 ? 'data ativa' : 'datas ativas'}`}</span> : undefined}
+          editLabel="Gerenciar datas" onEdit={() => go('datas')} />
         <AutoCard Icon={Star} title="Avaliação do atendimento" on={surveyOn} status={sentTxt('avaliacao', surveyOn)} saving={savingKey === 'pesquisa-toggle'} toggle={toggleSurvey}
           desc="Ao encerrar, pergunta ao cliente como foi o atendimento." previewText={preview(surveyMsg)} editLabel="Editar avaliação" onEdit={() => go('pesquisa')} />
       </div>
@@ -1022,7 +1034,9 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
     </div>
   )
 
-  const content: Record<string, React.ReactNode> = { conexao, automacoes, horario, respostas, equipe, bloqueios, etiquetas, pesquisa }
+  const datas = <SpecialDatesSettings institutionId={institutionId} horarioTxt={horarioTxt} onChanged={setSpecialCount} />
+
+  const content: Record<string, React.ReactNode> = { conexao, automacoes, datas, horario, respostas, equipe, bloqueios, etiquetas, pesquisa }
 
   return (
     <>

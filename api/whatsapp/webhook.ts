@@ -132,6 +132,8 @@ async function scheduleOpen(flow: any, institutionId: string, defaultTz: string)
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
   const day = DAY_KEYS_SCHED[now.getDay()]
   const cur = now.getHours() * 60 + now.getMinutes()
+  const sp = await activeSpecialDate(flow, institutionId, tz)
+  if (sp && specialClosedNow(sp, tz)) return false
   if (flow?.schedule_mode === 'individual') {
     const { data } = await supabase.from('users')
       .select('active, working_days, working_hours_start, working_hours_end').eq('institution_id', institutionId)
@@ -140,6 +142,79 @@ async function scheduleOpen(flow: any, institutionId: string, defaultTz: string)
   }
   return ((flow?.working_days as string[]) ?? []).includes(day)
     && cur >= toMinSched(flow?.working_start || '08:00') && cur <= toMinSched(flow?.working_end || '18:00')
+}
+
+// ── Feriados e datas especiais (whatsapp_special_dates) ──────────────────────
+// 'closed' = escola fechada o dia todo; 'reduced' = atende só até reduced_end.
+// mode: before_robot (avisa e o robô segue), only_message (avisa e o robô não
+// atende), after_robot (o aviso vai no lugar da mensagem de "fora do horário"
+// quando o robô passa para a equipe).
+type SpecialDate = {
+  id: string; name: string; date_start: string; date_end: string | null; repeat_yearly: boolean
+  day_type: 'closed' | 'reduced'; reduced_end: string | null; mode: 'before_robot' | 'only_message' | 'after_robot'; message: string
+}
+async function activeSpecialDate(flow: any, institutionId: string, tz: string): Promise<SpecialDate | null> {
+  try {
+    if (!autoOn(flow, 'data_especial')) return null
+    const { data } = await supabase.from('whatsapp_special_dates').select('*').eq('institution_id', institutionId).eq('active', true)
+    if (!data?.length) return null
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+    const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate()
+    const tMd = (now.getMonth() + 1) * 100 + now.getDate()
+    const ymd = (d: string) => { const [y, m, dd] = d.split('-').map(Number); return y * 10000 + m * 100 + dd }
+    const md  = (d: string) => { const [, m, dd] = d.split('-').map(Number); return m * 100 + dd }
+    for (const d of data as SpecialDate[]) {
+      const end = d.date_end || d.date_start
+      if (d.repeat_yearly) {
+        const sM = md(d.date_start), eM = md(end)
+        if (sM <= eM ? (tMd >= sM && tMd <= eM) : (tMd >= sM || tMd <= eM)) return d
+      } else if (today >= ymd(d.date_start) && today <= ymd(end)) return d
+    }
+  } catch (e) { console.error('[special_dates]', e) }
+  return null
+}
+function specialClosedNow(sp: SpecialDate, tz: string): boolean {
+  if (sp.day_type !== 'reduced') return true
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+  return (now.getHours() * 60 + now.getMinutes()) > toMinSched(sp.reduced_end || '12:00')
+}
+// O aviso sai uma vez por dia por cliente (não repete a cada mensagem dele).
+async function sentSpecialRecently(institutionId: string, remoteJid: string): Promise<boolean> {
+  const { data } = await supabase.from('whatsapp_messages').select('id')
+    .eq('institution_id', institutionId).eq('remote_jid', remoteJid).eq('automation', 'data_especial')
+    .gte('created_at', new Date(Date.now() - 18 * 3600_000).toISOString()).limit(1)
+  return !!data?.length
+}
+// Mesmo destino de "fora do horário": grupo (rodízio) → atendente fixo → fila sem dono.
+async function assignOffHoursFallback(flow: any, institutionId: string, remoteJid: string, why: string): Promise<void> {
+  let assigneeId: string | null = null
+  let assigneeName: string | null = null
+  if (flow.timeout_group_id) {
+    const { data: group } = await supabase.from('whatsapp_groups').select('*').eq('id', flow.timeout_group_id).maybeSingle()
+    if (group?.member_ids?.length) {
+      const availableSet = await getAvailableMemberIds(group.member_ids)
+      const availableIds = group.member_ids.filter((id: string) => availableSet.has(id))
+      if (availableIds.length) {
+        const nextIndex = ((group.last_assigned_index ?? -1) + 1) % availableIds.length
+        assigneeId = availableIds[nextIndex]
+        const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId as string).maybeSingle()
+        assigneeName = (u as any)?.full_name || null
+        await supabase.from('whatsapp_groups').update({ last_assigned_index: nextIndex }).eq('id', flow.timeout_group_id)
+      }
+    }
+  }
+  if (!assigneeId && flow.timeout_assignee_id) {
+    assigneeId = flow.timeout_assignee_id
+    const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId as string).maybeSingle()
+    assigneeName = (u as any)?.full_name || flow.timeout_assignee_name || null
+  }
+  await supabase.from('whatsapp_conversations')
+    .update({ status: assigneeId ? 'open' : 'waiting', bot_active: false, assigned_user_id: assigneeId, assigned_user_name: assigneeName, last_message_at: new Date().toISOString() })
+    .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+  await supabase.from('whatsapp_conversation_events').insert({
+    institution_id: institutionId, remote_jid: remoteJid, event_type: 'assignment',
+    description: `${why}: atribuído a ${assigneeName || 'fila geral (sem responsável configurado)'}`,
+  })
 }
 
 // `automation` marca o tipo do envio (robo, fora_horario, almoco, avaliacao...)
@@ -2256,7 +2331,12 @@ async function processCustomFlow(
             last_message_at:    new Date().toISOString(),
           })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        if (outsideMsg && autoOn(flow, 'fora_horario')) await sendAutoMessage(institutionId, remoteJid, outsideMsg, 'fora_horario')
+        const spNow = await activeSpecialDate(flow, institutionId, tz)
+        if (spNow && specialClosedNow(spNow, tz)) {
+          // Data especial: o aviso do robô (before/only) já saiu na entrada; em 'after_robot' sai aqui, no lugar do "fora do horário".
+          if (spNow.mode === 'after_robot' && !(await sentSpecialRecently(institutionId, remoteJid)))
+            await sendAutoMessage(institutionId, remoteJid, fillHorario(spNow.message, flow as any), 'data_especial')
+        } else if (outsideMsg && autoOn(flow, 'fora_horario')) await sendAutoMessage(institutionId, remoteJid, outsideMsg, 'fora_horario')
         await supabase.from('whatsapp_conversation_events').insert({
           institution_id: institutionId,
           remote_jid:     remoteJid,
@@ -2741,6 +2821,18 @@ async function processFlow(
       // Reaproveita a leitura do guard acima — mesma linha, sem round-trip extra.
       const convState = guardConvState
 
+      // Data especial (feriado, recesso...): avisa antes do robô ou no lugar dele.
+      const spTz = (flow as any).timezone || 'America/Sao_Paulo'
+      const spEntry = await activeSpecialDate(flow, institutionId, spTz)
+      if (spEntry && specialClosedNow(spEntry, spTz) && (spEntry.mode === 'only_message' || spEntry.mode === 'before_robot')) {
+        if (!(await sentSpecialRecently(institutionId, remoteJid)))
+          await sendAutoMessage(institutionId, remoteJid, fillHorario(spEntry.message, flow as any), 'data_especial')
+        if (spEntry.mode === 'only_message') {
+          if (convState?.bot_active !== false) await assignOffHoursFallback(flow, institutionId, remoteJid, `Data especial (${spEntry.name})`)
+          return
+        }
+      }
+
       console.log('[FLOW] convState:', { bot_active: convState?.bot_active, assigned_user_id: convState?.assigned_user_id })
 
       // ── button/list reply mid-flow: honour __menu_sent_* regardless of isNewConversation ──
@@ -2847,7 +2939,9 @@ async function processFlow(
 
     // Off-hours: only notify on new conversations
     if (!isOpen) {
-      if (isNewConversation && flow.off_hours_message) {
+      const spStd = await activeSpecialDate(flow, institutionId, flow.timezone || 'America/Fortaleza')
+      const spStdClosed = !!spStd && specialClosedNow(spStd, flow.timezone || 'America/Fortaleza')
+      if (isNewConversation && (spStdClosed || flow.off_hours_message)) {
         // Mesma resolução de fallback do nó 'transfer' (grupo round-robin →
         // atendente fixo → 'waiting' sem dono) — ver comentário lá pra detalhe
         // do porquê nunca deixar status='open' com assigned_user_id NULL.
@@ -2886,7 +2980,8 @@ async function processFlow(
             last_message_at:    new Date().toISOString(),
           })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        if (autoOn(flow, 'fora_horario')) await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.off_hours_message, flow), 'fora_horario')
+        if (spStdClosed) await sendAutoMessage(institutionId, remoteJid, fillHorario(spStd!.message, flow), 'data_especial')
+        else if (autoOn(flow, 'fora_horario')) await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.off_hours_message, flow), 'fora_horario')
         await supabase.from('whatsapp_conversation_events').insert({
           institution_id: institutionId,
           remote_jid:     remoteJid,

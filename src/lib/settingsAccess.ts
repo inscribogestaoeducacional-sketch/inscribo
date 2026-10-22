@@ -39,6 +39,7 @@ export const SETTINGS_ITEMS = {
   'escola.lembrete':               { tab: 'escola',       label: 'Lembrete de lead sem contato', roles: ADMIN },
   'whatsapp.conexao':              { tab: 'whatsapp', section: 'conexao',   label: 'Conexão e robô',           roles: ADMIN },
   'whatsapp.automacoes':           { tab: 'whatsapp', section: 'automacoes', label: 'Automações',              roles: ADMIN },
+  'whatsapp.datas':               { tab: 'whatsapp', section: 'datas',     label: 'Feriados e datas especiais', roles: ADMIN },
   'whatsapp.horario':              { tab: 'whatsapp', section: 'horario',   label: 'Horário e mensagens automáticas', roles: ADMIN },
   'whatsapp.respostas':            { tab: 'whatsapp', section: 'respostas', label: 'Respostas rápidas',        roles: BOTH },
   'whatsapp.equipe':               { tab: 'whatsapp', section: 'equipe',    label: 'Grupos e tempo de inatividade', roles: BOTH },
