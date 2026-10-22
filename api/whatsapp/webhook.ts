@@ -720,6 +720,9 @@ async function sendSatisfactionSurvey(institutionId: string, remoteJid: string, 
         from_me: true, contact_name: '_bot_', is_bot_message: true, automation: 'avaliacao', status: 'sent', direction: 'outbound',
         timestamp: new Date().toISOString(),
       })
+      // Base do "Lembrete da avaliação" (serviço whatsapp-followups).
+      await supabase.from('whatsapp_conversations').update({ survey_sent_at: new Date().toISOString() })
+        .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
     }
   } catch (e) { console.error('❌ sendSatisfactionSurvey error:', e) }
 }
