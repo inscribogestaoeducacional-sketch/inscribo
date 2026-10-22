@@ -10,6 +10,7 @@ import {
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, User as UserType, supabase } from '../../lib/supabase'
+import { getInitials } from '../../lib/initials'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { getAuthHeaders, getBearerHeader } from '../../lib/authHeaders'
@@ -122,13 +123,6 @@ function mapMsgType(messageType: string): MsgType {
     case 'deleted':             return 'deleted'
     default:                    return 'text'
   }
-}
-
-function getInitials(name: string): string {
-  if (!name) return '?'
-  const parts = name.trim().split(' ').filter(Boolean)
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 const AVATAR_BG_COLORS = [

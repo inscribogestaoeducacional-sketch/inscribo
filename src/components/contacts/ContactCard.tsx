@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { getInitials as initials } from '../../lib/initials'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { useLeadUnits, unitOptionsFor } from '../../lib/leadUnits'
@@ -46,12 +47,6 @@ function nameHash(s: string) {
   return Math.abs(h)
 }
 function avatarColor(name: string) { return AVATAR_COLORS[nameHash(name) % AVATAR_COLORS.length] }
-function initials(s: string) {
-  const p = (s || '').trim().split(' ').filter(Boolean)
-  if (!p.length) return '?'
-  if (p.length === 1) return p[0].slice(0, 2).toUpperCase()
-  return (p[0][0] + p[p.length - 1][0]).toUpperCase()
-}
 function fmtDate(s: string) {
   try { return new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) }
   catch { return s }

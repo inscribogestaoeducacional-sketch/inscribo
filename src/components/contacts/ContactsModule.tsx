@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { getInitials as initials } from '../../lib/initials'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import * as XLSX from 'xlsx'
 import {
@@ -48,13 +49,6 @@ function nameHash(name: string) {
   return Math.abs(h)
 }
 const hexColor = (name: string) => HEX_COLORS[nameHash(name) % HEX_COLORS.length]
-
-function initials(name: string) {
-  const parts = name.trim().split(' ').filter(Boolean)
-  if (!parts.length) return '?'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
 
 function formatPhone(digits: string): string {
   const d = digits.replace(/^55/, '')
