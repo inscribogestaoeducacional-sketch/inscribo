@@ -211,17 +211,23 @@ async function sendSurvey(ctx: Ctx) {
   const token = await globalToken(ctx.sb)
   // Sem número/token: a tela cai no envio de texto (/api/whatsapp/send), como antes.
   if (!phone || !token) return { sent: false }
+  // Títulos dos botões configurados pela escola (Configurações > Avaliação); padrão se vazio.
+  let titles = ['😞 Ruim', '😐 Regular', '😊 Ótimo']
+  try {
+    const iid = ctx.body.institution_id
+    if (iid) {
+      const { data } = await ctx.sb.from('whatsapp_flows').select('survey_config').eq('institution_id', iid).maybeSingle()
+      const b = (data as any)?.survey_config?.buttons
+      if (Array.isArray(b) && b.length === 3) titles = b.map((t: unknown, i: number) => String(t || '').trim().slice(0, 20) || titles[i])
+    }
+  } catch { /* usa o padrão */ }
   const r = await graph(token, `${metaId(phone.phone_number_id, 'Phone ID')}/messages`, {
     method: 'POST',
     body: {
       messaging_product: 'whatsapp', to, type: 'interactive',
       interactive: {
         type: 'button', body: { text: message },
-        action: { buttons: [
-          { type: 'reply', reply: { id: 'survey_1', title: '😞 Ruim' } },
-          { type: 'reply', reply: { id: 'survey_2', title: '😐 Regular' } },
-          { type: 'reply', reply: { id: 'survey_3', title: '😊 Ótimo' } },
-        ] },
+        action: { buttons: titles.map((t, i) => ({ type: 'reply', reply: { id: `survey_${i + 1}`, title: t } })) },
       },
     },
   })

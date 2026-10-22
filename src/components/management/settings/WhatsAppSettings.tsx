@@ -29,6 +29,18 @@ const AUTO_LABEL: Record<string, string> = {
   avaliacao: 'Avaliação', captacao: 'Captação', descadastro: 'Descadastro de campanhas', data_especial: 'Data especial',
 }
 
+// Avaliação: padrões (iguais aos do servidor, que usa estes valores quando o campo está vazio).
+type SurveyForm = { buttons: [string, string, string]; thanks: string; ask_comment: boolean; comment_question: string; comment_thanks: string; valid_hours: number; other_reply: 'reabrir' | 'repetir' }
+const SURVEY_DEFAULTS: SurveyForm = {
+  buttons: ['😞 Ruim', '😐 Regular', '😊 Ótimo'],
+  thanks: 'Obrigado pelo seu feedback! 🙏 Estamos sempre buscando melhorar nosso atendimento.',
+  ask_comment: false,
+  comment_question: 'O que podemos melhorar no nosso atendimento?',
+  comment_thanks: 'Obrigado por contar! Vamos usar o seu comentário para melhorar. 🙏',
+  valid_hours: 48,
+  other_reply: 'reabrir',
+}
+
 const TAG_COLORS = ['#6366f1', '#16a34a', '#dc2626', '#d97706', '#0891b2', '#ec4899', '#64748b', '#ea580c']
 
 export const WA_SECTION_INFO: Record<string, { label: string; desc: string }> = {
@@ -125,6 +137,8 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const [timeoutMessage, setTimeoutMessage] = useState('Um momento, estou te conectando com um atendente! 👋')
   const [surveyMsg, setSurveyMsg] = useState('Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊')
   const [surveyOn, setSurveyOn] = useState(false)
+  const [scheduleMode, setScheduleMode] = useState<'general' | 'individual'>('general')
+  const [sv, setSv] = useState<SurveyForm>(SURVEY_DEFAULTS)
   const [lunchStart, setLunchStart] = useState('')
   const [lunchEnd, setLunchEnd] = useState('')
   const [history, setHistory] = useState<{ id: string; automation: string; remote_jid: string; content: string | null; created_at: string }[]>([])
@@ -204,6 +218,11 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         if (f.timeout_message) setTimeoutMessage(f.timeout_message)
         if (f.outside_hours_message) setOutsideHoursMsg(f.outside_hours_message)
         if (f.lunch_message) setLunchMsg(f.lunch_message)
+        if (f.schedule_mode === 'individual') setScheduleMode('individual')
+        if (f.survey_config && typeof f.survey_config === 'object') {
+          const c = f.survey_config as Partial<SurveyForm>
+          setSv({ ...SURVEY_DEFAULTS, ...c, buttons: Array.isArray(c.buttons) && c.buttons.length === 3 ? (c.buttons as [string, string, string]) : SURVEY_DEFAULTS.buttons })
+        }
         if (f.lunch_start) setLunchStart(String(f.lunch_start).slice(0, 5))
         if (f.lunch_end) setLunchEnd(String(f.lunch_end).slice(0, 5))
         if (f.bot_timeout_minutes) setBotTimeoutMinutes(f.bot_timeout_minutes)
@@ -608,6 +627,39 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const horario = (
     <div style={col}>
       <Card>
+        <Title Icon={Users} title="Como a escola atende" help="Cada escola escolhe: um horário único para todos ou o horário de cada atendente." />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Chip active={scheduleMode === 'general'} onClick={() => { if (scheduleMode !== 'general') { setScheduleMode('general'); saveFlow('mode', { schedule_mode: 'general' }) } }}>Atendimento geral (horário único)</Chip>
+          <Chip active={scheduleMode === 'individual'} onClick={() => { if (scheduleMode !== 'individual') { setScheduleMode('individual'); saveFlow('mode', { schedule_mode: 'individual' }) } }}>Por atendente (cada um com seu horário)</Chip>
+          {savingKey === 'mode' && <Loader2 size={16} className="animate-spin" color={BRAND.primary} />}
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <NowNote>{scheduleMode === 'general'
+            ? 'Valendo agora: a escola abre e fecha num horário só, com um almoço só. As conversas são distribuídas como sempre.'
+            : 'Valendo agora: a escola está aberta quando algum atendente está no próprio horário. As conversas vão só para quem está em horário e fora do almoço.'}</NowNote>
+        </div>
+      </Card>
+
+      {scheduleMode === 'individual' && (
+        <Card>
+          <Title Icon={Clock} title="Horário de cada atendente" help="Os horários e o almoço de cada pessoa são ajustados em Equipe. Fora do horário de todos, o robô avisa o cliente." />
+          {attendants.filter(a => a.working_hours_start && a.working_hours_end).length === 0
+            ? <WarnNote>Nenhum atendente tem horário cadastrado. Enquanto isso vale o horário único da escola. Cadastre em Equipe.</WarnNote>
+            : <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {attendants.filter(a => a.working_hours_start && a.working_hours_end).map(a => (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: `1px solid ${BRAND.line}`, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 160px', fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>{a.full_name}</div>
+                  <div style={{ fontSize: 12.5, color: BRAND.muted }}>{(a.working_days || []).map(d => dayNames[d]).join(', ')} · {String(a.working_hours_start).slice(0, 5)} às {String(a.working_hours_end).slice(0, 5)}</div>
+                  <div style={{ fontSize: 12.5, color: BRAND.muted }}>{a.has_lunch_break && a.lunch_start && a.lunch_end ? `Almoço ${String(a.lunch_start).slice(0, 5)}–${String(a.lunch_end).slice(0, 5)}` : 'Sem almoço'}</div>
+                </div>
+              ))}
+            </div>}
+          <div style={{ marginTop: 12 }}><GhostButton onClick={() => go('equipe')}><Pencil size={13} /> Editar horários em Equipe</GhostButton></div>
+        </Card>
+      )}
+
+      {scheduleMode === 'general' && <>
+      <Card>
         <Title Icon={Clock} title="Dias e horário" help="Quando a escola atende pelo WhatsApp. Fora desse período, o robô avisa o cliente." />
         <label style={label}>Dias da semana</label>
         {days(workingDays, d => setWorkingDays(w => (w.includes(d) ? w.filter(x => x !== d) : [...w, d])))}
@@ -620,7 +672,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
       </Card>
 
       <Card>
-        <Title Icon={Coffee} title="Horário de almoço da escola" help="Vale para o robô (bloco “Horário de almoço”) e para a mensagem de almoço. O almoço de cada atendente continua em Equipe." />
+        <Title Icon={Coffee} title="Horário de almoço da escola" help="Vale para a escola toda: o robô (bloco “Horário de almoço”) e a mensagem de almoço. O almoço de cada atendente continua em Equipe." />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
           <div><label style={label}>Almoço começa</label><input type="time" style={input} value={lunchStart} onChange={e => setLunchStart(e.target.value)} /></div>
           <div><label style={label}>Almoço termina</label><input type="time" style={input} value={lunchEnd} onChange={e => setLunchEnd(e.target.value)} /></div>
@@ -629,6 +681,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         <SaveButton text="Salvar almoço" saving={savingKey === 'lunch'} saved={savedKey === 'lunch'}
           onClick={() => saveFlow('lunch', { lunch_start: lunchStart || null, lunch_end: lunchEnd || null })} />
       </Card>
+      </>}
 
       <Card>
         <Title Icon={MessageSquareText} title="Mensagens automáticas" help="O que o cliente recebe fora do horário e no almoço. Use {horario} para inserir os horários automaticamente." />
@@ -893,29 +946,77 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   )
 
   // ───────────────────────────── Avaliação ─────────────────────────────
+  const setSvF = <K extends keyof SurveyForm>(k: K, v: SurveyForm[K]) => setSv(prev => ({ ...prev, [k]: v }))
+  const saveSurvey = () => saveFlow('pesquisa', { satisfaction_survey_enabled: surveyOn, satisfaction_message: surveyMsg, survey_config: sv })
+  const bub = (me: boolean): React.CSSProperties => ({ maxWidth: '88%', borderRadius: 10, padding: '7px 10px', fontSize: 13, color: '#111B21', marginBottom: 8, whiteSpace: 'pre-wrap', boxShadow: '0 1px 1px rgba(0,0,0,.08)', background: me ? '#D9FDD3' : '#fff', marginLeft: me ? 'auto' : 0 })
   const pesquisa = (
     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-      <div style={{ flex: '1 1 440px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ flex: '1 1 460px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Avaliar ao encerrar</div>
-              <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 2 }}>Quando o atendimento é encerrado, o cliente recebe a pergunta com 3 botões: Ruim, Regular e Ótimo.</div>
+              <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 2 }}>Quando o atendimento é encerrado, o cliente recebe a pergunta com 3 botões.</div>
             </div>
             <Switch on={surveyOn} onChange={setSurveyOn} labelText="Ligar avaliação" />
           </div>
         </Card>
-        <Card style={{ opacity: surveyOn ? 1 : 0.6 }}>
-          <Title Icon={Star} title="Pergunta" help="O texto que o cliente vê antes dos botões." />
-          {textarea(surveyMsg, setSurveyMsg, 3, 'Como você avalia nosso atendimento hoje?')}
-        </Card>
-        <div><SaveButton text="Salvar avaliação" saving={savingKey === 'pesquisa'} saved={savedKey === 'pesquisa'} onClick={() => saveFlow('pesquisa', { satisfaction_survey_enabled: surveyOn, satisfaction_message: surveyMsg })} /></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, opacity: surveyOn ? 1 : 0.6 }}>
+          <Card>
+            <Title Icon={Star} title="Pergunta e botões" help="O texto que o cliente vê e o nome de cada botão." />
+            <label style={label}>Pergunta</label>
+            {textarea(surveyMsg, setSurveyMsg, 3, 'Como você avalia nosso atendimento hoje?')}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginTop: 12 }}>
+              {(['Nota ruim', 'Nota regular', 'Nota ótima'] as const).map((l, i) => (
+                <div key={l}><label style={label}>{l}</label>
+                  <input style={input} maxLength={20} value={sv.buttons[i]} onChange={e => setSvF('buttons', sv.buttons.map((b, j) => (j === i ? e.target.value : b)) as [string, string, string])} /></div>
+              ))}
+            </div>
+            <p style={hint}>Até 20 letras por botão (limite do WhatsApp). O cliente também pode responder 1, 2 ou 3.</p>
+            <label style={{ ...label, marginTop: 12 }}>Agradecimento</label>
+            {textarea(sv.thanks, v => setSvF('thanks', v), 2)}
+          </Card>
+          <Card>
+            <Title Icon={MessageSquareText} title="Quando a nota é ruim" help="Deixa o cliente contar o que aconteceu. A resposta fica guardada no atendimento." />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Switch on={sv.ask_comment} onChange={v => setSvF('ask_comment', v)} labelText="Perguntar o que melhorar" />
+              <span style={{ fontSize: 13.5, color: BRAND.ink }}>Perguntar o que podemos melhorar</span>
+            </div>
+            {sv.ask_comment && <>
+              <label style={{ ...label, marginTop: 12 }}>Pergunta</label>
+              <input style={input} value={sv.comment_question} onChange={e => setSvF('comment_question', e.target.value)} />
+              <label style={{ ...label, marginTop: 12 }}>Agradecimento depois do comentário</label>
+              <input style={input} value={sv.comment_thanks} onChange={e => setSvF('comment_thanks', e.target.value)} />
+            </>}
+          </Card>
+          <Card>
+            <Title Icon={Clock} title="Se o cliente responder depois" help="Por quanto tempo a resposta ainda conta como avaliação e o que fazer quando ele escreve outra coisa." />
+            <label style={label}>A resposta vale por</label>
+            <select style={{ ...input, width: 180 }} value={sv.valid_hours} onChange={e => setSvF('valid_hours', parseInt(e.target.value))}>
+              {[12, 24, 48, 72, 168].map(h => <option key={h} value={h}>{h === 168 ? '7 dias' : `${h} horas`}</option>)}
+            </select>
+            <label style={{ ...label, marginTop: 14 }}>Se ele escrever outra coisa no lugar da nota</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Chip active={sv.other_reply === 'reabrir'} onClick={() => setSvF('other_reply', 'reabrir')}>Abrir um novo atendimento</Chip>
+              <Chip active={sv.other_reply === 'repetir'} onClick={() => setSvF('other_reply', 'repetir')}>Repetir a pergunta uma vez</Chip>
+            </div>
+            <p style={hint}>Depois do prazo, qualquer mensagem do cliente abre um novo atendimento.</p>
+          </Card>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <SaveButton text="Salvar avaliação" saving={savingKey === 'pesquisa'} saved={savedKey === 'pesquisa'} onClick={saveSurvey} />
+          <GhostButton onClick={() => setSv(SURVEY_DEFAULTS)}>Voltar ao padrão</GhostButton>
+        </div>
       </div>
-      <aside style={{ flex: '0 1 320px', minWidth: 250 }}>
+      <aside style={{ flex: '0 1 340px', minWidth: 250 }}>
         <div style={{ background: '#E7F0E8', borderRadius: 18, padding: 16, border: `1px solid ${BRAND.line}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#3F5F46', marginBottom: 10 }}><Smartphone size={14} /> Como o cliente vê</div>
-          <div style={{ background: '#D9FDD3', borderRadius: 10, padding: '7px 10px', fontSize: 13, color: '#111B21', marginBottom: 8, whiteSpace: 'pre-wrap', marginLeft: 'auto', maxWidth: '88%' }}>{surveyMsg || 'Como você avalia nosso atendimento hoje?'}</div>
-          {['😞 Ruim', '😐 Regular', '😊 Ótimo'].map(b => <div key={b} style={{ background: '#fff', borderRadius: 10, padding: '7px 10px', textAlign: 'center', color: '#0B7EC0', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{b}</div>)}
+          <div style={bub(true)}>{surveyMsg || 'Como você avalia nosso atendimento hoje?'}</div>
+          {sv.buttons.map((b, i) => <div key={i} style={{ background: '#fff', borderRadius: 10, padding: '7px 10px', textAlign: 'center', color: '#0B7EC0', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{b}</div>)}
+          <div style={{ ...bub(false), marginTop: 8 }}>{sv.buttons[0]}</div>
+          {sv.ask_comment
+            ? <><div style={bub(true)}>{sv.comment_question}</div><div style={bub(false)}>Demorou um pouco para responder.</div><div style={bub(true)}>{sv.comment_thanks}</div></>
+            : <div style={bub(true)}>{sv.thanks}</div>}
         </div>
       </aside>
     </div>
