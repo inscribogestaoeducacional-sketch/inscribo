@@ -47,6 +47,7 @@ export const SETTINGS_ITEMS = {
   'whatsapp.bloqueios':            { tab: 'whatsapp', section: 'bloqueios', label: 'Números bloqueados',       roles: BOTH },
   'whatsapp.etiquetas':            { tab: 'whatsapp', section: 'etiquetas', label: 'Etiquetas',                roles: BOTH },
   'whatsapp.pesquisa':             { tab: 'whatsapp', section: 'pesquisa',  label: 'Avaliação do atendimento', roles: BOTH },
+  'whatsapp.parada':               { tab: 'whatsapp', section: 'parada',    label: 'Conversa parada', roles: BOTH },
   // Etapa B passo 4: relatório de alunos (planilha) — admin e gestor; o banco aceita os dois
   'integracoes.planilha':          { tab: 'integracoes',  label: 'Enviar relatório de alunos (planilha)', roles: BOTH },
   // Fase 2 · marco 1: números manuais por série (admin e gestor; o banco aceita os dois)
