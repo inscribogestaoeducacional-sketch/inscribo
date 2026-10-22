@@ -79,10 +79,151 @@ async function readRawBody(req: VercelRequest): Promise<Buffer> {
 }
 
 // ── Send automatic text message via Meta Cloud API ───────────────────────────
+// Liga/desliga por automação (Configurações > WhatsApp > Automações).
+// Chave ausente = ligada. 'robo' e 'avaliacao' continuam em bot_enabled e
+// satisfaction_survey_enabled; as demais ficam em whatsapp_flows.automations.
+function autoOn(flow: any, key: string): boolean {
+  return flow?.automations?.[key] !== false
+}
+
+// Configuração da avaliação (whatsapp_flows.survey_config). Tudo opcional:
+// o que faltar usa o padrão, que mantém o comportamento de antes.
+type SurveyCfg = {
+  buttons: [string, string, string]; thanks: string; ask_comment: boolean
+  comment_question: string; comment_thanks: string; valid_hours: number; other_reply: 'reabrir' | 'repetir'
+}
+const SURVEY_DEFAULTS: SurveyCfg = {
+  buttons: ['😞 Ruim', '😐 Regular', '😊 Ótimo'],
+  thanks: 'Obrigado pelo seu feedback! 🙏 Estamos sempre buscando melhorar nosso atendimento.',
+  ask_comment: false,
+  comment_question: 'O que podemos melhorar no nosso atendimento?',
+  comment_thanks: 'Obrigado por contar! Vamos usar o seu comentário para melhorar. 🙏',
+  valid_hours: 48,
+  other_reply: 'reabrir',
+}
+function surveyCfg(raw: any): SurveyCfg {
+  const r = (raw && typeof raw === 'object') ? raw : {}
+  const btn = Array.isArray(r.buttons) && r.buttons.length === 3
+    ? (r.buttons.map((t: any, i: number) => (String(t || '').trim().slice(0, 20) || SURVEY_DEFAULTS.buttons[i])) as [string, string, string])
+    : SURVEY_DEFAULTS.buttons
+  const vh = Number(r.valid_hours)
+  return {
+    buttons: btn,
+    thanks: String(r.thanks || '').trim() || SURVEY_DEFAULTS.thanks,
+    ask_comment: r.ask_comment === true,
+    comment_question: String(r.comment_question || '').trim() || SURVEY_DEFAULTS.comment_question,
+    comment_thanks: String(r.comment_thanks || '').trim() || SURVEY_DEFAULTS.comment_thanks,
+    valid_hours: vh > 0 && vh <= 720 ? vh : SURVEY_DEFAULTS.valid_hours,
+    other_reply: r.other_reply === 'repetir' ? 'repetir' : 'reabrir',
+  }
+}
+
+// Horário de atendimento: no modo 'individual' a escola está aberta quando ALGUM
+// atendente está no próprio horário; sem horários individuais cadastrados (ou no
+// modo 'general') vale o horário único da escola, como sempre.
+const DAY_KEYS_SCHED = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+const toMinSched = (t: string | null | undefined) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0) }
+function attendantInOwnHours(u: any, day: string, cur: number): boolean {
+  return !!(u?.working_hours_start && u?.working_hours_end && (u.working_days || []).includes(day)
+    && cur >= toMinSched(u.working_hours_start) && cur <= toMinSched(u.working_hours_end))
+}
+async function scheduleOpen(flow: any, institutionId: string, defaultTz: string): Promise<boolean> {
+  const tz  = flow?.timezone || defaultTz
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+  const day = DAY_KEYS_SCHED[now.getDay()]
+  const cur = now.getHours() * 60 + now.getMinutes()
+  const sp = await activeSpecialDate(flow, institutionId, tz)
+  if (sp && specialClosedNow(sp, tz)) return false
+  if (flow?.schedule_mode === 'individual') {
+    const { data } = await supabase.from('users')
+      .select('active, working_days, working_hours_start, working_hours_end').eq('institution_id', institutionId)
+    const staff = (data || []).filter((u: any) => u.active !== false && u.working_hours_start && u.working_hours_end && (u.working_days || []).length)
+    if (staff.length) return staff.some((u: any) => attendantInOwnHours(u, day, cur))
+  }
+  return ((flow?.working_days as string[]) ?? []).includes(day)
+    && cur >= toMinSched(flow?.working_start || '08:00') && cur <= toMinSched(flow?.working_end || '18:00')
+}
+
+// ── Feriados e datas especiais (whatsapp_special_dates) ──────────────────────
+// 'closed' = escola fechada o dia todo; 'reduced' = atende só até reduced_end.
+// mode: before_robot (avisa e o robô segue), only_message (avisa e o robô não
+// atende), after_robot (o aviso vai no lugar da mensagem de "fora do horário"
+// quando o robô passa para a equipe).
+type SpecialDate = {
+  id: string; name: string; date_start: string; date_end: string | null; repeat_yearly: boolean
+  day_type: 'closed' | 'reduced'; reduced_end: string | null; mode: 'before_robot' | 'only_message' | 'after_robot'; message: string
+}
+async function activeSpecialDate(flow: any, institutionId: string, tz: string): Promise<SpecialDate | null> {
+  try {
+    if (!autoOn(flow, 'data_especial')) return null
+    const { data } = await supabase.from('whatsapp_special_dates').select('*').eq('institution_id', institutionId).eq('active', true)
+    if (!data?.length) return null
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+    const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate()
+    const tMd = (now.getMonth() + 1) * 100 + now.getDate()
+    const ymd = (d: string) => { const [y, m, dd] = d.split('-').map(Number); return y * 10000 + m * 100 + dd }
+    const md  = (d: string) => { const [, m, dd] = d.split('-').map(Number); return m * 100 + dd }
+    for (const d of data as SpecialDate[]) {
+      const end = d.date_end || d.date_start
+      if (d.repeat_yearly) {
+        const sM = md(d.date_start), eM = md(end)
+        if (sM <= eM ? (tMd >= sM && tMd <= eM) : (tMd >= sM || tMd <= eM)) return d
+      } else if (today >= ymd(d.date_start) && today <= ymd(end)) return d
+    }
+  } catch (e) { console.error('[special_dates]', e) }
+  return null
+}
+function specialClosedNow(sp: SpecialDate, tz: string): boolean {
+  if (sp.day_type !== 'reduced') return true
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+  return (now.getHours() * 60 + now.getMinutes()) > toMinSched(sp.reduced_end || '12:00')
+}
+// O aviso sai uma vez por dia por cliente (não repete a cada mensagem dele).
+async function sentSpecialRecently(institutionId: string, remoteJid: string): Promise<boolean> {
+  const { data } = await supabase.from('whatsapp_messages').select('id')
+    .eq('institution_id', institutionId).eq('remote_jid', remoteJid).eq('automation', 'data_especial')
+    .gte('created_at', new Date(Date.now() - 18 * 3600_000).toISOString()).limit(1)
+  return !!data?.length
+}
+// Mesmo destino de "fora do horário": grupo (rodízio) → atendente fixo → fila sem dono.
+async function assignOffHoursFallback(flow: any, institutionId: string, remoteJid: string, why: string): Promise<void> {
+  let assigneeId: string | null = null
+  let assigneeName: string | null = null
+  if (flow.timeout_group_id) {
+    const { data: group } = await supabase.from('whatsapp_groups').select('*').eq('id', flow.timeout_group_id).maybeSingle()
+    if (group?.member_ids?.length) {
+      const availableSet = await getAvailableMemberIds(group.member_ids)
+      const availableIds = group.member_ids.filter((id: string) => availableSet.has(id))
+      if (availableIds.length) {
+        const nextIndex = ((group.last_assigned_index ?? -1) + 1) % availableIds.length
+        assigneeId = availableIds[nextIndex]
+        const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId as string).maybeSingle()
+        assigneeName = (u as any)?.full_name || null
+        await supabase.from('whatsapp_groups').update({ last_assigned_index: nextIndex }).eq('id', flow.timeout_group_id)
+      }
+    }
+  }
+  if (!assigneeId && flow.timeout_assignee_id) {
+    assigneeId = flow.timeout_assignee_id
+    const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId as string).maybeSingle()
+    assigneeName = (u as any)?.full_name || flow.timeout_assignee_name || null
+  }
+  await supabase.from('whatsapp_conversations')
+    .update({ status: assigneeId ? 'open' : 'waiting', bot_active: false, assigned_user_id: assigneeId, assigned_user_name: assigneeName, last_message_at: new Date().toISOString() })
+    .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+  await supabase.from('whatsapp_conversation_events').insert({
+    institution_id: institutionId, remote_jid: remoteJid, event_type: 'assignment',
+    description: `${why}: atribuído a ${assigneeName || 'fila geral (sem responsável configurado)'}`,
+  })
+}
+
+// `automation` marca o tipo do envio (robo, fora_horario, almoco, avaliacao...)
+// para o Histórico de envios automáticos.
 async function sendAutoMessage(
   institutionId: string,
   to:            string,
-  text:          string
+  text:          string,
+  automation:    string = 'robo'
 ): Promise<void> {
   try {
     const { data: phone } = await supabase
@@ -134,6 +275,7 @@ async function sendAutoMessage(
         from_me:        true,
         contact_name:   '_bot_',
         is_bot_message: true,
+        automation,
         status:         'sent',
         direction:      'outbound',
         timestamp:      new Date().toISOString(),
@@ -241,6 +383,7 @@ async function sendInteractiveMenu(
         from_me:        true,
         contact_name:   '_bot_',
         is_bot_message: true,
+        automation:     'robo',
         status:         'sent',
         direction:      'outbound',
         timestamp:      new Date().toISOString(),
@@ -544,7 +687,7 @@ async function resolveOrRouteGroupSharedContact(
 }
 
 // ── Send satisfaction survey buttons via Meta Cloud API ─────────────────────
-async function sendSatisfactionSurvey(institutionId: string, remoteJid: string, message: string): Promise<void> {
+async function sendSatisfactionSurvey(institutionId: string, remoteJid: string, message: string, buttons: [string, string, string] = SURVEY_DEFAULTS.buttons): Promise<void> {
   try {
     const { data: phone } = await supabase
       .from('whatsapp_phone_numbers').select('phone_number_id')
@@ -561,9 +704,9 @@ async function sendSatisfactionSurvey(institutionId: string, remoteJid: string, 
           body: { text: message.slice(0, 1024) },
           action: {
             buttons: [
-              { type: 'reply', reply: { id: 'survey_1', title: '😞 Ruim' } },
-              { type: 'reply', reply: { id: 'survey_2', title: '😐 Regular' } },
-              { type: 'reply', reply: { id: 'survey_3', title: '😊 Ótimo' } },
+              { type: 'reply', reply: { id: 'survey_1', title: buttons[0] } },
+              { type: 'reply', reply: { id: 'survey_2', title: buttons[1] } },
+              { type: 'reply', reply: { id: 'survey_3', title: buttons[2] } },
             ],
           },
         },
@@ -574,7 +717,7 @@ async function sendSatisfactionSurvey(institutionId: string, remoteJid: string, 
       await supabase.from('whatsapp_messages').insert({
         institution_id: institutionId, remote_jid: remoteJid, message_id: d.messages?.[0]?.id,
         instance_name: 'cloud-api', content: message, message_type: 'interactive',
-        from_me: true, contact_name: '_bot_', is_bot_message: true, status: 'sent', direction: 'outbound',
+        from_me: true, contact_name: '_bot_', is_bot_message: true, automation: 'avaliacao', status: 'sent', direction: 'outbound',
         timestamp: new Date().toISOString(),
       })
     }
@@ -1154,7 +1297,7 @@ async function applyCaptureTrigger(p: {
   if (convErr) console.error('❌ [capture] erro ao atualizar conversa:', convErr.message)
 
   if (p.applyActions && trigger.auto_reply?.trim()) {
-    await sendAutoMessage(p.institutionId, p.remoteJid, trigger.auto_reply)
+    await sendAutoMessage(p.institutionId, p.remoteJid, trigger.auto_reply, 'captacao')
   }
 
   await logConversationEvent(
@@ -1416,7 +1559,7 @@ async function applyBroadcastOptOut(institutionId: string, remoteJid: string, ra
   }
   console.log('[broadcast] opt-out registrado:', remoteJid, '| palavra:', word)
   await sendAutoMessage(institutionId, remoteJid,
-    'Pronto! Você não vai mais receber nossas mensagens de campanha por aqui. Se precisar falar com a gente, é só mandar mensagem. 💙')
+    'Pronto! Você não vai mais receber nossas mensagens de campanha por aqui. Se precisar falar com a gente, é só mandar mensagem. 💙', 'descadastro')
   await logConversationEvent(institutionId, remoteJid, 'broadcast_opt_out',
     'Transmissões: contato pediu pra não receber mais campanhas', { keyword: word })
   return true
@@ -2032,7 +2175,7 @@ async function processCustomFlow(
                   institution_id: institutionId, remote_jid: remoteJid, message_id: d.messages?.[0]?.id,
                   instance_name: 'cloud-api', content: node.data?.caption || `[${mediaType}]`,
                   message_type: mediaType, media_url: mediaUrl, from_me: true, contact_name: '_bot_',
-                  is_bot_message: true, status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
+                  is_bot_message: true, automation: 'robo', status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
                 })
               } else { console.error('[flow] message media send failed:', await resp.text()) }
             }
@@ -2073,7 +2216,7 @@ async function processCustomFlow(
                 institution_id: institutionId, remote_jid: remoteJid, message_id: d.messages?.[0]?.id,
                 instance_name: 'cloud-api', content: `[Contato: ${node.data?.contactName}]`,
                 message_type: 'contacts', from_me: true, contact_name: '_bot_',
-                is_bot_message: true, status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
+                is_bot_message: true, automation: 'robo', status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
               })
             }
           }
@@ -2119,15 +2262,22 @@ async function processCustomFlow(
       const dayKeys  = ['SUN','MON','TUE','WED','THU','FRI','SAT']
       const curDay   = dayKeys[nowTz.getDay()]
       const curMins  = nowTz.getHours() * 60 + nowTz.getMinutes()
-      const [sh, sm] = ((flow as any).working_start || '08:00').split(':').map(Number)
-      const [eh, em] = ((flow as any).working_end   || '18:00').split(':').map(Number)
-      const withinHours = ((flow as any).working_days ?? []).includes(curDay)
-        && curMins >= sh * 60 + sm && curMins <= eh * 60 + em
+      const individualMode = (flow as any).schedule_mode === 'individual'
+      const withinHours = await scheduleOpen(flow, institutionId, 'America/Sao_Paulo')
 
       const outsideMsg = fillHorario((flow as any).outside_hours_message || (flow as any).off_hours_message || '', flow as any)
-      const lunchMsgText = fillHorario((flow as any).lunch_message || '', flow as any)
+      const lunchMsgText = autoOn(flow, 'almoco') ? fillHorario((flow as any).lunch_message || '', flow as any) : ''
 
+      // Almoço da escola (Configurações > Horário): vale para todos, quando ligado.
+      const schoolLunchNow = (() => {
+        if (individualMode) return false   // no modo individual o almoço é de cada atendente
+        const ls = (flow as any).lunch_start as string | null, le = (flow as any).lunch_end as string | null
+        if (!ls || !le || !autoOn(flow, 'almoco')) return false
+        const [a, b] = ls.split(':').map(Number), [c, d] = le.split(':').map(Number)
+        return curMins >= a * 60 + b && curMins <= c * 60 + d
+      })()
       const isOnLunch = (att: { lunch_start?: string | null; lunch_end?: string | null } | null) => {
+        if (schoolLunchNow) return true
         if (!att?.lunch_start || !att?.lunch_end) return false
         const [lsh, lsm] = att.lunch_start.split(':').map(Number)
         const [leh, lem] = att.lunch_end.split(':').map(Number)
@@ -2181,7 +2331,12 @@ async function processCustomFlow(
             last_message_at:    new Date().toISOString(),
           })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        if (outsideMsg) await sendAutoMessage(institutionId, remoteJid, outsideMsg)
+        const spNow = await activeSpecialDate(flow, institutionId, tz)
+        if (spNow && specialClosedNow(spNow, tz)) {
+          // Data especial: o aviso do robô (before/only) já saiu na entrada; em 'after_robot' sai aqui, no lugar do "fora do horário".
+          if (spNow.mode === 'after_robot' && !(await sentSpecialRecently(institutionId, remoteJid)))
+            await sendAutoMessage(institutionId, remoteJid, fillHorario(spNow.message, flow as any), 'data_especial')
+        } else if (outsideMsg && autoOn(flow, 'fora_horario')) await sendAutoMessage(institutionId, remoteJid, outsideMsg, 'fora_horario')
         await supabase.from('whatsapp_conversation_events').insert({
           institution_id: institutionId,
           remote_jid:     remoteJid,
@@ -2200,9 +2355,11 @@ async function processCustomFlow(
 
         if (group && group.member_ids?.length > 0) {
           const { data: members } = await supabase
-            .from('users').select('id,full_name,lunch_start,lunch_end,is_available')
+            .from('users').select('id,full_name,lunch_start,lunch_end,is_available,working_days,working_hours_start,working_hours_end')
             .in('id', group.member_ids)
 
+          // Modo individual só restringe pelo horário de cada um quando alguém do grupo tem horário cadastrado.
+          const ownHoursOn = individualMode && (members || []).some((m: any) => m.working_hours_start && m.working_hours_end && (m.working_days || []).length)
           // Find next available member (not on lunch, not ausente) starting after last assigned index
           const totalMembers = group.member_ids.length
           let assignee: any = null
@@ -2211,7 +2368,8 @@ async function processCustomFlow(
             const idx      = ((group.last_assigned_index ?? -1) + i) % totalMembers
             const memberId = group.member_ids[idx]
             const member   = (members || []).find((m: any) => m.id === memberId)
-            if (member && member.is_available !== false && !isOnLunch(member as any)) {
+            if (member && member.is_available !== false && !isOnLunch(member as any)
+                && (!ownHoursOn || attendantInOwnHours(member, curDay, curMins))) {
               assignee = member; newIndex = idx; break
             }
           }
@@ -2222,7 +2380,9 @@ async function processCustomFlow(
             // horário (invisível pra atendente sem "ver todas", bot para de
             // reagir). 'waiting' garante que apareça na fila geral.
             console.log('[flow] nenhum membro disponível no grupo (almoço ou ausente):', group.name)
-            if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText)
+            // No modo individual, só avisa de almoço se alguém que está em horário está almoçando.
+            const someoneOnLunch = !ownHoursOn || (members || []).some((m: any) => attendantInOwnHours(m, curDay, curMins) && isOnLunch(m))
+            if (lunchMsgText && someoneOnLunch) await sendAutoMessage(institutionId, remoteJid, lunchMsgText, 'almoco')
             await supabase.from('whatsapp_conversations')
               .update({ bot_active: false, status: 'waiting' })
               .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
@@ -2261,7 +2421,7 @@ async function processCustomFlow(
 
           if (isOnLunch(u as any)) {
             console.log('[flow] atendente em almoço, encaminhando mesmo assim:', assigneeName)
-            if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText)
+            if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText, 'almoco')
           } else {
             if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
           }
@@ -2291,14 +2451,7 @@ async function processCustomFlow(
       for (const cond of conditions) {
         let r = false
         if (cond.conditionType === 'business_hours') {
-          const tz  = flow.timezone || 'America/Fortaleza'
-          const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
-          const days = ['SUN','MON','TUE','WED','THU','FRI','SAT']
-          const isDay = ((flow.working_days as string[]) ?? []).includes(days[now.getDay()])
-          const [sh, sm] = (flow.working_start || '08:00').split(':').map(Number)
-          const [eh, em] = (flow.working_end   || '18:00').split(':').map(Number)
-          const cur = now.getHours() * 60 + now.getMinutes()
-          r = isDay && cur >= sh * 60 + sm && cur <= eh * 60 + em
+          r = await scheduleOpen(flow, institutionId, 'America/Fortaleza')
         } else if (cond.conditionType === 'lunch_break') {
           const tz  = flow.timezone || 'America/Fortaleza'
           const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
@@ -2538,7 +2691,7 @@ async function processCustomFlow(
                 message_id: d.messages?.[0]?.id, instance_name: 'cloud-api',
                 content: node.data?.caption || `[${metaType}]`,
                 message_type: metaType, media_url: mediaUrl,
-                from_me: true, contact_name: '_bot_', is_bot_message: true, status: 'sent',
+                from_me: true, contact_name: '_bot_', is_bot_message: true, automation: 'robo', status: 'sent',
                 direction: 'outbound', timestamp: new Date().toISOString(),
               })
             } else {
@@ -2569,12 +2722,12 @@ async function processCustomFlow(
         .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       const { data: flowCfg } = await supabase
         .from('whatsapp_flows')
-        .select('satisfaction_survey_enabled, satisfaction_message')
+        .select('satisfaction_survey_enabled, satisfaction_message, survey_config')
         .eq('institution_id', institutionId)
         .maybeSingle()
       if (flowCfg?.satisfaction_survey_enabled) {
         const surveyMsg = (flowCfg.satisfaction_message as string) || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊'
-        await sendSatisfactionSurvey(institutionId, remoteJid, surveyMsg)
+        await sendSatisfactionSurvey(institutionId, remoteJid, surveyMsg, surveyCfg((flowCfg as any).survey_config).buttons)
       }
       currentNodeId = 'end'; break
     }
@@ -2670,6 +2823,18 @@ async function processFlow(
       // Reaproveita a leitura do guard acima — mesma linha, sem round-trip extra.
       const convState = guardConvState
 
+      // Data especial (feriado, recesso...): avisa antes do robô ou no lugar dele.
+      const spTz = (flow as any).timezone || 'America/Sao_Paulo'
+      const spEntry = await activeSpecialDate(flow, institutionId, spTz)
+      if (spEntry && specialClosedNow(spEntry, spTz) && (spEntry.mode === 'only_message' || spEntry.mode === 'before_robot')) {
+        if (!(await sentSpecialRecently(institutionId, remoteJid)))
+          await sendAutoMessage(institutionId, remoteJid, fillHorario(spEntry.message, flow as any), 'data_especial')
+        if (spEntry.mode === 'only_message') {
+          if (convState?.bot_active !== false) await assignOffHoursFallback(flow, institutionId, remoteJid, `Data especial (${spEntry.name})`)
+          return
+        }
+      }
+
       console.log('[FLOW] convState:', { bot_active: convState?.bot_active, assigned_user_id: convState?.assigned_user_id })
 
       // ── button/list reply mid-flow: honour __menu_sent_* regardless of isNewConversation ──
@@ -2760,7 +2925,7 @@ async function processFlow(
     const [endH,   endM  ] = (flow.working_end   || '18:00').split(':').map(Number)
     const currentMin     = now.getHours() * 60 + now.getMinutes()
     const isWorkingHours = currentMin >= startH * 60 + startM && currentMin <= endH * 60 + endM
-    const isOpen         = isWorkingDay && isWorkingHours
+    const isOpen         = flow.schedule_mode === 'individual' ? await scheduleOpen(flow, institutionId, 'America/Fortaleza') : (isWorkingDay && isWorkingHours)
 
     console.log('[HORARIO]', {
       timezone:       flow.timezone,
@@ -2776,7 +2941,9 @@ async function processFlow(
 
     // Off-hours: only notify on new conversations
     if (!isOpen) {
-      if (isNewConversation && flow.off_hours_message) {
+      const spStd = await activeSpecialDate(flow, institutionId, flow.timezone || 'America/Fortaleza')
+      const spStdClosed = !!spStd && specialClosedNow(spStd, flow.timezone || 'America/Fortaleza')
+      if (isNewConversation && (spStdClosed || flow.off_hours_message)) {
         // Mesma resolução de fallback do nó 'transfer' (grupo round-robin →
         // atendente fixo → 'waiting' sem dono) — ver comentário lá pra detalhe
         // do porquê nunca deixar status='open' com assigned_user_id NULL.
@@ -2815,7 +2982,8 @@ async function processFlow(
             last_message_at:    new Date().toISOString(),
           })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.off_hours_message, flow))
+        if (spStdClosed) await sendAutoMessage(institutionId, remoteJid, fillHorario(spStd!.message, flow), 'data_especial')
+        else if (autoOn(flow, 'fora_horario')) await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.off_hours_message, flow), 'fora_horario')
         await supabase.from('whatsapp_conversation_events').insert({
           institution_id: institutionId,
           remote_jid:     remoteJid,
@@ -4127,55 +4295,78 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq('remote_jid', remoteJid)
           .maybeSingle()
 
-        // ── Satisfaction survey response (button survey_1/2/3 or text 1-5 fallback) ──
-        const isSurveyReply =
-          (existingConv?.status === 'closed') && (
-            (msgType === 'interactive' &&
-             msg.interactive?.type === 'button_reply' &&
-             ['survey_1','survey_2','survey_3'].includes(msg.interactive.button_reply?.id || '')) ||
-            (msgType !== 'interactive' && /^[1-5]$/.test(text.trim()))
-          )
-
-        if (isSurveyReply) {
+        // ── Avaliação do atendimento: nota (botão survey_1/2/3 ou texto 1-5), comentário
+        // da nota ruim e "outra resposta", conforme survey_config. Só vale dentro do
+        // prazo (valid_hours) desde o encerramento; depois disso a mensagem segue o
+        // fluxo normal, como uma conversa nova.
+        if (existingConv?.status === 'closed') {
           const { data: sf } = await supabase
             .from('whatsapp_flows')
-            .select('satisfaction_survey_enabled')
+            .select('satisfaction_survey_enabled, satisfaction_message, survey_config')
             .eq('institution_id', institutionId)
             .maybeSingle()
 
           if (sf?.satisfaction_survey_enabled) {
-            let score = 0
-            if (msgType === 'interactive') {
-              const btnId = msg.interactive?.button_reply?.id
-              if (btnId === 'survey_1') score = 1
-              if (btnId === 'survey_2') score = 2
-              if (btnId === 'survey_3') score = 3
-            } else {
-              // Fallback de texto livre é 1-5 (regex isSurveyReply acima), mas
-              // satisfaction_score usa a mesma escala 1-3 dos botões — mapeia
-              // em vez de gravar o dígito cru, senão 4/5 nunca batiam no
-              // filtro `<= 3` do GestorHome.tsx e eram descartados em
-              // silêncio (achado da auditoria anterior).
-              const rawScore = parseInt(text.trim(), 10)
-              score = rawScore <= 1 ? 1 : rawScore <= 3 ? 2 : 3
-            }
-
-            if (score > 0) {
-              const scoreLabel = interactiveTitle || text.trim() || `Avaliação: ${score}`
+            const cfg = surveyCfg((sf as any).survey_config)
+            const { data: sv } = await supabase.from('whatsapp_conversations')
+              .select('satisfaction_score, satisfaction_comment, satisfaction_repeated')
+              .eq('institution_id', institutionId).eq('remote_jid', remoteJid).maybeSingle()
+            const closedAgoMs = existingConv.closed_at ? Date.now() - new Date(existingConv.closed_at as unknown as string).getTime() : 0
+            const inWindow = closedAgoMs <= cfg.valid_hours * 3600_000
+            const btnId = msgType === 'interactive' && msg.interactive?.type === 'button_reply' ? (msg.interactive.button_reply?.id || '') : ''
+            const isButton = ['survey_1', 'survey_2', 'survey_3'].includes(btnId)
+            const isDigit = msgType !== 'interactive' && /^[1-5]$/.test(text.trim())
+            const saveInbound = async (label: string) => {
               await supabase.from('whatsapp_conversations')
-                .update({ satisfaction_score: score, last_message: scoreLabel, last_message_at: timestamp, last_customer_message_at: timestamp })
-                .eq('institution_id', institutionId)
-                .eq('remote_jid', remoteJid)
+                .update({ last_message: label, last_message_at: timestamp, last_customer_message_at: timestamp })
+                .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
               await supabase.from('whatsapp_messages').insert({
                 institution_id: institutionId, remote_jid: remoteJid, message_id: msg.id,
-                instance_name: 'cloud-api', content: scoreLabel,
-                message_type: msgType,
+                instance_name: 'cloud-api', content: label, message_type: msgType,
                 from_me: false, contact_name: contactName, timestamp,
                 status: 'received', direction: 'inbound', raw_data: msg,
               })
-              await sendAutoMessage(institutionId, remoteJid, 'Obrigado pelo seu feedback! 🙏 Estamos sempre buscando melhorar nosso atendimento.')
             }
-            continue
+
+            if (inWindow && (isButton || isDigit)) {
+              let score = 0
+              if (isButton) score = Number(btnId.slice(-1))
+              else {
+                // Texto livre é 1-5; satisfaction_score usa a escala 1-3 dos botões.
+                const rawScore = parseInt(text.trim(), 10)
+                score = rawScore <= 1 ? 1 : rawScore <= 3 ? 2 : 3
+              }
+              const scoreLabel = interactiveTitle || text.trim() || `Avaliação: ${score}`
+              await supabase.from('whatsapp_conversations')
+                .update({ satisfaction_score: score })
+                .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+              await saveInbound(scoreLabel)
+              if (score === 1 && cfg.ask_comment) await sendAutoMessage(institutionId, remoteJid, cfg.comment_question, 'avaliacao')
+              else await sendAutoMessage(institutionId, remoteJid, cfg.thanks, 'avaliacao')
+              continue
+            }
+
+            // Comentário da nota ruim: o primeiro texto depois da pergunta.
+            if (inWindow && cfg.ask_comment && msgType === 'text' && (sv as any)?.satisfaction_score === 1 && !(sv as any)?.satisfaction_comment) {
+              await supabase.from('whatsapp_conversations')
+                .update({ satisfaction_comment: text.trim().slice(0, 1000) })
+                .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+              await saveInbound(text.trim() || '[comentário]')
+              await sendAutoMessage(institutionId, remoteJid, cfg.comment_thanks, 'avaliacao')
+              continue
+            }
+
+            // Cliente escreveu outra coisa em vez de avaliar: repete a pergunta uma vez
+            // (se a escola escolheu assim); senão segue o fluxo e abre novo atendimento.
+            if (inWindow && cfg.other_reply === 'repetir' && msgType === 'text' && (sv as any)?.satisfaction_score == null && !(sv as any)?.satisfaction_repeated) {
+              await supabase.from('whatsapp_conversations')
+                .update({ satisfaction_repeated: true })
+                .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+              await saveInbound(text.trim() || '[mensagem]')
+              await sendSatisfactionSurvey(institutionId, remoteJid,
+                (sf.satisfaction_message as string) || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊', cfg.buttons)
+              continue
+            }
           }
         }
 
