@@ -14,11 +14,26 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const GRAPH = 'https://graph.facebook.com/v25.0'
 const META_TIMEOUT_MS = 15000
 
+// Papel (claim "role") de um JWT já validado pelo gateway; null se não for JWT.
+function jwtRole(token: string): string | null {
+  try {
+    const part = token.split('.')[1]
+    if (!part) return null
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '='))
+    return JSON.parse(json)?.role ?? null
+  } catch {
+    return null
+  }
+}
+
 serve(async (req: Request) => {
-  // Só o agendamento (service role) chama: a chave anônima também passa pelo
-  // verify_jwt do gateway, então confere aqui.
+  // Só o agendamento (service role) chama. O gateway (verify_jwt) já validou a
+  // assinatura do token; a chave anônima também passaria, então confere aqui o
+  // papel dentro dele. Não compara com SUPABASE_SERVICE_ROLE_KEY do ambiente:
+  // a chave guardada em platform_settings é válida mas não é o mesmo texto
+  // (22/10/2026: a 1ª rodada voltou 403 por isso).
   const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
-  if (!bearer || bearer !== SUPABASE_SERVICE_KEY) return new Response('forbidden', { status: 403 })
+  if (!bearer || jwtRole(bearer) !== 'service_role') return new Response('forbidden', { status: 403 })
 
   const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
   const { data: tok } = await sb.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
