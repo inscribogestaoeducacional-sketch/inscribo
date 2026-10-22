@@ -2358,6 +2358,8 @@ async function processCustomFlow(
             .from('users').select('id,full_name,lunch_start,lunch_end,is_available,working_days,working_hours_start,working_hours_end')
             .in('id', group.member_ids)
 
+          // Modo individual só restringe pelo horário de cada um quando alguém do grupo tem horário cadastrado.
+          const ownHoursOn = individualMode && (members || []).some((m: any) => m.working_hours_start && m.working_hours_end && (m.working_days || []).length)
           // Find next available member (not on lunch, not ausente) starting after last assigned index
           const totalMembers = group.member_ids.length
           let assignee: any = null
@@ -2367,7 +2369,7 @@ async function processCustomFlow(
             const memberId = group.member_ids[idx]
             const member   = (members || []).find((m: any) => m.id === memberId)
             if (member && member.is_available !== false && !isOnLunch(member as any)
-                && (!individualMode || attendantInOwnHours(member, curDay, curMins))) {
+                && (!ownHoursOn || attendantInOwnHours(member, curDay, curMins))) {
               assignee = member; newIndex = idx; break
             }
           }
@@ -2379,7 +2381,7 @@ async function processCustomFlow(
             // reagir). 'waiting' garante que apareça na fila geral.
             console.log('[flow] nenhum membro disponível no grupo (almoço ou ausente):', group.name)
             // No modo individual, só avisa de almoço se alguém que está em horário está almoçando.
-            const someoneOnLunch = !individualMode || (members || []).some((m: any) => attendantInOwnHours(m, curDay, curMins) && isOnLunch(m))
+            const someoneOnLunch = !ownHoursOn || (members || []).some((m: any) => attendantInOwnHours(m, curDay, curMins) && isOnLunch(m))
             if (lunchMsgText && someoneOnLunch) await sendAutoMessage(institutionId, remoteJid, lunchMsgText, 'almoco')
             await supabase.from('whatsapp_conversations')
               .update({ bot_active: false, status: 'waiting' })
