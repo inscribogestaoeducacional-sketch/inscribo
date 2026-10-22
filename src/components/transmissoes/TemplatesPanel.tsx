@@ -94,7 +94,11 @@ const EMPTY: EditorState = {
   body: '', examples: {}, labels: {}, buttons: [], urlExample: '',
 }
 
-export default function TemplatesPanel({ institutionId, onChanged }: { institutionId: string; onChanged?: () => void }) {
+export interface TemplateRequest { n: number; template?: TemplateRow; duplicate?: boolean }
+
+// hideLists + request: usado por Configurações > WhatsApp > Modelos, que mostra a
+// própria lista e só reaproveita este editor (criar, editar, enviar pra Meta).
+export default function TemplatesPanel({ institutionId, onChanged, hideLists, request }: { institutionId: string; onChanged?: () => void; hideLists?: boolean; request?: TemplateRequest }) {
   const [rows, setRows] = useState<TemplateRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editor, setEditor] = useState<EditorState | null>(null)
@@ -109,6 +113,10 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
     setLoading(false)
   }
   useEffect(() => { reload() }, [institutionId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!request || !request.n) return
+    if (request.template) openEdit(request.template, !!request.duplicate); else openNew()
+  }, [request?.n]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const own  = rows.filter(r => r.institution_id === institutionId)
   const aion = rows.filter(r => r.institution_id === null)
@@ -258,7 +266,7 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
         </div>
       )}
 
-      <div style={cardStyle}>
+      {!hideLists && <div style={cardStyle}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Templates da escola</h3>
@@ -287,9 +295,9 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
               setSaving(null); reload(); onChanged?.()
             }} />
         )}
-      </div>
+      </div>}
 
-      {aion.length > 0 && (
+      {!hideLists && aion.length > 0 && (
         <div style={cardStyle}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Templates padrão da Áion</h3>

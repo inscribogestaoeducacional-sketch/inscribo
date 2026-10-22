@@ -4,10 +4,11 @@
 // (loadTemplates), só com o visual das Configurações.
 import { useEffect, useState } from 'react'
 import { FileText, Plus, RefreshCw, Copy, Pencil, Send, Loader2, Lock } from 'lucide-react'
-import { loadTemplates, type TemplateRow } from '../../transmissoes/TemplatesPanel'
+import TemplatesPanel, { loadTemplates, type TemplateRow, type TemplateRequest } from '../../transmissoes/TemplatesPanel'
 import { TEMPLATE_STATUS, CATEGORY_LABEL } from '../../../lib/broadcasts'
 import { BRAND, GRAD } from '../../../lib/brand'
-import { Card, Title, GhostButton, NowNote } from './ui'
+import { supabase } from '../../../lib/supabase'
+import { Card, Title, GhostButton, NowNote, WarnNote } from './ui'
 
 const bubble = { background: '#D9FDD3', borderRadius: 10, padding: '8px 10px', fontSize: 12.5, color: '#111B21', whiteSpace: 'pre-wrap' as const, lineHeight: 1.45, boxShadow: '0 1px 1px rgba(0,0,0,.08)' }
 
@@ -15,11 +16,15 @@ function Tag({ padrao }: { padrao: boolean }) {
   return <span style={{ fontSize: 11, fontWeight: 800, borderRadius: 999, padding: '3px 10px', color: padrao ? BRAND.primaryDark : '#475569', background: padrao ? BRAND.soft : '#F1F5F9' }}>{padrao ? 'Padrão' : 'Da escola'}</span>
 }
 
-export default function TemplatesSettings({ institutionId, onNew, onEdit }: {
-  institutionId: string
-  onNew?: () => void
-  onEdit?: (t: TemplateRow, duplicate: boolean) => void
-}) {
+export default function TemplatesSettings({ institutionId }: { institutionId: string }) {
+  const [request, setRequest] = useState<TemplateRequest>({ n: 0 })
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  useEffect(() => {
+    supabase.from('broadcast_settings').select('enabled').eq('institution_id', institutionId).maybeSingle()
+      .then(({ data }: any) => setEnabled(data ? data.enabled === true : false))
+  }, [institutionId])
+  const onNew = () => setRequest(r => ({ n: r.n + 1 }))
+  const onEdit = (t: TemplateRow, duplicate: boolean) => setRequest(r => ({ n: r.n + 1, template: t, duplicate }))
   const [rows, setRows] = useState<TemplateRow[]>([])
   const [loading, setLoading] = useState(true)
   const reload = async () => { setLoading(true); try { setRows(await loadTemplates(institutionId)) } catch (e) { console.error('[Modelos]', e) } setLoading(false) }
@@ -67,9 +72,11 @@ export default function TemplatesSettings({ institutionId, onNew, onEdit }: {
             <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 2 }}>A Meta exige um modelo aprovado para a escola puxar conversa com o cliente. A aprovação leva de minutos a 24 horas.</div>
           </div>
           <GhostButton onClick={reload}><RefreshCw size={14} /> Atualizar</GhostButton>
-          <button type="button" onClick={onNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 18px', borderRadius: 14, border: 'none', background: GRAD, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}><Plus size={16} /> Novo modelo</button>
+          <button type="button" onClick={onNew} disabled={enabled === false} style={{ opacity: enabled === false ? 0.5 : 1, cursor: enabled === false ? 'default' : 'pointer',  display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 18px', borderRadius: 14, border: 'none', background: GRAD, color: '#fff', fontWeight: 800, fontSize: 14, fontFamily: 'inherit' }}><Plus size={16} /> Novo modelo</button>
         </div>
       </Card>
+      {enabled === false && <WarnNote>Os modelos próprios ainda não estão liberados para esta escola. Fale com a Áion para liberar. Você já pode ver a lista abaixo.</WarnNote>}
+      <TemplatesPanel institutionId={institutionId} hideLists request={request} onChanged={reload} />
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Loader2 size={24} color={BRAND.primary} className="animate-spin" /></div>
       ) : (
