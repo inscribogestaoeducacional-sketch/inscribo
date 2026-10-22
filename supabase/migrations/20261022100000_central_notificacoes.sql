@@ -182,6 +182,25 @@ DROP POLICY IF EXISTS wph_read ON public.whatsapp_phone_health;
 CREATE POLICY wph_read ON public.whatsapp_phone_health FOR SELECT TO authenticated
   USING (is_super_admin_user() OR user_school_role_in(institution_id, ARRAY['admin', 'manager']));
 
+-- ── Escolas sem alerta (teste/demonstração) ─────────────────────────────────
+-- platform_settings.wa_alertas_ignorar: lista de ids de escola — JSON
+-- ('["id1","id2"]') ou separada por vírgula/espaço. Vale para queda e silêncio:
+-- o estado continua sendo gravado, só não abre aviso. Valor inválido = ninguém
+-- é ignorado (nunca derruba a conferência).
+CREATE OR REPLACE FUNCTION notif.ignored_institutions()
+RETURNS uuid[] LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE v text; out uuid[] := '{}';
+BEGIN
+  SELECT value INTO v FROM platform_settings WHERE key = 'wa_alertas_ignorar';
+  IF coalesce(btrim(v), '') = '' THEN RETURN out; END IF;
+  SELECT coalesce(array_agg(m[1]::uuid), '{}') INTO out
+    FROM regexp_matches(v, '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', 'g') AS m;
+  RETURN out;
+EXCEPTION WHEN OTHERS THEN
+  RETURN '{}';
+END $$;
+REVOKE ALL ON FUNCTION notif.ignored_institutions() FROM PUBLIC;
+
 -- ── Queda: resultado da conferência (edge whatsapp-health-check, só GET) ────
 -- p_status NULL + p_error = a Meta não respondeu: registra e não conta como
 -- queda nem como volta. Não CONNECTED → "WhatsApp desconectou" para o Super
@@ -232,6 +251,9 @@ BEGIN
   ON CONFLICT (phone_number_id) DO UPDATE SET institution_id = excluded.institution_id, status = excluded.status,
     platform_type = excluded.platform_type, is_on_biz_app = excluded.is_on_biz_app, checked_at = excluded.checked_at,
     down_since = coalesce(h.down_since, excluded.down_since), last_error = NULL;
+
+  -- escola de teste/demonstração: grava o estado, não avisa
+  IF v_phone.institution_id = ANY (notif.ignored_institutions()) THEN RETURN 'ignorada'; END IF;
 
   SELECT name INTO v_name FROM institutions WHERE id = v_phone.institution_id;
   v_num := coalesce(nullif(v_phone.phone_number, ''), p_phone_number_id);
@@ -353,6 +375,7 @@ BEGIN
      WHERE dedupe_key = v_key AND resolved_at IS NULL
        AND r.last_in > (data->>'ultima_recebida')::timestamptz;
     CONTINUE WHEN r.down;
+    CONTINUE WHEN r.institution_id = ANY (notif.ignored_institutions());
     CONTINUE WHEN NOT notif.in_working_hours(p_now, r.days, r.wstart, r.wend, r.tz);
     CONTINUE WHEN notif.working_seconds_between(r.last_in, p_now, r.days, r.wstart, r.wend, r.tz) < v_hours * 3600;
     IF notif.emit_alert(r.institution_id, 'superadmin', 'whatsapp_silencio', 'conexao',
@@ -436,6 +459,12 @@ GRANT EXECUTE ON FUNCTION public.whatsapp_usage_by_school(date) TO authenticated
 
 -- Consultas de consumo e silêncio por escola e data (94 mil linhas em 22/10/2026: segundos).
 CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_inst_created ON public.whatsapp_messages (institution_id, created_at);
+
+-- Escola modelo da Áion (Colégio Áion, teste; sem número válido em 22/10/2026)
+-- fora dos alertas. Não sobrescreve uma lista já existente.
+INSERT INTO public.platform_settings (key, value)
+VALUES ('wa_alertas_ignorar', '["169b10a1-024d-4ac8-b3a8-199f34d1f360"]')
+ON CONFLICT (key) DO NOTHING;
 
 -- Tempo real: o sino escuta inserts.
 DO $$ BEGIN

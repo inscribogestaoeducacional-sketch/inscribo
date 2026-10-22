@@ -296,3 +296,25 @@ test('reverter: o script desfaz tudo (sem cron no PGlite) e a migration aplica d
   await db.exec(MIGRATION)
   assert.equal((await sys(`SELECT 1 FROM pg_tables WHERE tablename = 'notification_alerts'`)).length, 1)
 })
+
+test('escolas em wa_alertas_ignorar: grava o estado, mas não avisa queda nem silêncio', async () => {
+  await sys('DELETE FROM notification_alerts; DELETE FROM whatsapp_phone_health;')
+  // a migration já põe o Colégio Áion na lista (e não sobrescreve lista existente)
+  const v = await sys<{ value: string }>(`SELECT value FROM platform_settings WHERE key = 'wa_alertas_ignorar'`)
+  assert.match(v[0].value, /169b10a1-024d-4ac8-b3a8-199f34d1f360/)
+  await sys(`UPDATE platform_settings SET value = $1 WHERE key = 'wa_alertas_ignorar'`, [`169b10a1-024d-4ac8-b3a8-199f34d1f360, ${ESC_A}`])
+  assert.equal((await sys<{ r: string }>(`SELECT whatsapp_health_record($1, 'DISCONNECTED', NULL, NULL, NULL, now()) AS r`, [PHONE_A]))[0].r, 'ignorada')
+  assert.equal(await count(), 0)
+  assert.equal((await sys(`SELECT 1 FROM whatsapp_phone_health WHERE phone_number_id = $1 AND down_since IS NOT NULL`, [PHONE_A])).length, 1)
+  // silêncio da A também não avisa
+  await sys(`SELECT whatsapp_health_record($1, 'CONNECTED', NULL, NULL, NULL, now())`, [PHONE_A])
+  await seedMessages('2026-10-21 11:00+00')
+  await sys(`SELECT whatsapp_silence_check('2026-10-21 16:00+00')`)
+  assert.equal(await count(`institution_id = '${ESC_A}'`), 0)
+  // B (fora da lista) continua avisando queda
+  await sys(`SELECT whatsapp_health_record($1, 'DISCONNECTED', NULL, NULL, NULL, now())`, [PHONE_B])
+  assert.equal(await count(`institution_id = '${ESC_B}'`), 2)
+  // valor inválido: ninguém ignorado, nada quebra
+  await sys(`UPDATE platform_settings SET value = 'lixo' WHERE key = 'wa_alertas_ignorar'`)
+  assert.equal((await sys<{ r: string }>(`SELECT whatsapp_health_record($1, 'DISCONNECTED', NULL, NULL, NULL, now()) AS r`, [PHONE_A]))[0].r, 'desconectado')
+})
