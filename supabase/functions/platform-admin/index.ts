@@ -232,6 +232,11 @@ async function sendSurvey(ctx: Ctx) {
     },
   })
   if (!r.ok) console.warn('[platform-admin] pesquisa não enviada:', metaError(r.data, `HTTP ${r.status}`))
+  // Base do "Lembrete da avaliação" (serviço whatsapp-followups).
+  if (r.ok && ctx.body.institution_id && UUID_RE.test(String(ctx.body.institution_id))) {
+    await ctx.sb.from('whatsapp_conversations').update({ survey_sent_at: new Date().toISOString() })
+      .eq('institution_id', ctx.body.institution_id).eq('remote_jid', to)
+  }
   return { sent: true, ok: r.ok }
 }
 

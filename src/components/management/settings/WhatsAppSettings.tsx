@@ -8,7 +8,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Wifi, RefreshCw, Loader2, Check, X, Plus, Trash2, Pencil, Bot, Zap, Clock, Coffee, Timer, Star,
-  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History, CalendarDays,
+  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History, CalendarDays, BellRing,
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { platformAdmin } from '../../../lib/platformAdmin'
@@ -27,11 +27,11 @@ const FLOW_DAYS = [
 // Nome de cada tipo de envio automático (coluna whatsapp_messages.automation).
 const AUTO_LABEL: Record<string, string> = {
   robo: 'Robô', fora_horario: 'Fora do horário', almoco: 'Almoço', parou_responder: 'Cliente parou de responder',
-  avaliacao: 'Avaliação', captacao: 'Captação', descadastro: 'Descadastro de campanhas', data_especial: 'Data especial',
+  avaliacao: 'Avaliação', avaliacao_lembrete: 'Lembrete da avaliação', conversa_parada: 'Conversa parada', captacao: 'Captação', descadastro: 'Descadastro de campanhas', data_especial: 'Data especial',
 }
 
 // Avaliação: padrões (iguais aos do servidor, que usa estes valores quando o campo está vazio).
-type SurveyForm = { buttons: [string, string, string]; thanks: string; ask_comment: boolean; comment_question: string; comment_thanks: string; valid_hours: number; other_reply: 'reabrir' | 'repetir' }
+type SurveyForm = { buttons: [string, string, string]; thanks: string; ask_comment: boolean; comment_question: string; comment_thanks: string; valid_hours: number; other_reply: 'reabrir' | 'repetir'; reminder_enabled: boolean; reminder_hours: number; reminder_message: string }
 const SURVEY_DEFAULTS: SurveyForm = {
   buttons: ['😞 Ruim', '😐 Regular', '😊 Ótimo'],
   thanks: 'Obrigado pelo seu feedback! 🙏 Estamos sempre buscando melhorar nosso atendimento.',
@@ -40,6 +40,17 @@ const SURVEY_DEFAULTS: SurveyForm = {
   comment_thanks: 'Obrigado por contar! Vamos usar o seu comentário para melhorar. 🙏',
   valid_hours: 48,
   other_reply: 'reabrir',
+  reminder_enabled: false,
+  reminder_hours: 6,
+  reminder_message: 'Oi! Sua opinião é muito importante para nós. Como foi o seu atendimento? É só tocar em um dos botões acima. 🙏',
+}
+
+// Conversa parada: o atendente respondeu e o cliente sumiu. Desligada até a escola ligar.
+type IdleForm = { enabled: boolean; hours: number; message: string }
+const IDLE_DEFAULTS: IdleForm = {
+  enabled: false,
+  hours: 4,
+  message: 'Oi! Ainda precisa de ajuda? Se já resolvemos, é só avisar. Estamos por aqui. 😊',
 }
 
 const TAG_COLORS = ['#6366f1', '#16a34a', '#dc2626', '#d97706', '#0891b2', '#ec4899', '#64748b', '#ea580c']
@@ -54,6 +65,7 @@ export const WA_SECTION_INFO: Record<string, { label: string; desc: string }> = 
   etiquetas:  { label: 'Etiquetas', desc: 'Cores para organizar as conversas.' },
   bloqueios:  { label: 'Números bloqueados', desc: 'Números que o sistema ignora.' },
   pesquisa:   { label: 'Avaliação do atendimento', desc: 'Pergunta ao cliente como foi o atendimento, ao encerrar.' },
+  parada:     { label: 'Conversa parada', desc: 'Lembra o cliente que sumiu depois de ser atendido.' },
 }
 
 // Fluxo visual ligado (as 6 escolas hoje): boas-vindas, menu e a mensagem
@@ -142,6 +154,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const [specialCount, setSpecialCount] = useState<number | null>(null)
   const [scheduleMode, setScheduleMode] = useState<'general' | 'individual'>('general')
   const [sv, setSv] = useState<SurveyForm>(SURVEY_DEFAULTS)
+  const [idle, setIdle] = useState<IdleForm>(IDLE_DEFAULTS)
   const [lunchStart, setLunchStart] = useState('')
   const [lunchEnd, setLunchEnd] = useState('')
   const [history, setHistory] = useState<{ id: string; automation: string; remote_jid: string; content: string | null; created_at: string }[]>([])
@@ -226,6 +239,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
           const c = f.survey_config as Partial<SurveyForm>
           setSv({ ...SURVEY_DEFAULTS, ...c, buttons: Array.isArray(c.buttons) && c.buttons.length === 3 ? (c.buttons as [string, string, string]) : SURVEY_DEFAULTS.buttons })
         }
+        if (f.idle_config && typeof f.idle_config === 'object') setIdle({ ...IDLE_DEFAULTS, ...(f.idle_config as Partial<IdleForm>) })
         if (f.lunch_start) setLunchStart(String(f.lunch_start).slice(0, 5))
         if (f.lunch_end) setLunchEnd(String(f.lunch_end).slice(0, 5))
         if (f.bot_timeout_minutes) setBotTimeoutMinutes(f.bot_timeout_minutes)
@@ -302,6 +316,16 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const toggleAuto = async (key: string, v: boolean) => {
     const prev = (flow.automations as Record<string, boolean> | undefined) || {}
     await saveFlow('auto-' + key, { automations: { ...prev, [key]: v } })
+  }
+  const toggleReminder = async (v: boolean) => {
+    const prev = sv
+    setSv({ ...sv, reminder_enabled: v })
+    if (!(await saveFlow('reminder-toggle', { survey_config: { ...sv, reminder_enabled: v } }))) setSv(prev)
+  }
+  const toggleIdle = async (v: boolean) => {
+    const prev = idle
+    setIdle({ ...idle, enabled: v })
+    if (!(await saveFlow('idle-toggle', { idle_config: { ...idle, enabled: v } }))) setIdle(prev)
   }
   const toggleSurvey = async (v: boolean) => { setSurveyOn(v); if (!(await saveFlow('pesquisa-toggle', { satisfaction_survey_enabled: v }))) setSurveyOn(!v) }
 
@@ -442,6 +466,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         ...(allowed.includes('automacoes') ? [{ id: 'automacoes', Icon: Zap, title: 'Automações', desc: 'Veja tudo que o sistema manda sozinho e o que está ligado.', hl: true, open: () => go('automacoes') }] : []),
         ...(allowed.includes('conexao') ? [{ id: 'robo', Icon: Bot, title: 'Robô de atendimento', desc: 'Monte o menu e o caminho de cada conversa.', hl: true, open: () => setShowFlowEditor(true) }] : []),
         ...(allowed.includes('pesquisa') ? [{ id: 'pesquisa', Icon: Star, title: 'Avaliação do atendimento', desc: 'Nota do cliente ao encerrar.', open: () => go('pesquisa') }] : []),
+        ...(allowed.includes('parada') ? [{ id: 'parada', Icon: Hourglass, title: 'Conversa parada', desc: 'Avisa o cliente que sumiu depois de ser atendido.', open: () => go('parada') }] : []),
       ],
     },
     {
@@ -605,6 +630,11 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
           editLabel="Gerenciar datas" onEdit={() => go('datas')} />
         <AutoCard Icon={Star} title="Avaliação do atendimento" on={surveyOn} status={sentTxt('avaliacao', surveyOn)} saving={savingKey === 'pesquisa-toggle'} toggle={toggleSurvey}
           desc="Ao encerrar, pergunta ao cliente como foi o atendimento." previewText={preview(surveyMsg)} editLabel="Editar avaliação" onEdit={() => go('pesquisa')} />
+        <AutoCard Icon={BellRing} title="Lembrete da avaliação" on={surveyOn && sv.reminder_enabled} status={!surveyOn ? 'Precisa da avaliação ligada' : sentTxt('avaliacao_lembrete', sv.reminder_enabled)} saving={savingKey === 'reminder-toggle'} toggle={surveyOn ? toggleReminder : undefined}
+          desc={`Se o cliente não responder a avaliação, recebe um lembrete depois de ${sv.reminder_hours} horas. Uma vez só.`} previewText={preview(sv.reminder_message)} editLabel="Editar lembrete" onEdit={() => go('pesquisa')}
+          now={!surveyOn ? <WarnNote>Ligue a avaliação para usar o lembrete.</WarnNote> : undefined} />
+        <AutoCard Icon={Hourglass} title="Conversa parada" on={idle.enabled} status={sentTxt('conversa_parada', idle.enabled)} saving={savingKey === 'idle-toggle'} toggle={toggleIdle}
+          desc={`Depois que a equipe responde e o cliente some por ${idle.hours} horas, ele recebe um aviso. Só no horário da escola, uma vez por conversa.`} previewText={preview(idle.message)} editLabel="Editar tempo e mensagem" onEdit={() => go('parada')} />
       </div>
 
       <div style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, overflow: 'hidden' }}>
@@ -1002,6 +1032,22 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
             </>}
           </Card>
           <Card>
+            <Title Icon={BellRing} title="Lembrete se ele não responder" help="Uma única mensagem para quem recebeu a avaliação e não tocou em nenhum botão." />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Switch on={sv.reminder_enabled} onChange={v => setSvF('reminder_enabled', v)} labelText="Enviar lembrete" />
+              <span style={{ fontSize: 13.5, color: BRAND.ink }}>Enviar um lembrete</span>
+            </div>
+            {sv.reminder_enabled && <>
+              <label style={{ ...label, marginTop: 12 }}>Enviar depois de</label>
+              <select style={{ ...input, width: 180 }} value={sv.reminder_hours} onChange={e => setSvF('reminder_hours', parseInt(e.target.value))}>
+                {[2, 4, 6, 12, 23].map(h => <option key={h} value={h}>{h} horas</option>)}
+              </select>
+              <label style={{ ...label, marginTop: 12 }}>Mensagem</label>
+              {textarea(sv.reminder_message, v => setSvF('reminder_message', v), 2)}
+              <p style={hint}>Vai só dentro do horário da escola e no máximo 23 horas depois, que é o limite do WhatsApp para texto livre.</p>
+            </>}
+          </Card>
+          <Card>
             <Title Icon={Clock} title="Se o cliente responder depois" help="Por quanto tempo a resposta ainda conta como avaliação e o que fazer quando ele escreve outra coisa." />
             <label style={label}>A resposta vale por</label>
             <select style={{ ...input, width: 180 }} value={sv.valid_hours} onChange={e => setSvF('valid_hours', parseInt(e.target.value))}>
@@ -1025,6 +1071,8 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#3F5F46', marginBottom: 10 }}><Smartphone size={14} /> Como o cliente vê</div>
           <div style={bub(true)}>{surveyMsg || 'Como você avalia nosso atendimento hoje?'}</div>
           {sv.buttons.map((b, i) => <div key={i} style={{ background: '#fff', borderRadius: 10, padding: '7px 10px', textAlign: 'center', color: '#0B7EC0', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{b}</div>)}
+          {sv.reminder_enabled && <div style={{ fontSize: 11, color: '#3F5F46', textAlign: 'center', margin: '6px 0' }}>… {sv.reminder_hours} horas sem resposta</div>}
+          {sv.reminder_enabled && <div style={bub(true)}>{sv.reminder_message}</div>}
           <div style={{ ...bub(false), marginTop: 8 }}>{sv.buttons[0]}</div>
           {sv.ask_comment
             ? <><div style={bub(true)}>{sv.comment_question}</div><div style={bub(false)}>Demorou um pouco para responder.</div><div style={bub(true)}>{sv.comment_thanks}</div></>
@@ -1034,9 +1082,62 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
     </div>
   )
 
+  const saveIdle = () => saveFlow('parada', { idle_config: idle })
+  const parada = (
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 460px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Avisar quando a conversa para</div>
+              <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 2 }}>A equipe respondeu e o cliente não escreveu mais. Ele recebe uma mensagem, uma vez só.</div>
+            </div>
+            <Switch on={idle.enabled} onChange={v => setIdle({ ...idle, enabled: v })} labelText="Ligar conversa parada" />
+          </div>
+        </Card>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, opacity: idle.enabled ? 1 : 0.6 }}>
+          <Card>
+            <Title Icon={Hourglass} title="Quando avisar" help="Conta a partir da última resposta da equipe." />
+            <label style={label}>Sem resposta do cliente por</label>
+            <select style={{ ...input, width: 180 }} value={idle.hours} onChange={e => setIdle({ ...idle, hours: parseInt(e.target.value) })}>
+              {[1, 2, 4, 6, 12, 23].map(h => <option key={h} value={h}>{h} {h === 1 ? 'hora' : 'horas'}</option>)}
+            </select>
+            <p style={hint}>No máximo 23 horas: depois de 24 horas o WhatsApp não deixa mandar texto livre.</p>
+          </Card>
+          <Card>
+            <Title Icon={MessageSquareText} title="Mensagem" help="O texto que o cliente recebe." />
+            {textarea(idle.message, v => setIdle({ ...idle, message: v }), 3)}
+          </Card>
+          <Card>
+            <Title Icon={Clock} title="Regras" />
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: BRAND.muted, lineHeight: 1.7 }}>
+              <li>Só envia no horário de atendimento da escola. Fora dele, espera abrir.</li>
+              <li>Não envia em feriado ou data especial em que a escola está fechada.</li>
+              <li>Uma vez por conversa. Se o cliente voltar e a conversa parar de novo, avisa de novo.</li>
+              <li>Não fecha a conversa. Só avisa.</li>
+            </ul>
+          </Card>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <SaveButton text="Salvar conversa parada" saving={savingKey === 'parada'} saved={savedKey === 'parada'} onClick={saveIdle} />
+          <GhostButton onClick={() => setIdle(IDLE_DEFAULTS)}>Voltar ao padrão</GhostButton>
+        </div>
+      </div>
+      <aside style={{ flex: '0 1 340px', minWidth: 250 }}>
+        <div style={{ background: '#E7F0E8', borderRadius: 18, padding: 16, border: `1px solid ${BRAND.line}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#3F5F46', marginBottom: 10 }}><Smartphone size={14} /> Como o cliente vê</div>
+          <div style={bub(false)}>Qual o valor da mensalidade do 5º ano?</div>
+          <div style={bub(true)}>Olá! A mensalidade do 5º ano é R$ 780,00. Posso te enviar a proposta?</div>
+          <div style={{ fontSize: 11, color: '#3F5F46', textAlign: 'center', margin: '6px 0' }}>… {idle.hours} {idle.hours === 1 ? 'hora' : 'horas'} sem resposta</div>
+          <div style={bub(true)}>{idle.message}</div>
+        </div>
+      </aside>
+    </div>
+  )
+
   const datas = <SpecialDatesSettings institutionId={institutionId} horarioTxt={horarioTxt} onChanged={setSpecialCount} />
 
-  const content: Record<string, React.ReactNode> = { conexao, automacoes, datas, horario, respostas, equipe, bloqueios, etiquetas, pesquisa }
+  const content: Record<string, React.ReactNode> = { conexao, automacoes, datas, horario, respostas, equipe, bloqueios, etiquetas, pesquisa, parada }
 
   return (
     <>
