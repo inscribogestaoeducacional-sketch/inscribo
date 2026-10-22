@@ -97,6 +97,8 @@ serve(async () => {
         from_me:        true,
         message_type:   'text',
         content:        item.message,
+        is_bot_message: true,
+        automation:     'parou_responder',
         timestamp:      new Date().toISOString(),
         status:         'sent',
         ...(waMessageId ? { message_id: waMessageId } : {}),

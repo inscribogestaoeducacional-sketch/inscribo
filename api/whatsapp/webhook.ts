@@ -79,10 +79,20 @@ async function readRawBody(req: VercelRequest): Promise<Buffer> {
 }
 
 // ── Send automatic text message via Meta Cloud API ───────────────────────────
+// Liga/desliga por automação (Configurações > WhatsApp > Automações).
+// Chave ausente = ligada. 'robo' e 'avaliacao' continuam em bot_enabled e
+// satisfaction_survey_enabled; as demais ficam em whatsapp_flows.automations.
+function autoOn(flow: any, key: string): boolean {
+  return flow?.automations?.[key] !== false
+}
+
+// `automation` marca o tipo do envio (robo, fora_horario, almoco, avaliacao...)
+// para o Histórico de envios automáticos.
 async function sendAutoMessage(
   institutionId: string,
   to:            string,
-  text:          string
+  text:          string,
+  automation:    string = 'robo'
 ): Promise<void> {
   try {
     const { data: phone } = await supabase
@@ -134,6 +144,7 @@ async function sendAutoMessage(
         from_me:        true,
         contact_name:   '_bot_',
         is_bot_message: true,
+        automation,
         status:         'sent',
         direction:      'outbound',
         timestamp:      new Date().toISOString(),
@@ -241,6 +252,7 @@ async function sendInteractiveMenu(
         from_me:        true,
         contact_name:   '_bot_',
         is_bot_message: true,
+        automation:     'robo',
         status:         'sent',
         direction:      'outbound',
         timestamp:      new Date().toISOString(),
@@ -574,7 +586,7 @@ async function sendSatisfactionSurvey(institutionId: string, remoteJid: string, 
       await supabase.from('whatsapp_messages').insert({
         institution_id: institutionId, remote_jid: remoteJid, message_id: d.messages?.[0]?.id,
         instance_name: 'cloud-api', content: message, message_type: 'interactive',
-        from_me: true, contact_name: '_bot_', is_bot_message: true, status: 'sent', direction: 'outbound',
+        from_me: true, contact_name: '_bot_', is_bot_message: true, automation: 'avaliacao', status: 'sent', direction: 'outbound',
         timestamp: new Date().toISOString(),
       })
     }
@@ -1154,7 +1166,7 @@ async function applyCaptureTrigger(p: {
   if (convErr) console.error('❌ [capture] erro ao atualizar conversa:', convErr.message)
 
   if (p.applyActions && trigger.auto_reply?.trim()) {
-    await sendAutoMessage(p.institutionId, p.remoteJid, trigger.auto_reply)
+    await sendAutoMessage(p.institutionId, p.remoteJid, trigger.auto_reply, 'captacao')
   }
 
   await logConversationEvent(
@@ -1416,7 +1428,7 @@ async function applyBroadcastOptOut(institutionId: string, remoteJid: string, ra
   }
   console.log('[broadcast] opt-out registrado:', remoteJid, '| palavra:', word)
   await sendAutoMessage(institutionId, remoteJid,
-    'Pronto! Você não vai mais receber nossas mensagens de campanha por aqui. Se precisar falar com a gente, é só mandar mensagem. 💙')
+    'Pronto! Você não vai mais receber nossas mensagens de campanha por aqui. Se precisar falar com a gente, é só mandar mensagem. 💙', 'descadastro')
   await logConversationEvent(institutionId, remoteJid, 'broadcast_opt_out',
     'Transmissões: contato pediu pra não receber mais campanhas', { keyword: word })
   return true
@@ -2032,7 +2044,7 @@ async function processCustomFlow(
                   institution_id: institutionId, remote_jid: remoteJid, message_id: d.messages?.[0]?.id,
                   instance_name: 'cloud-api', content: node.data?.caption || `[${mediaType}]`,
                   message_type: mediaType, media_url: mediaUrl, from_me: true, contact_name: '_bot_',
-                  is_bot_message: true, status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
+                  is_bot_message: true, automation: 'robo', status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
                 })
               } else { console.error('[flow] message media send failed:', await resp.text()) }
             }
@@ -2073,7 +2085,7 @@ async function processCustomFlow(
                 institution_id: institutionId, remote_jid: remoteJid, message_id: d.messages?.[0]?.id,
                 instance_name: 'cloud-api', content: `[Contato: ${node.data?.contactName}]`,
                 message_type: 'contacts', from_me: true, contact_name: '_bot_',
-                is_bot_message: true, status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
+                is_bot_message: true, automation: 'robo', status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
               })
             }
           }
@@ -2125,9 +2137,17 @@ async function processCustomFlow(
         && curMins >= sh * 60 + sm && curMins <= eh * 60 + em
 
       const outsideMsg = fillHorario((flow as any).outside_hours_message || (flow as any).off_hours_message || '', flow as any)
-      const lunchMsgText = fillHorario((flow as any).lunch_message || '', flow as any)
+      const lunchMsgText = autoOn(flow, 'almoco') ? fillHorario((flow as any).lunch_message || '', flow as any) : ''
 
+      // Almoço da escola (Configurações > Horário): vale para todos, quando ligado.
+      const schoolLunchNow = (() => {
+        const ls = (flow as any).lunch_start as string | null, le = (flow as any).lunch_end as string | null
+        if (!ls || !le || !autoOn(flow, 'almoco')) return false
+        const [a, b] = ls.split(':').map(Number), [c, d] = le.split(':').map(Number)
+        return curMins >= a * 60 + b && curMins <= c * 60 + d
+      })()
       const isOnLunch = (att: { lunch_start?: string | null; lunch_end?: string | null } | null) => {
+        if (schoolLunchNow) return true
         if (!att?.lunch_start || !att?.lunch_end) return false
         const [lsh, lsm] = att.lunch_start.split(':').map(Number)
         const [leh, lem] = att.lunch_end.split(':').map(Number)
@@ -2181,7 +2201,7 @@ async function processCustomFlow(
             last_message_at:    new Date().toISOString(),
           })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        if (outsideMsg) await sendAutoMessage(institutionId, remoteJid, outsideMsg)
+        if (outsideMsg && autoOn(flow, 'fora_horario')) await sendAutoMessage(institutionId, remoteJid, outsideMsg, 'fora_horario')
         await supabase.from('whatsapp_conversation_events').insert({
           institution_id: institutionId,
           remote_jid:     remoteJid,
@@ -2222,7 +2242,7 @@ async function processCustomFlow(
             // horário (invisível pra atendente sem "ver todas", bot para de
             // reagir). 'waiting' garante que apareça na fila geral.
             console.log('[flow] nenhum membro disponível no grupo (almoço ou ausente):', group.name)
-            if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText)
+            if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText, 'almoco')
             await supabase.from('whatsapp_conversations')
               .update({ bot_active: false, status: 'waiting' })
               .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
@@ -2261,7 +2281,7 @@ async function processCustomFlow(
 
           if (isOnLunch(u as any)) {
             console.log('[flow] atendente em almoço, encaminhando mesmo assim:', assigneeName)
-            if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText)
+            if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText, 'almoco')
           } else {
             if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
           }
@@ -2538,7 +2558,7 @@ async function processCustomFlow(
                 message_id: d.messages?.[0]?.id, instance_name: 'cloud-api',
                 content: node.data?.caption || `[${metaType}]`,
                 message_type: metaType, media_url: mediaUrl,
-                from_me: true, contact_name: '_bot_', is_bot_message: true, status: 'sent',
+                from_me: true, contact_name: '_bot_', is_bot_message: true, automation: 'robo', status: 'sent',
                 direction: 'outbound', timestamp: new Date().toISOString(),
               })
             } else {
@@ -2815,7 +2835,7 @@ async function processFlow(
             last_message_at:    new Date().toISOString(),
           })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.off_hours_message, flow))
+        if (autoOn(flow, 'fora_horario')) await sendAutoMessage(institutionId, remoteJid, fillHorario(flow.off_hours_message, flow), 'fora_horario')
         await supabase.from('whatsapp_conversation_events').insert({
           institution_id: institutionId,
           remote_jid:     remoteJid,
@@ -4173,7 +4193,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 from_me: false, contact_name: contactName, timestamp,
                 status: 'received', direction: 'inbound', raw_data: msg,
               })
-              await sendAutoMessage(institutionId, remoteJid, 'Obrigado pelo seu feedback! 🙏 Estamos sempre buscando melhorar nosso atendimento.')
+              await sendAutoMessage(institutionId, remoteJid, 'Obrigado pelo seu feedback! 🙏 Estamos sempre buscando melhorar nosso atendimento.', 'avaliacao')
             }
             continue
           }

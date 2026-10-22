@@ -8,7 +8,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Wifi, RefreshCw, Loader2, Check, X, Plus, Trash2, Pencil, Bot, Zap, Clock, Coffee, Timer, Star,
-  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff,
+  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History,
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { platformAdmin } from '../../../lib/platformAdmin'
@@ -22,6 +22,12 @@ const FLOW_DAYS = [
   { id: 'MON', label: 'Seg' }, { id: 'TUE', label: 'Ter' }, { id: 'WED', label: 'Qua' },
   { id: 'THU', label: 'Qui' }, { id: 'FRI', label: 'Sex' }, { id: 'SAT', label: 'Sáb' }, { id: 'SUN', label: 'Dom' },
 ]
+
+// Nome de cada tipo de envio automático (coluna whatsapp_messages.automation).
+const AUTO_LABEL: Record<string, string> = {
+  robo: 'Robô', fora_horario: 'Fora do horário', almoco: 'Almoço', parou_responder: 'Cliente parou de responder',
+  avaliacao: 'Avaliação', captacao: 'Captação', descadastro: 'Descadastro de campanhas', data_especial: 'Data especial',
+}
 
 const TAG_COLORS = ['#6366f1', '#16a34a', '#dc2626', '#d97706', '#0891b2', '#ec4899', '#64748b', '#ea580c']
 
@@ -119,6 +125,13 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const [timeoutMessage, setTimeoutMessage] = useState('Um momento, estou te conectando com um atendente! 👋')
   const [surveyMsg, setSurveyMsg] = useState('Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊')
   const [surveyOn, setSurveyOn] = useState(false)
+  const [lunchStart, setLunchStart] = useState('')
+  const [lunchEnd, setLunchEnd] = useState('')
+  const [history, setHistory] = useState<{ id: string; automation: string; remote_jid: string; content: string | null; created_at: string }[]>([])
+  const [historyNames, setHistoryNames] = useState<Record<string, string>>({})
+  const [historyFilter, setHistoryFilter] = useState('')
+  const [historyLimit, setHistoryLimit] = useState(8)
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const [flowUsers, setFlowUsers] = useState<{ id: string; full_name: string }[]>([])
   const [quickReplies, setQuickReplies] = useState<{ id: string; title: string; message: string; order_index: number }[]>([])
@@ -191,6 +204,8 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         if (f.timeout_message) setTimeoutMessage(f.timeout_message)
         if (f.outside_hours_message) setOutsideHoursMsg(f.outside_hours_message)
         if (f.lunch_message) setLunchMsg(f.lunch_message)
+        if (f.lunch_start) setLunchStart(String(f.lunch_start).slice(0, 5))
+        if (f.lunch_end) setLunchEnd(String(f.lunch_end).slice(0, 5))
         if (f.bot_timeout_minutes) setBotTimeoutMinutes(f.bot_timeout_minutes)
         if (f.bot_timeout_message) setBotTimeoutMessage(f.bot_timeout_message)
         if (f.bot_timeout_assignee_id) setBotTimeoutAssigneeId(f.bot_timeout_assignee_id)
@@ -256,6 +271,12 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   }
 
   const toggleBot = async (v: boolean) => { setFlow(f => ({ ...f, bot_enabled: v })); if (!(await saveFlow('bot', { bot_enabled: v }))) setFlow(f => ({ ...f, bot_enabled: !v })) }
+  // Liga/desliga de cada automação: chave em whatsapp_flows.automations (ausente = ligada).
+  const autoOn = (key: string) => (flow.automations as Record<string, boolean> | undefined)?.[key] !== false
+  const toggleAuto = async (key: string, v: boolean) => {
+    const prev = (flow.automations as Record<string, boolean> | undefined) || {}
+    await saveFlow('auto-' + key, { automations: { ...prev, [key]: v } })
+  }
   const toggleSurvey = async (v: boolean) => { setSurveyOn(v); if (!(await saveFlow('pesquisa-toggle', { satisfaction_survey_enabled: v }))) setSurveyOn(!v) }
 
   const handleToggleAgentName = async (value: boolean) => {
@@ -330,6 +351,30 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
       }).eq('id', att.id)
     } catch (e) { console.error(e) } finally { setSavingAtt(null) }
   }
+
+  useEffect(() => {
+    if (section !== 'automacoes') return
+    let alive = true
+    ;(async () => {
+      setHistoryLoading(true)
+      try {
+        const since = new Date(Date.now() - 7 * 86400000).toISOString()
+        const { data } = await supabase.from('whatsapp_messages')
+          .select('id, automation, remote_jid, content, created_at')
+          .eq('institution_id', institutionId).not('automation', 'is', null).gte('created_at', since)
+          .order('created_at', { ascending: false }).limit(1000)
+        if (!alive) return
+        const rows = (data || []) as any[]
+        setHistory(rows)
+        const jids = Array.from(new Set(rows.slice(0, 200).map(r => r.remote_jid))).slice(0, 100)
+        if (jids.length) {
+          const { data: convs } = await supabase.from('whatsapp_conversations').select('remote_jid, contact_name').eq('institution_id', institutionId).in('remote_jid', jids)
+          if (alive) setHistoryNames(Object.fromEntries(((convs || []) as any[]).map(c => [c.remote_jid, c.contact_name || ''])))
+        }
+      } catch (e) { console.error('[historico]', e) } finally { if (alive) setHistoryLoading(false) }
+    })()
+    return () => { alive = false }
+  }, [section, institutionId])
 
   const visual = hasVisualFlow(flow)
   const isAdmin = role === 'admin'
@@ -504,21 +549,58 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
     </div>
   )
 
+  const sent7 = (k: string) => history.filter(h => h.automation === k).length
+  const sentTxt = (k: string, on: boolean) => (on ? `Ligada · ${sent7(k)} envios em 7 dias` : 'Desligada')
+  const shownHistory = history.filter(h => !historyFilter || h.automation === historyFilter)
+  const fmtWhen = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+  const whoOf = (jid: string) => historyNames[jid] || '+' + jid.split('@')[0]
+
   const automacoes = (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 14 }}>
-      <AutoCard Icon={Bot} title="Robô de atendimento" on={!!flow.bot_enabled} saving={savingKey === 'bot'} toggle={toggleBot}
-        desc="Atende na hora, mostra o menu e passa a conversa para a pessoa certa." editLabel="Editar robô" onEdit={() => setShowFlowEditor(true)} />
-      <AutoCard Icon={Clock} title="Fora do horário" on status="Sempre ligada" desc="Responde quando a escola está fechada e deixa a conversa na fila."
-        previewText={preview(visual ? outsideHoursMsg : offHoursMsg)} editLabel="Editar mensagem" onEdit={() => go('horario')}
-        now={visual ? <NowNote>Com o robô ligado, vale a mensagem das transferências do robô.</NowNote> : undefined} />
-      <AutoCard Icon={Coffee} title="Horário de almoço" on status="Sempre ligada" desc="Avisa que a equipe está no almoço e volta logo." previewText={preview(lunchMsg)} editLabel="Editar mensagem" onEdit={() => go('horario')} />
-      <AutoCard Icon={Timer} title="Cliente parou de responder" on={!!timeoutNow} status={timeoutNow ? 'Sempre ligada' : 'Sem tempo definido'}
-        desc={timeoutNow ? `Depois de ${timeoutNow} min sem resposta ao robô, a conversa passa para a equipe.` : 'Passa a conversa para a equipe quando o cliente para de responder ao robô.'}
-        previewText={preview((flow.bot_timeout_message as string) || (flow.timeout_message as string))} editLabel="Editar tempo e mensagem" onEdit={() => go('horario')} />
-      <AutoCard Icon={Hourglass} title="Conversa parada com atendente" on status="Sempre ligada"
-        desc={`Se a conversa fica ${staleHours} h sem atividade com um atendente, ela volta a ficar visível para toda a equipe.`} editLabel="Editar prazo" onEdit={() => go('horario')} />
-      <AutoCard Icon={Star} title="Avaliação do atendimento" on={surveyOn} saving={savingKey === 'pesquisa-toggle'} toggle={toggleSurvey}
-        desc="Ao encerrar, pergunta ao cliente como foi o atendimento." previewText={preview(surveyMsg)} editLabel="Editar avaliação" onEdit={() => go('pesquisa')} />
+    <div style={col}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 14 }}>
+        <AutoCard Icon={Bot} title="Robô de atendimento" on={!!flow.bot_enabled} status={sentTxt('robo', !!flow.bot_enabled)} saving={savingKey === 'bot'} toggle={toggleBot}
+          desc="Atende na hora, mostra o menu e passa a conversa para a pessoa certa." editLabel="Editar robô" onEdit={() => setShowFlowEditor(true)} />
+        <AutoCard Icon={Clock} title="Fora do horário" on={autoOn('fora_horario')} status={sentTxt('fora_horario', autoOn('fora_horario'))} saving={savingKey === 'auto-fora_horario'} toggle={v => toggleAuto('fora_horario', v)}
+          desc="Responde quando a escola está fechada e deixa a conversa na fila."
+          previewText={preview(visual ? outsideHoursMsg : offHoursMsg)} editLabel="Editar mensagem" onEdit={() => go('horario')}
+          now={visual ? <NowNote>Com o robô ligado, vale a mensagem das transferências do robô.</NowNote> : undefined} />
+        <AutoCard Icon={Coffee} title="Horário de almoço" on={autoOn('almoco')} status={sentTxt('almoco', autoOn('almoco'))} saving={savingKey === 'auto-almoco'} toggle={v => toggleAuto('almoco', v)}
+          desc={lunchStart && lunchEnd ? `Almoço da escola das ${lunchStart} às ${lunchEnd}. Avisa o cliente quando a equipe está no almoço.` : 'Avisa o cliente quando a equipe está no almoço (horário de cada atendente em Equipe).'}
+          previewText={preview(lunchMsg)} editLabel="Editar mensagem e horário" onEdit={() => go('horario')} />
+        <AutoCard Icon={Timer} title="Cliente parou de responder" on={autoOn('parou_responder') && !!timeoutNow} status={timeoutNow ? sentTxt('parou_responder', autoOn('parou_responder')) : 'Sem tempo definido'}
+          saving={savingKey === 'auto-parou_responder'} toggle={v => toggleAuto('parou_responder', v)}
+          desc={timeoutNow ? `Depois de ${timeoutNow} min sem resposta ao robô, a conversa passa para a equipe.` : 'Passa a conversa para a equipe quando o cliente para de responder ao robô.'}
+          previewText={preview((flow.bot_timeout_message as string) || (flow.timeout_message as string))} editLabel="Editar tempo e mensagem" onEdit={() => go('horario')}
+          now={!autoOn('parou_responder') ? <WarnNote>Desligada: a conversa fica com o robô e não é passada para a equipe por falta de resposta.</WarnNote> : undefined} />
+        <AutoCard Icon={Star} title="Avaliação do atendimento" on={surveyOn} status={sentTxt('avaliacao', surveyOn)} saving={savingKey === 'pesquisa-toggle'} toggle={toggleSurvey}
+          desc="Ao encerrar, pergunta ao cliente como foi o atendimento." previewText={preview(surveyMsg)} editLabel="Editar avaliação" onEdit={() => go('pesquisa')} />
+      </div>
+
+      <div style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: `1px solid ${BRAND.line}`, flexWrap: 'wrap' }}>
+          <History size={16} color={BRAND.primary} />
+          <div style={{ fontSize: 14, fontWeight: 700, color: BRAND.ink, flex: 1 }}>Enviados automaticamente (últimos 7 dias)</div>
+          <select value={historyFilter} onChange={e => { setHistoryFilter(e.target.value); setHistoryLimit(8) }} style={{ ...input, width: 'auto', padding: '6px 10px', fontSize: 12.5 }} aria-label="Filtrar por automação">
+            <option value="">Todas</option>
+            {Object.entries(AUTO_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        </div>
+        {historyLoading ? <div style={{ padding: 24, textAlign: 'center' }}><Loader2 size={18} className="animate-spin" color={BRAND.primary} /></div>
+          : shownHistory.length === 0 ? <div style={{ padding: '22px 18px', fontSize: 13, color: BRAND.muted, lineHeight: 1.5 }}>Ainda não há envios automáticos marcados. Eles aparecem aqui a partir de agora, cada um com o nome da automação que enviou.</div>
+          : shownHistory.slice(0, historyLimit).map(h => (
+            <div key={h.id} style={{ display: 'flex', gap: 12, padding: '10px 18px', borderTop: '1px solid #F1F4F8', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: BRAND.primaryDark, background: BRAND.soft, borderRadius: 999, padding: '3px 8px', whiteSpace: 'nowrap' }}>{AUTO_LABEL[h.automation] || h.automation}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: BRAND.ink }}>{whoOf(h.remote_jid)}</div>
+                <div style={{ fontSize: 12.5, color: BRAND.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.content}</div>
+              </div>
+              <span style={{ fontSize: 11.5, color: BRAND.faint, whiteSpace: 'nowrap' }}>{fmtWhen(h.created_at)}</span>
+            </div>
+          ))}
+        {shownHistory.length > historyLimit && (
+          <button type="button" onClick={() => setHistoryLimit(n => n + 20)} style={{ width: '100%', padding: 12, border: 'none', borderTop: '1px solid #F1F4F8', background: '#fff', color: BRAND.primaryDark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Ver mais</button>
+        )}
+      </div>
     </div>
   )
 
@@ -535,6 +617,17 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         </div>
         <SaveButton text="Salvar horário" saving={savingKey === 'horario'} saved={savedKey === 'horario'}
           onClick={() => saveFlow('horario', { is_active: true, working_days: workingDays, working_start: workingStart, working_end: workingEnd })} />
+      </Card>
+
+      <Card>
+        <Title Icon={Coffee} title="Horário de almoço da escola" help="Vale para o robô (bloco “Horário de almoço”) e para a mensagem de almoço. O almoço de cada atendente continua em Equipe." />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div><label style={label}>Almoço começa</label><input type="time" style={input} value={lunchStart} onChange={e => setLunchStart(e.target.value)} /></div>
+          <div><label style={label}>Almoço termina</label><input type="time" style={input} value={lunchEnd} onChange={e => setLunchEnd(e.target.value)} /></div>
+        </div>
+        <p style={{ ...hint, margin: '0 0 14px' }}>Deixe em branco se a escola não para para o almoço. No horário do almoço, a conversa que chega fica na fila e o cliente recebe a mensagem de almoço.</p>
+        <SaveButton text="Salvar almoço" saving={savingKey === 'lunch'} saved={savedKey === 'lunch'}
+          onClick={() => saveFlow('lunch', { lunch_start: lunchStart || null, lunch_end: lunchEnd || null })} />
       </Card>
 
       <Card>
