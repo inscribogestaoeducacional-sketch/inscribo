@@ -380,6 +380,8 @@ function AppContent() {
             <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><UserManagement /></ProtectedRoute>} />
             {/* Fase 6.2: gestor também abre; cada item é filtrado por perfil em lib/settingsAccess.ts */}
             <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin','manager']}><SystemSettings /></ProtectedRoute>} />
+            {/* ETAPA 3B: tela de cada grupo do Início das Configurações */}
+            <Route path="/settings/:grupo" element={<ProtectedRoute allowedRoles={['admin','manager']}><SystemSettings /></ProtectedRoute>} />
             <Route path="/profile"      element={<UserProfile />} />
             <Route path="/setup"        element={<InitialSetup />} />
             <Route path="/login"        element={<Navigate to={schoolDefault} replace />} />

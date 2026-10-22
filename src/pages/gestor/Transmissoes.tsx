@@ -10,6 +10,7 @@
 // =============================================================================
 import React, { useEffect, useState } from 'react'
 import { Send, Plus, Wallet, Radio, AlertTriangle, RefreshCw } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { CAMPAIGN_STATUS, brl, type Campaign } from '../../lib/broadcasts'
@@ -25,7 +26,10 @@ export default function Transmissoes() {
   const { user } = useAuth()
   const institutionId = user?.institution_id || ''
 
-  const [tab, setTab] = useState<Tab>('campaigns')
+  // ETAPA 3B: Configurações abre direto Modelos ou "Não recebem" (?aba=)
+  const [searchParams] = useSearchParams()
+  const abaInicial = ({ modelos: 'templates', 'nao-recebem': 'suppressions' } as Record<string, Tab>)[searchParams.get('aba') ?? ''] ?? 'campaigns'
+  const [tab, setTab] = useState<Tab>(abaInicial)
   const [enabled, setEnabled] = useState<boolean | null>(null)
   const [limits, setLimits] = useState<{ hourly: number; daily: number } | null>(null)
   const [campaigns, setCampaigns] = useState<Campaign[]>([])

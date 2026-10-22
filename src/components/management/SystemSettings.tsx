@@ -1,10 +1,10 @@
 ﻿import React, { useState, useEffect, useRef } from 'react'
 import {
-  Save, Upload, Building, Mail, Phone, Globe, Palette,
-  MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
+  Save, Upload, Building, Mail, Phone, Globe,
+  Wifi, WifiOff, RefreshCw,
   Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
-  ChevronUp, ChevronDown, Pencil, Send, Plug,
+  ChevronUp, ChevronDown, Pencil,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -18,8 +18,10 @@ import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 import LeadUnitFieldEditor from './LeadUnitFieldEditor'
 import LeadReminderSettingsEditor from './LeadReminderSettingsEditor'
 import IntegrationsTab from './IntegrationsTab'
-import { useSearchParams } from 'react-router-dom'
-import { canSeeSettingsItem, canSeeSettingsTab, visibleWhatsAppSections, type SettingsTabId } from '../../lib/settingsAccess'
+import { useSearchParams, useParams, useNavigate, useLocation } from 'react-router-dom'
+import { canSeeSettingsItem, visibleWhatsAppSections, SETTINGS_ITEMS } from '../../lib/settingsAccess'
+import { resolveSettingsRoute, groupForTab, type SettingsGroupId } from '../../lib/settingsMap'
+import { SettingsHome, SettingsGroupPage, LegacyScreenHeader } from './settings/SettingsPanel'
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
 
@@ -1824,15 +1826,16 @@ function GradeLevelsEditor({ institutionId, onToast }: { institutionId: string; 
 }
 
 // ─── SystemSettings Principal ─────────────────────────────────────────────────
-const TABS = [
-  { id: 'geral',      label: 'Geral',      icon: Building },
-  { id: 'pagamentos', label: 'Pagamentos', icon: DollarSign },
-  { id: 'escola',     label: 'Escola',     icon: GraduationCap },
-  { id: 'identidade', label: 'Identidade', icon: Palette },
-  { id: 'whatsapp',   label: 'WhatsApp',   icon: MessageCircle },
-  // Fase 2 · marco 1: base de alunos (lançamento manual, Activesoft, fonte)
-  { id: 'integracoes', label: 'Integrações', icon: Plug },
-]
+// ETAPA 3B: as abas saíram; /settings abre o Início (9 grupos) e cada tela
+// antiga continua no mesmo endereço ?tab=…&sec=…, com o título abaixo.
+const TAB_TITLE: Record<string, string> = {
+  geral: 'Dados da escola e plano',
+  pagamentos: 'Pagamentos',
+  transmissoes: 'Créditos de Transmissões',
+  escola: 'Séries, unidade e lembrete de leads',
+  identidade: 'Logo e cores',
+  integracoes: 'Base de alunos e Activesoft',
+}
 
 export default function SystemSettings() {
   const { user } = useAuth()
@@ -1841,6 +1844,9 @@ export default function SystemSettings() {
   const [searchParams, setSearchParams] = useSearchParams()
   const urlTab = searchParams.get('tab')
   const urlSec = searchParams.get('sec')
+  const { grupo } = useParams<{ grupo?: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [showSchoolSetup, setShowSchoolSetup] = useState(false)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -1849,14 +1855,17 @@ export default function SystemSettings() {
 
   // Aba "Transmissões" só com o módulo liberado pela Áion (mesma regra do menu).
   const broadcastEnabled = useBroadcastEnabled(institutionId)
-  const visibleTabs = (broadcastEnabled
-    ? [...TABS.slice(0, 2), { id: 'transmissoes', label: 'Transmissões', icon: Send }, ...TABS.slice(2)]
-    : TABS
-  ).filter(t => canSeeSettingsTab(t.id as SettingsTabId, role))
-  // Aba pedida na URL vale só se o perfil vê; senão, a primeira visível.
-  const activeTab = visibleTabs.some(t => t.id === urlTab) ? (urlTab as string) : (visibleTabs[0]?.id ?? 'escola')
-  const setActiveTab = (tab: string) => setSearchParams({ tab }, { replace: true })
-  const setWaSection = (sec: string) => setSearchParams({ tab: 'whatsapp', sec }, { replace: true })
+  const ctx = { role, broadcast: broadcastEnabled }
+  // ETAPA 3B: Início, grupo ou tela antiga; links antigos que não abrem mais
+  // direto (ex.: ?tab=whatsapp sem seção, dos alertas) são redirecionados.
+  const route = resolveSettingsRoute({ grupo, tab: urlTab, sec: urlSec }, ctx)
+  const activeTab = route.kind === 'tab' ? route.tab : null
+  const setWaSection = (sec: string) => setSearchParams({ tab: 'whatsapp', sec }, { replace: true, state: location.state })
+  const redirectTo = route.kind === 'redirect' ? route.to : null
+
+  useEffect(() => {
+    if (redirectTo) navigate(redirectTo, { replace: true })
+  }, [redirectTo, navigate])
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
@@ -1869,49 +1878,26 @@ export default function SystemSettings() {
     setTimeout(() => setToast(null), 3000)
   }
 
+  if (route.kind === 'home') return <SettingsHome ctx={ctx} />
+  if (route.kind === 'group') return <SettingsGroupPage group={route.group} ctx={ctx} institutionId={institutionId} />
+  if (!activeTab) return null
+
+  // Volta para o grupo de onde a pessoa veio; num link direto, o grupo da tela.
+  const fromGroup = (location.state as { from?: SettingsGroupId } | null)?.from ?? groupForTab(activeTab, urlSec)
+  const screenTitle = activeTab === 'whatsapp'
+    ? (Object.values(SETTINGS_ITEMS) as { tab: string; section?: string; label: string }[]).find(i => i.tab === 'whatsapp' && i.section === urlSec)?.label ?? 'WhatsApp'
+    : TAB_TITLE[activeTab] ?? 'Configurações'
+
   return (
     <div style={{ padding: isMobile ? 0 : 24, display: 'flex', flexDirection: 'column', gap: isMobile ? 0 : 20, minHeight: '100%', background: '#f8f9fb' }}>
       <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
 
       {toast && <Toast msg={toast.msg} ok={toast.ok} />}
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '16px 16px 12px' : 0, background: isMobile ? '#fff' : 'transparent', borderBottom: isMobile ? '1px solid #E2E8F0' : 'none' }}>
-        <div style={{ width: 38, height: 38, borderRadius: 12, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Settings size={18} color="#00A896" />
-        </div>
-        <div>
-          <h1 style={{ fontSize: isMobile ? 17 : 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Configurações</h1>
-          <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Gerencie as configurações da instituição</p>
-        </div>
+      {/* Header: Configurações › grupo, no lugar das abas */}
+      <div style={{ padding: isMobile ? '16px 16px 12px' : 0, background: isMobile ? '#fff' : 'transparent', borderBottom: isMobile ? '1px solid #E2E8F0' : 'none' }}>
+        <LegacyScreenHeader group={fromGroup} title={screenTitle} />
       </div>
-
-      {/* Tabs */}
-      {isMobile ? (
-        <div style={{ overflowX: 'auto', display: 'flex', gap: 8, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #E2E8F0', scrollbarWidth: 'none' }}>
-          {visibleTabs.map(tab => {
-            const Icon = tab.icon
-            const active = activeTab === tab.id
-            return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', borderRadius: 20, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#00A896' : '#64748B', background: active ? '#E6F7F5' : '#F1F5F9', border: active ? '1.5px solid #00A896' : '1.5px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 36, flexShrink: 0 }}>
-                <Icon size={13} />{tab.label}
-              </button>
-            )
-          })}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', gap: 2, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 4, width: 'fit-content' }}>
-          {visibleTabs.map(tab => {
-            const Icon = tab.icon
-            const active = activeTab === tab.id
-            return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#00A896' : '#64748B', background: active ? '#E6F7F5' : 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.15s' }}>
-                <Icon size={14} />{tab.label}
-              </button>
-            )
-          })}
-        </div>
-      )}
 
       {/* Conteúdo */}
       <div style={{ padding: isMobile ? '16px 0 96px' : 0 }}>
