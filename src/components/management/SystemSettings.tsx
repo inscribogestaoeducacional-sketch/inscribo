@@ -1,10 +1,10 @@
 ﻿import React, { useState, useEffect, useRef } from 'react'
 import {
-  Save, Upload, Building, Mail, Phone, Globe, Palette,
+  Save, Upload, Building, Mail, Phone, Globe,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
-  ChevronUp, ChevronDown, Pencil, Send, Plug,
+  ChevronUp, ChevronDown, Pencil, Plug, Zap, Bot, MessageSquareText, Tag, Ban, Star, BarChart3,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -18,8 +18,13 @@ import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 import LeadUnitFieldEditor from './LeadUnitFieldEditor'
 import LeadReminderSettingsEditor from './LeadReminderSettingsEditor'
 import IntegrationsTab from './IntegrationsTab'
-import { useSearchParams } from 'react-router-dom'
-import { canSeeSettingsItem, canSeeSettingsTab, visibleWhatsAppSections, type SettingsTabId } from '../../lib/settingsAccess'
+import { useSearchParams, useParams, useNavigate, useLocation } from 'react-router-dom'
+import { canSeeSettingsItem, visibleWhatsAppSections } from '../../lib/settingsAccess'
+import { resolveSettingsRoute, groupForTab, visibleGroups, SETTINGS_GROUPS, type SettingsGroupId } from '../../lib/settingsMap'
+import { BRAND, GRAD } from '../../lib/brand'
+import WhatsAppAutomations, { type AutomationsFlow } from '../whatsapp/WhatsAppAutomations'
+import WhatsAppUsagePanel from '../whatsapp/WhatsAppUsagePanel'
+import { SettingsShell, GroupHub, SectionHeader } from './settings/SettingsPanel'
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
 
@@ -283,14 +288,41 @@ const FLOW_DAYS = [
   { id: 'THU', label: 'Qui' }, { id: 'FRI', label: 'Sex' }, { id: 'SAT', label: 'Sáb' }, { id: 'SUN', label: 'Dom' },
 ]
 
+// ETAPA 3B-2: mesmo desenho do AION Business — Início do WhatsApp com a faixa
+// da conexão e cartões por assunto; cada seção abre com "← WhatsApp".
 const WA_SECTIONS = [
-  { id: 'conexao',   icon: '📡', label: 'Conexão' },
-  { id: 'horario',   icon: '🕐', label: 'Horário' },
-  { id: 'respostas', icon: '⚡', label: 'Respostas' },
-  { id: 'equipe',    icon: '👥', label: 'Equipe' },
-  { id: 'bloqueios', icon: '🚫', label: 'Bloqueios' },
-  { id: 'etiquetas', icon: '🏷️', label: 'Etiquetas' },
-  { id: 'pesquisa',  icon: '⭐', label: 'Avaliação' },
+  { id: 'conexao',    label: 'Conexão',                  desc: 'Número, situação da conexão e nome do atendente nas mensagens.' },
+  { id: 'automacoes', label: 'Automações',               desc: 'Tudo o que o WhatsApp manda sozinho, num lugar só. Cada cartão abre onde se edita.' },
+  { id: 'horario',    label: 'Horário de atendimento',   desc: 'Dias e horários da escola, mensagens de fora do horário e almoço, e o tempo de espera do robô.' },
+  { id: 'respostas',  label: 'Respostas rápidas',        desc: 'Textos prontos que a equipe usa no chat. O que mudar aqui aparece no WhatsApp na hora.' },
+  { id: 'equipe',     label: 'Equipe e distribuição',    desc: 'Grupos que recebem as conversas, horário de cada atendente e o tempo de inatividade.' },
+  { id: 'etiquetas',  label: 'Etiquetas',                desc: 'Cores para organizar as conversas e os contatos.' },
+  { id: 'bloqueios',  label: 'Números bloqueados',       desc: 'O sistema ignora as mensagens desses números.' },
+  { id: 'pesquisa',   label: 'Avaliação do atendimento', desc: 'Ao encerrar, a família avalia o atendimento.' },
+  { id: 'uso',        label: 'Uso do mês',               desc: 'Mensagens recebidas e enviadas, dia a dia.' },
+]
+
+const WA_ICON: Record<string, typeof Zap> = {
+  conexao: Plug, automacoes: Zap, robo: Bot, horario: Clock, respostas: MessageSquareText,
+  equipe: Users, etiquetas: Tag, bloqueios: Ban, pesquisa: Star, uso: BarChart3,
+}
+
+const WA_HUB_GROUPS: { title: string; items: { id: string; label: string; desc: string; highlight?: boolean }[] }[] = [
+  { title: 'Automação', items: [
+    { id: 'automacoes', label: 'Automações', desc: 'O que é enviado sozinho e o que está valendo.', highlight: true },
+    { id: 'robo',       label: 'Robô de atendimento', desc: 'Boas-vindas, menu e o caminho de cada conversa.', highlight: true },
+    { id: 'pesquisa',   label: 'Avaliação do atendimento', desc: 'Nota da família ao encerrar.' },
+  ] },
+  { title: 'Atendimento', items: [
+    { id: 'horario',   label: 'Horário de atendimento', desc: 'Quando a escola atende e o que o robô diz fora dele.' },
+    { id: 'equipe',    label: 'Equipe e distribuição', desc: 'Quem recebe cada conversa.' },
+    { id: 'respostas', label: 'Respostas rápidas', desc: 'Textos prontos para a equipe.' },
+  ] },
+  { title: 'Organização', items: [
+    { id: 'etiquetas', label: 'Etiquetas', desc: 'Organize as conversas por cor.' },
+    { id: 'bloqueios', label: 'Números bloqueados', desc: 'Números que o sistema ignora.' },
+    { id: 'uso',       label: 'Uso do mês', desc: 'Mensagens recebidas e enviadas.' },
+  ] },
 ]
 
 // Fase 6.1 — fluxo visual ligado (as 6 escolas hoje): boas-vindas, menu e a
@@ -322,6 +354,19 @@ function EffectiveTimeoutNote({ flow, where }: { flow: Record<string, unknown>; 
   )
 }
 
+// O webhook manda quem chama fora do horário para o grupo do tempo de
+// inatividade (whatsapp_flows.timeout_group_id) — regra escondida que esta
+// nota mostra nas duas telas que mexem nela.
+function OffHoursDestinationNote({ groupId, groups, where }: { groupId?: string | null; groups: { id: string; name: string; emoji: string }[]; where: 'horario' | 'equipe' }) {
+  const g = groups.find(x => x.id === groupId)
+  return (
+    <div style={{ fontSize: 12, color: '#1E3A8A', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '8px 12px', marginBottom: 12, lineHeight: 1.5 }}>
+      <strong>Valendo agora:</strong> quem chama fora do horário {g ? <>vai para o grupo <strong>{g.emoji} {g.name}</strong></> : <>fica na fila geral, sem dono</>}.
+      {where === 'horario' ? <> Esse grupo é o mesmo do tempo de inatividade, em Equipe e distribuição.</> : <> Trocar o grupo abaixo muda também esse destino.</>}
+    </div>
+  )
+}
+
 const TAG_COLORS = ['#6366f1','#16a34a','#dc2626','#d97706','#0891b2','#ec4899','#64748b','#ea580c']
 
 function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
@@ -332,7 +377,6 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
 }) {
   // Fase 6.2: seções filtradas por perfil e ligadas à URL (?sec=)
   const allowedSections = visibleWhatsAppSections(role)
-  const sections = WA_SECTIONS.filter(s => allowedSections.includes(s.id))
   const [metaConfig, setMetaConfig]       = useState<any>(null)
   const [loading, setLoading]             = useState(true)
   const [usage, setUsage]                 = useState({ count: 0, limit: 1000 })
@@ -382,10 +426,22 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
   const [newBlockNum, setNewBlockNum] = useState('')
   const [newBlockReason, setNewBlockReason] = useState('')
   const [savingBlock, setSavingBlock] = useState(false)
-  const [waSection, setWaSectionState] = useState(() => (section && allowedSections.includes(section) ? section : allowedSections[0] ?? 'respostas'))
+  const [waSection, setWaSectionState] = useState(() => (section && allowedSections.includes(section) ? section : 'inicio'))
   useEffect(() => {
-    if (section && allowedSections.includes(section) && section !== waSection) setWaSectionState(section)
+    const target = section && allowedSections.includes(section) ? section : 'inicio'
+    if (target !== waSection) setWaSectionState(target)
   }, [section])
+  // Situação vista pela conferência automática (whatsapp-health-check, a cada
+  // 10 min). Só leitura.
+  const [health, setHealth] = useState<{ status: string | null; down_since: string | null } | null>(null)
+  useEffect(() => {
+    if (!institutionId) return
+    let alive = true
+    supabase.from('whatsapp_phone_health').select('status, down_since, checked_at').eq('institution_id', institutionId)
+      .order('checked_at', { ascending: false }).limit(1)
+      .then(({ data }) => { if (alive) setHealth((data?.[0] as { status: string | null; down_since: string | null } | undefined) ?? null) })
+    return () => { alive = false }
+  }, [institutionId])
   const setWaSection = (sec: string) => { setWaSectionState(sec); onSectionChange?.(sec) }
 
   // Tags
@@ -551,69 +607,35 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
     setBlacklist(prev => prev.filter(b => b.id !== id))
   }
 
-  const handleSaveFlow = async () => {
-    setSavingFlow(true)
-    try {
-      const saveData = {
-        institution_id:              institutionId,
-        bot_enabled:                 flow.bot_enabled,
-        is_active:                   true,
-        working_days:                flow.working_days,
-        working_start:               flow.working_start,
-        working_end:                 flow.working_end,
-        lunch_start:                 (flow as any).lunch_start,
-        lunch_end:                   (flow as any).lunch_end,
-        timezone:                    flow.timezone,
-        welcome_message:             flow.welcome_message,
-        off_hours_message:           flow.off_hours_message,
-        menu_enabled:                flow.menu_enabled,
-        menu_message:                flow.menu_message,
-        menu_options:                flow.menu_options,
-        satisfaction_survey_enabled: flow.satisfaction_survey_enabled,
-        satisfaction_message:        flow.satisfaction_message,
-        timeout_minutes:             timeoutMinutes,
-        timeout_group_id:            timeoutGroupId || null,
-        timeout_assignee_id:         timeoutAssigneeId || null,
-        timeout_assignee_name:       timeoutAssigneeId
-          ? (flowUsers.find(u => u.id === timeoutAssigneeId)?.full_name || null)
-          : null,
-        timeout_message:             timeoutMessage,
-        bot_timeout_minutes:         botTimeoutMinutes,
-        bot_timeout_message:         botTimeoutMessage || null,
-        bot_timeout_assignee_id:     botTimeoutAssigneeId || null,
-        bot_timeout_assignee_type:   botTimeoutAssigneeId ? botTimeoutAssigneeType : null,
-        stale_conversation_hours:    staleConversationHours,
-      }
-
-      console.log('[SAVE FLOW] dados:', JSON.stringify(saveData))
-
-      const { error } = await supabase
-        .from('whatsapp_flows')
-        .upsert(saveData, { onConflict: 'institution_id' })
-
-      if (error) {
-        console.error('[SAVE FLOW] erro:', JSON.stringify(error))
-        alert('Erro ao salvar: ' + error.message)
-        return
-      }
-
-      setFlowSaved(true)
-      setTimeout(() => setFlowSaved(false), 2500)
-    } catch (e) {
-      console.error('[SAVE FLOW] exception:', e)
-    } finally {
-      setSavingFlow(false)
-    }
-  }
-
-  // Gravação PARCIAL das seções que o gestor também usa (Equipe e Avaliação).
+  // Gravação PARCIAL: cada botão grava só as colunas da própria seção.
   // O banco (trg_whatsapp_flows_guard_columns) só deixa o admin mudar conexão,
-  // robô e horário; gravar a linha inteira daqui faria o salvamento do gestor
-  // ser recusado se algum campo de horário viesse diferente do banco.
-  const handleSaveFlowPart = async (part: 'equipe' | 'pesquisa') => {
+  // robô e horário; gravar a linha inteira faria o salvamento do gestor ser
+  // recusado se algum campo de horário viesse diferente do banco.
+  // ETAPA 3B-2: Horário, tempo do robô e conversa parada também passaram a
+  // gravar só as suas colunas (antes: ~25 colunas de uma vez, inclusive
+  // boas-vindas e menu, que não têm efeito com o robô ligado).
+  const handleSaveFlowPart = async (part: 'horario' | 'robo_timeout' | 'parada' | 'equipe' | 'pesquisa') => {
     setSavingFlow(true)
     try {
-      const fields = part === 'equipe'
+      const fields = part === 'horario'
+        ? {
+            is_active:     true,
+            working_days:  flow.working_days,
+            working_start: flow.working_start,
+            working_end:   flow.working_end,
+            // a mensagem genérica só vale sem o robô (fluxo visual)
+            ...(hasVisualFlow(flow) ? {} : { off_hours_message: flow.off_hours_message }),
+          }
+        : part === 'robo_timeout'
+        ? {
+            bot_timeout_minutes:       botTimeoutMinutes,
+            bot_timeout_message:       botTimeoutMessage || null,
+            bot_timeout_assignee_id:   botTimeoutAssigneeId || null,
+            bot_timeout_assignee_type: botTimeoutAssigneeId ? botTimeoutAssigneeType : null,
+          }
+        : part === 'parada'
+        ? { stale_conversation_hours: staleConversationHours }
+        : part === 'equipe'
         ? {
             timeout_minutes:       timeoutMinutes,
             timeout_group_id:      timeoutGroupId || null,
@@ -761,13 +783,13 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
   const usagePct   = Math.min(100, Math.round((monthlyConvCount / (usage.limit || 1000)) * 100))
   const usageColor = usagePct >= 90 ? '#EF4444' : usagePct >= 70 ? '#F59E0B' : '#10B981'
 
-  const dCard  = { background: '#fff', borderRadius: 12, border: '1px solid #E2E8F0', padding: 20 }
-  const dInput = { background: '#fff', border: '1px solid #E2E8F0', color: '#1A2B4A', borderRadius: 8, padding: '9px 12px', fontSize: 13, width: '100%', outline: 'none', boxSizing: 'border-box' as const }
+  const dCard  = { background: '#fff', borderRadius: 18, border: `1px solid ${BRAND.line}`, padding: 20, boxShadow: '0 1px 2px rgba(11,27,52,.04)' }
+  const dInput = { background: '#fff', border: `1px solid ${BRAND.line}`, color: BRAND.ink, borderRadius: 12, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit', width: '100%', outline: 'none', boxSizing: 'border-box' as const }
   const dLabel = { fontSize: 12, fontWeight: 600 as const, color: '#475569', display: 'block' as const, marginBottom: 6 }
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-      <Loader2 size={28} color="#00A896" className="animate-spin" />
+      <Loader2 size={28} color="#2563EB" className="animate-spin" />
     </div>
   )
 
@@ -777,7 +799,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
         <div style={{ width: 56, height: 56, background: '#E2E8F0', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
           <WifiOff size={26} color="#94A3B8" />
         </div>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: '0 0 8px' }}>WhatsApp não configurado</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0B1B34', margin: '0 0 8px' }}>WhatsApp não configurado</h2>
         <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 20px', lineHeight: 1.6 }}>
           Conecte agora mesmo usando sua conta do Meta Business — sem precisar de ajuda da nossa equipe.
         </p>
@@ -789,54 +811,124 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
     </div>
   )
 
+  const phoneLabel = phoneRecord?.phone_number || metaConfig.whatsapp_phone_number || ''
+  const current = WA_SECTIONS.find(x => x.id === waSection)
+  const canConexao = allowedSections.includes('conexao')
+  const groupsHub = WA_HUB_GROUPS
+    .map(g => ({ ...g, items: g.items.filter(it => (it.id === 'robo' ? canConexao : allowedSections.includes(it.id))) }))
+    .filter(g => g.items.length)
+  // Situação: o teste manual (Verificar) vale por cima da conferência automática
+  const live: { st: 'ok' | 'off' | 'checking' | 'unknown'; msg?: string } = testing ? { st: 'checking' }
+    : testResult ? (testResult.ok ? { st: 'ok' } : { st: 'off', msg: testResult.msg.replace(/^❌ /, '') })
+    : health?.down_since ? { st: 'off', msg: `Fora do ar desde ${new Date(health.down_since).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}. Use "Reconectar" na Conexão.` }
+    : health?.status === 'CONNECTED' ? { st: 'ok' } : { st: 'unknown' }
+
   return (
     <>
-      {showFlowEditor && <FlowEditor institutionId={institutionId} onClose={() => setShowFlowEditor(false)} />}
-      <div style={{ display: 'flex', background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden', minHeight: 520 }}>
+      {showFlowEditor && <FlowEditor institutionId={institutionId} onClose={() => { setShowFlowEditor(false); loadConfig() }} />}
+      <style>{`
+        @keyframes aionPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+        @keyframes aionSlide{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+        .aion-pop{animation:aionPop .32s cubic-bezier(.2,.8,.2,1) both}
+        .aion-slide{animation:aionSlide .28s cubic-bezier(.2,.8,.2,1) both}
+        .aion-tile{transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease}
+        .aion-tile:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(11,27,52,.08);border-color:#C3D5F2}
+      `}</style>
 
-        {/* Sidebar */}
-        <div style={{ width: 200, flexShrink: 0, background: '#F8FAFC', borderRight: '1px solid #E2E8F0', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {sections.map(sec => {
-            const active = waSection === sec.id
-            return (
-              <button key={sec.id} onClick={() => setWaSection(sec.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? '#00A896' : 'transparent', color: active ? '#fff' : '#64748B', fontSize: 13, fontWeight: active ? 600 : 400, cursor: 'pointer', textAlign: 'left', width: '100%', position: 'relative' }}>
-                <span style={{ fontSize: 14 }}>{sec.icon}</span>
-                <span style={{ flex: 1 }}>{sec.label}</span>
-                {sec.id === 'conexao' && (
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
+      {waSection === 'inicio' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+          {/* Número conectado */}
+          <div className="aion-pop" style={{ borderRadius: 20, padding: 22, color: '#fff', background: live.st === 'off' ? 'linear-gradient(130deg, #B91C1C 0%, #DC2626 100%)' : GRAD, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(255,255,255,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <MessageCircle size={26} />
+            </div>
+            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+              <div style={{ fontSize: 12, opacity: .85, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase' }}>WhatsApp oficial (Meta)</div>
+              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{phoneLabel || metaConfig.whatsapp_display_name || 'Número conectado'}</div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, background: 'rgba(255,255,255,.18)', padding: '4px 10px', borderRadius: 999 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: live.st === 'ok' ? '#A3E635' : live.st === 'off' ? '#FECACA' : '#FDE68A' }} />
+                  {live.st === 'ok' ? 'Conectado' : live.st === 'off' ? 'Desconectado' : live.st === 'checking' ? 'Verificando…' : 'Status indisponível'}
+                </span>
+                {canConexao && (
+                  <button onClick={handleTestConnection} disabled={testing} title="Verificar de novo" aria-label="Verificar conexão de novo" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#fff', background: 'rgba(255,255,255,.18)', border: 'none', padding: '4px 10px', borderRadius: 999, cursor: 'pointer' }}>
+                    <RefreshCw size={12} className={testing ? 'animate-spin' : undefined} /> Verificar
+                  </button>
                 )}
+                <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(255,255,255,.18)', padding: '4px 10px', borderRadius: 999 }}>
+                  {flow.bot_enabled ? 'Robô ligado' : 'Atendimento manual'}
+                </span>
+              </div>
+              {live.st === 'off' && live.msg && <div style={{ fontSize: 12.5, marginTop: 8, opacity: .95 }}>{live.msg}</div>}
+            </div>
+            {canConexao && (
+              <button onClick={() => setWaSection('conexao')}
+                style={{ fontSize: 13, fontWeight: 700, color: '#0B1B34', background: '#fff', border: 'none', borderRadius: 12, padding: '11px 16px', cursor: 'pointer' }}>
+                {live.st === 'off' ? 'Reconectar agora' : 'Gerenciar conexão'}
               </button>
-            )
-          })}
+            )}
+          </div>
+
+          {groupsHub.map((g, gi) => (
+            <div key={g.title} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#5B6B86', letterSpacing: '.06em', textTransform: 'uppercase' }}>{g.title}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+                {g.items.map((it, i) => (
+                  <button key={it.id} className="aion-pop aion-tile"
+                    onClick={() => it.id === 'robo' ? setShowFlowEditor(true) : setWaSection(it.id)}
+                    style={{ animationDelay: `${(gi * 4 + i) * 35}ms`, textAlign: 'left', background: '#fff', border: '1px solid #E3E8F0', borderRadius: 16, padding: 16, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'flex-start', fontFamily: 'inherit' }}>
+                    <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: it.highlight ? GRAD : BRAND.soft, color: it.highlight ? '#fff' : BRAND.primary }}>{(() => { const I = WA_ICON[it.id] || Settings; return <I size={19} /> })()}</span>
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: '#0B1B34' }}>{it.label}</span>
+                      <span style={{ fontSize: 12.5, color: '#5B6B86', lineHeight: 1.45 }}>{it.desc}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
+      ) : (
+      <div key={waSection} className="aion-slide" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <SectionHeader backLabel="WhatsApp" onBack={() => setWaSection('inicio')} title={current?.label ?? ''} desc={current?.desc} />
 
         {/* Content */}
-        <div style={{ flex: 1, padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {waSection === 'automacoes' && (
+            <WhatsAppAutomations
+              flow={flow as AutomationsFlow}
+              outsideHoursMsg={outsideHoursMsg}
+              lunchMsg={lunchMsg}
+              groups={groups}
+              onOpen={setWaSection}
+              onOpenFlowEditor={() => setShowFlowEditor(true)}
+            />
+          )}
+
+          {waSection === 'uso' && <WhatsAppUsagePanel institutionId={institutionId} />}
 
           {waSection === 'conexao' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>📡 Conexão WhatsApp</h3>
               <div style={dCard}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                   <div style={{ width: 44, height: 44, background: '#F0FDF4', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Wifi size={20} color="#10b981" />
+                    <Wifi size={20} color="#3B82F6" />
                   </div>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>WhatsApp conectado</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#0B1B34' }}>WhatsApp oficial (Meta)</div>
                     <div style={{ fontSize: 12, color: '#64748B' }}>{metaConfig.whatsapp_display_name}</div>
                   </div>
-                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 999, fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />Online
+                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', background: live.st === 'ok' ? '#F0FDF4' : live.st === 'off' ? '#FEF2F2' : '#FFFBEB', border: `1px solid ${live.st === 'ok' ? '#BBF7D0' : live.st === 'off' ? '#FECACA' : '#FDE68A'}`, borderRadius: 999, fontSize: 11, fontWeight: 700, color: live.st === 'ok' ? '#15803D' : live.st === 'off' ? '#B91C1C' : '#B45309' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />{live.st === 'ok' ? 'Conectado' : live.st === 'off' ? 'Desconectado' : live.st === 'checking' ? 'Verificando…' : 'Status indisponível'}
                   </span>
                 </div>
                 <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12, color: '#64748B', marginBottom: 12 }}>
-                  <div>Número: <strong style={{ color: '#1A2B4A' }}>{phoneRecord?.phone_number || metaConfig.whatsapp_phone_number || '—'}</strong></div>
-                  {metaConfig.whatsapp_phone_id && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Phone ID: {metaConfig.whatsapp_phone_id}</div>}
+                  <div>Número: <strong style={{ color: '#0B1B34' }}>{phoneRecord?.phone_number || metaConfig.whatsapp_phone_number || '—'}</strong></div>
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   {flow.bot_enabled
-                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 999, fontSize: 11, fontWeight: 600, color: '#16a34a' }}>🤖 Robô ativo</span>
+                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 999, fontSize: 11, fontWeight: 600, color: '#16a34a' }}>Robô ativo</span>
                     : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 999, fontSize: 11, fontWeight: 600, color: '#64748B' }}>👤 Atendimento manual</span>
                   }
                 </div>
@@ -856,8 +948,8 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                 )}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => setShowFlowEditor(true)}
-                    style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#E6F7F5', border: '1px solid #00A896', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#00A896', cursor: 'pointer' }}>
-                    <GitBranch size={14} />Editor de Fluxo
+                    style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#EFF6FF', border: '1px solid #2563EB', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#2563EB', cursor: 'pointer' }}>
+                    <GitBranch size={14} />Editar robô
                   </button>
                   <button onClick={handleTestConnection} disabled={testing}
                     style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#64748B', cursor: 'pointer', opacity: testing ? 0.6 : 1 }}>
@@ -889,13 +981,13 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
               <div style={dCard}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Mostrar nome do atendente nas mensagens</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#0B1B34' }}>Mostrar nome do atendente nas mensagens</div>
                     <div style={{ fontSize: 12, color: '#64748B', marginTop: 2, lineHeight: 1.5 }}>
                       Quando ativado, as mensagens enviadas pelos atendentes mostram o nome de quem está respondendo, numa linha antes do texto (ex: <strong>*Maria*:</strong><br />Olá!). Não afeta templates nem mensagens automáticas do bot.
                     </div>
                   </div>
                   <button onClick={() => handleToggleAgentName(!showAgentName)} disabled={savingAgentName}
-                    style={{ width: 44, height: 24, borderRadius: 999, background: showAgentName ? '#00A896' : '#CBD5E1', border: 'none', cursor: savingAgentName ? 'default' : 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0, opacity: savingAgentName ? 0.6 : 1 }}>
+                    style={{ width: 44, height: 24, borderRadius: 999, background: showAgentName ? '#2563EB' : '#CBD5E1', border: 'none', cursor: savingAgentName ? 'default' : 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0, opacity: savingAgentName ? 0.6 : 1 }}>
                     <span style={{ position: 'absolute', top: 3, left: showAgentName ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
                   </button>
                 </div>
@@ -905,14 +997,13 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
 
           {waSection === 'horario' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>🕐 Horário de Atendimento</h3>
               <div style={dCard}>
                 <div style={{ marginBottom: 16 }}>
                   <label style={dLabel}>Dias da semana</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                     {FLOW_DAYS.map(d => (
                       <button key={d.id} onClick={() => toggleDay(d.id)}
-                        style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `2px solid ${flow.working_days.includes(d.id) ? '#00A896' : '#E2E8F0'}`, background: flow.working_days.includes(d.id) ? '#E6F7F5' : '#fff', color: flow.working_days.includes(d.id) ? '#00A896' : '#64748B' }}>
+                        style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `2px solid ${flow.working_days.includes(d.id) ? '#2563EB' : '#E2E8F0'}`, background: flow.working_days.includes(d.id) ? '#EFF6FF' : '#fff', color: flow.working_days.includes(d.id) ? '#2563EB' : '#64748B' }}>
                         {d.label}
                       </button>
                     ))}
@@ -928,28 +1019,28 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                     <input type="time" style={dInput} value={flow.working_end} onChange={e => setFlow(f => ({ ...f, working_end: e.target.value }))} />
                   </div>
                 </div>
+                {!hasVisualFlow(flow) && (
                 <div style={{ marginBottom: 16 }}>
-                  <label style={dLabel}>Mensagem fora do horário</label>
-                  {hasVisualFlow(flow) && (
-                    <p style={{ fontSize: 11, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 10px', margin: '0 0 6px' }}>
-                      Com o fluxo visual ligado, esta mensagem só é usada se a de "transferências do bot" (abaixo) estiver vazia.
-                    </p>
-                  )}
+                  <label style={dLabel}>Mensagem fora do horário (robô desligado)</label>
+                  <p style={{ fontSize: 11, color: '#64748B', margin: '0 0 6px' }}>Com o robô desligado, é esta que a família recebe quando a escola está fechada.</p>
                   <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={flow.off_hours_message} onChange={e => setFlow(f => ({ ...f, off_hours_message: e.target.value }))} />
                 </div>
-                <button onClick={handleSaveFlow} disabled={savingFlow}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                )}
+                <button onClick={() => handleSaveFlowPart('horario')} disabled={savingFlow}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 12, border: 'none', background: flowSaved ? '#16a34a' : GRAD, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
                   {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar horário</>}
                 </button>
               </div>
 
               {/* Mensagens automáticas de horário */}
               <div style={dCard}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>💬 Mensagens Automáticas</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Mensagens automáticas</div>
+                <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>O robô manda estas mensagens sozinho. Ao salvar, vale na próxima conversa.</p>
+                <OffHoursDestinationNote groupId={(flow as Record<string, unknown>).timeout_group_id as string | null} groups={groups} where="horario" />
                 <div style={{ marginBottom: 16 }}>
-                  <label style={dLabel}>Mensagem fora do horário (transferências do bot)</label>
+                  <label style={dLabel}>Mensagem fora do horário</label>
                   {hasVisualFlow(flow) && (
-                    <p style={{ fontSize: 11, color: '#15803D', margin: '0 0 4px' }}>É esta que o fluxo visual usa ao transferir fora do horário.</p>
+                    <p style={{ fontSize: 11, color: '#15803D', margin: '0 0 4px' }}>É esta que o robô manda quando a escola está fechada.</p>
                   )}
                   <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 6px' }}>Use <strong>{'{horario}'}</strong> para inserir os horários configurados automaticamente</p>
                   <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={outsideHoursMsg} onChange={e => setOutsideHoursMsg(e.target.value)} />
@@ -959,16 +1050,16 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                   <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={lunchMsg} onChange={e => setLunchMsg(e.target.value)} />
                 </div>
                 <button onClick={handleSaveMsgs} disabled={savingMsgs}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: msgsSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingMsgs ? 0.7 : 1 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 12, border: 'none', background: msgsSaved ? '#16a34a' : GRAD, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingMsgs ? 0.7 : 1 }}>
                   {savingMsgs ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : msgsSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar mensagens</>}
                 </button>
               </div>
 
               {/* ─── Bot Timeout ──────────────────────────────────────────── */}
               <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '18px 20px' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>⏱ Tempo de Inatividade do Bot</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 14 }}>Tempo de espera do robô</div>
                 <p style={{ margin: '0 0 16px', fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>
-                  Quando o bot está ativo e o cliente não responde por X minutos, o sistema envia uma mensagem e transfere para atendimento humano automaticamente.
+                  Quando o robô está ligado e a família não responde por alguns minutos, o sistema envia uma mensagem e passa a conversa para a equipe.
                 </p>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
@@ -980,7 +1071,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                     max={1440}
                     value={botTimeoutMinutes}
                     onChange={e => setBotTimeoutMinutes(Math.max(1, Math.min(1440, parseInt(e.target.value) || 1)))}
-                    style={{ width: 72, padding: '7px 10px', fontSize: 13, border: '1px solid #E2E8F0', borderRadius: 8, outline: 'none', textAlign: 'center', color: '#1A2B4A' }}
+                    style={{ width: 72, padding: '7px 10px', fontSize: 13, border: '1px solid #E2E8F0', borderRadius: 8, outline: 'none', textAlign: 'center', color: '#0B1B34' }}
                   />
                   <span style={{ fontSize: 13, color: '#64748B' }}>minutos sem resposta</span>
                 </div>
@@ -1010,11 +1101,11 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                           fontWeight: 600,
                           border: 'none',
                           borderRight: i === 0 ? '1px solid #E2E8F0' : 'none',
-                          background: botTimeoutAssigneeType === type ? '#00A896' : '#F8FAFC',
+                          background: botTimeoutAssigneeType === type ? '#2563EB' : '#F8FAFC',
                           color: botTimeoutAssigneeType === type ? '#fff' : '#64748B',
                           cursor: 'pointer',
                         }}>
-                        {type === 'user' ? '👤 Atendente' : '👥 Equipe'}
+                        {type === 'user' ? 'Atendente' : 'Equipe'}
                       </button>
                     ))}
                   </div>
@@ -1042,15 +1133,15 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                   )}
                 </div>
 
-                <button onClick={handleSaveFlow} disabled={savingFlow}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
-                  {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar timeout do bot</>}
+                <button onClick={() => handleSaveFlowPart('robo_timeout')} disabled={savingFlow}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 12, border: 'none', background: flowSaved ? '#16a34a' : GRAD, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                  {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar tempo de espera</>}
                 </button>
               </div>
 
               {/* ─── Conversas Paradas ────────────────────────────────────── */}
               <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '18px 20px' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>⏰ Conversas Paradas</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 14 }}>Conversas paradas</div>
                 <p style={{ margin: '0 0 16px', fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>
                   Se um atendente ficar ausente (férias, folga etc.), as conversas atribuídas a ele voltam a
                   ficar visíveis e resgatáveis por qualquer atendente após ficarem paradas por este período.
@@ -1069,8 +1160,8 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                     <option value={48}>48 horas</option>
                   </select>
                 </div>
-                <button onClick={handleSaveFlow} disabled={savingFlow}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                <button onClick={() => handleSaveFlowPart('parada')} disabled={savingFlow}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 12, border: 'none', background: flowSaved ? '#16a34a' : GRAD, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
                   {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar</>}
                 </button>
               </div>
@@ -1079,7 +1170,6 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
 
           {waSection === 'respostas' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>⚡ Respostas Rápidas</h3>
               {quickReplies.length === 0 && (
                 <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Nenhuma resposta rápida cadastrada.</p>
               )}
@@ -1093,14 +1183,14 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                           <textarea rows={2} style={{ ...dInput, resize: 'vertical' as const }} value={editQRData.message} onChange={e => setEditQRData(d => ({ ...d, message: e.target.value }))} placeholder="Mensagem" />
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <button onClick={handleUpdateQR} style={{ padding: '7px 10px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}><Check size={13} /></button>
+                          <button onClick={handleUpdateQR} style={{ padding: '7px 10px', background: '#2563EB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}><Check size={13} /></button>
                           <button onClick={() => setEditQRId(null)} style={{ padding: '7px 10px', background: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 6, cursor: 'pointer' }}><X size={13} /></button>
                         </div>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                         <div style={{ flex: 1 }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896' }}>/{qr.title}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#2563EB' }}>/{qr.title}</span>
                           <p style={{ fontSize: 12, color: '#64748B', margin: '4px 0 0', lineHeight: 1.4 }}>{qr.message}</p>
                         </div>
                         <div style={{ display: 'flex', gap: 4 }}>
@@ -1120,7 +1210,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                   <input style={dInput} value={newQR.title} onChange={e => setNewQR(q => ({ ...q, title: e.target.value }))} placeholder="Título (ex: preco, matricula)" />
                   <textarea rows={2} style={{ ...dInput, resize: 'vertical' as const }} value={newQR.message} onChange={e => setNewQR(q => ({ ...q, message: e.target.value }))} placeholder="Mensagem que será enviada..." />
                   <button onClick={handleAddQR} disabled={!newQR.title || !newQR.message || savingQR}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', borderRadius: 8, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!newQR.title || !newQR.message || savingQR) ? 0.5 : 1 }}>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', borderRadius: 8, border: 'none', background: '#2563EB', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!newQR.title || !newQR.message || savingQR) ? 0.5 : 1 }}>
                     <Plus size={14} />{savingQR ? 'Salvando...' : 'Adicionar resposta rápida'}
                   </button>
                 </div>
@@ -1130,7 +1220,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
 
           {waSection === 'equipe' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>👥 Horário por Atendente</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Horário de cada atendente</h3>
               {!canSeeSettingsItem('whatsapp.equipe.horarios', role) ? (
                 <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Só o administrador altera o horário dos atendentes.</p>
               ) : attendants.length === 0 ? (
@@ -1139,11 +1229,11 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {attendants.map(att => (
                     <div key={att.id} style={dCard}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 12 }}>{att.full_name}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0B1B34', marginBottom: 12 }}>{att.full_name}</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
                         {FLOW_DAYS.map(d => (
                           <button key={d.id} onClick={() => toggleAttendantDay(att.id, d.id)}
-                            style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `2px solid ${att.working_days.includes(d.id) ? '#00A896' : '#E2E8F0'}`, background: att.working_days.includes(d.id) ? '#E6F7F5' : '#fff', color: att.working_days.includes(d.id) ? '#00A896' : '#64748B' }}>
+                            style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `2px solid ${att.working_days.includes(d.id) ? '#2563EB' : '#E2E8F0'}`, background: att.working_days.includes(d.id) ? '#EFF6FF' : '#fff', color: att.working_days.includes(d.id) ? '#2563EB' : '#64748B' }}>
                             {d.label}
                           </button>
                         ))}
@@ -1158,7 +1248,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                           <input type="time" style={dInput} value={att.working_hours_end} onChange={e => updateAttendant(att.id, 'working_hours_end', e.target.value)} />
                         </div>
                         <button onClick={() => handleSaveAttendantHours(att)} disabled={savingAtt === att.id}
-                          style={{ padding: '9px 14px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingAtt === att.id ? 0.6 : 1 }}>
+                          style={{ padding: '9px 14px', background: '#2563EB', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingAtt === att.id ? 0.6 : 1 }}>
                           {savingAtt === att.id ? '...' : <Save size={13} />}
                         </button>
                       </div>
@@ -1166,7 +1256,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                       <div style={{ marginTop: 12, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: att.has_lunch_break ? 10 : 0 }}>
                           <button onClick={() => toggleAttendantLunch(att.id)}
-                            style={{ width: 36, height: 20, borderRadius: 999, background: att.has_lunch_break ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
+                            style={{ width: 36, height: 20, borderRadius: 999, background: att.has_lunch_break ? '#2563EB' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
                             <span style={{ position: 'absolute', top: 2, left: att.has_lunch_break ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
                           </button>
                           <span style={{ fontSize: 12, color: '#64748B' }}>Tem horário de almoço?</span>
@@ -1192,19 +1282,19 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
               {/* Grupos de Atendimento */}
               <div style={{ marginTop: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Grupos de Atendimento</h4>
+                  <h4 style={{ fontSize: 13, fontWeight: 700, color: '#0B1B34', margin: 0 }}>Grupos de atendimento</h4>
                   <button
                     onClick={() => { setGroupForm({ name: '', emoji: '👥', member_ids: [] }); setEditingGroup(null); setShowGroupForm(true) }}
-                    style={{ fontSize: 12, fontWeight: 600, color: '#00A896', background: '#E6F7F5', border: '1px solid #B2E8E2', borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}
+                    style={{ fontSize: 12, fontWeight: 600, color: '#2563EB', background: '#EFF6FF', border: '1px solid #B2E8E2', borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}
                   >+ Novo grupo</button>
                 </div>
                 {groups.length === 0 && (
                   <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Nenhum grupo criado ainda</p>
                 )}
                 {groups.map(group => (
-                  <div key={group.id} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #D1FAE5', background: '#F0FDFB', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div key={group.id} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #E3E8F0', background: '#F6F8FB', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{group.emoji} {group.name}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0B1B34' }}>{group.emoji} {group.name}</div>
                       <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
                         {group.member_ids.length} membro(s): {group.member_ids.map(id => flowUsers.find(u => u.id === id)?.full_name || id).join(', ')}
                       </div>
@@ -1212,7 +1302,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button
                         onClick={() => { setGroupForm({ name: group.name, emoji: group.emoji, member_ids: group.member_ids }); setEditingGroup(group); setShowGroupForm(true) }}
-                        style={{ fontSize: 11, color: '#00A896', background: 'none', border: '1px solid #B2E8E2', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
+                        style={{ fontSize: 11, color: '#2563EB', background: 'none', border: '1px solid #B2E8E2', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
                       >Editar</button>
                       <button
                         onClick={async () => { if (!confirm('Excluir este grupo?')) return; await supabase.from('whatsapp_groups').delete().eq('id', group.id); setGroups(prev => prev.filter(g => g.id !== group.id)) }}
@@ -1227,18 +1317,18 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
               {showGroupForm && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <div style={{ background: 'white', borderRadius: 16, padding: 24, width: 400, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>{editingGroup ? 'Editar grupo' : 'Novo grupo'}</h3>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#0B1B34', marginBottom: 16 }}>{editingGroup ? 'Editar grupo' : 'Novo grupo'}</h3>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                       <input value={groupForm.emoji} onChange={e => setGroupForm(f => ({ ...f, emoji: e.target.value }))}
-                        style={{ width: 50, padding: 8, fontSize: 20, border: '1px solid #D1FAE5', borderRadius: 8, textAlign: 'center', outline: 'none' }} maxLength={2} />
+                        style={{ width: 50, padding: 8, fontSize: 20, border: '1px solid #E3E8F0', borderRadius: 8, textAlign: 'center', outline: 'none' }} maxLength={2} />
                       <input value={groupForm.name} onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))}
                         placeholder="Nome do grupo (ex: Secretaria)"
-                        style={{ flex: 1, padding: '8px 12px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, outline: 'none', color: '#1A2B4A' }} />
+                        style={{ flex: 1, padding: '8px 12px', fontSize: 13, border: '1px solid #E3E8F0', borderRadius: 8, outline: 'none', color: '#0B1B34' }} />
                     </div>
                     <div style={{ marginBottom: 16 }}>
                       <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 8 }}>Membros do grupo</label>
                       {flowUsers.map(user => (
-                        <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 13, color: '#1A2B4A' }}>
+                        <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 13, color: '#0B1B34' }}>
                           <input type="checkbox" checked={groupForm.member_ids.includes(user.id)}
                             onChange={e => setGroupForm(f => ({ ...f, member_ids: e.target.checked ? [...f.member_ids, user.id] : f.member_ids.filter(id => id !== user.id) }))} />
                           {user.full_name}
@@ -1247,7 +1337,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button onClick={() => setShowGroupForm(false)}
-                        style={{ flex: 1, padding: 10, fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, background: 'white', cursor: 'pointer', color: '#64748B' }}>
+                        style={{ flex: 1, padding: 10, fontSize: 13, border: '1px solid #E3E8F0', borderRadius: 8, background: 'white', cursor: 'pointer', color: '#64748B' }}>
                         Cancelar
                       </button>
                       <button
@@ -1266,7 +1356,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                           }
                           setShowGroupForm(false)
                         }}
-                        style={{ flex: 1, padding: 10, fontSize: 13, fontWeight: 700, background: '#00A896', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                        style={{ flex: 1, padding: 10, fontSize: 13, fontWeight: 700, background: '#2563EB', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                         {editingGroup ? 'Salvar' : 'Criar'}
                       </button>
                     </div>
@@ -1279,14 +1369,15 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                   que está valendo agora (valores salvos), sem mudar a regra. */}
               <EffectiveTimeoutNote flow={flow as Record<string, unknown>} where="equipe" />
               {/* Timeout de Inatividade */}
-              <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #E2F5F3' }}>
-                <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>⏱ Timeout de Inatividade</h4>
+              <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #E3E8F0' }}>
+                <h4 style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 12 }}>Tempo de inatividade</h4>
+                <OffHoursDestinationNote groupId={(flow as Record<string, unknown>).timeout_group_id as string | null} groups={groups} where="equipe" />
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B' }}>Tempo sem resposta:</label>
                   <input type="number" min={5} max={120} value={timeoutMinutes}
                     onChange={e => setTimeoutMinutes(Number(e.target.value))}
-                    style={{ width: 70, padding: '7px 10px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, outline: 'none', textAlign: 'center' }} />
+                    style={{ width: 70, padding: '7px 10px', fontSize: 13, border: '1px solid #E3E8F0', borderRadius: 8, outline: 'none', textAlign: 'center' }} />
                   <span style={{ fontSize: 13, color: '#64748B' }}>minutos</span>
                 </div>
 
@@ -1300,7 +1391,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                       else if (val.startsWith('group:')) { setTimeoutGroupId(val.replace('group:', '')); setTimeoutAssigneeId('') }
                       else { setTimeoutAssigneeId(val.replace('user:', '')); setTimeoutGroupId('') }
                     }}
-                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', outline: 'none' }}>
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E3E8F0', borderRadius: 8, background: '#F6F8FB', color: '#0B1B34', outline: 'none' }}>
                     <option value="">Ninguém (só desativar bot)</option>
                     <optgroup label="Grupos">
                       {groups.map(g => <option key={g.id} value={`group:${g.id}`}>{g.emoji} {g.name}</option>)}
@@ -1314,12 +1405,12 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                 <div style={{ marginBottom: 4 }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 4 }}>Mensagem ao transferir</label>
                   <textarea rows={2} value={timeoutMessage} onChange={e => setTimeoutMessage(e.target.value)}
-                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', resize: 'none' as const, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #E3E8F0', borderRadius: 8, background: '#F6F8FB', color: '#0B1B34', resize: 'none' as const, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
                 </div>
                 <div style={{ marginTop: 12 }}>
                   <button onClick={() => handleSaveFlowPart('equipe')} disabled={savingFlow}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
-                    {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar timeout</>}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 12, border: 'none', background: flowSaved ? '#16a34a' : GRAD, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                    {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar tempo de inatividade</>}
                   </button>
                 </div>
               </div>
@@ -1329,7 +1420,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
           {waSection === 'bloqueios' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>🚫 Números Bloqueados</h3>
+                <p style={{ margin: 0, fontSize: 13, color: BRAND.muted }}>Mensagens desses números não entram no WhatsApp da escola.</p>
                 <button onClick={() => setShowAddBlock(true)}
                   style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#DC2626', cursor: 'pointer' }}>
                   <Plus size={13} /> Bloquear número
@@ -1338,7 +1429,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
               {/* Fase 6.1: lista diferente da de Transmissões → "Não recebem" */}
               <p style={{ fontSize: 12, color: '#475569', margin: '8px 0 0', lineHeight: 1.5 }}>
                 Mensagens de número bloqueado aqui são ignoradas: não entram no Hub e o robô não responde. Quem pediu para <strong>não receber disparos</strong> fica em outra lista,
-                em <a href="/transmissoes" style={{ color: '#00A896', fontWeight: 600 }}>Transmissões → Não recebem</a>.
+                em <a href="/transmissoes" style={{ color: '#2563EB', fontWeight: 600 }}>Transmissões → Não recebem</a>.
               </p>
               {showAddBlock && (
                 <div style={{ ...dCard, background: '#FEF2F2', border: '1px solid #FECACA' }}>
@@ -1365,7 +1456,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                   {blacklist.map(b => (
                     <div key={b.id} style={{ ...dCard, background: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
                       <div>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1A2B4A', fontFamily: 'monospace' }}>{b.phone_number}</p>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#0B1B34', fontFamily: 'monospace' }}>{b.phone_number}</p>
                         {b.reason && <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748B' }}>{b.reason}</p>}
                       </div>
                       <button onClick={() => handleRemoveBlock(b.id)}
@@ -1381,7 +1472,6 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
 
           {waSection === 'etiquetas' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>🏷️ Etiquetas</h3>
               <div style={dCard}>
                 <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748B' }}>
                   Crie etiquetas para organizar suas conversas e leads no fluxo do robô.
@@ -1431,7 +1521,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                         setNewTagName(''); setNewTagColor('#6366f1')
                       }
                     }}
-                    style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingTag || !newTagName.trim() ? 0.6 : 1 }}>
+                    style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: '#2563EB', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingTag || !newTagName.trim() ? 0.6 : 1 }}>
                     {savingTag ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : <><Plus size={13} />Adicionar etiqueta</>}
                   </button>
                 </div>
@@ -1441,15 +1531,14 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
 
           {waSection === 'pesquisa' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>⭐ Avaliação do atendimento</h3>
               <div style={dCard}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A2B4A' }}>Pesquisa automática</p>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#0B1B34' }}>Avaliação automática</p>
                     <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748B' }}>Ao encerrar o atendimento, envia uma avaliação com 3 opções (Ótimo, Regular, Ruim). Não confundir com o módulo Pesquisas, que envia questionários por link.</p>
                   </div>
                   <button onClick={() => setFlow(f => ({ ...f, satisfaction_survey_enabled: !f.satisfaction_survey_enabled }))}
-                    style={{ width: 44, height: 24, borderRadius: 999, background: flow.satisfaction_survey_enabled ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
+                    style={{ width: 44, height: 24, borderRadius: 999, background: flow.satisfaction_survey_enabled ? '#2563EB' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
                     <span style={{ position: 'absolute', top: 3, left: flow.satisfaction_survey_enabled ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
                   </button>
                 </div>
@@ -1465,14 +1554,14 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
                         value={flow.satisfaction_message}
                         onChange={e => setFlow(f => ({ ...f, satisfaction_message: e.target.value }))}
                         placeholder="Como você avalia nosso atendimento hoje?..."
-                        style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#1A2B4A', resize: 'none' as const, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }}
+                        style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid #E3E8F0', background: '#F6F8FB', color: '#0B1B34', resize: 'none' as const, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }}
                       />
                     </div>
                   </div>
                 )}
                 <div style={{ marginTop: 16 }}>
                   <button onClick={() => handleSaveFlowPart('pesquisa')} disabled={savingFlow}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 12, border: 'none', background: flowSaved ? '#16a34a' : GRAD, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
                     {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar configuração</>}
                   </button>
                 </div>
@@ -1482,6 +1571,7 @@ function WhatsAppTab({ institutionId, role, section, onSectionChange }: {
 
         </div>
       </div>
+      )}
     </>
   )
 }
@@ -1824,39 +1914,45 @@ function GradeLevelsEditor({ institutionId, onToast }: { institutionId: string; 
 }
 
 // ─── SystemSettings Principal ─────────────────────────────────────────────────
-const TABS = [
-  { id: 'geral',      label: 'Geral',      icon: Building },
-  { id: 'pagamentos', label: 'Pagamentos', icon: DollarSign },
-  { id: 'escola',     label: 'Escola',     icon: GraduationCap },
-  { id: 'identidade', label: 'Identidade', icon: Palette },
-  { id: 'whatsapp',   label: 'WhatsApp',   icon: MessageCircle },
-  // Fase 2 · marco 1: base de alunos (lançamento manual, Activesoft, fonte)
-  { id: 'integracoes', label: 'Integrações', icon: Plug },
-]
+// ETAPA 3B-2: casca do AION Business — cabeçalho, busca e os assuntos em abas
+// (lista no celular). /settings abre o primeiro assunto; /settings/<grupo>
+// abre o assunto; os links antigos ?tab=…&sec=… abrem a mesma tela de antes,
+// dentro do assunto dela, com "← assunto" (WhatsApp: a seção já no desenho novo).
+const TAB_TITLE: Record<string, { title: string; desc: string }> = {
+  geral:        { title: 'Dados da escola', desc: 'Nome, e-mail, telefone, CNPJ, cidade e estado. Aparecem nas telas e nos contratos.' },
+  identidade:   { title: 'Logo e cores', desc: 'Usados nas telas da escola e, quando a Vitrine não tem os próprios, nela também.' },
+  escola:       { title: 'Séries, campanha, unidade e lembrete', desc: 'Séries que a escola oferece, dados da campanha, campo de unidade do lead e lembrete de lead sem contato.' },
+  integracoes:  { title: 'Base de alunos e Activesoft', desc: 'Relatório de alunos, lançamento manual por série e a ligação com o sistema escolar.' },
+  pagamentos:   { title: 'Pagamentos', desc: 'Histórico das cobranças da Áion.' },
+  transmissoes: { title: 'Créditos de Transmissões', desc: 'Saldo e extrato dos créditos de campanhas.' },
+}
 
 export default function SystemSettings() {
   const { user } = useAuth()
   const role = user?.role
-  // Fase 6.2: aba e seção na URL (?tab=whatsapp&sec=horario). Antes ?tab= era ignorado.
-  const [searchParams, setSearchParams] = useSearchParams()
+  // Fase 6.2: aba e seção na URL (?tab=whatsapp&sec=horario). ETAPA 3B: + /settings/<grupo>.
+  const [searchParams] = useSearchParams()
   const urlTab = searchParams.get('tab')
   const urlSec = searchParams.get('sec')
+  const { grupo } = useParams<{ grupo?: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [showSchoolSetup, setShowSchoolSetup] = useState(false)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
   const institutionId = user?.institution_id || ''
 
-  // Aba "Transmissões" só com o módulo liberado pela Áion (mesma regra do menu).
+  // Créditos de Transmissões só com o módulo liberado pela Áion (mesma regra do menu).
   const broadcastEnabled = useBroadcastEnabled(institutionId)
-  const visibleTabs = (broadcastEnabled
-    ? [...TABS.slice(0, 2), { id: 'transmissoes', label: 'Transmissões', icon: Send }, ...TABS.slice(2)]
-    : TABS
-  ).filter(t => canSeeSettingsTab(t.id as SettingsTabId, role))
-  // Aba pedida na URL vale só se o perfil vê; senão, a primeira visível.
-  const activeTab = visibleTabs.some(t => t.id === urlTab) ? (urlTab as string) : (visibleTabs[0]?.id ?? 'escola')
-  const setActiveTab = (tab: string) => setSearchParams({ tab }, { replace: true })
-  const setWaSection = (sec: string) => setSearchParams({ tab: 'whatsapp', sec }, { replace: true })
+  const ctx = { role, broadcast: broadcastEnabled }
+  const route = resolveSettingsRoute({ grupo, tab: urlTab, sec: urlSec }, ctx)
+  const groups = visibleGroups(ctx)
+  const redirectTo = route.kind === 'redirect' ? route.to : null
+
+  useEffect(() => {
+    if (redirectTo) navigate(redirectTo, { replace: true })
+  }, [redirectTo, navigate])
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
@@ -1869,79 +1965,65 @@ export default function SystemSettings() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  return (
-    <div style={{ padding: isMobile ? 0 : 24, display: 'flex', flexDirection: 'column', gap: isMobile ? 0 : 20, minHeight: '100%', background: '#f8f9fb' }}>
-      <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+  // Assunto em destaque nas abas: o do endereço, ou de onde a pessoa veio.
+  const activeGroup: SettingsGroupId | null = route.kind === 'group' ? route.group
+    : route.kind === 'home' ? (groups[0]?.id ?? null)
+    : route.kind === 'tab' ? ((location.state as { from?: SettingsGroupId } | null)?.from ?? groupForTab(route.tab, route.sec))
+    : null
+  // Seções do WhatsApp com histórico (o "voltar" do navegador funciona).
+  const openWaSection = (sec: string) => navigate(sec === 'inicio' ? '/settings/whatsapp' : `/settings?tab=whatsapp&sec=${sec}`, { state: { from: 'whatsapp' } })
+  const activeTab = route.kind === 'tab' ? route.tab : null
+  const backGroup = SETTINGS_GROUPS.find(g => g.id === activeGroup)
 
+  return (
+    <SettingsShell ctx={ctx} groups={groups} active={activeGroup}>
       {toast && <Toast msg={toast.msg} ok={toast.ok} />}
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '16px 16px 12px' : 0, background: isMobile ? '#fff' : 'transparent', borderBottom: isMobile ? '1px solid #E2E8F0' : 'none' }}>
-        <div style={{ width: 38, height: 38, borderRadius: 12, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Settings size={18} color="#00A896" />
-        </div>
-        <div>
-          <h1 style={{ fontSize: isMobile ? 17 : 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Configurações</h1>
-          <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Gerencie as configurações da instituição</p>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      {isMobile ? (
-        <div style={{ overflowX: 'auto', display: 'flex', gap: 8, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #E2E8F0', scrollbarWidth: 'none' }}>
-          {visibleTabs.map(tab => {
-            const Icon = tab.icon
-            const active = activeTab === tab.id
-            return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', borderRadius: 20, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#00A896' : '#64748B', background: active ? '#E6F7F5' : '#F1F5F9', border: active ? '1.5px solid #00A896' : '1.5px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 36, flexShrink: 0 }}>
-                <Icon size={13} />{tab.label}
-              </button>
-            )
-          })}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', gap: 2, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 4, width: 'fit-content' }}>
-          {visibleTabs.map(tab => {
-            const Icon = tab.icon
-            const active = activeTab === tab.id
-            return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#00A896' : '#64748B', background: active ? '#E6F7F5' : 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.15s' }}>
-                <Icon size={14} />{tab.label}
-              </button>
-            )
-          })}
-        </div>
+      {(route.kind === 'home' || route.kind === 'group') && activeGroup === 'whatsapp' && (
+        <WhatsAppTab institutionId={institutionId} role={role} section={null} onSectionChange={openWaSection} />
+      )}
+      {(route.kind === 'home' || route.kind === 'group') && activeGroup && activeGroup !== 'whatsapp' && (
+        <GroupHub group={activeGroup} ctx={ctx} institutionId={institutionId} />
+      )}
+      {activeTab === 'whatsapp' && (
+        <WhatsAppTab institutionId={institutionId} role={role} section={urlSec} onSectionChange={openWaSection} />
       )}
 
-      {/* Conteúdo */}
-      <div style={{ padding: isMobile ? '16px 0 96px' : 0 }}>
-        {activeTab === 'geral' && <GeralTab institutionId={institutionId} onToast={showToast} />}
-        {activeTab === 'identidade' && <IdentidadeTab institutionId={institutionId} onToast={showToast} />}
-        {activeTab === 'whatsapp' && <WhatsAppTab institutionId={institutionId} role={role} section={urlSec} onSectionChange={setWaSection} />}
-        {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
-        {activeTab === 'integracoes' && institutionId && <IntegrationsTab institutionId={institutionId} onToast={showToast} />}
-        {activeTab === 'transmissoes' && broadcastEnabled && <FinanceTab institutionId={institutionId} />}
-        {activeTab === 'escola' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {canSeeSettingsItem('escola.dados', role) && (
-            <div style={{ background: '#fff', borderRadius: isMobile ? 0 : 16, border: isMobile ? 'none' : '1px solid #E2E8F0', padding: isMobile ? '20px 16px' : 28, maxWidth: isMobile ? '100%' : 500 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>Configurações da Escola</h3>
-              <p style={{ fontSize: 13, color: '#64748B', marginBottom: 20, lineHeight: 1.6 }}>Atualize as informações da sua escola, séries oferecidas e mensalidade média.</p>
-              <button onClick={() => setShowSchoolSetup(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 48, width: isMobile ? '100%' : 'auto', justifyContent: 'center' }}>
-                <GraduationCap size={15} />Editar configurações da escola
-              </button>
+      {activeTab && activeTab !== 'whatsapp' && (
+        <div className="aion-pop" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <SectionHeader
+            backLabel={backGroup?.title ?? 'Configurações'}
+            onBack={() => navigate(backGroup ? `/settings/${backGroup.id}` : '/settings')}
+            title={TAB_TITLE[activeTab]?.title ?? 'Configurações'}
+            desc={TAB_TITLE[activeTab]?.desc}
+          />
+          {activeTab === 'geral' && <GeralTab institutionId={institutionId} onToast={showToast} />}
+          {activeTab === 'identidade' && <IdentidadeTab institutionId={institutionId} onToast={showToast} />}
+          {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
+          {activeTab === 'integracoes' && institutionId && <IntegrationsTab institutionId={institutionId} onToast={showToast} />}
+          {activeTab === 'transmissoes' && broadcastEnabled && <FinanceTab institutionId={institutionId} />}
+          {activeTab === 'escola' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {canSeeSettingsItem('escola.dados', role) && (
+              <div style={{ background: '#fff', borderRadius: 18, border: `1px solid ${BRAND.line}`, boxShadow: '0 1px 2px rgba(11,27,52,.04)', padding: isMobile ? '20px 16px' : 24, maxWidth: isMobile ? '100%' : 560 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Dados da campanha</h3>
+                <p style={{ fontSize: 13, color: BRAND.muted, marginBottom: 20, lineHeight: 1.6 }}>Mensalidade média da escola, alunos atuais, INEP e arquivos do sistema escolar. Usados nas metas e no estudo de mercado.</p>
+                <button onClick={() => setShowSchoolSetup(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 12, background: GRAD, color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 48, width: isMobile ? '100%' : 'auto', justifyContent: 'center' }}>
+                  <GraduationCap size={15} />Editar dados da campanha
+                </button>
+              </div>
+              )}
+              {institutionId && canSeeSettingsItem('escola.series', role) && <GradeLevelsEditor institutionId={institutionId} onToast={showToast} />}
+              {institutionId && canSeeSettingsItem('escola.unidade', role) && <LeadUnitFieldEditor institutionId={institutionId} onToast={showToast} />}
+              {institutionId && canSeeSettingsItem('escola.lembrete', role) && <LeadReminderSettingsEditor institutionId={institutionId} onToast={showToast} />}
             </div>
-            )}
-            {institutionId && canSeeSettingsItem('escola.series', role) && <GradeLevelsEditor institutionId={institutionId} onToast={showToast} />}
-            {institutionId && canSeeSettingsItem('escola.unidade', role) && <LeadUnitFieldEditor institutionId={institutionId} onToast={showToast} />}
-            {institutionId && canSeeSettingsItem('escola.lembrete', role) && <LeadReminderSettingsEditor institutionId={institutionId} onToast={showToast} />}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {showSchoolSetup && institutionId && (
         <SchoolSetupModal institutionId={institutionId} initialStep={1} editMode={true} onComplete={() => setShowSchoolSetup(false)} />
       )}
-    </div>
+    </SettingsShell>
   )
 }

@@ -38,6 +38,9 @@ export const SETTINGS_ITEMS = {
   'escola.unidade':                { tab: 'escola',       label: 'Campo de unidade do lead',    roles: BOTH },
   'escola.lembrete':               { tab: 'escola',       label: 'Lembrete de lead sem contato', roles: ADMIN },
   'whatsapp.conexao':              { tab: 'whatsapp', section: 'conexao',   label: 'Conexão e robô',           roles: ADMIN },
+  // ETAPA 3B-2 (padrão do Business): visão das mensagens automáticas e uso do mês
+  'whatsapp.automacoes':           { tab: 'whatsapp', section: 'automacoes', label: 'Automações',              roles: ADMIN },
+  'whatsapp.uso':                  { tab: 'whatsapp', section: 'uso',       label: 'Uso do mês',               roles: ADMIN },
   'whatsapp.horario':              { tab: 'whatsapp', section: 'horario',   label: 'Horário e mensagens automáticas', roles: ADMIN },
   'whatsapp.respostas':            { tab: 'whatsapp', section: 'respostas', label: 'Respostas rápidas',        roles: BOTH },
   'whatsapp.equipe':               { tab: 'whatsapp', section: 'equipe',    label: 'Grupos e tempo de inatividade', roles: BOTH },
