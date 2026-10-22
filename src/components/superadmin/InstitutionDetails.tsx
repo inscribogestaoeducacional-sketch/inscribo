@@ -13,6 +13,7 @@ import InstitutionBaseModuleTab from './InstitutionBaseModuleTab'
 import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, assertIsPhoneNumber, ownSchoolWaba, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
 import EmbeddedSignupButton from '../whatsapp/EmbeddedSignupButton'
 import LinkAionWabaPanel from './LinkAionWabaPanel'
+import WhatsAppUsagePanel from '../whatsapp/WhatsAppUsagePanel'
 import {
   Building2, Users, DollarSign, FileText, CheckCircle2,
   Clock, AlertTriangle, ExternalLink, Copy, RefreshCw,
@@ -431,7 +432,9 @@ export default function InstitutionDetails() {
   const [advancingPhase,     setAdvancingPhase]     = useState(false)
 
   // Gestão da escola tabs
-  const [mgmtTab, setMgmtTab] = useState<'users' | 'whatsapp' | 'financial' | 'templates' | 'campaigns' | 'broadcast' | 'base'>('users')
+  // ?tab=whatsapp abre direto na aba WhatsApp (links dos alertas do sino)
+  const [mgmtTab, setMgmtTab] = useState<'users' | 'whatsapp' | 'financial' | 'templates' | 'campaigns' | 'broadcast' | 'base'>(
+    () => (new URLSearchParams(window.location.search).get('tab') === 'whatsapp' ? 'whatsapp' : 'users'))
 
   // Templates tab state
   const [waTemplates, setWaTemplates] = useState<any[]>([])
@@ -2339,6 +2342,9 @@ export default function InstitutionDetails() {
                   {id && isSuperAdmin && (
                     <LinkAionWabaPanel institutionId={id} savedWabaId={ownWaba} onLinked={() => loadAll(true)} />
                   )}
+
+                  {/* Consumo: mensagens recebidas/enviadas por dia e por mês (Central de notificações) */}
+                  {id && <WhatsAppUsagePanel institutionId={id} />}
 
                   {/* Usage section */}
                   <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 space-y-3">

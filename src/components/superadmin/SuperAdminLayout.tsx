@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { useAlertNotifications } from '../../hooks/useAlertNotifications'
+import AlertNotificationList from '../layout/AlertNotificationList'
 import {
   Home, Building2, DollarSign, FileText, Settings,
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
@@ -100,6 +102,8 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   )
   const [profileOpen, setProfileOpen]     = useState(false)
   const [notifOpen,   setNotifOpen]       = useState(false)
+  // Central de notificações (queda/silêncio do WhatsApp) — notification_alerts
+  const { alerts, unread: alertsUnread, markRead: markAlertsRead } = useAlertNotifications()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unread, setUnread]               = useState(0)
   const [overdueFollowups, setOverdueFollowups] = useState(0)
@@ -182,6 +186,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   }
 
   const markAllRead = async () => {
+    if (alertsUnread) markAlertsRead(null)
     const ids = notifications.filter(n => !n.read).map(n => n.id)
     if (!ids.length) return
     await supabase.from('system_notifications').update({ read: true }).in('id', ids)
@@ -207,7 +212,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     exact ? location.pathname === path : location.pathname.startsWith(path)
 
   // badges totais no sino
-  const totalBadge = unread + overdueFollowups + todayMeetings
+  const totalBadge = unread + overdueFollowups + todayMeetings + alertsUnread
 
   // label da página atual
   const currentLabel = flatMenuItems.find(m => isActive(m.path, m.exact))?.label || 'Admin Geral'
@@ -350,12 +355,15 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                 <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 z-[300] overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
                     <p className="font-bold text-gray-900 text-sm">Notificações</p>
-                    {unread > 0 && (
+                    {(unread > 0 || alertsUnread > 0) && (
                       <button onClick={markAllRead} className="text-xs text-cyan-600 font-semibold hover:text-cyan-700">
                         Marcar tudo como lido
                       </button>
                     )}
                   </div>
+
+                  {/* Alertas da Central (queda/silêncio do WhatsApp) */}
+                  <AlertNotificationList alerts={alerts} onMarkRead={markAlertsRead} onNavigate={() => setNotifOpen(false)} />
 
                   {/* Alertas de sistema */}
                   {overdueFollowups > 0 && (
@@ -385,7 +393,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                   )}
 
                   <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
-                    {notifications.length === 0 && overdueFollowups === 0 && todayMeetings === 0 ? (
+                    {notifications.length === 0 && overdueFollowups === 0 && todayMeetings === 0 && alerts.length === 0 ? (
                       <div className="py-10 text-center text-gray-400">
                         <Bell className="w-8 h-8 mx-auto mb-2 text-gray-200" />
                         <p className="text-sm">Tudo em ordem!</p>

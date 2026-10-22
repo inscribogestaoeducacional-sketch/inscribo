@@ -33,6 +33,29 @@ const supabase = createClient(
 
 const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 
+// ── Central de notificações (ETAPA 2): registro dos eventos de conexão ──────
+// Guarda em whatsapp_connection_events o que a Meta já manda (account_update,
+// qualidade do número, falha de envio). Só registro: o aviso de queda vem da
+// conferência a cada 10 min (edge whatsapp-health-check). Nunca derruba nem
+// atrasa o processamento — se a função do banco ainda não existir, só loga.
+// Payloads de webhook não trazem token; mesmo assim só os campos abaixo vão.
+const CONNECTION_EVENT_KEYS = ['event', 'phone_number', 'display_phone_number', 'current_limit', 'old_limit',
+  'requested_verified_name', 'decision', 'ban_info', 'restriction_info', 'violation_info', 'lock_info'] as const
+async function logConnectionEvent(
+  phoneNumberId: string | null, wabaId: string | null, eventType: string, status: string | null, details: Record<string, unknown>,
+) {
+  try {
+    const { error } = await supabase.rpc('whatsapp_connection_event_log', {
+      p_phone_number_id: phoneNumberId, p_waba_id: wabaId, p_event_type: eventType, p_status: status, p_details: details,
+    })
+    if (error) console.warn('[connection-event] não registrado:', error.message)
+  } catch (e) {
+    console.warn('[connection-event] não registrado:', e)
+  }
+}
+const pickConnectionDetails = (v: Record<string, unknown> | undefined) =>
+  Object.fromEntries(CONNECTION_EVENT_KEYS.filter(k => v?.[k] !== undefined).map(k => [k, v![k]]))
+
 // Item A — janela de "reabertura silenciosa": se o cliente manda mensagem
 // nova dentro desse intervalo após a conversa ter sido fechada (encerrada
 // pelo atendente ou pelo bot, ver whatsapp_conversations.closed_at), reabre
@@ -3724,6 +3747,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const field = body?.entry?.[0]?.changes?.[0]?.field
       if (field === 'account_update') {
         console.log('[WEBHOOK] account_update recebido:', JSON.stringify(value))
+        await logConnectionEvent(null, String(value?.waba_info?.waba_id || body?.entry?.[0]?.id || '') || null,
+          'account_update', value?.event ? String(value.event) : null, pickConnectionDetails(value))
+        return res.status(200).json({ status: 'ok' })
+      }
+      // Qualidade/limite do número (FLAGGED, UNFLAGGED, DOWNGRADE...): vem por
+      // WABA, sem phone_number_id — só registra.
+      if (field === 'phone_number_quality_update') {
+        console.log('[WEBHOOK] phone_number_quality_update recebido:', JSON.stringify(value))
+        await logConnectionEvent(null, String(body?.entry?.[0]?.id || '') || null,
+          'phone_quality', value?.event ? String(value.event) : null, pickConnectionDetails(value))
         return res.status(200).json({ status: 'ok' })
       }
 
@@ -4462,6 +4495,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // apagar um erro já registrado numa atualização de status posterior
         // sem errors (ex: 'failed' seguido de um novo evento sem detalhe).
         if (status.errors?.length) console.error('❌ [status webhook] falha reportada pela Meta:', status.id, JSON.stringify(status.errors))
+        if (status.status === 'failed') {
+          const e0 = status.errors?.[0]
+          await logConnectionEvent(phoneNumberId ?? null, null, 'envio_falhou', e0?.code != null ? String(e0.code) : 'failed', {
+            message_id: status.id,
+            erros: (status.errors || []).slice(0, 3).map((e: any) => ({ code: e?.code, title: e?.title, details: e?.error_data?.details })),
+          })
+        }
         const { error: statusErr } = await supabase
           .from('whatsapp_messages')
           .update({

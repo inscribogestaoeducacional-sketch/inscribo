@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
+import WhatsAppUsageBySchool from './WhatsAppUsageBySchool'
 import {
   MessageCircle, Building2, AlertCircle,
   RefreshCw, Search, DollarSign, Wifi, WifiOff, TrendingUp
@@ -252,6 +253,9 @@ export default function AdminWhatsApp() {
             </div>
           )}
         </div>
+
+        {/* Central de notificações (ETAPA 2): mensagens recebidas/enviadas por escola no mês */}
+        <WhatsAppUsageBySchool />
 
       </div>
     </SuperAdminLayout>

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useNotifications } from '../../hooks/useNotifications'
 import { supabase } from '../../lib/supabase'
 import SchoolUpdateModal, { SchoolUpdateContent } from '../updates/SchoolUpdateModal'
+import { useAlertNotifications, type AlertNotification } from '../../hooks/useAlertNotifications'
+import AlertNotificationList from './AlertNotificationList'
 
 // Atualizações (school_updates) chegam no sino como system_notifications
 // broadcast com action_url = "school_update:<id>" (ver AdminUpdates.tsx) —
@@ -33,7 +35,9 @@ const severityConfig: Record<string, { bg: string; color: string; icon: string; 
   info:    { bg: '#DBEAFE', color: '#1E40AF', icon: 'i', dot: '#3B82F6' },
 }
 
-function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, navigate, onClose, onOpenUpdate }: {
+function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, navigate, onClose, onOpenUpdate, alerts, onAlertRead }: {
+  alerts: AlertNotification[]
+  onAlertRead: (ids: string[] | null) => void
   notifications: any[]
   unreadCount: number
   markAsRead: (id: string) => void
@@ -75,9 +79,12 @@ function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, na
         )}
       </div>
 
+      {/* Alertas da Central (queda/silêncio do WhatsApp) */}
+      <AlertNotificationList alerts={alerts} onMarkRead={onAlertRead} onNavigate={onClose} />
+
       {/* Lista */}
       <div>
-        {notifications.length === 0 ? (
+        {notifications.length === 0 && alerts.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center' }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div>
             <p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhuma notificação ainda</p>
@@ -135,7 +142,10 @@ export default function NotificationBell({ institutionId, isSuperAdmin = false }
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
-  const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications(institutionId, isSuperAdmin)
+  const { notifications, unreadCount: oldUnread, markAsRead, markAllRead: markAllOld } = useNotifications(institutionId, isSuperAdmin)
+  const { alerts, unread: alertsUnread, markRead: markAlertsRead } = useAlertNotifications()
+  const unreadCount = oldUnread + alertsUnread
+  const markAllRead = () => { void markAllOld(); if (alertsUnread) markAlertsRead(null) }
   const [viewUpdate, setViewUpdate] = useState<SchoolUpdateContent | null>(null)
 
   const openUpdate = async (updateId: string) => {
@@ -183,6 +193,8 @@ export default function NotificationBell({ institutionId, isSuperAdmin = false }
           navigate={navigate}
           onClose={() => setOpen(false)}
           onOpenUpdate={openUpdate}
+          alerts={alerts}
+          onAlertRead={markAlertsRead}
         />
       )}
 
