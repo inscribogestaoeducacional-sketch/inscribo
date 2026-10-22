@@ -5,6 +5,7 @@ import { normalizeBrazilianInput } from '../../lib/phone'
 import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
 import AionInboxHub from './AionInboxHub'
+import HubErrorBoundary from '../whatsapp/HubErrorBoundary'
 import FlowEditor from '../whatsapp/FlowEditor'
 import {
   Settings, MessageCircle, GitBranch, QrCode, Megaphone,
@@ -3497,7 +3498,7 @@ export default function AdminAionInbox() {
 
         {/* Tab content */}
         <div style={{ flex: 1, overflow: 'hidden', display: tab === 'inbox' || tab === 'flow' ? 'flex' : 'block', flexDirection: 'column' }}>
-          {tab === 'inbox' && <AionInboxHub isAionInbox={true} />}
+          {tab === 'inbox' && <HubErrorBoundary><AionInboxHub isAionInbox={true} /></HubErrorBoundary>}
           {tab === 'flow' && (
             aionPlatformId
               ? <FlowEditor institutionId={aionPlatformId} ownerType="platform" onClose={() => setTab('inbox')} />

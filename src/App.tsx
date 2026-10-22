@@ -41,6 +41,7 @@ import BaseAlunos from './pages/gestor/BaseAlunos'
 import LeadKanban        from './components/leads/LeadKanban'
 import VisitCalendar     from './components/calendar/VisitCalendar'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
+import HubErrorBoundary  from './components/whatsapp/HubErrorBoundary'
 import GestorReports     from './components/reports/GestorReports'
 import ClientsModule    from './components/clients/ClientsModule'
 import ContactsModule  from './components/contacts/ContactsModule'
@@ -365,7 +366,7 @@ function AppContent() {
             <Route path="/clients"        element={<ClientsModule />} />
             <Route path="/contacts"       element={<PermissionRoute module="contatos"><ContactsModule /></PermissionRoute>} />
             <Route path="/visits"         element={<PermissionRoute module="visitas"><VisitCalendar /></PermissionRoute>} />
-            <Route path="/whatsapp"       element={<PermissionRoute module="whatsapp"><WhatsAppHub /></PermissionRoute>} />
+            <Route path="/whatsapp"       element={<PermissionRoute module="whatsapp"><HubErrorBoundary><WhatsAppHub /></HubErrorBoundary></PermissionRoute>} />
             <Route path="/captacao"       element={<PermissionRoute module="captacao"><CaptacaoInteligente /></PermissionRoute>} />
             <Route path="/vitrine"        element={<PermissionRoute module="vitrine"><Vitrine /></PermissionRoute>} />
             <Route path="/transmissoes"   element={<PermissionRoute module="transmissoes"><Transmissoes /></PermissionRoute>} />
