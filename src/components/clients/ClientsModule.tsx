@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { getInitials } from '../../lib/initials'
 import {
   Users, Search, Plus, X, ChevronRight, Phone, Mail,
   MessageCircle, Clock, FileText, Tag, Edit3, Check,
@@ -62,10 +63,6 @@ const STATUS_CONFIG = {
 }
 
 const AVATAR_COLORS = ['#00A896', '#3B82F6', '#8B5CF6', '#F97316', '#EF4444', '#10B981', '#F59E0B', '#EC4899']
-
-function getInitials(name: string) {
-  return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
-}
 
 function fmt(date: string) {
   return new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })

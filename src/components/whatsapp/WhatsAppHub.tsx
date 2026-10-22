@@ -10,6 +10,7 @@ import {
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, Lead, supabase } from '../../lib/supabase'
+import { getInitials, cleanName } from '../../lib/initials'
 import { normalizeBrazilianInput, isBrazilianMobileLocal } from '../../lib/phone'
 import { startVoiceRecording, isMetaAcceptedAudio, UnsupportedAudioFormatError, type VoiceRecorderHandle } from '../../lib/voiceRecorder'
 import { CONVERSATION_NOTIFICATION_EVENT, type ConversationNotification } from '../layout/ConversationNotifier'
@@ -159,13 +160,6 @@ function mapMsgType(messageType: string): MsgType {
   }
 }
 
-function getInitials(name: string): string {
-  if (!name) return '?'
-  const parts = name.trim().split(' ').filter(Boolean)
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
 const AVATAR_BG_COLORS = [
   'linear-gradient(135deg, #00A896, #0DD3BF)',
   'linear-gradient(135deg, #667eea, #764ba2)',
@@ -215,11 +209,11 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
 
     let name: string
     if (isGroup) {
-      name = jidMsgs.find(m => m.contact_name)?.contact_name || normJid.replace(/@g\.us$/, '')
+      name = cleanName(jidMsgs.find(m => cleanName(m.contact_name))?.contact_name) || normJid.replace(/@g\.us$/, '')
     } else {
       // convData.contact_name (manually edited) takes priority over the WhatsApp-API name from messages
-      name = convData?.contact_name
-        || jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name
+      name = cleanName(convData?.contact_name)
+        || cleanName(jidMsgs.find(m => !m.from_me && cleanName(m.contact_name))?.contact_name)
         || formatPhone(normJid)
       console.log('[BUILD CONV] nome:', convData?.contact_name, '| jid:', normJid)
     }
@@ -262,7 +256,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
             status: (m.status as Message['status']) || 'sent',
             media_url: m.media_url,
             message_id: m.message_id,
-            senderName: m.from_me ? (m.contact_name || undefined) : undefined,
+            senderName: m.from_me ? (cleanName(m.contact_name) || undefined) : undefined,
             quoted_message_id: m.quoted_message_id,
             quoted_content:    m.quoted_content,
             quoted_from_me:    m.quoted_from_me,
@@ -294,7 +288,7 @@ function conversationFromRow(conv: WhatsappConversation): Conversation {
   const isGroup = normJid.endsWith('@g.us')
   return {
     id: normJid,
-    name: conv.contact_name || formatPhone(normJid),
+    name: cleanName(conv.contact_name) || formatPhone(normJid),
     phone: isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid),
     avatarColor: jidToColor(normJid),
     lastMessage: conv.last_message || '',
@@ -1235,9 +1229,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         supabase.from('whatsapp_contacts').select('name').eq('institution_id', effectiveInstitutionId).eq('phone', normalized).maybeSingle(),
       ])
       if (convRow) {
-        setNewConvMatch({ kind: 'conversation', name: (contactRow as any)?.name || formatPhone(jid) })
+        setNewConvMatch({ kind: 'conversation', name: cleanName((contactRow as any)?.name) || formatPhone(jid) })
       } else if (contactRow) {
-        setNewConvMatch({ kind: 'contact', name: (contactRow as any)?.name || formatPhone(jid) })
+        setNewConvMatch({ kind: 'contact', name: cleanName((contactRow as any)?.name) || formatPhone(jid) })
       } else {
         setNewConvMatch(null)
       }
@@ -1782,7 +1776,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
         // Browser Notification
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          const contactName = newMsg.contact_name || formatPhone(typingJid)
+          const contactName = cleanName(newMsg.contact_name) || formatPhone(typingJid)
           const preview = newMsg.content?.slice(0, 60) || '[mídia]'
           try {
             new Notification(contactName, {
@@ -1858,7 +1852,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         return prev.map(c => c.id === normJid
           ? {
               ...c,
-              name: (!c.name || c.name === formatPhone(normJid)) && newMsg.contact_name ? newMsg.contact_name : c.name,
+              name: (!c.name || c.name === formatPhone(normJid)) && cleanName(newMsg.contact_name) ? cleanName(newMsg.contact_name) : c.name,
               messages: newMessages,
               lastMessage: newMsg.content,
               lastTime: new Date(newMsg.timestamp),
@@ -1874,7 +1868,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       // em buildConversations pra conversas sem mensagens carregadas ainda.
       const conv: Conversation = {
         id: normJid,
-        name: visibleConvRow?.contact_name || newMsg.contact_name || (isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid)),
+        name: cleanName(visibleConvRow?.contact_name) || cleanName(newMsg.contact_name) || (isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid)),
         phone: isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid),
         avatarColor: jidToColor(normJid),
         lastMessage: newMsg.content,
@@ -2069,7 +2063,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       const hasLocalMessages = existing.messages.length > 0
       return {
         ...existing,
-        name: conv.contact_name || existing.name,
+        name: cleanName(conv.contact_name) || existing.name,
         status: (conv.status ?? existing.status) as ConvStatus,
         unreadCount: conv.unread_count ?? existing.unreadCount,
         // Valor do banco mesmo quando nulo: com `??` uma conversa devolvida
@@ -2334,7 +2328,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           if (c.id !== normJid) return c
           return {
             ...c,
-            name: payload.new?.contact_name || c.name,
+            name: cleanName(payload.new?.contact_name) || c.name,
             status: payload.new?.status || c.status,
             contact_type: payload.new?.contact_type || c.contact_type,
             lead_id: payload.new?.lead_id || c.lead_id,
@@ -2535,7 +2529,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         status: (m.status as Message['status']) || 'sent',
         media_url: m.media_url,
         message_id: m.message_id,
-        senderName: m.from_me ? (m.contact_name || undefined) : undefined,
+        senderName: m.from_me ? (cleanName(m.contact_name) || undefined) : undefined,
         quoted_message_id: m.quoted_message_id,
         quoted_content:    m.quoted_content,
         quoted_from_me:    m.quoted_from_me,
@@ -4138,9 +4132,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
     // Conversa existente (em qualquer formato, carregada ou não) só abre;
     // nova é criada já atribuída a quem iniciou — ver openConversationByPhone.
-    const opened = await openConversationByPhone(normalized, newConvName || existingContact?.name || null)
+    const opened = await openConversationByPhone(normalized, cleanName(newConvName) || cleanName(existingContact?.name) || null)
     if (opened) {
-      const nameOverride = newConvName || existingContact?.name
+      const nameOverride = cleanName(newConvName) || cleanName(existingContact?.name)
       if (nameOverride && !opened.created) {
         setConversations(prev => prev.map(c => c.id === opened.id ? { ...c, name: nameOverride } : c))
       }

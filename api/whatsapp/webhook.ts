@@ -1677,6 +1677,13 @@ async function ensureConversation(
 
 // Nome que na verdade é só o telefone (vazio, ou sem letras e com 8+ dígitos:
 // "558433121699", "+55 84 3312-1699"). Nome assim pode ser substituído.
+// Nome do perfil do WhatsApp sem espaços nas pontas. Perfil só com espaços
+// (" ") vira '' e cai no telefone, como perfil sem nome — gravado como " "
+// ele derrubava o Hub (tela branca no STJ, 21/10).
+function profileName(name: unknown): string {
+  return typeof name === 'string' ? name.trim() : ''
+}
+
 function looksLikePhone(name: string | null | undefined): boolean {
   const s = String(name ?? '').trim()
   if (!s) return true
@@ -3278,7 +3285,7 @@ async function processAionMessage({
     // duplicadas para o mesmo contato.
     const remoteJid   = normalizePhone((msg.from as string).replace(/@.*/, ''))
     const rawPhone    = remoteJid
-    const contactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
+    const contactName = profileName(value.contacts?.[0]?.profile?.name) || remoteJid
     const msgType     = (msg.type as string) || 'text'
     const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
 
@@ -3845,9 +3852,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!rawJid || rawJid.includes('@')) continue
 
         const contactName =
-          value.contacts?.find((c: any) =>
+          profileName(value.contacts?.find((c: any) =>
             c.wa_id === rawJid
-          )?.profile?.name || rawJid
+          )?.profile?.name) || rawJid
 
         const picUrl = value.contacts?.find((c: any) =>
           c.wa_id === rawJid
@@ -3887,7 +3894,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await upsertContact(
           institutionId,
           remoteJid,
-          (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid,
+          profileName(value.contacts?.[0]?.profile?.name) || remoteJid,
           value.contacts?.[0]?.profile?.picture_url as string | undefined
         )
 
@@ -3939,7 +3946,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const unsupportedText =
             '📎 Este tipo de conteúdo não pode ser recebido pelo WhatsApp Business (ex: visualização única, enquete, sticker restrito) — peça para reenviarem como texto, imagem ou documento comum.'
           const unsupportedTimestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
-          const unsupportedContactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
+          const unsupportedContactName = profileName(value.contacts?.[0]?.profile?.name) || remoteJid
 
           const { data: existingConvUnsup } = await supabase
             .from('whatsapp_conversations')
@@ -4006,7 +4013,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
-        const contactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
+        const contactName = profileName(value.contacts?.[0]?.profile?.name) || remoteJid
         console.log('[WEBHOOK] institutionId:', institutionId)
         console.log('[WEBHOOK] remoteJid:', remoteJid)
         console.log('[WEBHOOK] contactName:', contactName)

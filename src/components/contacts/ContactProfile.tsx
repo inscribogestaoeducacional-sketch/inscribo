@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { getInitials as initials } from '../../lib/initials'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { saveLead } from '../../lib/leadSave'
@@ -18,12 +19,6 @@ function nameHash(s: string) {
   let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffffff; return Math.abs(h)
 }
 const hexColor = (s: string) => HEX_COLORS[nameHash(s) % HEX_COLORS.length]
-function initials(s: string) {
-  const p = (s || '').trim().split(' ').filter(Boolean)
-  if (!p.length) return '?'
-  if (p.length === 1) return p[0].slice(0, 2).toUpperCase()
-  return (p[0][0] + p[p.length - 1][0]).toUpperCase()
-}
 function lightenHex(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16)
   const r = Math.round(((n >> 16) & 0xff) * (1 - amount) + 255 * amount)
