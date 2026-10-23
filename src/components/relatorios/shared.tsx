@@ -123,16 +123,29 @@ export function useAnalise(module: string, moduleTitle: string, institutionId: s
   return { busy, err, rep, run }
 }
 
+// Card de espera da IA: barra que sobe (real quando o texto traz "X de N", senão estimada pelo tempo) e tempo decorrido.
+function EsperaIA({ label }: { label?: string }) {
+  const [sec, setSec] = useState(0)
+  useEffect(() => { const t = setInterval(() => setSec(x => x + 1), 1000); return () => clearInterval(t) }, [])
+  const m = (label || '').match(/(\d+) de (\d+)/)
+  const real = m && Number(m[2]) > 0 ? Math.min(95, Math.round(Number(m[1]) / Number(m[2]) * 90)) : null
+  const est = Math.round(92 * (1 - Math.exp(-sec / 35)))
+  const pct = Math.max(real ?? 0, est * (real == null ? 1 : 0.4), 3)
+  return (
+    <div className="no-print" style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #E3E8F0', padding: '22px 24px', width: 'min(440px, 100%)', boxShadow: '0 20px 50px rgba(15,23,42,.25)' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}><Sparkles size={20} color={BRAND.primary} /><div style={{ fontSize: 16, fontWeight: 800, color: BRAND.ink }}>Gerando a análise da IA…</div></div>
+        <div style={{ height: 10, borderRadius: 99, background: '#E6F4F1', overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, borderRadius: 99, background: `linear-gradient(90deg, ${BRAND.primary}, #34D399)`, transition: 'width 1s ease' }} /></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: BRAND.text, marginTop: 8 }}><span>{label || 'Lendo os dados do período…'}</span><span style={{ color: BRAND.muted }}>{Math.floor(sec / 60)}:{String(sec % 60).padStart(2, '0')}</span></div>
+        <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 8 }}>Pode levar de 30 segundos a alguns minutos, principalmente na leitura completa do WhatsApp. Aguarde: o relatório aparece sozinho quando ficar pronto.</div>
+      </div>
+    </div>)
+}
+
 export function AnalisePanel({ rep, err, title, periodLabel, institutionId, institutionName, busy, label }: { rep: Analise | null; err: string; title: string; periodLabel: string; institutionId: string; institutionName: string; busy?: boolean; label?: string }) {
   const [logo, setLogo] = useState<string | null>(null)
   useEffect(() => { supabase.from('institutions').select('logo_url').eq('id', institutionId).maybeSingle().then(({ data }) => setLogo((data as { logo_url?: string | null } | null)?.logo_url ?? null)) }, [institutionId])
-  if (busy) return (
-    <div className="no-print" style={{ ...card, border: `2px solid ${BRAND.primary}`, background: BRAND.softer, display: 'flex', gap: 14, alignItems: 'center' }}>
-      <Loader2 size={28} className="animate-spin" color={BRAND.primary} style={{ flexShrink: 0 }} />
-      <div><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Gerando a análise da IA…</div>
-        <div style={{ fontSize: 13, color: BRAND.text }}>{label || 'Lendo os dados do período.'}</div>
-        <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 2 }}>Isso pode levar de 30 segundos a alguns minutos. Pode continuar na página: o relatório aparece aqui quando ficar pronto.</div></div>
-    </div>)
+  if (busy) return <EsperaIA label={label} />
   if (err) return <div style={{ ...card, color: '#B91C1C', fontSize: 13.5 }}>{err}</div>
   if (!rep) return null
   const h = (t: string) => <div style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, textTransform: 'uppercase', marginBottom: 6 }}>{t}</div>
