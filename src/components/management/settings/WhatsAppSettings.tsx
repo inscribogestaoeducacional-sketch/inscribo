@@ -63,7 +63,7 @@ export const WA_SECTION_INFO: Record<string, { label: string; desc: string }> = 
   datas:      { label: 'Feriados e datas especiais', desc: 'Mensagens próprias para os dias em que a escola muda o atendimento.' },
   horario:    { label: 'Horário de atendimento', desc: 'Dias e horários, mensagens de fora do horário e almoço, e o tempo do robô.' },
   respostas:  { label: 'Respostas rápidas', desc: 'Textos prontos para a equipe usar com "/" no chat.' },
-  equipe:     { label: 'Equipe e distribuição', desc: 'Grupos de atendimento, horário de cada atendente e transferência por inatividade.' },
+  equipe:     { label: 'Equipe e distribuição', desc: 'Grupos de atendimento, horário de cada atendente e para onde vai a conversa fora do horário.' },
   etiquetas:  { label: 'Etiquetas', desc: 'Cores para organizar as conversas.' },
   bloqueios:  { label: 'Números bloqueados', desc: 'Números que o sistema ignora.' },
   pesquisa:   { label: 'Avaliação do atendimento', desc: 'Pergunta ao cliente como foi o atendimento, ao encerrar.' },
@@ -83,23 +83,14 @@ type FlowRow = Record<string, unknown>
 type Attendant = { id: string; full_name: string; working_hours_start: string; working_hours_end: string; working_days: string[]; lunch_start: string; lunch_end: string; has_lunch_break: boolean }
 type Group = { id: string; name: string; emoji: string; member_ids: string[] }
 
-// O banco aplica COALESCE(bot_timeout_*, timeout_*): o tempo do robô vale; o da
-// equipe só entra quando aquele está vazio. Mostra o que está valendo agora.
-function TimeoutNow({ flow, where }: { flow: FlowRow; where: 'horario' | 'equipe' }) {
-  const botMin = flow.bot_timeout_minutes as number | null | undefined
-  const eqMin = flow.timeout_minutes as number | null | undefined
-  const botMsg = flow.bot_timeout_message as string | null | undefined
-  const eqMsg = flow.timeout_message as string | null | undefined
-  const min = botMin || eqMin
+// Tempo e mensagem de inatividade são um só (bot_timeout_*; o banco usa o antigo timeout_* só se aquele estiver vazio).
+function TimeoutNow({ flow }: { flow: FlowRow }) {
+  const min = (flow.bot_timeout_minutes as number | null | undefined) || (flow.timeout_minutes as number | null | undefined)
+  const hasMsg = !!((flow.bot_timeout_message as string | null | undefined) || (flow.timeout_message as string | null | undefined))
   if (!min) return null
-  const minFrom = botMin ? 'Horário' : 'Equipe'
-  const msgFrom = botMsg ? 'Horário' : eqMsg ? 'Equipe' : null
   return (
     <NowNote>
-      <strong>Valendo agora:</strong> o robô passa a conversa para a equipe após <strong>{min} min</strong> sem resposta (definido em {minFrom})
-      {msgFrom ? <>, com a mensagem definida em {msgFrom}</> : <>, sem mensagem</>}.
-      {where === 'equipe' && botMin ? <> O tempo desta tela só vale se o do Horário estiver vazio.</> : null}
-      {minFrom !== msgFrom && msgFrom ? <> Tempo e mensagem vêm de telas diferentes.</> : null}
+      <strong>Valendo agora:</strong> o robô passa a conversa para a equipe após <strong>{min} min</strong> sem resposta{hasMsg ? ', enviando a mensagem abaixo' : ', sem mensagem'}.
     </NowNote>
   )
 }
@@ -248,8 +239,9 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         if (f.idle_config && typeof f.idle_config === 'object') setIdle({ ...IDLE_DEFAULTS, ...(f.idle_config as Partial<IdleForm>) })
         if (f.lunch_start) setLunchStart(String(f.lunch_start).slice(0, 5))
         if (f.lunch_end) setLunchEnd(String(f.lunch_end).slice(0, 5))
-        if (f.bot_timeout_minutes) setBotTimeoutMinutes(f.bot_timeout_minutes)
-        if (f.bot_timeout_message) setBotTimeoutMessage(f.bot_timeout_message)
+        // tempo e mensagem são um só: o banco já usa o do robô e, se vazio, o antigo da equipe
+        if (f.bot_timeout_minutes || f.timeout_minutes) setBotTimeoutMinutes((f.bot_timeout_minutes || f.timeout_minutes) as number)
+        if (f.bot_timeout_message || f.timeout_message) setBotTimeoutMessage((f.bot_timeout_message || f.timeout_message) as string)
         if (f.bot_timeout_assignee_id) setBotTimeoutAssigneeId(f.bot_timeout_assignee_id)
         if (f.bot_timeout_assignee_type) setBotTimeoutAssigneeType(f.bot_timeout_assignee_type)
         if (f.stale_conversation_hours) setStaleHours(f.stale_conversation_hours)
@@ -754,8 +746,8 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
       </Card>
 
       <Card>
-        <Title Icon={Timer} title="Tempo de inatividade do robô" help="Quando o robô está ativo e o cliente não responde, o sistema envia uma mensagem e passa a conversa para atendimento humano." />
-        <div style={{ marginBottom: 14 }}><TimeoutNow flow={flow} where="horario" /></div>
+        <Title Icon={Timer} title="Quando o cliente some" help="Se o robô está atendendo e o cliente não responde por este tempo, o sistema envia a mensagem abaixo e passa a conversa para atendimento humano. Tempo, mensagem e destino desta situação ficam todos aqui." />
+        <div style={{ marginBottom: 14 }}><TimeoutNow flow={flow} /></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           <label style={{ ...label, margin: 0 }}>Transferir após</label>
           <input type="number" min={1} max={1440} value={botTimeoutMinutes} onChange={e => setBotTimeoutMinutes(Math.max(1, Math.min(1440, parseInt(e.target.value) || 1)))}
@@ -767,7 +759,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
           {textarea(botTimeoutMessage, setBotTimeoutMessage, 3, 'Olá! Vou te conectar com um de nossos atendentes. Aguarde um momento. 😊')}
         </div>
         <div style={{ marginBottom: 16 }}>
-          <label style={label}>Destino ao transferir (opcional)</label>
+          <label style={label}>Para quem passa quando o cliente some (opcional)</label>
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
             <Chip active={botTimeoutAssigneeType === 'user'} onClick={() => { setBotTimeoutAssigneeType('user'); setBotTimeoutAssigneeId('') }}>Atendente</Chip>
             <Chip active={botTimeoutAssigneeType === 'group'} onClick={() => { setBotTimeoutAssigneeType('group'); setBotTimeoutAssigneeId('') }}>Grupo</Chip>
@@ -780,6 +772,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         <SaveButton text="Salvar tempo do robô" saving={savingKey === 'bot-timeout'} saved={savedKey === 'bot-timeout'}
           onClick={() => saveFlow('bot-timeout', {
             bot_timeout_minutes: botTimeoutMinutes, bot_timeout_message: botTimeoutMessage || null,
+            ...(botTimeoutMessage.trim() ? { timeout_message: botTimeoutMessage } : {}), // vazio: mantém a mensagem padrão antiga, sem desligar a transferência
             bot_timeout_assignee_id: botTimeoutAssigneeId || null, bot_timeout_assignee_type: botTimeoutAssigneeId ? botTimeoutAssigneeType : null,
           })} />
       </Card>
@@ -896,14 +889,8 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
       </Card>
 
       <Card>
-        <Title Icon={Timer} title="Transferência por inatividade" help="Quando um cliente não responde por este tempo, a conversa é passada para quem você escolher." />
-        <div style={{ marginBottom: 14 }}><TimeoutNow flow={flow} where="equipe" /></div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-          <label style={{ ...label, margin: 0 }}>Tempo sem resposta</label>
-          <input type="number" min={5} max={120} value={timeoutMinutes} onChange={e => setTimeoutMinutes(Number(e.target.value))} style={{ ...input, width: 80, textAlign: 'center' }} />
-          <span style={{ fontSize: 13, color: BRAND.muted }}>minutos</span>
-        </div>
-        <div style={{ marginBottom: 14 }}>
+        <Title Icon={Timer} title="Para onde vai a conversa" help="Destino quando o robô passa a conversa para a equipe fora do horário de atendimento. O destino de quando o cliente some fica em Horário de atendimento." />
+        <div style={{ marginBottom: 16 }}>
           <label style={label}>Transferir para</label>
           <select style={input}
             value={timeoutGroupId ? `group:${timeoutGroupId}` : timeoutAssigneeId ? `user:${timeoutAssigneeId}` : ''}
@@ -918,11 +905,10 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
             <optgroup label="Atendentes">{flowUsers.map(u => <option key={u.id} value={`user:${u.id}`}>{u.full_name}</option>)}</optgroup>
           </select>
         </div>
-        <div style={{ marginBottom: 16 }}><label style={label}>Mensagem ao transferir</label>{textarea(timeoutMessage, setTimeoutMessage, 2)}</div>
         <SaveButton text="Salvar transferência" saving={savingKey === 'equipe'} saved={savedKey === 'equipe'}
           onClick={() => saveFlow('equipe', {
-            timeout_minutes: timeoutMinutes, timeout_group_id: timeoutGroupId || null, timeout_assignee_id: timeoutAssigneeId || null,
-            timeout_assignee_name: timeoutAssigneeId ? (flowUsers.find(u => u.id === timeoutAssigneeId)?.full_name || null) : null, timeout_message: timeoutMessage,
+            timeout_group_id: timeoutGroupId || null, timeout_assignee_id: timeoutAssigneeId || null,
+            timeout_assignee_name: timeoutAssigneeId ? (flowUsers.find(u => u.id === timeoutAssigneeId)?.full_name || null) : null, 
           })} />
       </Card>
     </div>
