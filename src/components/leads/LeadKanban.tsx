@@ -707,6 +707,15 @@ export default function LeadKanban() {
     if (fa === 'us' || fa === 'family' || fa === 'visits' || fa === 'enrolled' || fa === 'incomplete') setAttention(fa)
   }, [searchParams])
 
+  // "Ver lead" vindo de outras telas (?open=<id>): abre a ficha direto, uma vez só.
+  const openedRef = useRef<string | null>(null)
+  useEffect(() => {
+    const id = searchParams.get('open') || searchParams.get('highlight')
+    if (!id || openedRef.current === id || leads.length === 0) return
+    const l = leads.find(x => x.id === id)
+    if (l) { openedRef.current = id; setEditingLead(l); setShowNewLeadModal(true) }
+  }, [searchParams, leads])
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
   const showToast = useCallback((msg: string, type: 'error' | 'success') => {

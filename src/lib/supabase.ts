@@ -95,6 +95,11 @@ export interface Visit {
   created_at: string
   updated_at: string
   student_name?: string
+  reason_label?: string | null
+  reason_detail?: string | null
+  confirmed_at?: string | null
+  confirmed_via?: string | null
+  outcome_at?: string | null
 }
 
 export interface Enrollment {

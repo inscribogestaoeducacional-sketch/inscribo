@@ -2,8 +2,8 @@
 // o lead pra Visita/Proposta/Matriculado) e reaproveitável em outras telas.
 import { useState } from 'react'
 import { CalendarCheck, X } from 'lucide-react'
-import { useAuth } from '../../contexts/AuthContext'
-import { setVisitOutcome, isPastVisit, VISIT_OUTCOME_LABEL, type PendingVisit, type VisitOutcome } from '../../lib/visitOutcome'
+import { isPastVisit, VISIT_OUTCOME_LABEL, type PendingVisit, type VisitOutcome } from '../../lib/visitOutcome'
+import VisitOutcomePicker from './VisitOutcomePicker'
 
 const OUTCOME_STYLE: Record<VisitOutcome, { bg: string; color: string }> = {
   completed: { bg: '#DCFCE7', color: '#15803D' },
@@ -21,29 +21,9 @@ export default function VisitOutcomeDialog({ open, title, subtitle, visits, adva
   onClose: () => void
   onChanged?: () => void
 }) {
-  const { user } = useAuth()
   const [done, setDone] = useState<Record<string, VisitOutcome>>({})
-  const [saving, setSaving] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   if (!open) return null
-
-  const answer = async (v: PendingVisit, outcome: VisitOutcome) => {
-    if (!user?.institution_id) return
-    setSaving(v.id); setError(null)
-    try {
-      await setVisitOutcome({
-        visit: v, outcome, advanceLead,
-        user: { id: user.id, full_name: user.full_name, role: user.role, institution_id: user.institution_id },
-      })
-      setDone(d => ({ ...d, [v.id]: outcome }))
-      onChanged?.()
-    } catch (e) {
-      setError((e as Error).message || 'Não foi possível salvar a baixa.')
-    } finally {
-      setSaving(null)
-    }
-  }
 
   const pending = visits.filter(v => !done[v.id])
 
@@ -78,19 +58,11 @@ export default function VisitOutcomeDialog({ open, title, subtitle, visits, adva
                 {answered ? (
                   <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 999, ...OUTCOME_STYLE[answered] }}>✓ {VISIT_OUTCOME_LABEL[answered]}</span>
                 ) : (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {(['completed', 'no_show', 'cancelled'] as VisitOutcome[]).map(o => (
-                      <button key={o} disabled={saving === v.id} onClick={() => answer(v, o)}
-                        style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: saving === v.id ? 'wait' : 'pointer', ...OUTCOME_STYLE[o] }}>
-                        {VISIT_OUTCOME_LABEL[o]}
-                      </button>
-                    ))}
-                  </div>
+                  <VisitOutcomePicker visit={v} advanceLead={advanceLead} onDone={o => { setDone(d => ({ ...d, [v.id]: o })); onChanged?.() }} />
                 )}
               </div>
             )
           })}
-          {error && <p style={{ margin: 0, fontSize: 12, color: '#DC2626' }}>{error}</p>}
         </div>
 
         <div style={{ padding: '10px 18px 16px', display: 'flex', justifyContent: 'flex-end' }}>

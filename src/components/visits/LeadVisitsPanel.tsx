@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CalendarCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../contexts/AuthContext'
-import { setVisitOutcome, isPastVisit, VISIT_OUTCOME_LABEL, type VisitOutcome } from '../../lib/visitOutcome'
+import { isPastVisit } from '../../lib/visitOutcome'
+import VisitOutcomePicker from './VisitOutcomePicker'
 
 interface VisitRow { id: string; lead_id: string | null; scheduled_date: string; status: string }
 
@@ -21,11 +21,8 @@ export default function LeadVisitsPanel({ leadId, reloadKey, onChanged }: {
   reloadKey?: unknown
   onChanged?: () => void
 }) {
-  const { user } = useAuth()
   const [visits, setVisits] = useState<VisitRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -36,23 +33,6 @@ export default function LeadVisitsPanel({ leadId, reloadKey, onChanged }: {
   }, [leadId])
 
   useEffect(() => { load() }, [load, reloadKey])
-
-  const answer = async (v: VisitRow, outcome: VisitOutcome) => {
-    if (!user?.institution_id) return
-    setSaving(v.id); setError(null)
-    try {
-      await setVisitOutcome({
-        visit: v, outcome,
-        user: { id: user.id, full_name: user.full_name, role: user.role, institution_id: user.institution_id },
-      })
-      await load()
-      onChanged?.()
-    } catch (e) {
-      setError((e as Error).message || 'Não foi possível salvar a baixa.')
-    } finally {
-      setSaving(null)
-    }
-  }
 
   if (loading) return <div style={{ height: 40, borderRadius: 10, background: '#F1F5F9' }} />
   if (visits.length === 0) return <p style={{ margin: 0, fontSize: 12, color: '#94A3B8' }}>Nenhuma visita agendada.</p>
@@ -73,20 +53,14 @@ export default function LeadVisitsPanel({ leadId, reloadKey, onChanged }: {
               <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: chip.bg, color: chip.color }}>{chip.label}</span>
             </div>
             {v.status === 'scheduled' && (
-              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                {pendingPast && <span style={{ fontSize: 11, color: '#B45309', fontWeight: 600, marginRight: 4 }}>Sem baixa — aconteceu?</span>}
-                {(['completed', 'no_show', 'cancelled'] as VisitOutcome[]).map(o => (
-                  <button key={o} type="button" disabled={saving === v.id} onClick={() => answer(v, o)}
-                    style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 7, border: '1px solid #E2E8F0', background: '#fff', color: '#334155', cursor: saving === v.id ? 'wait' : 'pointer' }}>
-                    {VISIT_OUTCOME_LABEL[o]}
-                  </button>
-                ))}
+              <div style={{ marginTop: 8 }}>
+                {pendingPast && <div style={{ fontSize: 11, color: '#B45309', fontWeight: 600, marginBottom: 5 }}>Sem baixa — aconteceu?</div>}
+                <VisitOutcomePicker visit={v} onDone={() => { load(); onChanged?.() }} />
               </div>
             )}
           </div>
         )
       })}
-      {error && <p style={{ margin: 0, fontSize: 12, color: '#DC2626' }}>{error}</p>}
     </div>
   )
 }

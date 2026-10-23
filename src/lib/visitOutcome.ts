@@ -78,13 +78,19 @@ export async function setVisitOutcome(params: {
   user: { id: string; full_name: string; role: string; institution_id: string }
   /** true = se "aconteceu" e o lead ainda está antes da visita, avança pra 'visit' */
   advanceLead?: boolean
+  /** obrigatório quando a visita não aconteceu (faltou/cancelada) */
+  reason?: { label: string; detail?: string }
 }): Promise<void> {
-  const { visit, outcome, notes, user, advanceLead = true } = params
-  await DatabaseService.updateVisit(visit.id, { status: outcome, ...(notes ? { notes } : {}) } as Partial<Visit>)
+  const { visit, outcome, notes, user, advanceLead = true, reason } = params
+  if (outcome !== 'completed' && !reason?.label) throw new Error('Diga por que a visita não aconteceu.')
+  await DatabaseService.updateVisit(visit.id, {
+    status: outcome, ...(notes ? { notes } : {}),
+    ...(outcome !== 'completed' && reason ? { reason_label: reason.label, reason_detail: reason.detail || null } : {}),
+  } as Partial<Visit>)
   await logAudit({
     institution_id: user.institution_id, module: 'visits', record_id: visit.id,
     action: outcome === 'cancelled' ? 'deleted' : 'status_changed',
-    old_value: 'scheduled', new_value: outcome,
+    old_value: 'scheduled', new_value: outcome === 'completed' || !reason ? outcome : `${outcome}: ${reason.label}`,
     user_id: user.id, user_name: user.full_name, user_role: user.role,
   })
   if (outcome === 'completed' && advanceLead && visit.lead_id) {

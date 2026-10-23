@@ -1,13 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   ChevronLeft, ChevronRight, Plus, X, Search, Check, Trash2,
-  Calendar, Clock, TrendingUp, History
+  Calendar, Clock, History, CalendarCheck, MessageCircle, Settings2, AlertCircle, UserX, Percent,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { DatabaseService, Visit, Lead } from '../../lib/supabase'
+import { DatabaseService, Visit, Lead, supabase } from '../../lib/supabase'
 import { logAudit } from '../../hooks/useAudit'
-import { setVisitOutcome, advanceLeadTo, isPastVisit } from '../../lib/visitOutcome'
+import { advanceLeadTo, isPastVisit } from '../../lib/visitOutcome'
+import { normalizeBrazilianInput } from '../../lib/phone'
+import { BRAND } from '../../lib/brand'
+import PageHeader from '../ui/PageHeader'
+import VisitOutcomePicker from '../visits/VisitOutcomePicker'
+import { DEFAULT_REASONS, useVisitReasons, type ReasonKind } from '../../lib/visitReasons'
 import AuditModal from '../common/AuditModal'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -189,638 +194,331 @@ function NovaVisitaModal({ isOpen, onClose, onSave, defaultDate, leads }: NovaVi
   )
 }
 
-// ─── VisitCalendar ────────────────────────────────────────────────────────────
+// ─── Editor dos motivos (gestor/admin) ────────────────────────────────────────
+function ReasonsEditor({ institutionId, onClose, onSaved }: { institutionId: string; onClose: () => void; onSaved: () => void }) {
+  const { labelsFor, rows } = useVisitReasons(institutionId)
+  const [lists, setLists] = useState<Record<ReasonKind, string[]> | null>(null)
+  const [draft, setDraft] = useState<Record<ReasonKind, string>>({ no_show: '', cancelled: '' })
+  const [saving, setSaving] = useState(false)
+  useEffect(() => { setLists({ no_show: labelsFor('no_show'), cancelled: labelsFor('cancelled') }) }, [rows.length]) // eslint-disable-line
+  if (!lists) return null
+  const kinds: [ReasonKind, string][] = [['no_show', 'Quando a família faltou'], ['cancelled', 'Quando a visita foi cancelada']]
+  const save = async () => {
+    setSaving(true)
+    for (const [k] of kinds) {
+      await supabase.from('visit_reasons').delete().eq('institution_id', institutionId).eq('kind', k)
+      if (lists[k].length) await supabase.from('visit_reasons').insert(lists[k].map((label, i) => ({ institution_id: institutionId, kind: k, label, sort_order: i })))
+    }
+    setSaving(false); onSaved(); onClose()
+  }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(15,23,42,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 520, maxHeight: '88vh', overflowY: 'auto', padding: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ flex: 1, fontSize: 16, fontWeight: 800, color: BRAND.ink }}>Motivos de a visita não acontecer</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={18} color={BRAND.muted} /></button>
+        </div>
+        <p style={{ margin: '0 0 12px', fontSize: 12.5, color: BRAND.muted }}>Essas opções aparecem para quem dá baixa na visita. “Outro” sempre existe.</p>
+        {kinds.map(([k, title]) => (
+          <div key={k} style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: BRAND.ink, marginBottom: 6 }}>{title}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              {lists[k].map((l, i) => (
+                <span key={l + i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: BRAND.soft, color: BRAND.primaryDark, fontSize: 12, fontWeight: 600, padding: '3px 6px 3px 11px', borderRadius: 999 }}>
+                  {l}<button type="button" onClick={() => setLists(p => p && ({ ...p, [k]: p[k].filter((_, j) => j !== i) }))} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}><X size={13} color={BRAND.primaryDark} /></button>
+                </span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={draft[k]} onChange={e => setDraft(d => ({ ...d, [k]: e.target.value }))} placeholder="Novo motivo"
+                onKeyDown={e => { if (e.key === 'Enter' && draft[k].trim()) { setLists(p => p && ({ ...p, [k]: [...p[k], draft[k].trim()] })); setDraft(d => ({ ...d, [k]: '' })) } }}
+                style={{ flex: 1, padding: '7px 10px', borderRadius: 9, border: `1px solid ${BRAND.line}`, fontSize: 13, outline: 'none' }} />
+              <button type="button" onClick={() => { if (!draft[k].trim()) return; setLists(p => p && ({ ...p, [k]: [...p[k], draft[k].trim()] })); setDraft(d => ({ ...d, [k]: '' })) }}
+                style={{ padding: '7px 12px', borderRadius: 9, border: 'none', background: BRAND.primary, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Adicionar</button>
+            </div>
+          </div>
+        ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <button type="button" onClick={() => setLists({ no_show: DEFAULT_REASONS.no_show, cancelled: DEFAULT_REASONS.cancelled })} style={{ border: 'none', background: 'none', color: BRAND.muted, cursor: 'pointer', fontSize: 12.5 }}>Voltar ao padrão</button>
+          <button type="button" onClick={save} disabled={saving} style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: BRAND.primary, color: '#fff', fontWeight: 800, cursor: 'pointer' }}>{saving ? 'Salvando...' : 'Salvar'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Tela de Visitas ──────────────────────────────────────────────────────────
+type ViewMode = 'month' | 'week' | 'list'
+type Focus = null | 'today' | 'pending' | 'unconfirmed'
+interface MsgInfo { status: string; scheduled_for: string; sent_at: string | null }
+
+const STAGE_CSS = `
+@keyframes vsFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes vsPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.35)}50%{box-shadow:0 0 0 7px rgba(239,68,68,0)}}
+.vs-in{animation:vsFade .32s ease both}
+.vs-card{transition:transform .16s ease, box-shadow .16s ease}
+.vs-card:hover{transform:translateY(-2px);box-shadow:0 10px 22px -12px rgba(0,122,110,.4)}
+.vs-kpi{transition:transform .16s ease, box-shadow .16s ease;cursor:pointer;font-family:inherit;text-align:left}
+.vs-kpi:hover{transform:translateY(-2px);box-shadow:0 10px 22px -14px rgba(26,43,74,.35)}
+.vs-alert{animation:vsPulse 2.2s ease-in-out infinite}
+.vs-day{transition:background .12s ease, transform .12s ease}
+.vs-day:hover{background:#fff;transform:scale(1.06)}
+@media (prefers-reduced-motion: reduce){.vs-in,.vs-alert{animation:none}.vs-card,.vs-kpi,.vs-day{transition:none}}
+`
+
+const STATUS_COLOR: Record<string, string> = { scheduled: '#8B5CF6', completed: '#10B981', no_show: '#94A3B8', cancelled: '#F87171' }
+
 export default function VisitCalendar() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
-  useEffect(() => {
-    const h = () => setIsMobile(window.innerWidth < 768)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
   const [visits, setVisits] = useState<Visit[]>([])
   const [leads, setLeads] = useState<Lead[]>([])
+  const [users, setUsers] = useState<Map<string, string>>(new Map())
+  const [msgs, setMsgs] = useState<Map<string, MsgInfo>>(new Map())
   const [loading, setLoading] = useState(true)
+  const [view, setView] = useState<ViewMode>('month')
+  const [focus, setFocus] = useState<Focus>(() => new URLSearchParams(window.location.search).get('pendentes') === '1' ? 'pending' : null)
   const [calendarMonth, setCalendarMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [showModal, setShowModal] = useState(false)
-
+  const [showReasons, setShowReasons] = useState(false)
   const [auditVisitId, setAuditVisitId] = useState<string | null>(null)
-
-  // Inline completion
-  const [completingId, setCompletingId] = useState<string | null>(null)
-  const [completionNotes, setCompletionNotes] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [mobileFilter, setMobileFilter] = useState(0)
-
-  useEffect(() => {
-    if (user?.institution_id) loadData()
-  }, [user])
+  const [baixaId, setBaixaId] = useState<string | null>(null)
+  const { refresh: refreshReasons } = useVisitReasons(user?.institution_id)
+  const canEdit = user?.role === 'admin' || user?.role === 'manager'
 
   const loadData = useCallback(async () => {
+    if (!user?.institution_id) return
     try {
-      setLoading(true)
-      const [visitsData, leadsData] = await Promise.all([
-        DatabaseService.getVisits(user!.institution_id!),
-        DatabaseService.getLeads(user!.institution_id!)
+      const inst = user.institution_id
+      const [visitsData, leadsData, usersRes] = await Promise.all([
+        DatabaseService.getVisits(inst),
+        DatabaseService.getLeads(inst),
+        supabase.from('users').select('id, full_name').eq('institution_id', inst),
       ])
-      setVisits(visitsData)
-      setLeads(leadsData)
-    } catch (err) {
-      console.error('Erro ao carregar visitas:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [user])
+      setVisits(visitsData); setLeads(leadsData)
+      setUsers(new Map(((usersRes.data ?? []) as { id: string; full_name: string }[]).map(u => [u.id, u.full_name])))
+      const ids = visitsData.filter(v => v.status === 'scheduled').map(v => v.id)
+      if (ids.length) {
+        const { data } = await supabase.from('whatsapp_scheduled_messages').select('visit_id, status, scheduled_for, sent_at')
+          .in('visit_id', ids).order('scheduled_for', { ascending: false })
+        const m = new Map<string, MsgInfo>()
+        for (const r of (data ?? []) as (MsgInfo & { visit_id: string })[]) if (!m.has(r.visit_id)) m.set(r.visit_id, r)
+        setMsgs(m)
+      } else setMsgs(new Map())
+    } catch (err) { console.error('Erro ao carregar visitas:', err) } finally { setLoading(false) }
+  }, [user?.institution_id])
+  useEffect(() => { loadData() }, [loadData])
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-  const today = new Date()
-  const todayStr = toLocalDateStr(today)
-  const weekStart = new Date(today)
-  weekStart.setDate(today.getDate() - today.getDay())
-  const weekStartStr = toLocalDateStr(weekStart)
+  const leadById = useMemo(() => new Map(leads.map(l => [l.id, l])), [leads])
+  const today = new Date(); const todayStr = toLocalDateStr(today)
+  const dayStr = (v: Visit) => toLocalDateStr(new Date(v.scheduled_date))
+  const sortAsc = (a: Visit, b: Visit) => a.scheduled_date.localeCompare(b.scheduled_date)
 
-  const statsToday = visits.filter(v => toLocalDateStr(new Date(v.scheduled_date)) === todayStr).length
-  const statsWeek = visits.filter(v => toLocalDateStr(new Date(v.scheduled_date)) >= weekStartStr).length
-  const statsCompleted = visits.filter(v => v.status === 'completed').length
-  const statsDone = visits.filter(v => v.status === 'completed' || v.status === 'no_show').length
-  const statsRate = statsDone > 0 ? Math.round((statsCompleted / statsDone) * 100) : 0
+  const pending = useMemo(() => visits.filter(v => v.status === 'scheduled' && isPastVisit(v)).sort(sortAsc), [visits])
+  const todayVisits = visits.filter(v => dayStr(v) === todayStr).sort(sortAsc)
+  const in7 = toLocalDateStr(new Date(Date.now() + 7 * 86400000))
+  const unconfirmed = visits.filter(v => v.status === 'scheduled' && !isPastVisit(v) && dayStr(v) <= in7 && !v.confirmed_at).sort(sortAsc)
+  const monthKey = `${today.getFullYear()}-${today.getMonth()}`
+  const monthDone = visits.filter(v => { const d = new Date(v.scheduled_date); return `${d.getFullYear()}-${d.getMonth()}` === monthKey && (v.status === 'completed' || v.status === 'no_show') })
+  const monthRate = monthDone.length ? Math.round(monthDone.filter(v => v.status === 'completed').length / monthDone.length * 100) : 0
+  const monthNoShow = monthDone.filter(v => v.status === 'no_show').length
 
-  // ── Calendar helpers ────────────────────────────────────────────────────────
-  const getDaysInMonth = (d: Date) => {
-    const year = d.getFullYear()
-    const month = d.getMonth()
-    const firstDay = new Date(year, month, 1).getDay()
-    const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const calDays = (() => {
+    const y = calendarMonth.getFullYear(), m = calendarMonth.getMonth()
     const days: (Date | null)[] = []
-    for (let i = 0; i < firstDay; i++) days.push(null)
-    for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i))
+    for (let i = 0; i < new Date(y, m, 1).getDay(); i++) days.push(null)
+    for (let i = 1; i <= new Date(y, m + 1, 0).getDate(); i++) days.push(new Date(y, m, i))
     return days
-  }
+  })()
+  const dayColor = (arr: Visit[]) => arr.some(v => v.status === 'scheduled' && isPastVisit(v)) ? '#EF4444'
+    : arr.some(v => v.status === 'scheduled') ? '#8B5CF6' : arr.some(v => v.status === 'completed') ? '#10B981' : arr.length ? '#94A3B8' : null
 
-  const getVisitsForDate = (date: Date) => {
-    const dateStr = toLocalDateStr(date)
-    return visits.filter(v => toLocalDateStr(new Date(v.scheduled_date)) === dateStr)
-  }
-
-  const getDotColor = (dayVisitsArr: Visit[]) => {
-    if (dayVisitsArr.length === 0) return null
-    if (dayVisitsArr.some(v => v.status === 'scheduled')) return 'bg-amber-400'
-    if (dayVisitsArr.some(v => v.status === 'completed')) return 'bg-green-400'
-    if (dayVisitsArr.some(v => v.status === 'no_show')) return 'bg-gray-400'
-    return 'bg-red-400'
-  }
-
-  // ── Selected day ────────────────────────────────────────────────────────────
   const selectedStr = toLocalDateStr(selectedDate)
-  const dayVisits = visits
-    .filter(v => toLocalDateStr(new Date(v.scheduled_date)) === selectedStr)
-    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+  const dayVisits = visits.filter(v => dayStr(v) === selectedStr).sort(sortAsc)
+  const weekStart = new Date(selectedDate); weekStart.setDate(selectedDate.getDate() - selectedDate.getDay())
+  const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d })
+  const upcoming = visits.filter(v => v.status === 'scheduled' && !isPastVisit(v)).sort(sortAsc)
 
-  // ── Upcoming (next 7 days, scheduled only, excluding selected day) ──────────
-  const next7 = new Date(today)
-  next7.setDate(today.getDate() + 7)
-  const next7Str = toLocalDateStr(next7)
-  const upcomingVisits = visits
-    .filter(v => {
-      const d = toLocalDateStr(new Date(v.scheduled_date))
-      return d >= todayStr && d <= next7Str && d !== selectedStr && v.status === 'scheduled'
-    })
-    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
-    .slice(0, 10)
-
-  // Fase 0A — já passaram e seguem 'scheduled' (sem baixa), mais antigas primeiro
-  const pastPendingVisits = visits
-    .filter(v => v.status === 'scheduled' && isPastVisit(v))
-    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
-
-  // Alerta "visitas sem baixa" do Início navega com ?pendentes=1
-  const hasPending = pastPendingVisits.length > 0
-  useEffect(() => {
-    if (hasPending && new URLSearchParams(window.location.search).get('pendentes') === '1') {
-      document.getElementById('visitas-sem-baixa')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [hasPending])
-
-  const quickOutcome = async (visit: Visit, outcome: 'completed' | 'no_show' | 'cancelled') => {
-    if (outcome === 'cancelled' && !confirm('Marcar esta visita como cancelada?')) return
-    await setVisitOutcome({
-      visit: { id: visit.id, lead_id: visit.lead_id }, outcome,
-      user: { id: user!.id, full_name: user!.full_name, role: user!.role, institution_id: user!.institution_id! },
-    })
-    await loadData()
-  }
-
-  // ── Actions ─────────────────────────────────────────────────────────────────
   const handleCreateVisit = async (data: { lead_id: string; student_name: string; date: string; time: string; notes: string }) => {
-    const [year, month, day] = data.date.split('-')
-    const [hours, minutes] = data.time.split(':')
+    const [year, month, day] = data.date.split('-'); const [hours, minutes] = data.time.split(':')
     const visitDate = new Date(+year, +month - 1, +day, +hours, +minutes, 0)
     const newVisit = await DatabaseService.createVisit({
-      institution_id: user!.institution_id,
-      lead_id: data.lead_id,
-      student_name: data.student_name,
-      scheduled_date: visitDate.toISOString(),
-      notes: data.notes || undefined,
-      status: 'scheduled',
+      institution_id: user!.institution_id, lead_id: data.lead_id, student_name: data.student_name,
+      scheduled_date: visitDate.toISOString(), notes: data.notes || undefined, status: 'scheduled',
     })
-    await advanceLeadTo(data.lead_id, 'scheduled')  // Fase 0A: só avança, nunca volta
-    if (newVisit?.id) {
-      await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: newVisit.id, action: 'created', new_value: `${data.student_name} — ${data.date}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
-    }
+    await advanceLeadTo(data.lead_id, 'scheduled')
+    if (newVisit?.id) await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: newVisit.id, action: 'created', new_value: `${data.student_name} — ${data.date}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     await loadData()
   }
 
-  const handleMarkCompleted = async (visitId: string) => {
-    setSaving(true)
-    try {
-      // Fase 0A: baixa compartilhada (Kanban, modal, Hub) — só avança o lead
-      // pra 'visit' se ele ainda estiver antes da visita (antes forçava sempre).
-      const visit = visits.find(v => v.id === visitId)
-      await setVisitOutcome({
-        visit: { id: visitId, lead_id: visit?.lead_id }, outcome: 'completed', notes: completionNotes || undefined,
-        user: { id: user!.id, full_name: user!.full_name, role: user!.role, institution_id: user!.institution_id! },
-      })
-      setCompletingId(null)
-      setCompletionNotes('')
-      await loadData()
-    } finally {
-      setSaving(false)
-    }
+  const openChat = (v: Visit) => {
+    const l = v.lead_id ? leadById.get(v.lead_id) : undefined
+    if (l?.phone) navigate(`/whatsapp?phone=${normalizeBrazilianInput(l.phone)}`)
   }
 
-  const handleMarkNoShow = async (visitId: string) => {
-    await setVisitOutcome({
-      visit: { id: visitId }, outcome: 'no_show',
-      user: { id: user!.id, full_name: user!.full_name, role: user!.role, institution_id: user!.institution_id! },
-    })
-    await loadData()
-  }
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const pill = (bg: string, color: string): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 4, background: bg, color, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999 })
 
-  const handleCancel = async (visitId: string) => {
-    if (!confirm('Cancelar esta visita?')) return
-    await setVisitOutcome({
-      visit: { id: visitId }, outcome: 'cancelled',
-      user: { id: user!.id, full_name: user!.full_name, role: user!.role, institution_id: user!.institution_id! },
-    })
-    await loadData()
-  }
-
-  const formatTime = (dateStr: string) =>
-    new Date(dateStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-
-  const formatSelectedDate = (d: Date) =>
-    d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
-
-  if (loading) {
+  const VisitCard = ({ v, i }: { v: Visit; i: number }) => {
+    const lead = v.lead_id ? leadById.get(v.lead_id) : undefined
+    const owner = users.get(v.assigned_to ?? lead?.assigned_to ?? '') ?? null
+    const past = v.status === 'scheduled' && isPastVisit(v)
+    const stripe = past ? '#EF4444' : STATUS_COLOR[v.status] ?? '#8B5CF6'
+    const msg = msgs.get(v.id)
+    const name = v.student_name || lead?.student_name || 'Visitante'
+    const initials = name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#14b8a6] border-t-transparent" />
-      </div>
-    )
-  }
-
-  const calDays = getDaysInMonth(calendarMonth)
-  const weekLabels = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
-
-  // ── Mobile early return ───────────────────────────────────────────────────
-  if (isMobile) {
-    const now = new Date()
-    const todayStr2 = toLocalDateStr(now)
-    const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1)
-    const tomorrowStr = toLocalDateStr(tomorrow)
-    const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 6)
-    const weekEndStr = toLocalDateStr(weekEnd)
-
-    const dateFilters = [
-      { label: 'Hoje',        fn: (v: Visit) => toLocalDateStr(new Date(v.scheduled_date)) === todayStr2 },
-      { label: 'Amanhã',      fn: (v: Visit) => toLocalDateStr(new Date(v.scheduled_date)) === tomorrowStr },
-      { label: 'Essa semana', fn: (v: Visit) => { const d = toLocalDateStr(new Date(v.scheduled_date)); return d >= todayStr2 && d <= weekEndStr } },
-    ]
-    const mobileVisits = visits.filter(dateFilters[mobileFilter].fn).sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
-
-        {/* Header */}
-        <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Calendar style={{ width: 16, height: 16, color: '#F59E0B' }} />
-            </div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Visitas</h1>
-            <span style={{ background: '#FEF3C7', color: '#B45309', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{statsToday} hoje</span>
+      <div className="vs-card vs-in" style={{ animationDelay: `${Math.min(i, 10) * 30}ms`, background: '#fff', borderRadius: 16, padding: 12, borderLeft: `4px solid ${stripe}`, boxShadow: '0 1px 2px rgba(26,43,74,.05), 0 6px 16px -10px rgba(26,43,74,.22)' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 13, background: `linear-gradient(135deg, ${stripe}, ${stripe}BB)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>{initials}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: BRAND.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}{lead?.grade_interest && <span style={{ fontWeight: 400, color: BRAND.muted }}> · {lead.grade_interest}</span>}</div>
+            <div style={{ fontSize: 12, color: BRAND.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead?.responsible_name || 'Sem responsável'} · {owner ? `atendente ${owner}` : 'sem atendente'}</div>
           </div>
-          <button onClick={() => { setSelectedDate(new Date()); setShowModal(true) }}
-            style={{ padding: '8px 14px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, minHeight: 44 }}>
-            <Plus style={{ width: 14, height: 14 }} /> Nova
-          </button>
+          <span style={pill(past ? '#FEE2E2' : '#EDE9FE', past ? '#B91C1C' : '#6D28D9')}><Clock size={12} />{view === 'month' ? fmtTime(v.scheduled_date) : `${new Date(v.scheduled_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${fmtTime(v.scheduled_date)}`}{past ? ' · sem baixa' : ''}</span>
         </div>
-
-        {/* Date chips */}
-        <div style={{ padding: '12px 16px 0', display: 'flex', gap: 8, flexShrink: 0 }}>
-          {dateFilters.map(({ label }, i) => (
-            <button key={label} onClick={() => setMobileFilter(i)}
-              style={{ padding: '8px 16px', borderRadius: 9999, fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 44,
-                background: mobileFilter === i ? '#00A896' : '#fff',
-                color: mobileFilter === i ? '#fff' : '#64748B',
-                border: `1px solid ${mobileFilter === i ? '#00A896' : '#E2E8F0'}` } as React.CSSProperties}>
-              {label}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 5, marginTop: 9, flexWrap: 'wrap' }}>
+          {v.status === 'completed' && <span style={pill('#DCFCE7', '#15803D')}><Check size={11} />Realizada</span>}
+          {v.status === 'no_show' && <span style={pill('#F1F5F9', '#475569')}><UserX size={11} />Faltou{v.reason_label ? `: ${v.reason_label}` : ''}</span>}
+          {v.status === 'cancelled' && <span style={pill('#FEE2E2', '#B91C1C')}>Cancelada{v.reason_label ? `: ${v.reason_label}` : ''}</span>}
+          {v.status === 'scheduled' && !past && (v.confirmed_at
+            ? <span style={pill('#DCFCE7', '#15803D')}><Check size={11} />Família confirmou</span>
+            : <span style={pill('#FEF3C7', '#B45309')}>Sem confirmação</span>)}
+          {v.status === 'scheduled' && msg && <span style={pill('#F1F5F9', '#475569')}>{msg.status === 'sent' ? `Lembrete enviado ${fmtTime(msg.sent_at ?? msg.scheduled_for)}` : msg.status === 'pending' ? `Lembrete às ${fmtTime(msg.scheduled_for)}` : msg.status === 'failed' ? 'Lembrete falhou' : 'Lembrete cancelado'}</span>}
+          {v.status === 'scheduled' && !msg && <span style={pill('#F1F5F9', '#64748B')}>Sem lembrete agendado</span>}
         </div>
-
-        {/* Visit list */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0' }}>
-          {mobileVisits.length === 0 ? (
-            <div style={{ padding: '40px 16px', textAlign: 'center' }}>
-              <p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhuma visita para este período</p>
-            </div>
-          ) : mobileVisits.map(v => {
-            const st = visitStatus[v.status as keyof typeof visitStatus]
-            const dt = new Date(v.scheduled_date)
-            const hora = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-            return (
-              <div key={v.id} style={{ padding: '14px 16px', background: '#fff', borderRadius: 14, margin: '0 16px 10px', border: '1px solid #E2E8F0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{hora}</span>
-                  <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 999, fontWeight: 600, background: st?.badgeStyle?.background ?? '#F1F5F9', color: st?.badgeStyle?.color ?? '#64748B' }}>{st?.label ?? v.status}</span>
-                </div>
-                <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: '0 0 4px' }}>{v.student_name}</p>
-                {v.notes && <p style={{ fontSize: 12, color: '#94A3B8', marginTop: 6, fontStyle: 'italic', margin: 0 }}>{v.notes}</p>}
-              </div>
-            )
-          })}
+        {v.notes && <p style={{ margin: '8px 0 0', fontSize: 12, color: BRAND.muted, fontStyle: 'italic' }}>{v.notes}</p>}
+        {v.reason_detail && <p style={{ margin: '4px 0 0', fontSize: 12, color: BRAND.muted }}>{v.reason_detail}</p>}
+        {(past || baixaId === v.id) && v.status === 'scheduled' && (
+          <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 12, padding: 10, marginTop: 9 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#9A3412', marginBottom: 7 }}>A visita aconteceu?</div>
+            <VisitOutcomePicker visit={{ id: v.id, lead_id: v.lead_id ?? null, scheduled_date: v.scheduled_date, student_name: v.student_name }} onDone={() => { setBaixaId(null); loadData() }} />
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 9, borderTop: '1px solid #F1F5F4', flexWrap: 'wrap' }}>
+          {v.lead_id && <button type="button" onClick={() => navigate(`/leads?open=${v.lead_id}`)} style={{ background: '#EEF2FF', color: '#4338CA', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer' }}>Ver lead</button>}
+          {lead?.phone && <button type="button" onClick={() => openChat(v)} style={{ background: '#DCFCE7', color: '#15803D', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><MessageCircle size={13} />Conversa</button>}
+          {v.status === 'scheduled' && !past && baixaId !== v.id && <button type="button" onClick={() => setBaixaId(v.id)} style={{ background: '#FFF7ED', color: '#C2410C', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer' }}>Dar baixa</button>}
+          <button type="button" onClick={() => setAuditVisitId(v.id)} style={{ background: '#F1F5F9', color: '#475569', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><History size={13} />Histórico</button>
         </div>
-
-        {/* Modal */}
-        <NovaVisitaModal isOpen={showModal} onClose={() => setShowModal(false)} leads={leads}
-          defaultDate={toLocalDateStr(selectedDate)}
-          onSave={async ({ lead_id, student_name, date, time, notes }) => {
-            const [y, m, d] = date.split('-').map(Number)
-            const [h, min] = time.split(':').map(Number)
-            const dt = new Date(y, m - 1, d, h, min)
-            await DatabaseService.createVisit({ institution_id: user!.institution_id!, lead_id, student_name, scheduled_date: dt.toISOString(), notes, status: 'scheduled' })
-            await loadData()
-          }}
-        />
       </div>
     )
   }
+
+  const List = ({ items, empty }: { items: Visit[]; empty: string }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {items.length === 0 && <div style={{ textAlign: 'center', padding: '30px 10px', color: BRAND.faint, fontSize: 13 }}>{empty}</div>}
+      {items.map((v, i) => <VisitCard key={v.id} v={v} i={i} />)}
+    </div>
+  )
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-2 border-[#14b8a6] border-t-transparent" /></div>
+
+  const kpi = (key: Focus, label: string, value: string | number, sub: string, color: string, Icon: typeof Clock, alert?: boolean) => {
+    const on = focus === key && key !== null
+    return (
+      <button key={label} type="button" className={`vs-kpi vs-in ${alert && !on ? 'vs-alert' : ''}`} onClick={() => key && setFocus(on ? null : key)}
+        style={{ background: on ? BRAND.softer : '#fff', borderRadius: 14, padding: '9px 12px', border: `${alert || on ? 2 : 1}px solid ${on ? BRAND.primary : alert ? '#EF4444' : BRAND.line}`, cursor: key ? 'pointer' : 'default' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase' }}><Icon size={13} />{label}</div>
+        <div style={{ fontSize: 24, fontWeight: 800, color: alert ? '#B91C1C' : BRAND.ink, lineHeight: 1.2 }}>{value}</div>
+        <div style={{ fontSize: 11.5, color: BRAND.muted }}>{sub}</div>
+      </button>
+    )
+  }
+
+  const focusTitle = focus === 'pending' ? `Visitas que já passaram e estão sem baixa (${pending.length})`
+    : focus === 'unconfirmed' ? `Próximas visitas sem confirmação da família (${unconfirmed.length})`
+    : focus === 'today' ? `Visitas de hoje (${todayVisits.length})` : ''
 
   return (
-    <div style={{ display: 'flex', overflow: 'hidden', background: '#f8f9fb', height: '100%' }}>
-
-      {/* ── Left column ──────────────────────────────────────────────────────── */}
-      <div className="w-80 flex-shrink-0 flex flex-col overflow-y-auto" style={{ borderRight: '0.5px solid #D1FAE5', background: '#F0FDFB' }}>
-        <div className="p-4 space-y-3">
-
-          {/* KPI cards — Design System */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {[
-              { label: 'Hoje', value: statsToday, iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar },
-              { label: 'Semana', value: statsWeek, iconBg: '#E6F7F5', iconColor: '#00A896', Icon: Clock },
-              { label: 'Realizadas', value: statsCompleted, iconBg: '#D1FAE5', iconColor: '#10B981', Icon: Check },
-              { label: 'Taxa', value: `${statsRate}%`, iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: TrendingUp },
-            ].map(({ label, value, iconBg, iconColor, Icon }) => (
-              <div key={label} style={{ background: '#FFFFFF', borderRadius: 12, border: '0.5px solid #E2E8F0', padding: '12px', boxShadow: '0 1px 3px rgba(0,168,150,0.04)' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.05em', margin: 0 }}>{label}</p>
-                  <div style={{ width: 26, height: 26, borderRadius: 7, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon style={{ width: 13, height: 13, color: iconColor }} />
-                  </div>
-                </div>
-                <p style={{ fontSize: 22, fontWeight: 700, color: '#1A2B4A', margin: 0, lineHeight: 1 }}>{value}</p>
-              </div>
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflowY: 'auto', background: BRAND.bg }}>
+      <style>{STAGE_CSS}</style>
+      <PageHeader icon={CalendarCheck} title="Visitas"
+        subtitle={today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+        actions={<>
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,.16)', borderRadius: 10, padding: 3 }}>
+            {([['month', 'Mês'], ['week', 'Semana'], ['list', 'Lista']] as [ViewMode, string][]).map(([k, l]) => (
+              <button key={k} type="button" onClick={() => { setView(k); setFocus(null) }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: view === k && !focus ? '#fff' : 'transparent', color: view === k && !focus ? BRAND.primaryDark : '#fff', transition: 'all .15s' }}>{l}</button>
             ))}
           </div>
+          {canEdit && <button type="button" onClick={() => setShowReasons(true)} title="Motivos de não realização" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Settings2 size={16} color="#fff" /></button>}
+          <button type="button" onClick={() => { setSelectedDate(new Date()); setShowModal(true) }} style={{ background: '#fff', color: BRAND.primaryDark, border: 'none', padding: '9px 16px', borderRadius: 11, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Nova visita</button>
+        </>} />
 
-          {/* Calendar card */}
-          <div style={{ background: '#FFFFFF', borderRadius: 16, border: '0.5px solid #E2E8F0', padding: 16, boxShadow: '0 1px 4px rgba(0,168,150,0.06)' }}>
-            {/* Month navigation */}
-            <div className="flex items-center justify-between mb-3">
-              <button
-                onClick={() => setCalendarMonth(d => { const n = new Date(d); n.setMonth(d.getMonth() - 1); return n })}
-                className="p-1 rounded hover:bg-gray-100 text-gray-400 transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-sm font-semibold text-[#1e2d6b] capitalize">
-                {calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-              </span>
-              <button
-                onClick={() => setCalendarMonth(d => { const n = new Date(d); n.setMonth(d.getMonth() + 1); return n })}
-                className="p-1 rounded hover:bg-gray-100 text-gray-400 transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8 }}>
+        {kpi('today', 'Hoje', todayVisits.length, `${todayVisits.filter(v => v.confirmed_at).length} já confirmou`, '#D97706', Calendar)}
+        {kpi('pending', 'Sem baixa', pending.length, 'já passaram, falta dizer', '#B91C1C', AlertCircle, pending.length > 0)}
+        {kpi('unconfirmed', 'Sem confirmação', unconfirmed.length, 'próximos 7 dias', '#6366F1', Clock)}
+        {kpi(null, 'Comparecimento', `${monthRate}%`, `no mês · ${monthNoShow} falta${monthNoShow === 1 ? '' : 's'}`, BRAND.primaryDark, Percent)}
+      </div>
 
-            {/* Week day labels */}
-            <div className="grid grid-cols-7 mb-1">
-              {weekLabels.map((d, i) => (
-                <div key={i} className="text-center text-xs text-gray-400 font-medium py-1">{d}</div>
-              ))}
-            </div>
-
-            {/* Calendar grid */}
-            <div className="grid grid-cols-7">
-              {calDays.map((date, i) => {
-                if (!date) return <div key={i} className="h-8 w-8" />
-                const dayVisitsArr = getVisitsForDate(date)
-                const dotColor = getDotColor(dayVisitsArr)
-                const isToday = date.toDateString() === today.toDateString()
-                const isSelected = date.toDateString() === selectedDate.toDateString()
-                return (
-                  <div key={i} className="flex flex-col items-center justify-center py-0.5">
-                    <button
-                      onClick={() => setSelectedDate(date)}
-                      style={{
-                        width: 30, height: 30, borderRadius: '50%', fontSize: 12,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-                        background: isSelected ? '#00A896' : isToday ? '#E6F7F5' : 'transparent',
-                        color: isSelected ? '#FFFFFF' : isToday ? '#00A896' : '#1A2B4A',
-                        fontWeight: isSelected || isToday ? 700 : 400,
-                      }}
-                    >
-                      {date.getDate()}
-                    </button>
-                    {dotColor && (
-                      <div className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-teal-300' : dotColor}`} />
-                    )}
-                    {!dotColor && <div className="h-2 mt-0.5" />}
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Legend */}
-            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-x-3 gap-y-1">
-              {Object.entries(visitStatus).map(([, cfg]) => (
-                <div key={cfg.label} className="flex items-center gap-1">
-                  <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                  <span className="text-xs text-gray-400">{cfg.label}</span>
+      {focus ? (
+        <div className="vs-in">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span id="visitas-sem-baixa" style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink }}>{focusTitle}</span>
+            <button type="button" onClick={() => setFocus(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12.5, color: BRAND.muted, display: 'flex', alignItems: 'center', gap: 4 }}><X size={14} />Limpar filtro</button>
+          </div>
+          <List items={focus === 'pending' ? pending : focus === 'unconfirmed' ? unconfirmed : todayVisits} empty="Nada por aqui. Tudo em dia." />
+        </div>
+      ) : view === 'list' ? (
+        <div className="vs-in"><div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Próximas visitas ({upcoming.length})</div><List items={upcoming} empty="Nenhuma visita agendada." /></div>
+      ) : view === 'week' ? (
+        <div className="vs-in">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <button type="button" onClick={() => setSelectedDate(d => new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7))} style={{ border: 'none', background: '#fff', borderRadius: 8, padding: 6, cursor: 'pointer' }}><ChevronLeft size={16} /></button>
+            <span style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink, flex: 1, textAlign: 'center' }}>{weekDays[0].toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} – {weekDays[6].toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}</span>
+            <button type="button" onClick={() => setSelectedDate(d => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7))} style={{ border: 'none', background: '#fff', borderRadius: 8, padding: 6, cursor: 'pointer' }}><ChevronRight size={16} /></button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 10 }}>
+            {weekDays.map(d => {
+              const arr = visits.filter(v => dayStr(v) === toLocalDateStr(d)).sort(sortAsc)
+              const isToday = toLocalDateStr(d) === todayStr
+              return (
+                <div key={d.toISOString()} style={{ background: isToday ? BRAND.softer : '#F1F5F4', borderRadius: 16, padding: 8, border: `1px solid ${isToday ? BRAND.softLine : 'transparent'}` }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: isToday ? BRAND.primaryDark : BRAND.ink, padding: '2px 4px 8px', textTransform: 'capitalize' }}>{d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' })} <span style={{ color: BRAND.faint, fontWeight: 600 }}>· {arr.length}</span></div>
+                  <List items={arr} empty="Livre" />
                 </div>
-              ))}
-            </div>
+              )
+            })}
           </div>
         </div>
-      </div>
-
-      {/* ── Right column ─────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', background: 'linear-gradient(135deg, #FFFFFF, #F0FDFB)', borderBottom: '0.5px solid #D1FAE5', boxShadow: '0 2px 8px rgba(0,168,150,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Calendar style={{ width: 18, height: 18, color: '#F59E0B' }} />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(270px,1fr))', gap: 14, alignItems: 'start' }}>
+          <div className="vs-in" style={{ background: BRAND.softer, border: `1px solid ${BRAND.softLine}`, borderRadius: 16, padding: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <button type="button" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><ChevronLeft size={18} color={BRAND.faint} /></button>
+              <span style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink, textTransform: 'capitalize' }}>{calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+              <button type="button" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><ChevronRight size={18} color={BRAND.faint} /></button>
             </div>
-            <div>
-              <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Visitas</h2>
-              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0, textTransform: 'capitalize' }}>{formatSelectedDate(selectedDate)}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowModal(true)}
-            style={{ background: '#00A896', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#007A6E' }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#00A896' }}
-          >
-            <Plus style={{ width: 14, height: 14 }} />
-            Nova Visita
-          </button>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-
-          {/* Day visit cards */}
-          {dayVisits.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-                <Calendar className="w-6 h-6 text-gray-300" />
-              </div>
-              <p className="text-sm font-semibold text-gray-400 mb-1">Nenhuma visita neste dia</p>
-              <p className="text-xs text-gray-300 mb-4">Clique em "Nova Visita" para agendar</p>
-              <button
-                onClick={() => setShowModal(true)}
-                style={{ background: '#00A896', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-              >
-                <Plus className="w-4 h-4" />
-                Agendar Visita
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3 mb-6">
-              {dayVisits.map(visit => {
-                const lead = leads.find(l => l.id === visit.lead_id)
-                const cfg = visitStatus[visit.status]
-                const isCompleting = completingId === visit.id
-
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', textAlign: 'center', fontSize: 11, color: BRAND.faint, marginBottom: 3 }}>{['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => <span key={i}>{d}</span>)}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, textAlign: 'center' }}>
+              {calDays.map((d, i) => {
+                if (!d) return <span key={i} />
+                const arr = visits.filter(v => dayStr(v) === toLocalDateStr(d))
+                const col = dayColor(arr); const sel = toLocalDateStr(d) === selectedStr; const isT = toLocalDateStr(d) === todayStr
                 return (
-                  <div key={visit.id} className="hover:shadow-md transition-shadow" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                    <div className="p-4">
-                      <div className="flex items-start gap-3">
-                        {/* Avatar */}
-                        <div className="w-10 h-10 rounded-full bg-teal-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
-                          {(visit.student_name || '?').charAt(0).toUpperCase()}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold text-gray-800">{visit.student_name || 'Visitante'}</span>
-                            <span className="text-xs px-2 py-1 rounded-full bg-teal-50 text-teal-700 font-medium flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {formatTime(visit.scheduled_date)}
-                            </span>
-                            <span style={{ ...cfg.badgeStyle, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999 }}>
-                              {cfg.label}
-                            </span>
-                          </div>
-                          {lead && (
-                            <p className="text-xs text-gray-500 mt-0.5">{lead.responsible_name}</p>
-                          )}
-                          {visit.notes && !isCompleting && (
-                            <p className="text-xs text-gray-400 mt-1 italic">{visit.notes}</p>
-                          )}
-                        </div>
-
-                        {/* Ver Lead button */}
-                        {visit.lead_id && (
-                          <button
-                            onClick={() => navigate(`/leads?highlight=${visit.lead_id}`)}
-                            className="flex-shrink-0 text-xs px-2 py-1 rounded-md bg-[#1e2d6b]/10 text-[#1e2d6b] hover:bg-[#1e2d6b]/20 font-medium transition-colors whitespace-nowrap"
-                          >
-                            Ver Lead
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setAuditVisitId(visit.id)}
-                          className="flex-shrink-0 text-xs px-2 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium transition-colors flex items-center gap-1 whitespace-nowrap"
-                          title="Ver histórico"
-                        >
-                          <History className="w-3 h-3" />
-                          Histórico
-                        </button>
-                      </div>
-
-                      {/* Inline completion notes */}
-                      {isCompleting && (
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <textarea
-                            value={completionNotes}
-                            onChange={e => setCompletionNotes(e.target.value)}
-                            placeholder="Observações sobre a visita realizada..."
-                            rows={2}
-                            className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
-                            style={{ resize: 'none' }}
-                            autoFocus
-                          />
-                          <div className="flex gap-2 mt-2">
-                            <button
-                              onClick={() => handleMarkCompleted(visit.id)}
-                              disabled={saving}
-                              className="px-3 py-1.5 text-xs font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-                            >
-                              {saving ? 'Salvando...' : 'Confirmar Realizada'}
-                            </button>
-                            <button
-                              onClick={() => { setCompletingId(null); setCompletionNotes('') }}
-                              className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50"
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Action bar — scheduled only */}
-                    {visit.status === 'scheduled' && !isCompleting && (
-                      <div className="flex border-t border-gray-100">
-                        <button
-                          onClick={() => { setCompletingId(visit.id); setCompletionNotes('') }}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-green-700 hover:bg-green-50 transition-colors"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          Realizada
-                        </button>
-                        <div className="w-px bg-gray-100" />
-                        <button
-                          onClick={() => handleMarkNoShow(visit.id)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                          Não compareceu
-                        </button>
-                        <div className="w-px bg-gray-100" />
-                        <button
-                          onClick={() => handleCancel(visit.id)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Cancelar
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <button key={i} type="button" className="vs-day" onClick={() => setSelectedDate(d)} style={{ border: isT && !sel ? `1px solid ${BRAND.primary}` : '1px solid transparent', borderRadius: 9, padding: '4px 0', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: sel || isT ? 800 : 500, background: sel ? BRAND.primary : 'transparent', color: sel ? '#fff' : BRAND.ink }}>
+                    {d.getDate()}
+                    <div style={{ height: 6, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2 }}>{col && <span style={{ width: 5, height: 5, borderRadius: '50%', background: sel ? '#fff' : col }} />}{arr.length > 1 && <span style={{ fontSize: 8, color: sel ? '#fff' : BRAND.muted }}>{arr.length}</span>}</div>
+                  </button>
                 )
               })}
             </div>
-          )}
-
-          {/* Fase 0A — visitas que já passaram sem baixa (pendência dos Alertas) */}
-          {pastPendingVisits.length > 0 && (
-            <div id="visitas-sem-baixa" className="rounded-xl p-3" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
-              <h3 className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#B45309' }}>
-                Sem baixa — {pastPendingVisits.length} {pastPendingVisits.length === 1 ? 'visita' : 'visitas'}
-              </h3>
-              <p className="text-xs mb-3" style={{ color: '#92400E' }}>Visita só conta como realizada com baixa.</p>
-              <div className="space-y-2">
-                {pastPendingVisits.map(visit => {
-                  const visitDate = new Date(visit.scheduled_date)
-                  return (
-                    <div key={visit.id} className="px-3 py-2.5 bg-white border border-gray-100 rounded-lg">
-                      <p className="text-xs font-semibold text-gray-700 truncate">{visit.student_name || 'Sem nome'}</p>
-                      <p className="text-xs text-gray-400 mb-2">
-                        {visitDate.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
-                        {' · '}{formatTime(visit.scheduled_date)}
-                      </p>
-                      <div className="flex gap-2 flex-wrap">
-                        <button onClick={() => quickOutcome(visit, 'completed')} className="text-xs font-semibold px-2.5 py-1 rounded-md" style={{ background: '#DCFCE7', color: '#15803D' }}>Aconteceu</button>
-                        <button onClick={() => quickOutcome(visit, 'no_show')} className="text-xs font-semibold px-2.5 py-1 rounded-md" style={{ background: '#FFEDD5', color: '#C2410C' }}>Faltou</button>
-                        <button onClick={() => quickOutcome(visit, 'cancelled')} className="text-xs font-semibold px-2.5 py-1 rounded-md" style={{ background: '#F1F5F9', color: '#475569' }}>Cancelada</button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10, paddingTop: 9, borderTop: `1px solid ${BRAND.softLine}`, fontSize: 11, color: BRAND.muted }}>
+              {[['#10B981', 'Realizada'], ['#EF4444', 'Sem baixa'], ['#94A3B8', 'Faltou'], ['#8B5CF6', 'Agendada']].map(([c, l]) => <span key={l}><i style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: c, marginRight: 4 }} />{l}</span>)}
             </div>
-          )}
-
-          {/* Upcoming visits */}
-          {upcomingVisits.length > 0 && (
-            <div className="bg-gray-50 rounded-xl p-3">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                Próximas visitas — 7 dias
-              </h3>
-              <div className="space-y-2">
-                {upcomingVisits.map(visit => {
-                  const visitDate = new Date(visit.scheduled_date)
-                  return (
-                    <div
-                      key={visit.id}
-                      className="flex items-center gap-3 px-3 py-2.5 bg-white border border-gray-100 rounded-lg hover:shadow-sm transition-shadow"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                        {(visit.student_name || '?').charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-gray-700 truncate">{visit.student_name}</p>
-                        <p className="text-xs text-gray-400">
-                          {visitDate.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
-                          {' · '}
-                          {formatTime(visit.scheduled_date)}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setSelectedDate(new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate()))
-                          setCalendarMonth(new Date(visitDate.getFullYear(), visitDate.getMonth(), 1))
-                        }}
-                        className="text-xs text-teal-600 hover:text-teal-700 font-semibold whitespace-nowrap"
-                      >
-                        Ver dia
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink, marginBottom: 8, textTransform: 'capitalize' }}>{selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })} <span style={{ color: BRAND.faint, fontWeight: 600, textTransform: 'none' }}>· {dayVisits.length} visita{dayVisits.length === 1 ? '' : 's'}</span></div>
+            <List items={dayVisits} empty="Nenhuma visita neste dia." />
+          </div>
         </div>
-      </div>
-
-      {/* Nova Visita modal */}
-      <NovaVisitaModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        onSave={handleCreateVisit}
-        defaultDate={selectedStr}
-        leads={leads}
-      />
-
-      {/* Audit modal */}
-      {auditVisitId && (
-        <AuditModal
-          recordId={auditVisitId}
-          moduleName="visits"
-          isOpen={!!auditVisitId}
-          onClose={() => setAuditVisitId(null)}
-        />
       )}
+
+      <NovaVisitaModal isOpen={showModal} onClose={() => setShowModal(false)} onSave={handleCreateVisit} defaultDate={selectedStr} leads={leads} />
+      {auditVisitId && <AuditModal recordId={auditVisitId} moduleName="visits" isOpen={!!auditVisitId} onClose={() => setAuditVisitId(null)} />}
+      {showReasons && user?.institution_id && <ReasonsEditor institutionId={user.institution_id} onClose={() => setShowReasons(false)} onSaved={refreshReasons} />}
     </div>
   )
 }
