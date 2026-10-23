@@ -59,7 +59,7 @@ const TAG_COLORS = ['#6366f1', '#16a34a', '#dc2626', '#d97706', '#0891b2', '#ec4
 
 export const WA_SECTION_INFO: Record<string, { label: string; desc: string }> = {
   conexao:    { label: 'Conexão', desc: 'Número conectado, reconexão e nome do atendente nas mensagens.' },
-  automacoes: { label: 'Automações', desc: 'Tudo que o sistema manda sozinho, num lugar só.' },
+  automacoes: { label: 'Painel de automações', desc: 'Liga e desliga tudo que o sistema manda sozinho e mostra o que já foi enviado.' },
   datas:      { label: 'Feriados e datas especiais', desc: 'Mensagens próprias para os dias em que a escola muda o atendimento.' },
   horario:    { label: 'Horário de atendimento', desc: 'Dias e horários, mensagens de fora do horário e almoço, e o tempo do robô.' },
   respostas:  { label: 'Respostas rápidas', desc: 'Textos prontos para a equipe usar com "/" no chat.' },
@@ -483,7 +483,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
     },
     {
       title: 'Mensagens automáticas', items: [
-        ...(allowed.includes('automacoes') ? [{ id: 'automacoes', Icon: Zap, title: 'Automações', desc: 'Veja tudo que o sistema manda sozinho e o que está ligado.', hl: true, open: () => go('automacoes') }] : []),
+        ...(allowed.includes('automacoes') ? [{ id: 'automacoes', Icon: Zap, title: 'Painel de automações', desc: 'Liga e desliga o que o sistema manda sozinho e mostra os envios.', hl: true, open: () => go('automacoes') }] : []),
         ...(allowed.includes('horario') ? [{ id: 'horario', Icon: Clock, title: 'Horário de atendimento', desc: 'Quando a escola atende e o que o robô responde fora do horário.', open: () => go('horario') }] : []),
         ...(allowed.includes('datas') ? [{ id: 'datas', Icon: CalendarDays, title: 'Feriados e datas especiais', desc: 'Avisos nos dias em que a escola não atende ou atende menos.', open: () => go('datas') }] : []),
         ...(allowed.includes('parada') ? [{ id: 'parada', Icon: Hourglass, title: 'Conversa parada', desc: 'Avisa o cliente que sumiu depois de ser atendido.', open: () => go('parada') }] : []),
