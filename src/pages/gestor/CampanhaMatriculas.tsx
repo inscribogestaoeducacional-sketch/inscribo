@@ -594,9 +594,51 @@ export default function CampanhaMatriculas() {
 
       {!loading && cycle && tab === 'serie' && (
         <div style={card}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 4 }}>Retenção por série e turma</div>
-          <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 12 }}>De cada série do ano anterior, quantos alunos voltaram. Em vermelho: abaixo da média da escola.</div>
-          {!(years.length || hist?.current) ? <div style={{ fontSize: 13, color: BRAND.muted }}>Ainda não há histórico para mostrar.</div> : [...(hist?.current && hist.current.base > 0 ? [hist.current] : []), ...years.slice().reverse()].map(y => {
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 4 }}>Séries e turmas</div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 14 }}>Como cada série está na campanha de agora e como foi nos anos anteriores.</div>
+          {hist?.current && hist.current.base > 0 && (() => {
+            const c = hist.current, avgC = c.base ? c.retained / c.base : 0
+            const ly = years.find(y => y.year === targetYear - 1)
+            return (
+              <div style={{ marginBottom: 22 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: BRAND.ink }}>Campanha {targetYear} em andamento</div>
+                  <div style={{ fontSize: 13, color: BRAND.muted }}><b style={{ color: BRAND.primaryDark, fontSize: 18 }}>{pct(avgC, 1)}</b> já garantidos · {fmt(c.retained)} de {fmt(c.base)} alunos · {fmt(c.new_students)} novos</div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
+                  {c.by_grade.filter(g => g.base > 0 || g.new_students > 0).map(g => {
+                    const r = g.base ? g.retained / g.base : 0
+                    const lg = ly?.by_grade.find(x => x.name === g.name)
+                    const lr = lg && lg.base ? lg.retained / lg.base : null
+                    const behind = r < avgC - 0.05
+                    const key = `cur-${g.grade_id}`
+                    const turmas = c.by_class.filter(t => t.grade_id === g.grade_id)
+                    return (
+                      <div key={key} style={{ border: `1px solid ${behind ? '#FECACA' : '#E3E8F0'}`, background: behind ? '#FFFBFB' : '#fff', borderRadius: 14, padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                          <div style={{ fontWeight: 800, color: BRAND.ink, fontSize: 14 }}>{g.name}</div>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: behind ? '#B91C1C' : BRAND.primaryDark }}>{pct(r, 0)}</div>
+                        </div>
+                        <div style={{ height: 8, borderRadius: 99, background: '#EDF1F0', overflow: 'hidden', margin: '8px 0' }}><div style={{ width: `${r * 100}%`, height: '100%', background: behind ? '#EF4444' : '#10B981', transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /></div>
+                        <div style={{ fontSize: 12.5, color: BRAND.muted, lineHeight: 1.6 }}>
+                          <b style={{ color: BRAND.ink }}>{fmt(g.retained)}</b> garantidos de {fmt(g.base)} · faltam <b style={{ color: behind ? '#B91C1C' : BRAND.ink }}>{fmt(g.lost)}</b> · {fmt(g.new_students)} novos
+                          {lr != null && <div>Fechou {targetYear - 1} com {pct(lr, 0)} <span style={{ color: r >= lr ? '#15803D' : '#B45309', fontWeight: 700 }}>({r >= lr ? 'já passou' : `faltam ${Math.round((lr - r) * 100)} pontos`})</span></div>}
+                        </div>
+                        {turmas.length > 0 && <button onClick={() => setOpenClasses(openClasses === key ? null : key)} style={{ border: 'none', background: 'none', padding: '6px 0 0', color: BRAND.primaryDark, fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{openClasses === key ? 'ocultar turmas' : `ver ${turmas.length} turmas`}</button>}
+                        {openClasses === key && turmas.map(t => { const tr = t.base ? t.retained / t.base : 0; return (
+                          <div key={t.class_id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, padding: '4px 0', borderTop: '1px solid #EEF2F1' }}>
+                            <span style={{ flex: 1, color: BRAND.text }}>{t.name}</span><span style={{ color: BRAND.muted }}>{t.retained}/{t.base}</span><b style={{ width: 40, textAlign: 'right', color: tr < avgC - 0.05 ? '#B91C1C' : BRAND.ink }}>{pct(tr, 0)}</b>
+                          </div>) })}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 8 }}>Em vermelho: série mais de 5 pontos abaixo da média da escola. Para ver aluno por aluno e comparar com o mesmo dia do ano passado, use a aba Matriculômetro.</div>
+              </div>
+            )
+          })()}
+          {!(years.length || hist?.current) ? <div style={{ fontSize: 13, color: BRAND.muted }}>Ainda não há histórico para mostrar.</div> : years.length > 0 && <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink, margin: '4px 0 10px' }}>Anos anteriores</div>}
+          {[...years.slice().reverse()].map(y => {
             const inProg = y.year === targetYear
             const avg = y.base ? y.retained / y.base : 0
             return (
