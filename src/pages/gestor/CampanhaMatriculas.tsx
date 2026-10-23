@@ -80,6 +80,7 @@ export default function CampanhaMatriculas() {
   const [panel, setPanel] = useState<PanelRow[]>([])
   const [info, setInfo] = useState<{ sources: string[] | null; pre_counts: boolean } | null>(null)
   const [tab, setTab] = useState<Tab>('geral')
+  const [funnel, setFunnel] = useState<{ history_since: string | null; months: { m: string; entraram: number; etapas: Record<string, { n: number; inferidos: number }> }[] } | null>(null)
   const [noLead, setNoLead] = useState<{ novos_matriculados: number; sem_lead: number; lista: { student: string; grade: string | null }[] } | null>(null)
   const [ed, setEd] = useState<Ed | null>(null)
   const [loading, setLoading] = useState(true)
@@ -114,12 +115,14 @@ export default function CampanhaMatriculas() {
     let alive = true
     setLoading(true); setEd(null)
     ;(async () => {
-      const [h, p, i, nl] = await Promise.all([
+      const [h, p, i, nl, fn] = await Promise.all([
         supabase.rpc('campaign_history', { p_institution_id: institutionId, p_target_year: targetYear, p_years: 3 }),
         supabase.rpc('base_reenrollment_panel', { p_institution_id: institutionId, p_target_year: targetYear }),
         supabase.rpc('base_sync_info', { p_institution_id: institutionId }),
         supabase.rpc('campaign_enrollments_without_lead', { p_inst: institutionId, p_year: targetYear }),
+        supabase.rpc('campaign_funnel_monthly', { p_inst: institutionId, p_from: cycle.start_date ?? `${targetYear - 1}-09-01`, p_to: cycle.end_date ?? `${targetYear}-03-31` }),
       ])
+      setFunnel(fn.error ? null : (fn.data as typeof funnel))
       if (!alive) return
       setNoLead(nl.error ? null : (nl.data as typeof noLead))
       setHist((h.data ?? null) as History | null)
@@ -380,6 +383,33 @@ export default function CampanhaMatriculas() {
                   <span key={i} style={{ background: '#fff', border: '1px solid #FDE68A', borderRadius: 999, padding: '3px 10px' }}>{x.student}{x.grade ? ` · ${x.grade}` : ''}</span>
                 ))}
                 {noLead.lista.length > 12 && <span style={{ color: BRAND.muted }}>+{noLead.lista.length - 12}</span>}
+              </div>
+            </div>
+          )}
+          {funnel && funnel.months.length > 0 && (
+            <div style={card}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 4 }}>Funil mês a mês</div>
+              <div style={{ fontSize: 12, color: BRAND.muted, marginBottom: 10 }}>
+                Leads que entraram e quantos chegaram a cada etapa em cada mês.
+                {funnel.history_since ? ` O histórico de etapas começou em ${new Date(funnel.history_since + 'T12:00:00').toLocaleDateString('pt-BR')}; antes disso as etapas foram estimadas (entre parênteses).` : ''}
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                  <thead><tr style={{ color: BRAND.muted, textAlign: 'right' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Mês</th><th>Entraram</th><th>Contato</th><th>Agendou</th><th>Visitou</th><th>Proposta</th><th>Matriculou</th><th>Perdeu</th>
+                  </tr></thead>
+                  <tbody>
+                    {funnel.months.map(r => {
+                      const c = (k: string) => { const e = r.etapas[k]; return e ? <>{e.n}{e.inferidos > 0 && <span style={{ color: BRAND.muted }}> ({e.inferidos})</span>}</> : '—' }
+                      return (
+                        <tr key={r.m} style={{ borderTop: '1px solid #EEF3F2', textAlign: 'right' }}>
+                          <td style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 700, color: BRAND.ink }}>{monthName(r.m + '-01')}</td>
+                          <td>{r.entraram}</td><td>{c('contact')}</td><td>{c('scheduled')}</td><td>{c('visit')}</td><td>{c('proposal')}</td><td>{c('enrolled')}</td><td>{c('lost')}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
