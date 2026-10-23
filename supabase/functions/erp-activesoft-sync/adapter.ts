@@ -146,6 +146,7 @@ export function normEnturmacao(o: Obj, situacaoSistema: string): Staged | null {
       situacao:         pick(o, 'situacao_aluno_turma', 'situacao', 'situacao_descricao', 'situacao_nome', 'descricao_situacao', 'status'),
       situacao_sistema: situacaoSistema,
       novato:           pick(o, 'novato_considerando_periodo_anterior'),
+      efetivacao:       pick(o, 'data_efetivacao_matricula', 'data_matricula'),
     }),
   }
 }
@@ -211,10 +212,11 @@ export type Step = { key: string; route: RouteKey; entity: string; params: Recor
 //     (sigla_periodo). Se a API ignorar o filtro e devolver 2026, as linhas caem
 //     no mesmo registro (mesmo id) e nada vira 2027 por engano.
 export type PeriodMode = 'sigla' | 'id' | 'turma' | 'nenhum'
-export type PeriodPlan = { atual: string; seguinte: string; modo: PeriodMode; valor?: string | null; turmasSeguinte?: string[] }
-export function periodYears(now = new Date()): { atual: string; seguinte: string } {
+export type PeriodPlan = { atual: string; seguinte: string; anteriores?: string[]; modo: PeriodMode; valor?: string | null; turmasSeguinte?: string[] }
+export function periodYears(now = new Date()): { atual: string; seguinte: string; anteriores: string[] } {
   const y = now.getFullYear()
-  return { atual: String(y), seguinte: String(y + 1) }
+  // anteriores: histórico lido para separar novato, rematrícula e ex-aluno que voltou
+  return { atual: String(y), seguinte: String(y + 1), anteriores: [String(y - 1), String(y - 2)] }
 }
 const SITUACOES = ['A', 'I', 'P', 'S']
 // Rota que pode estar fora do token sem impedir a carga: unidades (a
@@ -233,8 +235,11 @@ export function plan(names: boolean, p: PeriodPlan = { ...periodYears(), modo: '
     { key: 'cursos',   route: 'cursos',   entity: 'curso',   params: {} },
     { key: `turmas_${atual}`,    route: 'turmas', entity: 'turma', params: { mostrar_todas_as_turmas: true, periodo_sigla: atual },    ano: atual },
     { key: `turmas_${seguinte}`, route: 'turmas', entity: 'turma', params: { mostrar_todas_as_turmas: true, periodo_sigla: seguinte }, ano: seguinte },
+    ...(modo === 'sigla' ? (p.anteriores ?? []).map(a => ({ key: `turmas_${a}`, route: 'turmas' as const, entity: 'turma', params: { mostrar_todas_as_turmas: true, periodo_sigla: a }, ano: a })) : []),
     // período atual: sem filtro (é o padrão da API, já validado)
     ...SITUACOES.map(sit => ent(atual, sit, {})),
+    // anos anteriores (só quando o período pode ser pedido pela sigla)
+    ...(modo === 'sigla' ? (p.anteriores ?? []).flatMap(a => SITUACOES.map(sit => ent(a, sit, { periodo: a }))) : []),
     // período seguinte: pelo modo descoberto no teste
     ...((modo === 'sigla' || modo === 'id') && valor ? SITUACOES.map(sit => ent(seguinte, sit, { periodo: valor })) : []),
     ...(modo === 'turma' ? (p.turmasSeguinte ?? []).flatMap(t => SITUACOES.map(sit => ent(seguinte, sit, { turma: t }, `_t${t}`))) : []),

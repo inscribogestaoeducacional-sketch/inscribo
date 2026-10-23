@@ -29,7 +29,7 @@ const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!
 const TIME_BUDGET_MS = 40_000
-const KEEP_FROM_YEAR = new Date().getFullYear() - 1     // N-1 em diante (base do ano anterior)
+const KEEP_FROM_YEAR = new Date().getFullYear() - 2     // N-2 em diante (histórico para novato / ex-aluno)
 
 type Supa = ReturnType<typeof createClient>
 class HttpError extends Error { constructor(public status: number, message: string) { super(message) } }
@@ -41,22 +41,28 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization') || ''
     if (!authHeader.startsWith('Bearer ')) throw new HttpError(401, 'Não autenticado')
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-    const { data: u, error: ue } = await userClient.auth.getUser()
-    if (ue || !u?.user) throw new HttpError(401, 'Não autenticado')
-
     const body = await req.json().catch(() => ({}))
     const inst = String(body?.institution_id || '')
     if (!/^[0-9a-f-]{36}$/i.test(inst)) throw new HttpError(400, 'institution_id inválido')
-    // papel e módulo conferidos com o JWT de quem chamou
-    const [{ data: isAdmin }, { data: modOn }] = await Promise.all([
-      userClient.rpc('base_user_is_admin', { p_institution_id: inst }),
-      userClient.rpc('base_module_enabled', { p_institution_id: inst }),
-    ])
-    if (isAdmin !== true) throw new HttpError(403, 'Só o administrador da escola mexe na integração')
-    if (modOn !== true) throw new HttpError(403, 'Módulo Base de alunos não liberado para esta escola')
-
     const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    // chamada do sistema (cron da sincronização automática): chave de serviço; o módulo continua conferido
+    const isSystem = authHeader === `Bearer ${SUPABASE_SERVICE_KEY}` || jwtRole(authHeader) === 'service_role'   // assinatura já validada pelo gateway (verify_jwt)
+    if (isSystem) {
+      const { data: set } = await sb.from('student_base_settings').select('module_enabled').eq('institution_id', inst).maybeSingle()
+      if (set?.module_enabled !== true) throw new HttpError(403, 'Módulo Base de alunos não liberado para esta escola')
+    } else {
+      const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+      const { data: u, error: ue } = await userClient.auth.getUser()
+      if (ue || !u?.user) throw new HttpError(401, 'Não autenticado')
+      // papel e módulo conferidos com o JWT de quem chamou
+      const [{ data: isAdmin }, { data: modOn }] = await Promise.all([
+        userClient.rpc('base_user_is_admin', { p_institution_id: inst }),
+        userClient.rpc('base_module_enabled', { p_institution_id: inst }),
+      ])
+      if (isAdmin !== true) throw new HttpError(403, 'Só o administrador da escola mexe na integração')
+      if (modOn !== true) throw new HttpError(403, 'Módulo Base de alunos não liberado para esta escola')
+    }
+
     switch (body?.action) {
       case 'test': return json(200, await actionTest(sb, inst))
       case 'periodos': return json(200, await actionPeriods(sb, inst))
@@ -70,6 +76,14 @@ serve(async (req) => {
     return json(status, { error: msg })
   }
 })
+
+function jwtRole(h: string): string | null {
+  try {
+    const part = h.replace(/^Bearer\s+/i, '').split('.')[1]
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(b64.padEnd(b64.length + (4 - b64.length % 4) % 4, '='))).role ?? null
+  } catch { return null }
+}
 
 async function loadConn(sb: Supa, inst: string) {
   const { data: conn } = await sb.from('erp_connections')
