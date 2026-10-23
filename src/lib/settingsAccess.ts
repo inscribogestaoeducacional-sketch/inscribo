@@ -33,7 +33,7 @@ export const SETTINGS_ITEMS = {
   'escola.dados':                  { tab: 'escola', section: 'dados',      label: 'Dados da escola',             roles: ADMIN },
   'escola.identidade':             { tab: 'escola', section: 'identidade', label: 'Logo e cores',                roles: ADMIN },
   'escola.series':                 { tab: 'escola', section: 'series',     label: 'Séries',                      roles: BOTH },
-  'escola.campanha':               { tab: 'escola', section: 'campanha',   label: 'Dados da campanha (assistente)', roles: ADMIN },
+  'escola.campanha':               { tab: 'escola', section: 'campanha',   label: 'Dados da campanha', roles: ADMIN },
   'plano.plano':                   { tab: 'plano', section: 'plano',       label: 'Plano e faturamento',         roles: ADMIN },
   'plano.pagamentos':              { tab: 'plano', section: 'pagamentos',  label: 'Pagamentos',                  roles: ADMIN },
   'plano.creditos':                { tab: 'plano', section: 'creditos',    label: 'Créditos de Transmissões',    roles: ADMIN },

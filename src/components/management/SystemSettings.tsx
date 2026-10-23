@@ -219,7 +219,7 @@ function IdentidadeTab({ institutionId, onToast }: { institutionId: string; onTo
             </div>
           </Card>
           <Card>
-            <Title Icon={Palette} title="Cores da marca" help="Usadas nas pesquisas de satisfação e nas telas do cliente." />
+            <Title Icon={Palette} title="Cores da marca" help="A logo e a cor primária aparecem nas pesquisas de satisfação e na Vitrine. A cor secundária fica guardada, mas nenhuma tela a usa ainda." />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {colorRow('Cor primária', primaryColor, setPrimaryColor)}
               {colorRow('Cor secundária', secondaryColor, setSecondaryColor)}
@@ -473,12 +473,12 @@ export default function SystemSettings() {
   const escolaGroups: HubGroup[] = [{
     title: 'Sobre a escola', items: [
       { key: 'dados', label: 'Dados da escola', desc: 'Nome, contato, CNPJ e cidade da escola.', item: 'escola.dados', Icon: Building, render: () => <GeralTab institutionId={institutionId} onToast={showToast} part="dados" /> },
-      { key: 'identidade', label: 'Logo e cores', desc: 'A logo e as cores da escola nas telas e mensagens.', item: 'escola.identidade', Icon: Palette, render: () => <IdentidadeTab institutionId={institutionId} onToast={showToast} /> },
+      { key: 'identidade', label: 'Logo e cores', desc: 'A logo e a cor primária que o cliente vê nas pesquisas de satisfação e na Vitrine.', item: 'escola.identidade', Icon: Palette, render: () => <IdentidadeTab institutionId={institutionId} onToast={showToast} /> },
       { key: 'series', label: 'Séries', desc: 'As séries e etapas de ensino da escola, na ordem em que aparecem em todo o sistema.', item: 'escola.series', Icon: Layers, render: () => <GradeLevelsEditor institutionId={institutionId} onToast={showToast} /> },
-      { key: 'campanha', label: 'Dados da campanha', desc: 'As informações que o assistente usa para falar da escola: séries oferecidas, mensalidade média e dados da campanha.', item: 'escola.campanha', Icon: GraduationCap, render: () => (
+      { key: 'campanha', label: 'Dados da campanha', desc: 'Séries oferecidas, mensalidade média e número de alunos. Quem usa: o gerador de campanha e o painel do gestor. O robô do WhatsApp não lê estes dados.', item: 'escola.campanha', Icon: GraduationCap, render: () => (
         <Card style={{ maxWidth: 560 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Dados da campanha</div>
-          <div style={{ fontSize: 12.5, color: BRAND.muted, margin: '4px 0 14px', lineHeight: 1.5 }}>Abre o passo a passo com as informações da escola, as séries oferecidas e a mensalidade média.</div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted, margin: '4px 0 14px', lineHeight: 1.5 }}>Abre o passo a passo com as informações da escola, as séries oferecidas e a mensalidade média. Servem ao gerador de campanha e ao painel do gestor (não ao robô do WhatsApp).</div>
           <GhostButton onClick={() => setShowSchoolSetup(true)}><GraduationCap size={15} /> Editar dados da campanha</GhostButton>
         </Card>
       ) },

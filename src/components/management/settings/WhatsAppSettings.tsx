@@ -688,13 +688,13 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         <div style={{ marginTop: 12 }}>
           <NowNote>{scheduleMode === 'general'
             ? 'Valendo agora: a escola abre e fecha num horário só, com um almoço só. As conversas são distribuídas como sempre.'
-            : 'Valendo agora: a escola está aberta quando algum atendente está no próprio horário. As conversas vão só para quem está em horário e fora do almoço.'}</NowNote>
+            : 'Valendo agora: a escola está aberta quando algum atendente está no próprio horário. Quando a conversa é distribuída para um grupo, ela vai só para quem está em horário e fora do almoço. Conversa enviada direto para um atendente fixo não confere o horário dele.'}</NowNote>
         </div>
       </Card>
 
       {scheduleMode === 'individual' && (
         <Card>
-          <Title Icon={Clock} title="Horário de cada atendente" help="Os horários e o almoço de cada pessoa são ajustados em Equipe. Fora do horário de todos, o robô avisa o cliente." />
+          <Title Icon={Clock} title="Horário de cada atendente" help="Os horários e o almoço de cada pessoa são ajustados em Equipe. Valem na distribuição por grupo. Fora do horário de todos, o robô avisa o cliente." />
           {attendants.filter(a => a.working_hours_start && a.working_hours_end).length === 0
             ? <WarnNote>Nenhum atendente tem horário cadastrado. Enquanto isso vale o horário único da escola. Cadastre em Equipe.</WarnNote>
             : <div style={{ display: 'flex', flexDirection: 'column' }}>
