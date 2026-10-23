@@ -1648,6 +1648,19 @@ async function handleTemplateEvent(field: string, wabaId: string, value: any, ac
     if (updErr) console.error('❌ [template-event] erro ao atualizar template_institution_status:', updErr.message)
   }
 
+  // Aviso no sininho da escola (só para modelo criado por ela): aprovado, recusado ou pausado.
+  if (field === 'message_template_status_update' && ['approved', 'rejected', 'paused'].includes(String(statusUpdate.status))) {
+    for (const d of (defs || []) as any[]) {
+      if (!d.institution_id || !institutionIds.includes(d.institution_id)) continue
+      try {
+        await supabase.rpc('whatsapp_template_alert', {
+          p_institution: d.institution_id, p_template_def: d.id,
+          p_status: statusUpdate.status, p_reason: (statusUpdate.error_message as string) || null,
+        })
+      } catch (e) { console.error('[template-event] aviso do modelo falhou:', e instanceof Error ? e.message : String(e)) }
+    }
+  }
+
   // Cache por escola (whatsapp_templates) — é dele que envio manual,
   // agendamento (whatsapp-scheduled-send) e pickers leem o template aprovado.
   // Na aprovação, busca a definição completa na Meta (components/categoria)
