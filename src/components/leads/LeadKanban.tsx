@@ -404,6 +404,7 @@ interface FilterDrawerProps {
   filterStatus: string; setFilterStatus: (v: string) => void
   filterSource: string; setFilterSource: (v: string) => void
   periodFilter: string; setPeriodFilter: (v: any) => void
+  campaignLabel?: string
   customStart: string; setCustomStart: (v: string) => void
   customEnd: string; setCustomEnd: (v: string) => void
   gradeFilter: string; setGradeFilter: (v: string) => void
@@ -421,7 +422,7 @@ interface FilterDrawerProps {
 }
 
 function FilterDrawer(props: FilterDrawerProps) {
-  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, schoolSources, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, noContactFilter, setNoContactFilter, noContactDays, setNoContactDays, unitFilterCfg, onClear } = props
+  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, campaignLabel, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, schoolSources, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, noContactFilter, setNoContactFilter, noContactDays, setNoContactDays, unitFilterCfg, onClear } = props
   if (!open) return null
 
   const section = (label: string) => (
@@ -509,6 +510,7 @@ function FilterDrawer(props: FilterDrawerProps) {
           {section('Período')}
           <select value={periodFilter} onChange={e => setPeriodFilter(e.target.value)} style={selCls}>
             <option value="all">Todos os períodos</option>
+            {campaignLabel && <option value="campaign">{campaignLabel} (início ao fim)</option>}
             <option value="today">Hoje</option>
             <option value="week">Esta semana</option>
             <option value="month">Este mês</option>
@@ -589,7 +591,7 @@ export default function LeadKanban() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterSource, setFilterSource] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [periodFilter, setPeriodFilter] = useState<'all'|'today'|'week'|'month'|'year'|'custom'>('all')
+  const [periodFilter, setPeriodFilter] = useState<'all'|'today'|'week'|'month'|'year'|'custom'|'campaign'>('all')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [gradeFilter, setGradeFilter] = useState('all')
@@ -635,7 +637,7 @@ export default function LeadKanban() {
   const [compactView, setCompactView] = useState(false)
 
   // ── Item 10 — campanha ativa da instituição ────────────────────────────────
-  const [activeCampaignCycle, setActiveCampaignCycle] = useState<{ id: string; label: string; targetYear: number | null } | null>(null)
+  const [activeCampaignCycle, setActiveCampaignCycle] = useState<{ id: string; label: string; targetYear: number | null; start?: string; end?: string } | null>(null)
   const [institutionCity, setInstitutionCity] = useState<string>('')
 
   useEffect(() => {
@@ -714,14 +716,14 @@ export default function LeadKanban() {
         DatabaseService.getLeads(instId),
         supabase.from('users').select('id, full_name, role').eq('institution_id', instId).order('full_name'),
         // Mesma regra do banco (active_campaign_cycle_id): ativo/liberado, com datas, o mais recente.
-        supabase.from('campaign_cycles').select('id, year, label, target_school_year').eq('institution_id', instId).in('status', ['active', 'released']).not('start_date', 'is', null).not('end_date', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('campaign_cycles').select('id, year, label, target_school_year, start_date, end_date').eq('institution_id', instId).in('status', ['active', 'released']).not('start_date', 'is', null).not('end_date', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('institutions').select('city').eq('id', instId).maybeSingle(),
       ])
       setLeads(leadsData)
       setPendingVisitsByLead(await fetchPendingVisitsByLead(instId))
       refreshInteractions()
       setUsers((usersRes.data as SimpleUser[]) ?? [])
-      setActiveCampaignCycle(campaignRes.data ? { id: campaignRes.data.id, label: campaignRes.data.label || String(campaignRes.data.year), targetYear: campaignRes.data.target_school_year ?? null } : null)
+      setActiveCampaignCycle(campaignRes.data ? { id: campaignRes.data.id, label: campaignRes.data.label || String(campaignRes.data.year), targetYear: campaignRes.data.target_school_year ?? null, start: campaignRes.data.start_date ?? undefined, end: campaignRes.data.end_date ?? undefined } : null)
       setInstitutionCity(instRes.data?.city ?? '')
     } catch (err) {
       console.error('Erro ao carregar dados:', err)
@@ -977,6 +979,9 @@ export default function LeadKanban() {
       }
       case 'month': return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now }
       case 'year':  return { start: new Date(now.getFullYear(), 0, 1), end: now }
+      case 'campaign': return activeCampaignCycle?.start && activeCampaignCycle?.end
+        ? { start: new Date(activeCampaignCycle.start + 'T00:00:00'), end: new Date(activeCampaignCycle.end + 'T23:59:59') }
+        : { start: null, end: null }
       case 'custom': return {
         start: customStart ? new Date(customStart) : null,
         end:   customEnd   ? new Date(customEnd + 'T23:59:59') : null,
@@ -1318,7 +1323,7 @@ export default function LeadKanban() {
       open={filterDrawerOpen} onClose={() => setFilterDrawerOpen(false)}
       filterStatus={filterStatus} setFilterStatus={setFilterStatus}
       filterSource={filterSource} setFilterSource={setFilterSource} schoolSources={schoolSources}
-      periodFilter={periodFilter} setPeriodFilter={setPeriodFilter}
+      periodFilter={periodFilter} setPeriodFilter={setPeriodFilter} campaignLabel={activeCampaignCycle?.start ? activeCampaignCycle.label : undefined}
       customStart={customStart} setCustomStart={setCustomStart}
       customEnd={customEnd} setCustomEnd={setCustomEnd}
       gradeFilter={gradeFilter} setGradeFilter={setGradeFilter} gradeNames={gradeNames}

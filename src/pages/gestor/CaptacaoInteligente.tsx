@@ -23,6 +23,7 @@ import {
 } from 'recharts'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { useActiveCampaign } from '../../lib/activeCampaign'
 import {
   type CaptureTrigger, type CaptureChannel, CAPTURE_CHANNELS, CAPTURE_TEXT_MIN,
   buildWaMeLink, findOverlappingTriggers, formatDuration,
@@ -105,7 +106,10 @@ export default function CaptacaoInteligente() {
   const [openDropdown, setOpenDropdown]   = useState<string | null>(null)
   const [toast, setToast]           = useState<string | null>(null)
 
-  const [period, setPeriod]         = useState<number>(30)
+  const [period, setPeriod]         = useState<number | 'campanha'>(30)
+  const campaign = useActiveCampaign(institutionId)
+  const [periodTouched, setPeriodTouched] = useState(false)
+  useEffect(() => { if (campaign && !periodTouched) setPeriod('campanha') }, [campaign, periodTouched])
   const [stats, setStats]           = useState<StatsRow[]>([])
   const [statsLoading, setStatsLoading] = useState(false)
 
@@ -160,7 +164,7 @@ export default function CaptacaoInteligente() {
     if (!institutionId) return
     setStatsLoading(true)
     const end   = new Date(Date.now() + 60_000)
-    const start = new Date(Date.now() - period * 24 * 60 * 60 * 1000)
+    const start = period === 'campanha' && campaign ? new Date(campaign.start + 'T00:00:00-03:00') : new Date(Date.now() - (period === 'campanha' ? 30 : period) * 24 * 60 * 60 * 1000)
     // Recarrega a lista de gatilhos junto: a RPC já devolve gatilho criado em
     // outra aba/por outro usuário, e sem ele na lista local a linha seria
     // descartada em dashRows até um reload.
@@ -188,7 +192,7 @@ export default function CaptacaoInteligente() {
   }
 
   useEffect(() => { loadAll() }, [institutionId]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (activeTab === 'dashboard') loadStats() }, [activeTab, period, institutionId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (activeTab === 'dashboard') loadStats() }, [activeTab, period, institutionId, campaign?.start]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const visibleTriggers = triggers.filter(t => !t.archived_at)
   const userName  = (id: string) => users.find(u => u.id === id)?.full_name || 'Usuário'
@@ -517,8 +521,8 @@ export default function CaptacaoInteligente() {
       {activeTab === 'dashboard' && (
         <>
           <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, width: 'fit-content' }}>
-            {PERIODS.map(p => (
-              <button key={p.key} onClick={() => setPeriod(p.key)} style={{
+            {[...(campaign ? [{ key: 'campanha' as const, label: campaign.label }] : []), ...PERIODS].map(p => (
+              <button key={p.key} onClick={() => { setPeriodTouched(true); setPeriod(p.key) }} style={{
                 padding: '5px 14px', borderRadius: 7, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 background: period === p.key ? '#fff' : 'transparent',
                 color: period === p.key ? '#1e2d6b' : '#64748b',
@@ -546,7 +550,7 @@ export default function CaptacaoInteligente() {
           {!statsLoading && dashRows.length === 0 ? (
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '48px 24px', textAlign: 'center' }}>
               <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Sem dados no período</p>
-              <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>Nenhum gatilho ativo ou acionado nos últimos {PERIODS.find(p => p.key === period)?.label}.</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>Nenhum gatilho ativo ou acionado {period === 'campanha' && campaign ? `na ${campaign.label}.` : `nos últimos ${PERIODS.find(p => p.key === period)?.label ?? '30 dias'}.`}</p>
             </div>
           ) : !statsLoading && (
             <>

@@ -21,3 +21,24 @@ export function useActiveCampaignYear(institutionId: string | null | undefined):
   }, [institutionId])
   return year
 }
+
+export interface ActiveCampaign { year: number; label: string; start: string; end: string }
+
+/** Campanha ativa com datas (para os módulos oferecerem o período "Campanha"). */
+export function useActiveCampaign(institutionId: string | null | undefined): ActiveCampaign | null {
+  const [c, setC] = useState<ActiveCampaign | null>(null)
+  useEffect(() => {
+    if (!institutionId) { setC(null); return }
+    let alive = true
+    supabase.from('campaign_cycles').select('target_school_year, year, label, start_date, end_date')
+      .eq('institution_id', institutionId).eq('status', 'active').not('start_date', 'is', null).not('end_date', 'is', null)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => {
+        if (!alive) return
+        const r = data as { target_school_year: number | null; year: number; label: string | null; start_date: string; end_date: string } | null
+        setC(r ? { year: r.target_school_year ?? r.year, label: r.label || `Campanha ${r.target_school_year ?? r.year}`, start: r.start_date, end: r.end_date } : null)
+      })
+    return () => { alive = false }
+  }, [institutionId])
+  return c
+}

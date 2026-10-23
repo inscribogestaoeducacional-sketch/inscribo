@@ -11,6 +11,7 @@ import AuditModal from '../../components/common/AuditModal'
 import { createNotification } from '../../lib/notifications'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { aiFetch } from '../../lib/authHeaders'
+import SaidasActivesoft from '../../components/transfers/SaidasActivesoft'
 
 // ─── types ────────────────────────────────────────────────────────────────────
 interface Transfer {
@@ -556,6 +557,8 @@ export default function GestorTransfers() {
           <Plus size={15} /> Nova transferência
         </button>
       </div>
+
+      {activeTab === 'active' && <SaidasActivesoft institutionId={institutionId} onRegister={(name, grade) => { setForm({ ...EMPTY_FORM, studentName: name, grade }); setEditingTransfer(null); setShowNewModal(true) }} />}
 
       {/* ── Tabs ───────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, width: 'fit-content' }}>
