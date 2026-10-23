@@ -15,6 +15,7 @@ import { DatabaseService } from '../../lib/supabase'
 import type { Lead, Visit, Enrollment, MarketingCampaign } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { stageColumns, leadColumnKey, stageLabel } from '../../lib/stageLabels'
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 interface KPICardProps {
@@ -81,6 +82,8 @@ export default function Dashboard() {
     propostas: 0,
     matriculas: 0
   })
+  // Leads por etapa: uma linha por etapa original e por etapa extra da escola
+  const [stageRows, setStageRows] = useState<{ key: string; label: string; extra: boolean; count: number }[]>([])
   const [loading, setLoading] = useState(true)
   const mountedRef = useRef(true)
   const [previousMonthKpis, setPreviousMonthKpis] = useState({
@@ -190,6 +193,8 @@ export default function Dashboard() {
         matriculasMes: enrollmentsLastMonth,
         taxaConversao: Math.round(taxaConversaoLastMonth * 10) / 10
       })
+
+      setStageRows(stageColumns().map(c => ({ key: c.key, label: c.custom ? c.custom.label : stageLabel(c.status), extra: !!c.custom, count: leads.filter(l => leadColumnKey(l) === c.key).length })))
 
       setFunnelData({
         leads: leadsCount,
@@ -360,6 +365,32 @@ export default function Dashboard() {
           <KPICard key={i} {...kpi} />
         ))}
       </div>
+
+      {/* ── Leads por etapa (etapas extras da escola aparecem com linha própria) ── */}
+      {stageRows.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-5 sm:mb-6">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h3 className="text-base font-bold text-[#1e2d6b]">Leads por etapa</h3>
+            <span className="text-xs text-gray-400">{stageRows.reduce((a, r) => a + r.count, 0)} leads</span>
+          </div>
+          <div className="px-6 py-4 space-y-2.5">
+            {(() => {
+              const max = Math.max(1, ...stageRows.map(r => r.count))
+              return stageRows.map(r => (
+                <div key={r.key} className="flex items-center gap-3">
+                  <span className="w-44 shrink-0 text-sm text-gray-700 truncate">
+                    {r.label}{r.extra && <span className="ml-1.5 text-[10px] font-bold bg-[#00A896] text-white rounded-full px-2 py-0.5 align-middle">EXTRA</span>}
+                  </span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-2">
+                    <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${r.count ? Math.max(3, (r.count / max) * 100) : 0}%`, background: r.extra ? '#5CCBBF' : '#00A896' }} />
+                  </div>
+                  <span className="w-10 text-right text-sm font-bold text-[#1e2d6b]">{r.count}</span>
+                </div>
+              ))
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* ── Bottom row ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
