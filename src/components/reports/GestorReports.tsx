@@ -1410,7 +1410,7 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
       })
 
       await supabase.from('campaign_cycles')
-        .update({ status: 'finished', finished_at: new Date().toISOString() })
+        .update({ status: 'completed', finished_at: new Date().toISOString() })
         .eq('id', cycle.id)
 
       setShowFinishModal(false)
@@ -1672,7 +1672,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
         .from('campaign_cycles')
         .select('*')
         .eq('institution_id', institutionId)
-        .in('status', ['active', 'released', 'finished'])
+        .in('status', ['active', 'released', 'completed'])
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -1734,7 +1734,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
   ]
 
   // ─── CAMPANHA ENCERRADA ────────────────────────────────────
-  if (cycle?.status === 'finished') {
+  if (cycle?.status === 'completed') {
     return (
       <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
         <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>

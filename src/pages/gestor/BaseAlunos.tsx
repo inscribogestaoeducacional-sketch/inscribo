@@ -16,7 +16,7 @@ import { useBaseModuleEnabled } from '../../lib/baseModule'
 type PanelRow = {
   grade_level_id: string; grade_name: string; sort_order: number; is_terminal: boolean
   base_prev_year: number; reenrolled: number; reenrolled_declared: number; pending: number; left_school: number
-  new_students: number; returning_students: number; graduates: number; capacity: number | null
+  new_students: number; returning_students: number; graduates: number; capacity: number | null; pre_enrolled: number
 }
 type ListRow = {
   student_id: string; registration_code: string | null; student_name: string; guardian_name: string | null; category: string
@@ -28,8 +28,9 @@ const CATS: { key: string; label: string; color: string }[] = [
   { key: 'a_rematricular',          label: 'A rematricular',            color: '#D97706' },
   { key: 'rematriculado_declarado', label: 'Marcados pela equipe',      color: '#0D9488' },
   { key: 'rematriculado',           label: 'Rematriculados',            color: '#059669' },
+  { key: 'pre_matriculado',         label: 'Pré-matriculados',          color: '#7C3AED' },
   { key: 'novato',                  label: 'Novatos',                   color: '#2563EB' },
-  { key: 'retorno',                 label: 'Voltaram',                  color: '#7C3AED' },
+  { key: 'retorno',                 label: 'Voltaram',                  color: '#0EA5E9' },
   { key: 'saiu',                    label: 'Saíram',                    color: '#DC2626' },
   { key: 'concluinte',              label: 'Concluintes',               color: '#64748B' },
 ]
@@ -58,17 +59,20 @@ export default function BaseAlunos() {
   const [q, setQ] = useState('')
   const [details, setDetails] = useState(false)
   const [busyId, setBusyId] = useState('')
+  const [info, setInfo] = useState<{ last_seen: string | null; sources: string[] | null; pre_counts: boolean } | null>(null)
   const [capDraft, setCapDraft] = useState<Record<string, string>>({})
   const moduleOn = useBaseModuleEnabled(institutionId)
 
   const load = useCallback(async () => {
     if (!institutionId) return
     setLoading(true); setError('')
-    const [p, l] = await Promise.all([
+    const [p, l, inf] = await Promise.all([
       supabase.rpc('base_reenrollment_panel', { p_institution_id: institutionId, p_target_year: year }),
       supabase.rpc('base_reenrollment_list', { p_institution_id: institutionId, p_target_year: year }),
+      supabase.rpc('base_sync_info', { p_institution_id: institutionId }),
     ])
     setLoading(false)
+    setInfo(((inf.data ?? [])[0] ?? null) as typeof info)
     const err = p.error || l.error
     if (err) {
       setError(err.code === '42501' ? 'Sem permissão para ver a base de alunos.' : 'Não foi possível carregar: ' + err.message)
@@ -82,11 +86,11 @@ export default function BaseAlunos() {
   useEffect(() => { if (moduleOn) load() }, [load, moduleOn])
 
   const totals = useMemo(() => {
-    const t = { base: 0, re: 0, decl: 0, pend: 0, left: 0, novos: 0, ret: 0, conc: 0, cap: 0, capSet: false, occ: 0 }
+    const t = { pre: 0, base: 0, re: 0, decl: 0, pend: 0, left: 0, novos: 0, ret: 0, conc: 0, cap: 0, capSet: false, occ: 0 }
     for (const r of panel) {
-      t.base += r.base_prev_year; t.re += r.reenrolled; t.decl += r.reenrolled_declared; t.pend += r.pending
+      t.pre += r.pre_enrolled; t.base += r.base_prev_year; t.re += r.reenrolled; t.decl += r.reenrolled_declared; t.pend += r.pending
       t.left += r.left_school; t.novos += r.new_students; t.ret += r.returning_students; t.conc += r.graduates
-      if (r.capacity != null) { t.cap += r.capacity; t.capSet = true; t.occ += r.reenrolled + r.reenrolled_declared + r.new_students + r.returning_students }
+      if (r.capacity != null) { t.cap += r.capacity; t.capSet = true; t.occ += r.reenrolled + r.reenrolled_declared + r.new_students + r.returning_students + r.pre_enrolled }
     }
     return t
   }, [panel])
@@ -104,6 +108,12 @@ export default function BaseAlunos() {
     for (const r of list) m[r.category] = (m[r.category] || 0) + 1
     return m
   }, [list])
+
+  const setPreCounts = async (on: boolean) => {
+    const { error: err } = await supabase.rpc('base_set_pre_counts', { p_institution_id: institutionId, p_on: on })
+    if (err) { setError('Não foi possível salvar a regra: ' + err.message); return }
+    load()
+  }
 
   const mark = async (r: ListRow, on: boolean) => {
     setBusyId(r.student_id)
@@ -130,7 +140,7 @@ export default function BaseAlunos() {
   const hasData = list.length > 0
   if (moduleOn === false) return <Navigate to="/" replace />
   const rowsWithData = panel.filter(r => r.base_prev_year + r.reenrolled + r.reenrolled_declared + r.pending + r.left_school
-    + r.new_students + r.returning_students + r.graduates > 0 || r.capacity != null)
+    + r.new_students + r.returning_students + r.graduates + r.pre_enrolled > 0 || r.capacity != null)
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -163,11 +173,35 @@ export default function BaseAlunos() {
         </div>
       ) : hasData && (
         <>
+          {info?.last_seen && (
+            <div style={{ fontSize: 12, color: '#64748B' }}>
+              Dados de {(info.sources ?? []).map(o => o === 'activesoft' ? 'Activesoft' : 'planilha').join(' e ')} · atualizado em {new Date(info.last_seen).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}
+            </div>
+          )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <Big label="rematriculados" value={totals.re + totals.decl} color="#059669"
-              sub={`de ${totals.base} alunos de ${year - 1}${totals.decl > 0 ? ` · ${totals.decl} marcados pela equipe` : ''}`} />
-            <Big label="a rematricular" value={totals.pend} color="#D97706" />
+            <Big label="matriculados" value={totals.re + totals.decl + totals.novos + totals.ret} color="#059669"
+              sub={`${totals.re + totals.decl} rematrículas + ${totals.novos + totals.ret} novatos/voltaram${totals.decl > 0 ? ` · ${totals.decl} marcados pela equipe` : ''}`} />
+            <Big label="pré-matriculados" value={totals.pre} color="#7C3AED" sub="reservaram vaga, ainda não matriculados" />
+            <Big label="ainda faltam" value={totals.pend} color="#D97706" sub={`de ${totals.base} alunos de ${year - 1}`} />
             <Big label="saíram" value={totals.left} color="#DC2626" />
+          </div>
+          <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 18px' }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>Pré-matrícula conta como matriculado?</div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>
+                Cada escola escolhe. Hoje: {info?.pre_counts ? 'Sim, soma nas rematrículas.' : 'Não, aparece separada como “pré-matriculado”.'}
+              </div>
+            </div>
+            {canEdit && (
+              <div style={{ display: 'flex', border: '1.5px solid #E2E8F0', borderRadius: 10, overflow: 'hidden', fontSize: 13, fontWeight: 600 }}>
+                {[false, true].map(v => (
+                  <button key={String(v)} onClick={() => { if (!!info?.pre_counts !== v) setPreCounts(v) }}
+                    style={{ padding: '7px 16px', border: 0, cursor: 'pointer', background: !!info?.pre_counts === v ? '#00A896' : '#fff', color: !!info?.pre_counts === v ? '#fff' : '#475569', fontWeight: 600 }}>
+                    {v ? 'Sim' : 'Não'}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <button onClick={() => setDetails(!details)} style={{ all: 'unset', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}>
@@ -176,20 +210,21 @@ export default function BaseAlunos() {
           </div>
           {details && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             <Big label="novatos" value={totals.novos} color="#2563EB" />
-            <Big label="voltaram" value={totals.ret} color="#7C3AED" />
+            <Big label="voltaram" value={totals.ret} color="#0EA5E9" />
             <Big label="concluintes" value={totals.conc} color="#64748B" />
             <Big label="vagas livres" value={totals.capSet ? Math.max(totals.cap - totals.occ, 0) : 0} color="#0D9488"
               sub={totals.capSet ? `de ${totals.cap}` : 'digite as vagas na tabela'} />
           </div>}
 
           <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: details ? 900 : 520 }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: details ? 960 : 600 }}>
               <thead>
                 <tr style={{ background: '#F8FAFC' }}>
                   <th style={{ ...th, textAlign: 'left', paddingLeft: 16 }}>Série em {year}</th>
                   <th style={th}>Base {year - 1}</th>
                   <th style={th}>Rematriculados</th>
-                  <th style={th}>A rematricular</th>
+                  <th style={th}>Pré-matric.</th>
+                  <th style={th}>Ainda faltam</th>
                   <th style={{ ...th, paddingRight: details ? 8 : 16 }}>Saíram</th>
                   {details && <>
                     <th style={th}>Marcados</th>
@@ -203,7 +238,7 @@ export default function BaseAlunos() {
               </thead>
               <tbody>
                 {rowsWithData.map(r => {
-                  const occ = r.reenrolled + r.reenrolled_declared + r.new_students + r.returning_students
+                  const occ = r.reenrolled + r.reenrolled_declared + r.new_students + r.returning_students + r.pre_enrolled
                   return (
                     <tr key={r.grade_level_id} style={{ borderTop: '1px solid #F1F5F9' }}>
                       <td style={{ ...td, textAlign: 'left', fontWeight: 600, paddingLeft: 16 }}>
@@ -211,6 +246,7 @@ export default function BaseAlunos() {
                       </td>
                       <td style={td}>{r.base_prev_year || '–'}</td>
                       <td style={{ ...td, color: '#059669', fontWeight: 600 }}>{r.reenrolled + r.reenrolled_declared || '–'}</td>
+                      <td style={{ ...td, color: r.pre_enrolled ? '#7C3AED' : undefined, fontWeight: r.pre_enrolled ? 600 : 400 }}>{r.pre_enrolled || '–'}</td>
                       <td style={{ ...td, color: r.pending ? '#D97706' : undefined, fontWeight: r.pending ? 700 : 400 }}>{r.pending || '–'}</td>
                       <td style={{ ...td, paddingRight: details ? 8 : 16 }}>{r.left_school || '–'}</td>
                       {details && <>
