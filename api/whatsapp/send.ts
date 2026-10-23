@@ -503,7 +503,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     // (first_response_at, gravado só por sendAutoMessage() em webhook.ts, mede
     // o bot — first_human_response_at é o equivalente pra mensagem humana,
     // usado pelo KPI "Tempo de resposta" e pelo Ranking em GestorHome.tsx)
-    let convSelect = supabase.from('whatsapp_conversations').select('id, first_human_response_at')
+    let convSelect = supabase.from('whatsapp_conversations').select('id, first_human_response_at, lead_id, institution_id')
     if (resolvedConversationId) {
       convSelect = convSelect.eq('id', resolvedConversationId)
     } else if (isAionSend) {
@@ -528,6 +528,22 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
       await convUpdate.eq('is_aion_inbox', true).eq('remote_jid', to)
     } else {
       await convUpdate.eq('institution_id', institution_id).eq('remote_jid', storeJid)
+    }
+
+    // ── 1ª resposta de uma pessoa a um lead "Novo": passa para "Contato" ──
+    // (o gatilho de histórico grava a mudança; aqui só identificamos a origem
+    // automática). Nunca derruba o envio: qualquer erro é ignorado.
+    if (convRow && !convRow.first_human_response_at && convRow.lead_id && !isAionSend) {
+      try {
+        const { data: moved } = await supabase.from('leads')
+          .update({ status: 'contact' })
+          .eq('id', convRow.lead_id).eq('institution_id', convRow.institution_id ?? institution_id).eq('status', 'new').is('deleted_at', null)
+          .select('id')
+        if (moved && moved.length) {
+          const { data: h } = await supabase.from('lead_status_history').select('id').eq('lead_id', convRow.lead_id).eq('to_status', 'contact').order('changed_at', { ascending: false }).limit(1)
+          if (h?.[0]) await supabase.from('lead_status_history').update({ source: 'auto_whatsapp', changed_by_name: 'Automático: 1ª resposta no WhatsApp' }).eq('id', h[0].id)
+        }
+      } catch (e) { console.warn('[SEND] auto-contato do lead falhou (ignorado):', (e as Error)?.message) }
     }
 
     return res.status(200).json({ success: true, wamid })
