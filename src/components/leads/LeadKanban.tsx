@@ -4,7 +4,7 @@ import {
   Clock, Users, Send, CheckCircle, Save,
   MessageCircle, AlertTriangle, ChevronDown, ChevronRight, ChevronUp,
   Bell, UserCog, SlidersHorizontal, CheckSquare,
-  LayoutGrid, Rows3, Tag, Megaphone, MapPin, GraduationCap,
+  LayoutGrid, Rows3, Tag, Megaphone, MapPin, GraduationCap, List as ListIcon, Kanban,
 } from 'lucide-react'
 import { logAudit } from '../../hooks/useAudit'
 import AuditModal from '../common/AuditModal'
@@ -29,6 +29,9 @@ import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS, type ReminderOpt
 import { useLeadInteractions } from '../../hooks/useLeadInteractions'
 import { fetchPendingVisitsByLead, isPastVisit, advanceLeadTo, type PendingVisit } from '../../lib/visitOutcome'
 import VisitOutcomeDialog from '../visits/VisitOutcomeDialog'
+import PageHeader from '../ui/PageHeader'
+import { BRAND } from '../../lib/brand'
+import { AttentionStrip, WaitingList, LEADS_CSS, useLeadWaiting, waitLabel, daysSince, type AttentionKey, type StripCounts, type WaitingRow } from './LeadsAttention'
 import NewLeadModal from './NewLeadModal'
 import ScheduleVisitModal from './ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
@@ -155,20 +158,20 @@ interface CardContentProps {
   // Fase 0A: visita que já passou e está sem baixa → selo clicável
   pendingPastVisit?: PendingVisit | null
   onVisitOutcome?: (lead: Lead) => void
+  waitingInfo?: { side: 'us' | 'family' | null; since: string } | null
 }
 
-function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, unitName, selectMode, selected, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll, reminderOpts, pendingPastVisit, onVisitOutcome }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, unitName, selectMode, selected, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll, reminderOpts, pendingPastVisit, onVisitOutcome, waitingInfo }: CardContentProps) {
   const hasFamily = !!familyMembers && familyMembers.length > 1
   const lostReason = lead.lost_reason
   const lostLabel = lostReasonLabel(lostReason)
   const temperature = lead.lead_temperature ? LEAD_TEMPERATURES.find(t => t.value === lead.lead_temperature) : null
   const reminder = getLeadReminderInfo(lead, reminderOpts)
   const reminderColors = reminder ? REMINDER_COLORS[reminder.urgency] : null
-  const assignedInitials = assignedUser ? assignedUser.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() : null
 
   return (
     <div
-      className={`group relative rounded-xl border transition-all duration-150 overflow-hidden ${
+      className={`group relative rounded-xl border ld-card ld-in overflow-hidden ${
         selectMode && selected ? 'bg-indigo-50/60 border-indigo-400 ring-2 ring-indigo-400 shadow-sm'
         : isFlashing ? 'bg-teal-50/40 border-teal-400 ring-2 ring-teal-500 shadow-md animate-pulse'
         : overlay ? 'bg-white border-gray-200 shadow-xl scale-105 opacity-50'
@@ -199,6 +202,9 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
               )}
             </p>
           </div>
+          {temperature && (
+            <span title={temperature.label} style={{ display: 'inline-flex', flexShrink: 0, marginTop: 2 }}><temperature.icon size={15} color={temperature.color} /></span>
+          )}
           {!overlay && (
             <button
               title="Excluir"
@@ -211,57 +217,18 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
           )}
         </div>
 
-        {/* Item 9b — badges: série, origem, temperatura, campanha, ano de interesse */}
-        {(unitName || lead.grade_interest || lead.source || temperature || lead.campaign_cycle_id || lead.year_interest) && (
-          <div className="flex flex-wrap gap-1 mb-1.5">
-            {unitName && (
-              <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-indigo-200">📍 {unitName}</span>
-            )}
-            {lead.grade_interest && <span className="inline-flex items-center bg-[#14b8a6]/10 text-[#0d9488] text-xs font-medium px-2 py-0.5 rounded-full border border-[#14b8a6]/20">{lead.grade_interest}</span>}
-            {lead.year_interest && !compact && (
-              <span title="Ano de interesse" className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-xs font-medium px-2 py-0.5 rounded-full border border-amber-200">
-                📅 {lead.year_interest}
-              </span>
-            )}
-            {lead.source && (
-              lead.source === 'embed'
-                ? <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-sky-200">Via site</span>
-                : <span className="inline-flex items-center bg-gray-100 text-gray-500 text-xs font-medium px-2 py-0.5 rounded-full">{lead.source}</span>
-            )}
-            {temperature && (
-              <span title={temperature.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: temperature.bg, color: temperature.color, border: `1px solid ${temperature.border}` }}>
-                <temperature.icon size={10} />{!compact && temperature.label}
-              </span>
-            )}
-            {lead.campaign_cycle_id && !compact && (
-              <span title={lead.cycle_link_kind === 'herdado' ? 'Pipeline herdado: criado antes do início da campanha (não conta como lead da campanha)' : 'Vinculado a uma campanha'} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: lead.cycle_link_kind === 'herdado' ? '#F1F5F9' : '#F5F3FF', color: lead.cycle_link_kind === 'herdado' ? '#64748B' : '#7C3AED' }}>
-                <Megaphone size={10} />{lead.cycle_link_kind === 'herdado' && 'Herdado'}
-              </span>
-            )}
-          </div>
+        {/* Linha única: série · origem · unidade. O resto fica na ficha. */}
+        {(unitName || lead.grade_interest || lead.source) && (
+          <p className="text-xs text-gray-500 truncate mb-1.5" title={lead.campaign_cycle_id ? 'Vinculado a uma campanha' : undefined}>
+            {[unitName, lead.grade_interest, lead.source === 'embed' ? 'Via site' : lead.source].filter(Boolean).join(' · ')}
+          </p>
         )}
 
-        {/* Tags (item 9b — antes só apareciam no modal de histórico) */}
-        {!compact && lead.tags && lead.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-1.5">
-            {lead.tags.map(tag => (
-              <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 7px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: '#EEF2FF', color: '#4338CA' }}>
-                <Tag size={9} />{tag}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Telefone + responsável (atendente) */}
-        {!compact && (lead.phone || assignedUser) && (
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            {lead.phone && <span className="text-xs text-gray-500 flex items-center gap-1"><Phone size={10} />{lead.phone}</span>}
-            {assignedUser && (
-              <span title={`Responsável: ${assignedUser.full_name}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: '#1e2d6b', background: '#EEF2FF', padding: '2px 7px', borderRadius: 999, flexShrink: 0 }}>
-                <UserCog size={10} />{assignedInitials}
-              </span>
-            )}
-          </div>
+        {/* Espera da conversa: só a informação que pede ação */}
+        {!overlay && waitingInfo && lead.status !== 'lost' && lead.status !== 'enrolled' && (
+          <p style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 4, color: waitingInfo.side === 'us' ? '#B91C1C' : '#B45309' }}>
+            <Clock size={11} />{waitingInfo.side === 'us' ? 'família esperando' : 'sem retorno da família'} {waitLabel(waitingInfo.since)}
+          </p>
         )}
 
         {/* Fase 0A — visita que já passou sem baixa */}
@@ -636,6 +603,38 @@ export default function LeadKanban() {
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set())
   const [compactView, setCompactView] = useState(false)
 
+  // ── Faixa de atenção (clicável) + visão quadro/lista ───────────────────────
+  const [attention, setAttention] = useState<AttentionKey | null>(null)
+  const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
+  const { waiting, refresh: refreshWaiting } = useLeadWaiting(user?.institution_id)
+  const [weekVisitLeadIds, setWeekVisitLeadIds] = useState<Set<string>>(new Set())
+  const [todayVisitCount, setTodayVisitCount] = useState(0)
+  const [monthEnrolledIds, setMonthEnrolledIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (!user?.institution_id) return
+    const now = new Date()
+    const wStart = new Date(now); wStart.setHours(0, 0, 0, 0); wStart.setDate(wStart.getDate() - wStart.getDay())
+    const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 7)
+    const mStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const tStart = new Date(now); tStart.setHours(0, 0, 0, 0)
+    const tEnd = new Date(tStart); tEnd.setDate(tEnd.getDate() + 1)
+    ;(async () => {
+      const [v, e] = await Promise.all([
+        supabase.from('visits').select('lead_id, scheduled_date, status').eq('institution_id', user.institution_id)
+          .gte('scheduled_date', wStart.toISOString()).lt('scheduled_date', wEnd.toISOString()),
+        supabase.from('lead_status_history').select('lead_id').eq('institution_id', user.institution_id)
+          .eq('to_status', 'enrolled').gte('changed_at', mStart.toISOString()),
+      ])
+      const vs = ((v.data ?? []) as { lead_id: string | null; scheduled_date: string; status: string | null }[])
+        .filter(x => x.lead_id && !['cancelled', 'canceled', 'cancelada'].includes((x.status ?? '').toLowerCase()))
+      setWeekVisitLeadIds(new Set(vs.map(x => x.lead_id as string)))
+      setTodayVisitCount(vs.filter(x => { const d = new Date(x.scheduled_date); return d >= tStart && d < tEnd }).length)
+      setMonthEnrolledIds(new Set(((e.data ?? []) as { lead_id: string }[]).map(x => x.lead_id)))
+    })()
+  }, [user?.institution_id, leads.length])
+
+  const isIncomplete = (l: Lead) => !['enrolled', 'lost'].includes(l.status) && (!l.grade_interest || !l.source || !l.assigned_to)
+
   // ── Item 10 — campanha ativa da instituição ────────────────────────────────
   const [activeCampaignCycle, setActiveCampaignCycle] = useState<{ id: string; label: string; targetYear: number | null; start?: string; end?: string } | null>(null)
   const [institutionCity, setInstitutionCity] = useState<string>('')
@@ -660,7 +659,9 @@ export default function LeadKanban() {
   useEffect(() => {
     const highlightId = searchParams.get('highlight')
     if (highlightId) { setFlashingLeadId(highlightId); setTimeout(() => setFlashingLeadId(null), 3000) }
-    if (searchParams.get('filter') === 'no_contact') setNoContactFilter(true)
+    if (searchParams.get('filter') === 'no_contact') { setNoContactFilter(true); setViewMode('list') }
+    const fa = searchParams.get('filter')
+    if (fa === 'us' || fa === 'family' || fa === 'visits' || fa === 'enrolled' || fa === 'incomplete') setAttention(fa)
   }, [searchParams])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
@@ -1018,6 +1019,10 @@ export default function LeadKanban() {
     if (shiftFilter !== 'all' && (lead as any).shift_interest !== shiftFilter) return false
     if (temperatureFilter !== '' && lead.lead_temperature !== temperatureFilter) return false
     if (noContactFilter && !isLeadNoContact(lead, noContactDays)) return false
+    if (attention === 'us' || attention === 'family') { if (waiting.get(lead.id)?.side !== attention) return false }
+    else if (attention === 'visits') { if (!weekVisitLeadIds.has(lead.id)) return false }
+    else if (attention === 'enrolled') { if (!monthEnrolledIds.has(lead.id)) return false }
+    else if (attention === 'incomplete') { if (!isIncomplete(lead)) return false }
     if (ownerFilter === 'mine') { if (lead.assigned_to !== user?.id) return false }
     else if (ownerFilter === 'unassigned') { if (lead.assigned_to) return false }
     else if (ownerFilter !== 'all') { if (lead.assigned_to !== ownerFilter) return false }
@@ -1223,7 +1228,48 @@ export default function LeadKanban() {
   const columns = stageColumns().filter(c => !filterStatus || c.status === filterStatus)
   const visibleStatuses = columns.map(c => c.key)
   const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s).length, 0)
-  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'all' || noContactFilter || (unitCfg.enabled && unitFilter !== UNIT_FILTER_ALL)
+  const openLeads = leads.filter(l => !['enrolled', 'lost'].includes(l.status))
+  const stripCounts: StripCounts = {
+    us: openLeads.filter(l => waiting.get(l.id)?.side === 'us').length,
+    family: openLeads.filter(l => waiting.get(l.id)?.side === 'family').length,
+    visits: openLeads.filter(l => weekVisitLeadIds.has(l.id)).length,
+    todayVisits: todayVisitCount,
+    enrolled: leads.filter(l => monthEnrolledIds.has(l.id)).length,
+    incomplete: openLeads.filter(isIncomplete).length,
+  }
+  const waitingRows: WaitingRow[] = (attention === 'us' || attention === 'family')
+    ? openLeads.filter(l => waiting.get(l.id)?.side === attention).map(l => ({
+        id: l.id, name: l.responsible_name || l.student_name, sub: [l.student_name, l.grade_interest].filter(Boolean).join(' · '),
+        initials: (l.responsible_name || l.student_name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase(),
+        w: waiting.get(l.id)!, phone: l.phone,
+      }))
+    : []
+  const openLeadChat = (r: WaitingRow) => {
+    if (!r.phone) { showToast('Este lead não tem telefone cadastrado', 'error'); return }
+    navigate(`/whatsapp?phone=${normalizeBrazilianInput(r.phone)}`)
+  }
+  const openLeadCard = (r: WaitingRow) => { const l = leads.find(x => x.id === r.id); if (l) { setEditingLead(l); setShowNewLeadModal(true) } }
+  const attentionTitle: Record<AttentionKey, string> = {
+    us: 'Famílias esperando resposta da escola', family: 'Famílias que não responderam', visits: 'Visitas da semana',
+    enrolled: 'Matrículas do mês', incomplete: 'Cadastros com dados faltando',
+  }
+  const attentionBlock = (
+    <>
+      <style>{LEADS_CSS}</style>
+      <AttentionStrip counts={stripCounts} active={attention} onPick={k => { setAttention(k); if (k) refreshWaiting() }} />
+      {(attention === 'us' || attention === 'family') && (
+        <WaitingList title={attentionTitle[attention]} color={attention === 'us' ? '#B91C1C' : '#B45309'} rows={waitingRows}
+          onOpenChat={openLeadChat} onOpenLead={openLeadCard} onClose={() => setAttention(null)} />
+      )}
+      {(attention === 'visits' || attention === 'enrolled' || attention === 'incomplete') && (
+        <div className="ld-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: BRAND.softer, border: `1px solid ${BRAND.softLine}`, borderRadius: 12, padding: '8px 14px', fontSize: 13, color: BRAND.primaryDark, fontWeight: 600 }}>
+          <span>Mostrando: {attentionTitle[attention]}</span>
+          <button type="button" onClick={() => setAttention(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: BRAND.muted, fontSize: 12.5 }}>Limpar filtro</button>
+        </div>
+      )}
+    </>
+  )
+  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'all' || noContactFilter || attention !== null || (unitCfg.enabled && unitFilter !== UNIT_FILTER_ALL)
 
   // ── Consolidação de família — decisão individual por filho, dentro do
   // card (item 2 do pedido). 'open' reverte pro mesmo estágio usado pelo
@@ -1314,7 +1360,7 @@ export default function LeadKanban() {
   const clearAllFilters = () => {
     setSearchTerm(''); setFilterSource(''); setFilterStatus(''); setPeriodFilter('all')
     setCustomStart(''); setCustomEnd(''); setGradeFilter('all'); setShiftFilter('all')
-    setTemperatureFilter(''); setOwnerFilter('all'); setNoContactFilter(false); setNoContactDays(schoolNoContactDays)
+    setTemperatureFilter(''); setOwnerFilter('all'); setNoContactFilter(false); setAttention(null); setNoContactDays(schoolNoContactDays)
     setUnitFilter(UNIT_FILTER_ALL)
   }
 
@@ -1372,13 +1418,9 @@ export default function LeadKanban() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
 
-        {/* Header */}
-        <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Users style={{ width: 16, height: 16, color: '#8B5CF6' }} />
-          </div>
-          <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0, flex: 1 }}>Leads</h1>
-          <span style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{mobileLeads.length}</span>
+        <div style={{ padding: '12px 12px 0', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <PageHeader compact icon={Users} title="Leads" subtitle={`${mobileLeads.length} no funil`} />
+          {attentionBlock}
         </div>
 
         {/* Search + filtros */}
@@ -1507,41 +1549,29 @@ export default function LeadKanban() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, height: '100%', background: '#f8f9fb' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14, height: '100%', overflowY: 'auto', background: BRAND.bg }}>
+      <style>{LEADS_CSS}</style>
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Users style={{ width: 18, height: 18, color: '#8B5CF6' }} />
+      <PageHeader icon={Users} title="Leads" subtitle={`${filteredTotal} ${filteredTotal === 1 ? 'família no funil' : 'famílias no funil'}${hasActiveFilters ? ' (com filtros)' : ''}`}
+        actions={<>
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,.16)', borderRadius: 10, padding: 3 }}>
+            {([['board', 'Quadro', Kanban], ['list', 'Lista', ListIcon]] as const).map(([k, l, Ic]) => (
+              <button key={k} type="button" onClick={() => setViewMode(k)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: viewMode === k ? '#fff' : 'transparent', color: viewMode === k ? BRAND.primaryDark : '#fff', transition: 'all .15s' }}><Ic size={14} />{l}</button>
+            ))}
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Leads</h1>
-              <span style={{ padding: '2px 10px', background: '#EDE9FE', color: '#7C3AED', fontSize: 12, fontWeight: 700, borderRadius: 999 }}>{filteredTotal}</span>
-            </div>
-            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Gestão do funil de captação</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Item 13 — toggle view compacta */}
-          <button
-            onClick={() => setCompactView(v => !v)}
-            title={compactView ? 'Cards normais' : 'Cards compactos'}
-            style={{ width: 38, height: 38, borderRadius: 10, border: '1.5px solid ' + (compactView ? '#00A896' : '#E2E8F0'), background: compactView ? '#F0FDFB' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-          >
-            {compactView ? <Rows3 style={{ width: 16, height: 16, color: '#00A896' }} /> : <LayoutGrid style={{ width: 16, height: 16, color: '#64748B' }} />}
+          {viewMode === 'board' && (
+            <button type="button" onClick={() => setCompactView(v => !v)} title={compactView ? 'Cartões normais' : 'Cartões compactos'}
+              style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              {compactView ? <Rows3 size={16} color="#fff" /> : <LayoutGrid size={16} color="#fff" />}
+            </button>
+          )}
+          <button type="button" onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }}
+            style={{ background: '#fff', color: BRAND.primaryDark, border: 'none', padding: '9px 16px', borderRadius: 11, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={16} /> Novo lead
           </button>
-          <button
-            onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }}
-            style={{ background: '#00A896', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'translateY(0)' }}
-          >
-            <Plus style={{ width: 16, height: 16 }} /> Novo Lead
-          </button>
-        </div>
-      </div>
+        </>} />
+
+      {attentionBlock}
 
       {/* Filter Bar — item 6c: busca + botão de filtros (drawer) */}
       <div className="flex gap-3 mb-2 flex-wrap items-center">
@@ -1581,7 +1611,47 @@ export default function LeadKanban() {
         </div>
       )}
 
+      {/* Visão em lista */}
+      {viewMode === 'list' && (() => {
+        const rows = leads.filter(l => matchesLeadFilters(l, (() => { const { start, end } = getPeriodDates(); return { start, end } })())).sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
+        return (
+          <div className="ld-in" style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 14, overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 760 }}>
+              <thead><tr style={{ background: '#F8FAFC', color: BRAND.muted, textAlign: 'left', fontSize: 11.5, textTransform: 'uppercase' }}>
+                {['Família / aluno', 'Série', 'Etapa', 'Espera', 'Atendente', 'Criado', ''].map(h => <th key={h} style={{ padding: '9px 12px', fontWeight: 700 }}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {rows.length === 0 && <tr><td colSpan={7} style={{ padding: 28, textAlign: 'center', color: BRAND.faint }}>Nenhum lead encontrado</td></tr>}
+                {rows.slice(0, 300).map(l => {
+                  const w = waiting.get(l.id)
+                  const cfg = statusConfig[l.status]
+                  const temp = l.lead_temperature ? LEAD_TEMPERATURES.find(t => t.value === l.lead_temperature) : null
+                  return (
+                    <tr key={l.id} className="ld-row" onClick={() => cardActions.onEdit(l)} style={{ borderTop: '1px solid #EEF2F1', cursor: 'pointer' }}>
+                      <td style={{ padding: '9px 12px' }}>
+                        <div style={{ fontWeight: 700, color: BRAND.ink }}>{l.responsible_name} {temp && <temp.icon size={12} color={temp.color} style={{ verticalAlign: -1 }} />}</div>
+                        <div style={{ fontSize: 12, color: BRAND.muted }}>{l.student_name}</div>
+                      </td>
+                      <td style={{ padding: '9px 12px', color: BRAND.text }}>{l.grade_interest || '—'}</td>
+                      <td style={{ padding: '9px 12px' }}><span style={{ fontSize: 11.5, fontWeight: 700, padding: '2px 9px', borderRadius: 99, background: `${cfg?.accent ?? '#64748B'}22`, color: cfg?.accent ?? '#64748B' }}>{leadCustomStage(l)?.label ?? cfg?.label ?? l.status}</span></td>
+                      <td style={{ padding: '9px 12px', fontSize: 12, fontWeight: 600, color: w?.side === 'us' ? '#B91C1C' : BRAND.muted }}>{w ? `${w.side === 'us' ? 'Nossa vez' : 'Aguardando família'} · ${waitLabel(w.since)}` : '—'}</td>
+                      <td style={{ padding: '9px 12px', color: BRAND.text }}>{l.assigned_to ? (usersById.get(l.assigned_to)?.full_name ?? '—') : '—'}</td>
+                      <td style={{ padding: '9px 12px', color: BRAND.muted, whiteSpace: 'nowrap' }}>{new Date(l.created_at).toLocaleDateString('pt-BR')}</td>
+                      <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                        <button type="button" title="Abrir conversa" onClick={e => { e.stopPropagation(); handleWhatsApp(l) }} style={{ border: 'none', background: '#DCFCE7', color: '#15803D', borderRadius: 8, padding: '5px 8px', cursor: 'pointer' }}><MessageCircle size={14} /></button>{' '}
+                        <button type="button" title="Agendar visita" onClick={e => { e.stopPropagation(); cardActions.onSchedule(l) }} style={{ border: 'none', background: '#DBEAFE', color: '#1D4ED8', borderRadius: 8, padding: '5px 8px', cursor: 'pointer' }}><Calendar size={14} /></button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      })()}
+
       {/* Kanban Board */}
+      {viewMode === 'board' && (
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max">
@@ -1621,6 +1691,7 @@ export default function LeadKanban() {
                               reminderOpts={optsFor(lead.id)}
                               pendingPastVisit={(pendingVisitsByLead.get(lead.id) ?? []).find(isPastVisit) ?? null}
                               onVisitOutcome={openVisitOutcome}
+                              waitingInfo={waiting.get(lead.id) ?? null}
                               {...cardActions}
                             />
                           )
@@ -1659,6 +1730,7 @@ export default function LeadKanban() {
           ) : null}
         </DragOverlay>
       </DndContext>
+      )}
 
       {filterDrawerEl}
       {bulkBarEl}

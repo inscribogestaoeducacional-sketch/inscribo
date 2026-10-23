@@ -11,6 +11,7 @@
 // (ex.: pré-preencher responsável/telefone com os dados da conversa ativa,
 // origem = "WhatsApp", responsável sugerido = atendente da conversa). Não
 // afeta em nada o uso normal do LeadKanban, que não passa essa prop.
+import LeadTimeline from './LeadTimeline'
 import React, { useState, useEffect } from 'react'
 import {
   Plus, X, Save, Tag, Megaphone, UserPlus2,
@@ -71,8 +72,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
   const [savingNote, setSavingNote] = useState(false)
   const [savingActivity, setSavingActivity] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [history, setHistory] = useState<AuditEntry[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyKey, setHistoryKey] = useState(0)
   const [quickNote, setQuickNote] = useState('')
   const [activityForm, setActivityForm] = useState({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
   const [familyMatch, setFamilyMatch] = useState<FamilyMatch | null>(null)
@@ -142,32 +142,11 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
     setActiveTab('dados')
     setFieldErrors({})
     setQuickNote('')
-    setHistory([])
     setFamilyMatch(null)
     setFamilyMatchId(null)
     setExtraStudents([])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingLead, isOpen])
-
-  useEffect(() => {
-    if (activeTab === 'historico' && editingLead?.id) {
-      setLoadingHistory(true)
-      ;(async () => {
-        try {
-          const instId = (editingLead as any).institution_id ?? ''
-          const { data } = await supabase.from('audit_logs')
-            .select('*')
-            .eq('institution_id', instId)
-            .eq('record_id', editingLead.id)
-            .eq('module', 'lead')
-            .order('created_at', { ascending: true })
-            .limit(50)
-          setHistory((data || []) as AuditEntry[])
-        } catch { setHistory([]) }
-        finally { setLoadingHistory(false) }
-      })()
-    }
-  }, [activeTab, editingLead?.id])
 
   // ── Item 3b: detectar família já cadastrada com esse telefone ────────────
   // Só roda ao criar (não editar) e só depois que o campo perde foco, pra não
@@ -309,10 +288,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
         user_id: modalUser?.id || null, user_name: modalUser?.full_name || 'Atendente', user_role: '',
       })
       setActivityForm({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
-      const { data: h } = await supabase.from('audit_logs')
-        .select('*').eq('institution_id', instId).eq('record_id', editingLead.id).eq('module', 'lead')
-        .order('created_at', { ascending: true }).limit(50)
-      setHistory((h || []) as AuditEntry[])
+      setHistoryKey(k => k + 1)
     } catch {} finally { setSavingActivity(false) }
   }
 
@@ -704,43 +680,10 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                 </button>
               </div>
 
-              {/* Timeline */}
-              {loadingHistory
-                ? <div style={{ textAlign: 'center', padding: 32 }}><div className="animate-spin rounded-full h-7 w-7 border-4 border-[#00A896] border-t-transparent mx-auto" /></div>
-                : history.length === 0
-                  ? <div style={{ textAlign: 'center', padding: 32, color: '#94A3B8', fontSize: 13 }}>Nenhuma atividade registrada</div>
-                  : (
-                    <div style={{ position: 'relative', paddingLeft: 28 }}>
-                      <div style={{ position: 'absolute', left: 8, top: 0, bottom: 0, width: 2, background: '#E2E8F0', borderRadius: 1 }} />
-                      {history.map((item, idx) => {
-                        const color = getEventColor(item.action)
-                        const desc = buildDesc(item)
-                        return (
-                          <div key={item.id} style={{ position: 'relative', marginBottom: idx < history.length - 1 ? 12 : 0 }}>
-                            <div style={{
-                              position: 'absolute', left: -25, top: 13,
-                              width: 12, height: 12, borderRadius: '50%',
-                              background: color, border: '2.5px solid #fff',
-                              boxShadow: '0 1px 4px rgba(0,0,0,0.18)', zIndex: 1,
-                            }} />
-                            <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderLeft: `3px solid ${color}`, borderRadius: 10, padding: '10px 14px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>
-                                  {getEventIcon(item.action)} {item.action}
-                                </span>
-                                <span style={{ fontSize: 10, color: '#94A3B8', whiteSpace: 'nowrap', marginLeft: 8, flexShrink: 0 }}>{formatDT(item.created_at)}</span>
-                              </div>
-                              {desc && <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 4px', lineHeight: 1.5 }}>{desc}</p>}
-                              <span style={{ fontSize: 11, color: '#94A3B8' }}>por {item.user_name || 'Sistema'}</span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-              }
+              <LeadTimeline leadId={editingLead.id} refreshKey={historyKey} />
             </div>
           )}
+
 
           {/* ABA ANOTAÇÕES */}
           {activeTab === 'anotacoes' && editingLead && (
