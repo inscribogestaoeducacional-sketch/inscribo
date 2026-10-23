@@ -686,6 +686,19 @@ async function resolveOrRouteGroupSharedContact(
   return null
 }
 
+// Envia a avaliação ao encerrar a conversa, se a escola ligou. Usado por TODO caminho que
+// encerra pelo robô (bloco "Fim" e ação "encerrar conversa"), com os botões configurados.
+async function sendSurveyIfEnabled(institutionId: string, remoteJid: string): Promise<void> {
+  const { data: flowCfg } = await supabase
+    .from('whatsapp_flows')
+    .select('satisfaction_survey_enabled, satisfaction_message, survey_config')
+    .eq('institution_id', institutionId)
+    .maybeSingle()
+  if (!flowCfg?.satisfaction_survey_enabled) return
+  const surveyMsg = (flowCfg.satisfaction_message as string) || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊'
+  await sendSatisfactionSurvey(institutionId, remoteJid, surveyMsg, surveyCfg((flowCfg as any).survey_config).buttons)
+}
+
 // ── Send satisfaction survey buttons via Meta Cloud API ─────────────────────
 async function sendSatisfactionSurvey(institutionId: string, remoteJid: string, message: string, buttons: [string, string, string] = SURVEY_DEFAULTS.buttons): Promise<void> {
   try {
@@ -2471,10 +2484,13 @@ async function processCustomFlow(
         } else if (cond.conditionType === 'lunch_break') {
           const tz  = flow.timezone || 'America/Fortaleza'
           const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
-          const [lsh, lsm] = (flow.lunch_start || '12:00').split(':').map(Number)
-          const [leh, lem] = (flow.lunch_end   || '13:00').split(':').map(Number)
-          const cur = now.getHours() * 60 + now.getMinutes()
-          r = cur >= lsh * 60 + lsm && cur <= leh * 60 + lem
+          // Respeita o interruptor de almoço e só vale com horários preenchidos (sem 12h–13h escondido).
+          if (autoOn(flow, 'almoco') && flow.lunch_start && flow.lunch_end) {
+            const [lsh, lsm] = String(flow.lunch_start).split(':').map(Number)
+            const [leh, lem] = String(flow.lunch_end).split(':').map(Number)
+            const cur = now.getHours() * 60 + now.getMinutes()
+            r = cur >= lsh * 60 + lsm && cur <= leh * 60 + lem
+          }
         } else if (cond.conditionType === 'keyword') {
           r = text.toLowerCase().includes((cond.keyword || '').toLowerCase())
         } else if (cond.conditionType === 'first_message') {
@@ -2600,6 +2616,7 @@ async function processCustomFlow(
           await supabase.from('whatsapp_conversations')
             .update({ status: 'closed', bot_active: false, closed_at: new Date().toISOString() })
             .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+          await sendSurveyIfEnabled(institutionId, remoteJid)
         } else if (action.actionType === 'upsert_lead') {
           const phone  = remoteJid.replace(/@.*/, '')
           const noCode = phone.startsWith('55') ? phone.slice(2) : phone
@@ -2736,15 +2753,7 @@ async function processCustomFlow(
       await supabase.from('whatsapp_conversations')
         .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null, closed_at: new Date().toISOString() })
         .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-      const { data: flowCfg } = await supabase
-        .from('whatsapp_flows')
-        .select('satisfaction_survey_enabled, satisfaction_message, survey_config')
-        .eq('institution_id', institutionId)
-        .maybeSingle()
-      if (flowCfg?.satisfaction_survey_enabled) {
-        const surveyMsg = (flowCfg.satisfaction_message as string) || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊'
-        await sendSatisfactionSurvey(institutionId, remoteJid, surveyMsg, surveyCfg((flowCfg as any).survey_config).buttons)
-      }
+      await sendSurveyIfEnabled(institutionId, remoteJid)
       currentNodeId = 'end'; break
     }
     break
@@ -2942,7 +2951,8 @@ async function processFlow(
     const [endH,   endM  ] = (flow.working_end   || '18:00').split(':').map(Number)
     const currentMin     = now.getHours() * 60 + now.getMinutes()
     const isWorkingHours = currentMin >= startH * 60 + startM && currentMin <= endH * 60 + endM
-    const isOpen         = flow.schedule_mode === 'individual' ? await scheduleOpen(flow, institutionId, 'America/Fortaleza') : (isWorkingDay && isWorkingHours)
+    // scheduleOpen também considera feriado/data especial em qualquer modo (antes o modo geral ignorava)
+    const isOpen         = await scheduleOpen(flow, institutionId, 'America/Fortaleza')
 
     console.log('[HORARIO]', {
       timezone:       flow.timezone,
