@@ -87,11 +87,21 @@ interface EditorState {
   labels: Record<string, string>
   buttons: { type: 'QUICK_REPLY' | 'URL'; text: string; url_base?: string }[]
   urlExample: string
+  /** onde o modelo pode ser escolhido (available_contexts) */
+  contexts: string[]
 }
+
+const CONTEXT_OPTIONS: { key: string; label: string; hint: string }[] = [
+  { key: 'broadcast', label: 'Transmissões', hint: 'Disparo em massa para listas de contatos.' },
+  { key: 'new_conversation', label: 'Iniciar conversa', hint: 'Primeira mensagem para quem ainda não falou com a escola.' },
+  { key: 'manual_send', label: 'Envio manual no atendimento', hint: 'O atendente escolhe o modelo dentro da conversa.' },
+  { key: 'scheduled_message', label: 'Mensagem agendada', hint: 'Programar o envio para um horário futuro.' },
+]
+const ALL_CONTEXTS = CONTEXT_OPTIONS.map(c => c.key)
 
 const EMPTY: EditorState = {
   id: null, displayName: '', baseName: '', category: 'MARKETING', headerType: 'NONE', media: null, headerText: '', headerExample: '',
-  body: '', examples: {}, labels: {}, buttons: [], urlExample: '',
+  body: '', examples: {}, labels: {}, buttons: [], urlExample: '', contexts: ALL_CONTEXTS,
 }
 
 export interface TemplateRequest { n: number; template?: TemplateRow; duplicate?: boolean }
@@ -143,6 +153,8 @@ export default function TemplatesPanel({ institutionId, onChanged, hideLists, re
       labels: t.variable_labels || {},
       buttons: btns,
       urlExample: t.variable_examples?.button || '',
+      // duplicar herda onde o original pode ser usado; modelo sem contexto marcado volta ao padrão
+      contexts: (t.available_contexts || []).length > 0 ? (t.available_contexts as string[]) : ALL_CONTEXTS,
     })
   }
 
@@ -161,6 +173,7 @@ export default function TemplatesPanel({ institutionId, onChanged, hideLists, re
     if (e.headerText.length > 60) p.push('Cabeçalho com mais de 60 caracteres')
     if ((e.headerText.match(/\{\{\d+\}\}/g) || []).some(v => v !== '{{1}}')) p.push('O cabeçalho aceita só a variável {{1}}')
     if (/\{\{1\}\}/.test(e.headerText) && !e.headerExample.trim()) p.push('Preencha o exemplo da variável do cabeçalho')
+    if (e.contexts.length === 0) p.push('Marque pelo menos um lugar onde o modelo pode ser usado')
     if (e.buttons.length > 10) p.push('No máximo 10 botões')
     if (e.buttons.filter(b => b.type === 'URL').length > 2) p.push('No máximo 2 botões de link')
     e.buttons.forEach((b, i) => {
@@ -194,7 +207,7 @@ export default function TemplatesPanel({ institutionId, onChanged, hideLists, re
         buttons:           editor.buttons.map(b => b.type === 'URL' ? { type: 'URL', text: b.text.trim(), url_base: (b.url_base || '').trim() } : { type: 'QUICK_REPLY', text: b.text.trim() }),
         variable_examples: examples,
         variable_labels:   labels,
-        available_contexts: ['broadcast'],
+        available_contexts: editor.contexts,
       }
       let id = editor.id
       if (id) {
@@ -331,6 +344,19 @@ export default function TemplatesPanel({ institutionId, onChanged, hideLists, re
                   </select>
                   <p style={hintStyle}>A Meta pode reclassificar. O preço segue a categoria aprovada.</p>
                 </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Onde usar este modelo</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {CONTEXT_OPTIONS.map(c => (
+                    <label key={c.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={editor.contexts.includes(c.key)} style={{ marginTop: 3 }}
+                        onChange={e => setEditor(s => s && ({ ...s, contexts: e.target.checked ? [...s.contexts, c.key] : s.contexts.filter(k => k !== c.key) }))} />
+                      <span><strong>{c.label}</strong> <span style={{ color: '#5B6B86' }}>· {c.hint}</span></span>
+                    </label>
+                  ))}
+                </div>
+                <p style={hintStyle}>Só modelos aprovados pela Meta aparecem nesses lugares. Marketing é cobrado como marketing em qualquer um deles.</p>
               </div>
               {!editor.id && (
                 <div>

@@ -20,6 +20,7 @@ import EmbeddedSignupButton from '../../whatsapp/EmbeddedSignupButton'
 import { canSeeSettingsItem, visibleWhatsAppSections } from '../../../lib/settingsAccess'
 import { BRAND, GRAD } from '../../../lib/brand'
 import { Card, Title, Switch, SaveButton, GhostButton, Pill, NowNote, WarnNote, BackHeader, Tile, input, label, hint } from './ui'
+import { normalizeBrazilianInput } from '../../../lib/phone'
 
 const FLOW_DAYS = [
   { id: 'MON', label: 'Seg' }, { id: 'TUE', label: 'Ter' }, { id: 'WED', label: 'Qua' },
@@ -354,7 +355,9 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
     if (!newBlockNum.trim()) return
     setSavingBlock(true)
     try {
-      const phone = newBlockNum.trim().replace(/\D/g, '')
+      // grava 55 + DDD + 9º dígito: é assim que o webhook compara (digitar sem o 55 funcionava só na aparência)
+      const phone = normalizeBrazilianInput(newBlockNum.trim())
+      if (blacklist.some(b => b.phone_number === phone)) { setNewBlockNum(''); setSavingBlock(false); return }
       const { data, error } = await supabase.from('whatsapp_blacklist').insert({ institution_id: institutionId, phone_number: phone, reason: newBlockReason.trim() || null }).select('id,phone_number,reason,created_at').single()
       if (!error && data) { setBlacklist(prev => [data as any, ...prev]); setNewBlockNum(''); setNewBlockReason(''); setShowAddBlock(false) }
     } catch {}
@@ -773,7 +776,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
           onClick={() => saveFlow('bot-timeout', {
             bot_timeout_minutes: botTimeoutMinutes, bot_timeout_message: botTimeoutMessage || null,
             ...(botTimeoutMessage.trim() ? { timeout_message: botTimeoutMessage } : {}), // vazio: mantém a mensagem padrão antiga, sem desligar a transferência
-            bot_timeout_assignee_id: botTimeoutAssigneeId || null, bot_timeout_assignee_type: botTimeoutAssigneeId ? botTimeoutAssigneeType : null,
+            bot_timeout_assignee_id: botTimeoutAssigneeId || null, bot_timeout_assignee_type: botTimeoutAssigneeType, // sempre explícito: "Fila geral" não herda o destino de fora do horário
           })} />
       </Card>
 
@@ -924,7 +927,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         </div>
         {showAddBlock && (
           <div style={{ background: BRAND.dangerSoft, border: '1px solid #FECACA', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-            <input value={newBlockNum} onChange={e => setNewBlockNum(e.target.value)} placeholder="Número (ex.: 5583999999999)" style={input} />
+            <input value={newBlockNum} onChange={e => setNewBlockNum(e.target.value)} placeholder="Número com DDD (ex.: 83 99999-9999)" style={input} />
             <input value={newBlockReason} onChange={e => setNewBlockReason(e.target.value)} placeholder="Motivo (opcional)" style={input} />
             <div style={{ display: 'flex', gap: 8 }}>
               <GhostButton danger disabled={savingBlock || !newBlockNum.trim()} onClick={handleAddBlock}>{savingBlock ? 'Bloqueando…' : 'Confirmar bloqueio'}</GhostButton>

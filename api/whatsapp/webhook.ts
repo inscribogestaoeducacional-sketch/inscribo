@@ -2771,7 +2771,8 @@ async function processFlow(
       .from('whatsapp_blacklist')
       .select('id')
       .eq('institution_id', institutionId)
-      .eq('phone_number', remoteJid)
+      .in('phone_number', Array.from(new Set([remoteJid.replace(/@.*/, ''), normalizePhone(remoteJid.replace(/@.*/, '')), remoteJid])))
+      .limit(1)
       .maybeSingle()
 
     if (blocked) {
@@ -4120,7 +4121,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('whatsapp_blacklist')
           .select('id')
           .eq('institution_id', institutionId)
-          .eq('phone_number', rawPhone)
+          // a lista guarda o número normalizado (55 + DDD + 9º dígito); a Meta às vezes manda sem o 9º dígito
+          .in('phone_number', Array.from(new Set([rawPhone, normalizePhone(rawPhone)])))
+          .limit(1)
           .maybeSingle()
         if (isBlocked) {
           console.log('[webhook] número em blacklist, ignorando:', rawPhone)
