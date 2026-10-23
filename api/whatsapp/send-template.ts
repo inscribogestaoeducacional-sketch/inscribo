@@ -171,6 +171,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }))
     }
 
+    // ── Modelo com foto ou vídeo no cabeçalho: se quem chamou não mandou o cabeçalho,
+    // o arquivo cadastrado no modelo vai junto (ex.: confirmação de visita com foto). ──
+    if (!(templatePayload.components || []).some((c: any) => c.type === 'HEADER')) {
+      const { data: def } = await supabase
+        .from('template_definitions')
+        .select('header_config')
+        .eq('name', template_name)
+        .or(`institution_id.eq.${institution_id},institution_id.is.null`)
+        .limit(1)
+        .maybeSingle()
+      const hdrFmt = String((def?.header_config as any)?.format || '').toLowerCase()
+      const hdrLink = (def?.header_config as any)?.media?.public_url
+      if ((hdrFmt === 'image' || hdrFmt === 'video') && hdrLink) {
+        templatePayload.components = [
+          { type: 'HEADER', parameters: [{ type: hdrFmt, [hdrFmt]: { link: hdrLink } }] },
+          ...(templatePayload.components || []),
+        ]
+      }
+    }
+
     // ── Send via Meta Cloud API ──
     console.log('📤 Payload Meta:', JSON.stringify({ to, template: templatePayload }, null, 2))
     const metaRes = await fetch(`${GRAPH_URL}/${phoneRecord.phone_number_id}/messages`, {

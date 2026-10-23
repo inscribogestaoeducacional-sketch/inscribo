@@ -123,7 +123,7 @@ export default function TemplatesSettings({ institutionId }: { institutionId: st
               <GhostButton disabled={!pick[slot] || savingSlot === slot} onClick={() => setSlot(slot, pick[slot]!)}><Check size={14} /> Usar este</GhostButton>
             </div>
           )}
-          <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 10, lineHeight: 1.5 }}>A versão da escola precisa ser aprovada pela Meta e manter as mesmas variáveis: {meta.varsHelp}.</div>
+          <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 10, lineHeight: 1.5 }}>A versão da escola precisa ser aprovada pela Meta e manter as mesmas variáveis: {meta.varsHelp}. Pode ter foto ou vídeo no cabeçalho.</div>
         </div>
         <div style={{ flex: '0 1 280px', minWidth: 220, background: '#E7F0E8', borderRadius: 14, padding: 10 }}>
           <div style={bubble}>{text || '…'}</div>

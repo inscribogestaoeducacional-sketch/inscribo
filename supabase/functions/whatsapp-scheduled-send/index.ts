@@ -195,6 +195,23 @@ serve(async (req) => {
           templatePayload.components = [{ type: 'body', parameters }]
         }
 
+        // ── Modelo com foto ou vídeo no cabeçalho: o arquivo da escola vai junto ──
+        const { data: def } = await supabase
+          .from('template_definitions')
+          .select('header_config')
+          .eq('name', row.template_name)
+          .or(`institution_id.eq.${row.institution_id},institution_id.is.null`)
+          .limit(1)
+          .maybeSingle()
+        const hdrFmt = String((def?.header_config as any)?.format || '').toLowerCase()
+        const hdrLink = (def?.header_config as any)?.media?.public_url
+        if ((hdrFmt === 'image' || hdrFmt === 'video') && hdrLink) {
+          templatePayload.components = [
+            { type: 'header', parameters: [{ type: hdrFmt, [hdrFmt]: { link: hdrLink } }] },
+            ...(templatePayload.components || []),
+          ]
+        }
+
         const metaRes = await fetch(`${GRAPH_URL}/${phoneRecord.phone_number_id}/messages`, {
           method: 'POST',
           headers: {
