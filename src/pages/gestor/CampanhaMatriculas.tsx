@@ -339,8 +339,8 @@ export default function CampanhaMatriculas() {
   const st = STATUS_LABEL[cycle?.status ?? 'draft'] ?? STATUS_LABEL.draft
   const tabBtn = (id: Tab, label: string, Icon: typeof LayoutGrid) => (
     <button key={id} onClick={() => setTab(id)} style={{
-      display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-      fontSize: 13, fontWeight: 700, background: tab === id ? '#fff' : 'transparent', color: tab === id ? BRAND.primaryDark : BRAND.muted,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, flex: '1 1 0', whiteSpace: 'nowrap', padding: '9px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+      fontSize: 12.5, fontWeight: 700, background: tab === id ? '#fff' : 'transparent', color: tab === id ? BRAND.primaryDark : BRAND.muted,
       boxShadow: tab === id ? '0 1px 3px rgba(26,43,74,.1)' : 'none',
     }}><Icon size={15} />{label}</button>
   )
@@ -370,7 +370,7 @@ export default function CampanhaMatriculas() {
         </div>
       )}
 
-      <div style={{ display: 'inline-flex', gap: 4, background: '#EEF3F2', borderRadius: 14, padding: 5, alignSelf: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ display: 'inline-flex', gap: 4, background: '#EEF3F2', borderRadius: 14, padding: 5, width: '100%', boxSizing: 'border-box', overflowX: 'auto' }}>
         {tabBtn('geral', 'Visão geral', LayoutGrid)}
         {tabBtn('funil', 'Funil', Filter)}
         {tabBtn('novatos', 'Novatos', Users)}
@@ -379,7 +379,7 @@ export default function CampanhaMatriculas() {
         {tabBtn('serie', 'Séries e turmas', Layers)}
         {tabBtn('matriculometro', 'Matriculômetro', Flag)}
         {tabBtn('saidas', 'Saídas', LogOut)}
-        {tabBtn('relatorio', 'Relatório do mês', Sparkles)}
+        {tabBtn('relatorio', 'Relatório', Sparkles)}
       </div>
 
       {loading && <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div>}

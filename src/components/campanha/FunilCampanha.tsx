@@ -58,18 +58,20 @@ export default function FunilCampanha({ institutionId, from, to, planMonths, rat
         </select>
         <span style={{ fontSize: 12.5, color: BRAND.muted }}>Período da campanha: {fmtDate(from)} a {fmtDate(to)}</span>
       </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {[['', 'Campanha toda'], ...data.months.map(m => [m.m, monthName(m.m + '-01')])].map(([k, l]) => (
+          <button key={k} onClick={() => setMes(k)} style={{ padding: '7px 13px', borderRadius: 99, border: '1px solid ' + (mes === k ? BRAND.primary : '#E2E8F0'), background: mes === k ? BRAND.primary : '#fff', color: mes === k ? '#fff' : BRAND.text, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>{l}</button>
+        ))}
+      </div>
+      <StageCards data={data} mes={mes} planMonths={planMonths} rates={rates} />
+      <ConvRow data={data} mes={mes} rates={rates} />
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ ...card, flex: '1.5 1 520px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, flex: 1 }}>Funil de matrículas: meta × realizado</div>
-            <select value={mes} onChange={e => setMes(e.target.value)} style={sel}>
-              <option value="">Campanha toda</option>{data.months.map(m => <option key={m.m} value={m.m}>{monthName(m.m + '-01')}</option>)}
-            </select>
-          </div>
-          <Story data={data} mes={mes} planMonths={planMonths} rates={rates} />
-          <FunnelShape data={data} mes={mes} planMonths={planMonths} rates={rates} />
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Mês a mês no gráfico</div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 8 }}>Linhas cheias: o que aconteceu. Tracejado: a meta. Clique num mês acima para ver os cartões dele.</div>
+          <MonthLines data={data} planMonths={planMonths} rates={rates} />
           <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0', lineHeight: 1.6 }}>
-            {data.history_since ? `O registro de etapas começou em ${fmtDate(data.history_since)}. ` : ''}<b>~N estimados</b>: quando um lead aparece numa etapa mais à frente (por exemplo, matriculado) sem registro de ter passado pela anterior (por exemplo, visita), o sistema entende que ele passou e marca como estimado. A meta de cada etapa vem do plano (metas e taxas do funil, em “Configuração da campanha”).
+            {data.history_since ? `O registro de etapas começou em ${fmtDate(data.history_since)}. ` : ''}<b>~N estimados</b>: quando um lead aparece numa etapa mais à frente sem registro de ter passado pela anterior, o sistema entende que ele passou e marca como estimado.
           </p>
         </div>
         <div style={{ ...card, flex: '1 1 280px' }}>
@@ -88,43 +90,6 @@ export default function FunilCampanha({ institutionId, from, to, planMonths, rat
 
 const STG: [string, string, string][] = [['entraram', 'Leads', '#0EA5E9'], ['scheduled', 'Agendamentos', '#14B8A6'], ['visit', 'Visitas', '#10B981'], ['enrolled', 'Matrículas novas', '#059669']]
 
-function FunnelShape({ data, mes, planMonths, rates }: { data: Data; mes: string; planMonths: PlanMonth[]; rates: FunnelRates }) {
-  const novosMeta = mes ? (planMonths.find(m => m.m === mes)?.novos ?? 0) : planMonths.reduce((a, m) => a + m.novos, 0)
-  const need = funnelNeeds(novosMeta, rates)
-  const meta = [need.registrations, need.schedules, need.visits, novosMeta]
-  const mrow = data.months.find(m => m.m === mes)
-  const real = STG.map(([k]) => k === 'entraram' ? (mes ? (mrow?.entraram ?? 0) : data.entraram) : (mes ? (mrow?.etapas[k]?.n ?? 0) : (data.totais[k]?.n ?? 0)))
-  const inf = STG.map(([k]) => k === 'entraram' ? 0 : (mes ? (mrow?.etapas[k]?.inferidos ?? 0) : (data.totais[k]?.inferidos ?? 0)))
-  const top = Math.max(meta[0], real[0], 1)
-  const w = (n: number) => Math.max(14, Math.min(100, (n / top) * 100))
-  const poly = (tw: number, bw: number) => `polygon(${(100 - tw) / 2}% 0, ${(100 + tw) / 2}% 0, ${(100 + bw) / 2}% 100%, ${(100 - bw) / 2}% 100%)`
-  return (
-    <div>
-      {STG.map(([k, label, color], i) => {
-        const nextR = i < 3 ? w(real[i + 1]) : Math.max(10, w(real[i]) * 0.7)
-        const nextM = i < 3 ? w(meta[i + 1]) : Math.max(10, w(meta[i]) * 0.7)
-        const dev = meta[i] > 0 ? Math.round((real[i] - meta[i]) / meta[i] * 100) : null
-        const conv = i > 0 && real[i - 1] > 0 ? Math.round(real[i] / real[i - 1] * 100) : null
-        return (
-          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-            <div style={{ flex: 1, position: 'relative', height: 58 }}>
-              <div style={{ position: 'absolute', inset: 0, background: '#E2E8F0', clipPath: poly(w(meta[i]), nextM), opacity: 0.8 }} />
-              <div style={{ position: 'absolute', inset: 0, background: color, clipPath: poly(w(real[i]), nextR), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 15 }}>
-                <span style={{ textShadow: '0 1px 2px rgba(0,0,0,.25)' }}>{real[i]}{inf[i] > 0 ? <span title={`${inf[i]} destes foram deduzidos: o lead aparece numa etapa mais à frente sem registro de ter passado por esta`} style={{ fontWeight: 700, fontSize: 10.5, marginLeft: 6, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,255,255,.28)' }}>~{inf[i]} estimados</span> : ''}</span>
-              </div>
-            </div>
-            <div style={{ width: 190, fontSize: 12.5, lineHeight: 1.5 }}>
-              <div style={{ color: '#64748B' }}>Meta: <b style={{ color: BRAND.ink }}>{meta[i] || '—'}</b></div>
-              <div>{dev === null ? <span style={{ color: '#94A3B8' }}>sem meta definida</span> : <span style={{ fontWeight: 800, color: dev >= 0 ? '#15803D' : dev > -30 ? '#B45309' : '#B91C1C' }}>Desvio {dev > 0 ? '+' : ''}{dev}%</span>}
-                {conv !== null && <span style={{ color: '#94A3B8' }}> · converte {conv}%</span>}</div>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 const lostN = (e?: { n: number }) => e?.n ?? 0
 function stagesOf(data: Data, mes: string) {
   const mrow = data.months.find(m => m.m === mes)
@@ -132,28 +97,86 @@ function stagesOf(data: Data, mes: string) {
 }
 const pc = (a: number, b: number) => (b > 0 ? `${Math.round(a / b * 100)}%` : '—')
 
-function Story({ data, mes, planMonths, rates }: { data: Data; mes: string; planMonths: PlanMonth[]; rates: FunnelRates }) {
-  const real = stagesOf(data, mes)
+const STAGE_COL = ['#6366F1', '#8B5CF6', '#F59E0B', '#00A896']
+function metaOf(planMonths: PlanMonth[], rates: FunnelRates, mes: string) {
   const novos = mes ? (planMonths.find(m => m.m === mes)?.novos ?? 0) : planMonths.reduce((a, m) => a + m.novos, 0)
   const need = funnelNeeds(novos, rates)
-  const meta = [need.registrations, need.schedules, need.visits, novos]
-  const lost = mes ? lostN(data.months.find(m => m.m === mes)?.etapas.lost) : lostN(data.totais.lost)
-  const names = ['entraram no cadastro', 'agendaram uma visita', 'visitaram a escola', 'se matricularam']
-  const per = mes ? monthName(mes + '-01') : 'a campanha toda'
-  const dev = (a: number, m: number) => (m > 0 ? Math.round((a - m) / m * 100) : null)
+  return [need.registrations, need.schedules, need.visits, novos]
+}
+const devColor = (d: number | null) => d == null ? '#94A3B8' : d >= 0 ? '#15803D' : d > -30 ? '#B45309' : '#B91C1C'
+
+function StageCards({ data, mes, planMonths, rates }: { data: Data; mes: string; planMonths: PlanMonth[]; rates: FunnelRates }) {
+  const real = stagesOf(data, mes)
+  const meta = metaOf(planMonths, rates, mes)
+  const mrow = data.months.find(m => m.m === mes)
+  const inf = STG.map(([k]) => k === 'entraram' ? 0 : (mes ? (mrow?.etapas[k]?.inferidos ?? 0) : (data.totais[k]?.inferidos ?? 0)))
+  const names = ['Cadastros', 'Agendamentos', 'Visitas', 'Matrículas novas']
+  const nexts = ['agendaram', 'visitaram', 'matricularam', '']
   return (
-    <div style={{ background: '#F8FAFC', border: '1px solid #E3E8F0', borderRadius: 12, padding: '12px 14px', marginBottom: 12, fontSize: 13.5, lineHeight: 1.75, color: BRAND.text }}>
-      <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Em {per}:</div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
       {real.map((v, i) => {
-        const d = dev(v, meta[i])
+        const d = meta[i] > 0 ? Math.round((v - meta[i]) / meta[i] * 100) : null
+        const pct = meta[i] > 0 ? Math.min(100, v / meta[i] * 100) : 0
         return (
-          <div key={i}>
-            {i === 0 ? <b>{v} pessoas</b> : <><b>{v}</b> <span style={{ color: '#64748B' }}>({pc(v, real[i - 1])} da etapa anterior)</span></>} {names[i]}
-            {meta[i] > 0 && <span style={{ color: '#64748B' }}> · meta {meta[i]} · <b style={{ color: d != null && d >= 0 ? '#15803D' : d != null && d > -30 ? '#B45309' : '#B91C1C' }}>desvio {d != null && d > 0 ? '+' : ''}{d}%</b></span>}
+          <div key={i} style={{ ...card, padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 16px 12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', fontWeight: 600 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 7, background: STAGE_COL[i] + '1F', color: STAGE_COL[i], fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{i + 1}</span>{names[i]}
+              </div>
+              <div style={{ fontSize: 38, fontWeight: 800, color: STAGE_COL[i], lineHeight: 1.15, marginTop: 8 }}>{v}</div>
+              <div style={{ fontSize: 12, color: '#94A3B8' }}>meta: {meta[i] || '—'}{inf[i] > 0 && <span title="Deduzidos: o lead aparece numa etapa mais à frente sem registro desta" style={{ marginLeft: 8, color: '#0F766E', fontWeight: 700 }}>~{inf[i]} estimados</span>}</div>
+              {d != null && <div style={{ display: 'inline-block', marginTop: 8, fontSize: 12, fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: d >= 0 ? '#DCFCE7' : '#FEE2E2', color: devColor(d) }}>{d >= 0 ? '↑' : '↓'} {d > 0 ? '+' : ''}{d}%</div>}
+              <div style={{ borderTop: '1px solid #EEF2F1', marginTop: 12, paddingTop: 8, fontSize: 11.5, color: '#94A3B8' }}>
+                {i < 3 ? `→ ${pc(real[i + 1], v)} ${nexts[i]}` : `→ ${pc(v, real[0])} dos cadastros`}
+              </div>
+            </div>
+            <div style={{ height: 4, background: '#EEF2F1' }}><div style={{ width: `${pct}%`, height: '100%', background: STAGE_COL[i], transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /></div>
           </div>
         )
       })}
-      <div style={{ color: '#64748B' }}>{lost} leads foram perdidos no período.</div>
+    </div>
+  )
+}
+
+function ConvRow({ data, mes, rates }: { data: Data; mes: string; rates: FunnelRates }) {
+  const r = stagesOf(data, mes)
+  const items: [string, number, number][] = [['Cadastro → Agenda', r[0] ? r[1] / r[0] : 0, rates.registration_to_schedule], ['Agenda → Visita', r[1] ? r[2] / r[1] : 0, rates.schedule_to_visit], ['Visita → Matrícula', r[2] ? r[3] / r[2] : 0, rates.visit_to_enrollment]]
+  return (
+    <div style={{ ...card, display: 'flex', justifyContent: 'space-around', gap: 16, flexWrap: 'wrap' }}>
+      {items.map(([l, v, ideal]) => (
+        <div key={l} style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 26, fontWeight: 800, color: v >= ideal ? '#15803D' : '#B91C1C' }}>{(v * 100).toFixed(1)}%</div>
+          <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>{l}</div>
+          <div style={{ fontSize: 11.5, color: '#94A3B8' }}>ideal: {Math.round(ideal * 100)}%</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MonthLines({ data, planMonths, rates }: { data: Data; planMonths: PlanMonth[]; rates: FunnelRates }) {
+  const W = 640, H = 220, L = 34, B = 26, T = 10
+  const ms = data.months
+  const now = new Date().toISOString().slice(0, 7)
+  const series = STG.map(([k], i) => ({ k, i, real: ms.map(m => m.m > now ? null : k === 'entraram' ? m.entraram : (m.etapas[k]?.n ?? 0)), meta: ms.map(m => metaOf(planMonths, rates, m.m)[i]) }))
+  const max = Math.max(1, ...series.flatMap(s => [...s.real.map(v => v ?? 0), ...s.meta]))
+  const x = (j: number) => L + (ms.length > 1 ? j / (ms.length - 1) : 0.5) * (W - L - 10)
+  const y = (v: number) => T + (1 - v / max) * (H - T - B)
+  const path = (vals: (number | null)[]) => vals.map((v, j) => v == null ? '' : `${vals.slice(0, j).some(u => u != null) && vals[j - 1] != null ? 'L' : 'M'}${x(j)},${y(v)}`).join(' ')
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+        {[0, .5, 1].map(f => <g key={f}><line x1={L} x2={W - 10} y1={y(max * f)} y2={y(max * f)} stroke="#EEF2F1" /><text x={L - 6} y={y(max * f) + 4} fontSize="10" textAnchor="end" fill="#94A3B8">{Math.round(max * f)}</text></g>)}
+        {ms.map((m, j) => <text key={m.m} x={x(j)} y={H - 8} fontSize="10.5" textAnchor="middle" fill="#64748B">{monthName(m.m + '-01').slice(0, 3)}</text>)}
+        {series.map(s => <g key={s.k}>
+          <path d={path(s.meta)} fill="none" stroke={STAGE_COL[s.i]} strokeWidth="1.5" strokeDasharray="4 4" opacity=".55" />
+          <path d={path(s.real)} fill="none" stroke={STAGE_COL[s.i]} strokeWidth="2.5" />
+          {s.real.map((v, j) => v == null ? null : <circle key={j} cx={x(j)} cy={y(v)} r="3.5" fill={STAGE_COL[s.i]}><title>{`${STG[s.i][1]} · ${monthName(ms[j].m + '-01')}: feito ${v} · meta ${s.meta[j]}`}</title></circle>)}
+        </g>)}
+      </svg>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: '#475569' }}>
+        {STG.map(([, l], i) => <span key={l} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 10, height: 10, borderRadius: 3, background: STAGE_COL[i] }} />{l}</span>)}
+      </div>
     </div>
   )
 }
