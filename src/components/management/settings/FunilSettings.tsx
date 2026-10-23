@@ -1,13 +1,15 @@
 // Configurações > Funil e leads: início com cartões e uma tela por assunto.
 import { useState } from 'react'
-import { Tag } from 'lucide-react'
+import { Tag, ThumbsDown } from 'lucide-react'
 import { canSeeSettingsItem, type SettingsRole } from '../../../lib/settingsAccess'
 import { BRAND } from '../../../lib/brand'
 import { BackHeader, Tile } from './ui'
 import LeadSourcesEditor from '../LeadSourcesEditor'
+import LostReasonsEditor from '../LostReasonsEditor'
 
 const INFO: Record<string, { label: string; desc: string; item: string; Icon: any }> = {
   origens: { label: 'Origens do lead', desc: 'De onde os contatos chegam: escolha as que a escola usa e acrescente as suas.', item: 'funil.origens', Icon: Tag },
+  motivos: { label: 'Motivos de perda', desc: 'Por que um lead foi perdido: a lista usada ao marcar como perdido e nos relatórios de recusa.', item: 'funil.motivos', Icon: ThumbsDown },
 }
 
 export default function FunilSettings({ institutionId, role, isMobile, section, onSectionChange, onToast }: {
@@ -39,6 +41,7 @@ export default function FunilSettings({ institutionId, role, isMobile, section, 
     <div key={view} className="aion-slide" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <BackHeader backLabel="Funil e leads" onBack={goHome} title={info.label} help={info.desc} />
       {view === 'origens' && <LeadSourcesEditor institutionId={institutionId} onToast={onToast} />}
+      {view === 'motivos' && <LostReasonsEditor institutionId={institutionId} onToast={onToast} />}
     </div>
   )
 }

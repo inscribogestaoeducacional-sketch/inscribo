@@ -5,10 +5,16 @@
 import { useState, useEffect } from 'react'
 import { X, CheckCircle, AlertTriangle } from 'lucide-react'
 import type { Lead } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase'
+import { useCallback } from 'react'
+
+export interface LostReason { value: string; label: string; short: string; fator: string; subfator: string | null }
+// Motivo que fica sempre ligado: é o que sobra quando nenhum outro serve.
+export const LOCKED_LOST_REASON = 'outro'
 
 // ─── Motivos de recusa ────────────────────────────────────────────────────────
 // Fonte ÚNICA (Fase 0C + 6.1): label no Kanban/formulário, short e fator nos Relatórios.
-export const LOST_REASONS = [
+export const LOST_REASONS: LostReason[] = [
   { value: 'preco_alto',        label: 'Valor da mensalidade alto', short: 'Valor alto',           fator: 'Interno', subfator: 'Administrativo' },
   { value: 'nao_retornou',      label: 'Não retornou nosso contato', short: 'Não retornou',          fator: 'Externo', subfator: null },
   { value: 'outra_escola',      label: 'Escolheu outra escola', short: 'Outra escola',               fator: 'Externo', subfator: null },
@@ -37,6 +43,7 @@ export function LostReasonModal({ isOpen, lead, count, onConfirm, onCancel }: Lo
   const [selectedReason, setSelectedReason] = useState('')
   const [detail, setDetail] = useState('')
   const [saving, setSaving] = useState(false)
+  const { reasons } = useLostReasons(lead?.institution_id)
 
   useEffect(() => {
     if (isOpen) { setSelectedReason(''); setDetail('') }
@@ -54,7 +61,7 @@ export function LostReasonModal({ isOpen, lead, count, onConfirm, onCancel }: Lo
     }
   }
 
-  const selected = LOST_REASONS.find(r => r.value === selectedReason)
+  const selected = reasons.find(r => r.value === selectedReason)
 
   return (
     <div style={{
@@ -93,7 +100,7 @@ export function LostReasonModal({ isOpen, lead, count, onConfirm, onCancel }: Lo
 
         {/* Motivos */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-          {LOST_REASONS.map(reason => {
+          {reasons.map(reason => {
             const active = selectedReason === reason.value
             return (
               <button
@@ -193,5 +200,40 @@ export function LostReasonModal({ isOpen, lead, count, onConfirm, onCancel }: Lo
 export function lostReasonLabel(value: string | null | undefined): string | null {
   if (!value) return null
   if (value === 'nao_informado') return 'Não informado (antes da regra)'
-  return LOST_REASONS.find(r => r.value === value)?.label ?? value
+  return (schoolLostIndex[value] ?? LOST_REASONS.find(r => r.value === value))?.label ?? value
+}
+
+
+// ─── Motivos por escola ───────────────────────────────────────────────────────
+// Sem linhas em lost_reason_options = a lista padrão acima. A escola pode desligar,
+// reordenar e acrescentar motivos (Configurações > Funil e leads). O `value` gravado
+// no lead nunca muda, por isso o histórico e os relatórios continuam batendo.
+export interface LostReasonRow extends LostReason { id: string; active: boolean; sort_order: number }
+
+// Índice (valor → motivo) dos motivos da escola, ligados ou não, para rotular o que já foi gravado.
+let schoolLostIndex: Record<string, LostReason> = {}
+const LOST_CHANGED = 'aion:lost-reasons-changed'
+export const notifyLostReasonsChanged = () => window.dispatchEvent(new Event(LOST_CHANGED))
+
+export function useLostReasons(institutionId: string | undefined | null) {
+  const [rows, setRows] = useState<LostReasonRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const reload = useCallback(async () => {
+    if (!institutionId) { setRows([]); setLoading(false); return }
+    const { data, error } = await supabase.from('lost_reason_options')
+      .select('id, value, label, short, fator, active, sort_order').eq('institution_id', institutionId).order('sort_order', { ascending: true })
+    if (error) console.error('[useLostReasons]', error.message)
+    const list = ((data as any[]) ?? []).map(r => ({ ...r, subfator: null })) as LostReasonRow[]
+    schoolLostIndex = Object.fromEntries(list.map(r => [r.value, r]))
+    setRows(list)
+    setLoading(false)
+  }, [institutionId])
+  useEffect(() => { reload() }, [reload])
+  useEffect(() => { window.addEventListener(LOST_CHANGED, reload); return () => window.removeEventListener(LOST_CHANGED, reload) }, [reload])
+
+  const configured = rows.length > 0
+  const reasons: LostReason[] = configured ? rows.filter(r => r.active) : LOST_REASONS
+  // valor → motivo, com os desligados e os padrão como reserva (leads antigos).
+  const byValue: Record<string, LostReason> = { ...Object.fromEntries(LOST_REASONS.map(r => [r.value, r])), ...Object.fromEntries(rows.map(r => [r.value, r])) }
+  return { rows, configured, reasons, byValue, loading, reload }
 }

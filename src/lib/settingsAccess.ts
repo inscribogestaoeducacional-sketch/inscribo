@@ -38,6 +38,7 @@ export const SETTINGS_ITEMS = {
   'escola.unidade':                { tab: 'escola', section: 'unidade', label: 'Campo de unidade do lead',    roles: BOTH },
   'escola.lembrete':               { tab: 'escola', section: 'lembrete', label: 'Lembrete de lead sem contato', roles: ADMIN },
   'funil.origens':                 { tab: 'funil', section: 'origens', label: 'Origens do lead', roles: BOTH },
+  'funil.motivos':                 { tab: 'funil', section: 'motivos', label: 'Motivos de perda', roles: BOTH },
   'whatsapp.conexao':              { tab: 'whatsapp', section: 'conexao',   label: 'Conexão e robô',           roles: ADMIN },
   'whatsapp.automacoes':           { tab: 'whatsapp', section: 'automacoes', label: 'Automações',              roles: ADMIN },
   'whatsapp.datas':               { tab: 'whatsapp', section: 'datas',     label: 'Feriados e datas especiais', roles: ADMIN },

@@ -31,7 +31,7 @@ import VisitOutcomeDialog from '../visits/VisitOutcomeDialog'
 import NewLeadModal from './NewLeadModal'
 import ScheduleVisitModal from './ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
-import { LOST_REASONS, LostReasonModal, lostReasonLabel } from './lostReasons'
+import { LostReasonModal, lostReasonLabel, useLostReasons } from './lostReasons'
 import {
   type SimpleUser, type AuditEntry, type StudentEntry,
   statusConfig, LEAD_TEMPERATURES, LEAD_STAGES,
@@ -573,6 +573,7 @@ export default function LeadKanban() {
   const { names: gradeNames } = useGradeLevels(user?.institution_id)
   const unitCfg = useLeadUnits(user?.institution_id)
   const { sources: schoolSources } = useLeadSources(user?.institution_id)
+  const { byValue: lostByValue } = useLostReasons(user?.institution_id)
   const [unitFilter, setUnitFilter] = useState<string>(UNIT_FILTER_ALL)
   // Edição em lote "Definir unidade" (só com o campo ligado).
   const [selectMode, setSelectMode] = useState(false)
@@ -848,7 +849,7 @@ export default function LeadKanban() {
         await db.from('audit_logs').insert({
           institution_id: user!.institution_id, module: 'lead', record_id: id,
           action: 'Lead perdido',
-          field_changed: LOST_REASONS.find(r => r.value === reason)?.label || reason,
+          field_changed: lostByValue[reason]?.label || reason,
           new_value: detail || '',
           user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
         })
