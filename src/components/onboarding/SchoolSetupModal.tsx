@@ -260,7 +260,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
       // conflito com a constraint UNIQUE (institution_id, year))
       const { data: existing } = await supabase
         .from('campaign_cycles')
-        .select('id')
+        .select('id, status')
         .eq('institution_id', institutionId)
         .eq('year', campaignYear)
         .maybeSingle()
@@ -272,11 +272,13 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
         const { error } = await supabase
           .from('campaign_cycles')
           .update({
-            status: 'setup',
+            // Nunca muda o status de um ciclo que já existe: salvar "Dados da campanha"
+            // de uma escola ativa não pode devolvê-la para "setup".
             school_data: schoolDataPayload,
-            historical_data: historicalPayload,
-            erp_files: successFiles,
-            wizard_step: 3,
+            // Em edição, só troca os arquivos depois de ter carregado os que já existiam
+            // (senão salvar rápido apagaria o histórico).
+            ...(!editMode || existingCycle ? { historical_data: historicalPayload, erp_files: successFiles } : {}),
+            ...(existing.status === 'setup' || existing.status === 'draft' || !existing.status ? { wizard_step: 3 } : {}),
           })
           .eq('id', existing.id)
         cycleError = error
