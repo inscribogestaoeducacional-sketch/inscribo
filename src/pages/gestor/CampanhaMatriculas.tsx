@@ -12,13 +12,14 @@
 // curva padrão, marcada como "estimativa".
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter } from 'lucide-react'
+import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import PageHeader from '../../components/ui/PageHeader'
 import { BRAND, SHADOW } from '../../lib/brand'
 import { applyCampaignCycle } from '../../lib/campaignApply'
 import { aiFetch } from '../../lib/authHeaders'
+import { NovatosTab, RematriculaTab } from '../../components/campanha/NovatosRematricula'
 import FunilCampanha from '../../components/campanha/FunilCampanha'
 import Matriculometro from '../../components/campanha/Matriculometro'
 import {
@@ -32,7 +33,7 @@ type PanelRow = {
   grade_level_id: string; grade_name: string; base_prev_year: number; reenrolled: number; reenrolled_declared: number; pending: number
   left_school: number; new_students: number; returning_students: number; graduates: number; pre_enrolled: number
 }
-type Tab = 'geral' | 'funil' | 'metas' | 'serie' | 'matriculometro' | 'relatorio'
+type Tab = 'geral' | 'funil' | 'novatos' | 'rematricula' | 'metas' | 'serie' | 'matriculometro' | 'relatorio'
 type Report = { resumo?: string; secoes?: { titulo: string; texto?: string; pontos?: string[] }[]; alertas?: string[] }
 type Ed = {
   start: string; end: string; curStudents: number; baseStudents: number; retention: number
@@ -362,6 +363,8 @@ export default function CampanhaMatriculas() {
       <div style={{ display: 'inline-flex', gap: 4, background: '#EEF3F2', borderRadius: 14, padding: 5, alignSelf: 'flex-start', flexWrap: 'wrap' }}>
         {tabBtn('geral', 'Visão geral', LayoutGrid)}
         {tabBtn('funil', 'Funil', Filter)}
+        {tabBtn('novatos', 'Novatos', Users)}
+        {tabBtn('rematricula', 'Rematrícula', RefreshCw)}
         {tabBtn('serie', 'Séries e turmas', Layers)}
         {tabBtn('matriculometro', 'Matriculômetro', Flag)}
         {tabBtn('relatorio', 'Relatório da IA', Sparkles)}
@@ -582,6 +585,18 @@ export default function CampanhaMatriculas() {
       )}
 
       {!loading && cycle && tab === 'funil' && institutionId && <FunilCampanha institutionId={institutionId} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} />}
+
+      {!loading && cycle && tab === 'novatos' && institutionId && (
+        <NovatosTab institutionId={institutionId} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`}
+          rates={ed?.rates ?? ((cycle.funnel_rates as FunnelRates | null) ?? DEFAULT_FUNNEL)} goal={cycle.target_new_students ?? 0} done={prog.novos}
+          months={ed?.months ?? []} hist={hist?.current ?? null} />
+      )}
+
+      {!loading && cycle && tab === 'rematricula' && (
+        <RematriculaTab goal={cycle.goal_reenrollments ?? 0} done={prog.reMat} months={ed?.months ?? []} hist={hist?.current ?? null}
+          pre={prog.pre || panel.reduce((a, r) => a + (r.pre_enrolled || 0), 0)} pending={prog.pending}
+          bySegment={panel.map(r => ({ name: r.grade_name, pending: r.pending }))} />
+      )}
 
       {!loading && cycle && tab === 'matriculometro' && institutionId && <Matriculometro institutionId={institutionId} year={targetYear} />}
 

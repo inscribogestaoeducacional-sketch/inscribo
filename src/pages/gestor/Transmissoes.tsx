@@ -9,6 +9,7 @@
 // Visual segue CaptacaoInteligente.tsx.
 // =============================================================================
 import React, { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Send, Plus, Wallet, Radio, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -31,7 +32,9 @@ export default function Transmissoes() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [credit, setCredit] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [wizardOpen, setWizardOpen] = useState(false)
+  const location = useLocation()
+  const preRelations = (location.state as { relations?: string[] } | null)?.relations
+  const [wizardOpen, setWizardOpen] = useState(!!preRelations?.length)
   const [detailId, setDetailId] = useState<string | null>(null)
 
   async function load() {
@@ -170,7 +173,7 @@ export default function Transmissoes() {
       {tab === 'suppressions' && institutionId && user && <SuppressionPanel institutionId={institutionId} userId={user.id} />}
 
       {wizardOpen && (
-        <CampaignWizard institutionId={institutionId} onClose={() => setWizardOpen(false)}
+        <CampaignWizard institutionId={institutionId} initialRelations={preRelations} onClose={() => setWizardOpen(false)}
           onCreated={id => { setWizardOpen(false); load(); setDetailId(id) }} />
       )}
       {detailId && <CampaignDetail campaignId={detailId} onClose={() => setDetailId(null)} onChanged={load} />}

@@ -43,6 +43,7 @@ const BLOCKED_SHORT: Record<string, string> = {
 const RELATIONS = [
   { id: 'aluno', label: 'Alunos (matriculados e a rematricular)' },
   { id: 'pre_matriculado', label: 'Pré-matriculados' },
+  { id: 'pendente', label: 'Alunos sem rematrícula nem pré' },
   { id: 'ex_aluno', label: 'Ex-alunos' },
   { id: 'transferido', label: 'Transferidos' },
 ]
@@ -60,8 +61,8 @@ interface AudiencePage {
   estimate: any
 }
 
-export default function CampaignWizard({ institutionId, onClose, onCreated }: {
-  institutionId: string; onClose: () => void; onCreated: (campaignId: string) => void
+export default function CampaignWizard({ institutionId, onClose, onCreated, initialRelations }: {
+  institutionId: string; onClose: () => void; onCreated: (campaignId: string) => void; initialRelations?: string[]
 }) {
   const [step, setStep] = useState(0)
   const [templates, setTemplates] = useState<TemplateRow[]>([])
@@ -74,7 +75,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
   const [tags, setTags] = useState<string[]>([])
   const [types, setTypes] = useState<string[]>([])
   const [grades, setGrades] = useState<string[]>([])
-  const [relations, setRelations] = useState<string[]>([])
+  const [relations, setRelations] = useState<string[]>(initialRelations ?? [])
   const [triggerIds, setTriggerIds] = useState<string[]>([])
   const [prevCampaign, setPrevCampaign] = useState<{ id: string; only: 'sent' | 'replied' | 'clicked' } | null>(null)
   const [importRows, setImportRows] = useState<ImportRow[]>([])
