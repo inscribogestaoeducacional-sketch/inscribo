@@ -40,6 +40,9 @@ export interface Campaign {
   paused_reason: string | null
   send_mode: 'now' | 'scheduled'
   scheduled_at: string | null
+  send_dates?: string[] | null
+  send_window_start?: string | null
+  send_window_end?: string | null
   priced_category: string | null
   priced_own_account: boolean | null
   priced_recipients: number | null

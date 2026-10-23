@@ -89,7 +89,16 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
   const [mapping, setMapping] = useState<Record<string, VarSource>>({})
   const [actions, setActions] = useState<Record<string, ActionForm>>({ any: { ...EMPTY_ACTION } })
   const [name, setName] = useState('')
-  const [sendMode, setSendMode] = useState<'now' | 'scheduled'>('now')
+  const [sendMode, setSendMode] = useState<'now' | 'scheduled' | 'window'>('now')
+  const [sendDates, setSendDates] = useState<string[]>([])
+  const [dateDraft, setDateDraft] = useState('')
+  const [winStart, setWinStart] = useState('08:00')
+  const [winEnd, setWinEnd] = useState('18:00')
+  const [limits, setLimits] = useState<{ hourly: number; daily: number } | null>(null)
+  useEffect(() => {
+    supabase.from('broadcast_settings').select('hourly_limit, daily_limit').eq('institution_id', institutionId).maybeSingle()
+      .then(({ data }) => { if (data) setLimits({ hourly: (data as any).hourly_limit, daily: (data as any).daily_limit }) })
+  }, [institutionId])
   const [scheduledAt, setScheduledAt] = useState('')
 
   // prévia / envio
@@ -255,10 +264,14 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
       const created = await broadcastAction<{ campaign_id: string }>('create', {
         institution_id: institutionId, name: name.trim(), template_definition_id: templateId,
         variable_mapping: mapping, filter, import_rows: importRows, manual, opt_in_confirmed: optIn,
-        reply_actions: buildActions(), send_mode: sendMode,
+        reply_actions: buildActions(), send_mode: sendMode === 'scheduled' ? 'scheduled' : 'now',
         ...(sendMode === 'scheduled' ? { scheduled_at: new Date(scheduledAt).toISOString() } : {}),
       })
       campaignId = created.campaign_id
+      if (sendMode === 'window') {
+        const { error: schErr } = await supabase.rpc('broadcast_set_schedule', { p_campaign_id: campaignId, p_dates: sendDates, p_start: winStart, p_end: winEnd })
+        if (schErr) throw new Error('Não foi possível salvar os dias e o horário: ' + schErr.message)
+      }
       const priced = await broadcastAction<{ status: string; total_brl: number; needs_charge: boolean }>('price', { campaign_id: campaignId })
       let paymentLink: string | undefined, chargeError: string | undefined
       if (priced.needs_charge) {
@@ -295,6 +308,10 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
     if (step === 3) {
       if (!name.trim()) return 'Dê um nome à campanha'
       if (sendMode === 'scheduled' && !(Date.parse(scheduledAt) > Date.now() + 5 * 60_000)) return 'Agende com pelo menos 5 minutos de antecedência'
+      if (sendMode === 'window') {
+        if (!sendDates.length) return 'Escolha pelo menos um dia de envio'
+        if (!(winStart < winEnd)) return 'O horário final precisa ser depois do inicial'
+      }
       if (!preview?.audience?.eligible) return 'Nenhum destinatário elegível'
       if (preview?.mapping_errors?.length) return 'Revise as variáveis'
       if (preview?.estimate && !preview.estimate.available) return preview.estimate.reason
@@ -526,11 +543,51 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
                   <select style={inputStyle} value={sendMode} onChange={e => setSendMode(e.target.value as any)}>
                     <option value="now">Assim que for liberada</option>
                     <option value="scheduled">Agendar</option>
+                    <option value="window">Em dias e horário que eu escolher</option>
                   </select>
                   {sendMode === 'scheduled' && <input type="datetime-local" style={inputStyle} value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />}
                 </div>
               </div>
             </div>
+            {sendMode === 'window' && (() => {
+              const total = Number(preview?.audience?.eligible || 0)
+              const daily = limits?.daily ?? 0
+              const fits = daily * sendDates.length
+              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Fortaleza' })
+              const fmt = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })
+              return (
+                <div style={{ border: '1px solid #E2E8F0', borderRadius: 12, padding: 14, display: 'grid', gap: 10 }}>
+                  <div>
+                    <label style={labelStyle}>Dias de envio</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {sendDates.map(d => (
+                        <span key={d} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#E6F7F5', color: '#00796B', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>
+                          {fmt(d)}
+                          <button type="button" aria-label={`Remover ${fmt(d)}`} onClick={() => setSendDates(sendDates.filter(x => x !== d))} style={{ all: 'unset', cursor: 'pointer', fontWeight: 800 }}>×</button>
+                        </span>
+                      ))}
+                      <input type="date" style={{ ...inputStyle, width: 160 }} min={today} value={dateDraft} onChange={e => setDateDraft(e.target.value)} />
+                      <Btn onClick={() => { if (dateDraft && dateDraft >= today && !sendDates.includes(dateDraft)) setSendDates([...sendDates, dateDraft].sort()); setDateDraft('') }}>Adicionar dia</Btn>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <label style={{ ...labelStyle, margin: 0 }}>Enviar entre</label>
+                    <input type="time" style={{ ...inputStyle, width: 110 }} value={winStart} onChange={e => setWinStart(e.target.value)} />
+                    <span style={{ fontSize: 13 }}>e</span>
+                    <input type="time" style={{ ...inputStyle, width: 110 }} value={winEnd} onChange={e => setWinEnd(e.target.value)} />
+                    <span style={hintStyle}>(horário de Fortaleza)</span>
+                  </div>
+                  {limits && (
+                    <p style={{ ...hintStyle, margin: 0 }}>
+                      Limite da escola: até {limits.daily.toLocaleString('pt-BR')} mensagens por dia e {limits.hourly.toLocaleString('pt-BR')} por hora, definido pela Áion.
+                      {sendDates.length > 0 && total > 0 && (fits >= total
+                        ? <> Com {sendDates.length} dia(s), cabem as {total.toLocaleString('pt-BR')} mensagens.</>
+                        : <b style={{ color: '#B45309' }}> Com {sendDates.length} dia(s) só cabem {fits.toLocaleString('pt-BR')} das {total.toLocaleString('pt-BR')} mensagens; as demais ficam esperando. Escolha mais dias ou fale com a Áion para aumentar o limite.</b>)}
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
             {previewing ? <div style={{ height: 120, borderRadius: 12, background: '#f8fafc' }} className="animate-pulse" /> : preview && <>
               <AudienceSummary preview={preview} />
               {preview.sample?.[0]?.preview && (

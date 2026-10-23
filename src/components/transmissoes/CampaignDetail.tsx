@@ -104,6 +104,12 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
           <Badge label={st.label} color={st.color} bg={st.bg} />
           {c.status === 'paused' && c.paused_reason && <span style={{ fontSize: 12, color: '#C2410C' }}>{PAUSED_REASON[c.paused_reason] || c.paused_reason}</span>}
           {c.status === 'scheduled' && <span style={{ fontSize: 12, color: '#1D4ED8' }}>Envio em {fmtDate(c.scheduled_at)}</span>}
+          {(c.send_dates?.length || c.send_window_start) && (
+            <span style={{ fontSize: 12, color: '#1D4ED8' }}>
+              Envia {c.send_dates?.length ? `em ${c.send_dates.map(d => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })).join(', ')}` : 'todos os dias'}
+              {c.send_window_start && c.send_window_end ? `, das ${c.send_window_start.slice(0, 5)} às ${c.send_window_end.slice(0, 5)}` : ''}
+            </span>
+          )}
           <span style={{ fontSize: 12, color: '#94a3b8' }}>Template {c.template_name} · criada em {fmtDate(c.created_at)}</span>
         </div>
         <ErrorBox message={error} />
