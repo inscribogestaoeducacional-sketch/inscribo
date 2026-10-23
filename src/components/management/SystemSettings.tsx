@@ -11,8 +11,8 @@ import { supabase } from '../../lib/supabase'
 import SchoolSetupModal from '../onboarding/SchoolSetupModal'
 import WhatsAppSettings from './settings/WhatsAppSettings'
 import PageHeader from '../ui/PageHeader'
-import { SettingsStyles, Card, GhostButton, Title, SaveButton, NowNote, WarnNote, input, label } from './settings/ui'
-import { BRAND } from '../../lib/brand'
+import { SettingsStyles, Card, GhostButton, Title, SaveButton, NowNote, WarnNote, Pill, input, label } from './settings/ui'
+import { BRAND, GRAD } from '../../lib/brand'
 import FinanceTab from '../transmissoes/FinanceTab'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import HubSettings, { type HubGroup } from './settings/HubSettings'
@@ -318,14 +318,15 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
   const pendingMonthly = monthlyPayments.filter(p => p.status === 'pending')
   const overdueMonthly = monthlyPayments.filter(p => p.status === 'overdue')
 
-  const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-    paid:      { label: '✅ Pago',      color: '#16A34A', bg: '#F0FDF4' },
-    pending:   { label: '⏳ Pendente',  color: '#D97706', bg: '#FFFBEB' },
-    overdue:   { label: '🔴 Atrasado',  color: '#DC2626', bg: '#FEF2F2' },
-    cancelled: { label: '❌ Cancelado', color: '#9CA3AF', bg: '#F3F4F6' },
+  const statusConfig: Record<string, { label: string; tone: 'ok' | 'warn' | 'bad' | 'gray' | 'brand' }> = {
+    paid:      { label: 'Pago',      tone: 'ok' },
+    pending:   { label: 'Pendente',  tone: 'warn' },
+    overdue:   { label: 'Atrasado',  tone: 'bad' },
+    cancelled: { label: 'Cancelado', tone: 'gray' },
     // Faltava: cobrança estornada no Asaas aparecia com o status cru "refunded".
-    refunded:  { label: '↩️ Estornado', color: '#7C3AED', bg: '#F5F3FF' },
+    refunded:  { label: 'Estornado', tone: 'brand' },
   }
+  const payLink: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', height: 34, padding: '0 14px', borderRadius: 11, color: '#fff', fontSize: 13, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap' }
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
@@ -333,119 +334,83 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
     </div>
   )
 
-  return (
-    <div style={{ maxWidth: 700, display: 'flex', flexDirection: 'column', gap: 20 }}>
+  const kpi = (lbl: string, value: string | number, color: string) => (
+    <div style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: '14px 18px' }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: BRAND.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>{lbl}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color }}>{value}</div>
+    </div>
+  )
+  const late = overdueMonthly.length > 0
 
-      {/* Resumo financeiro */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-        {[
-          { label: 'Mensalidade do plano Áion', value: fmtBRL(institution?.monthly_value || 0), color: '#00A896', icon: '💰' },
-          { label: 'Pagas', value: paidMonthly.length, color: '#16A34A', icon: '✅' },
-          { label: 'Pendentes', value: pendingMonthly.length + overdueMonthly.length, color: overdueMonthly.length > 0 ? '#DC2626' : '#D97706', icon: overdueMonthly.length > 0 ? '🔴' : '⏳' },
-        ].map(k => (
-          <div key={k.label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: '16px 20px' }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>{k.icon} {k.label}</p>
-            <p style={{ fontSize: 22, fontWeight: 800, color: k.color, margin: 0 }}>{k.value}</p>
-          </div>
-        ))}
+  return (
+    <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+        {kpi('Mensalidade do plano Áion', fmtBRL(institution?.monthly_value || 0), BRAND.primaryDark)}
+        {kpi('Pagas', paidMonthly.length, BRAND.success)}
+        {kpi(late ? 'Pendentes (com atraso)' : 'Pendentes', pendingMonthly.length + overdueMonthly.length, late ? '#B91C1C' : BRAND.warn)}
       </div>
 
-      {/* Implantação */}
       {implPayment && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 20 }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 14px' }}>Taxa de Implantação</p>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <Card>
+          <Title Icon={FileText} title="Taxa de implantação" help="Cobrança única do início do contrato." />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <p style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: '0 0 4px' }}>{fmtBRL(implPayment.amount)}</p>
-              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Vencimento: {fmtDate(implPayment.due_date)}</p>
-              {implPayment.paid_at && <p style={{ fontSize: 12, color: '#16A34A', margin: '2px 0 0' }}>Pago em: {fmtDate(implPayment.paid_at)}</p>}
+              <div style={{ fontSize: 20, fontWeight: 800, color: BRAND.ink }}>{fmtBRL(implPayment.amount)}</div>
+              <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 2 }}>Vencimento: {fmtDate(implPayment.due_date)}</div>
+              {implPayment.paid_at && <div style={{ fontSize: 12.5, color: BRAND.success, marginTop: 2 }}>Pago em {fmtDate(implPayment.paid_at)}</div>}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{
-                padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-                color: statusConfig[implPayment.status]?.color || '#6B7280',
-                background: statusConfig[implPayment.status]?.bg || '#F3F4F6'
-              }}>
-                {statusConfig[implPayment.status]?.label || implPayment.status}
-              </span>
+              <Pill tone={statusConfig[implPayment.status]?.tone || 'gray'}>{statusConfig[implPayment.status]?.label || implPayment.status}</Pill>
               {implPayment.asaas_charge_url && implPayment.status !== 'paid' && (
-                <a
-                  href={implPayment.asaas_charge_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ padding: '8px 20px', borderRadius: 10, background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-block' }}
-                >
-                  💳 Pagar agora
-                </a>
+                <a href={implPayment.asaas_charge_url} target="_blank" rel="noopener noreferrer" style={{ ...payLink, background: GRAD }}>Pagar agora</a>
               )}
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Mensalidades */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 1, margin: 0 }}>Mensalidades</p>
-          <span style={{ fontSize: 12, color: '#94A3B8' }}>{monthlyPayments.length} parcelas</span>
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BRAND.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Mensalidades</div>
+          <span style={{ fontSize: 12.5, color: BRAND.muted }}>{monthlyPayments.length} parcelas</span>
         </div>
-
         {monthlyPayments.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center' }}>
-            <DollarSign size={36} color="#E2E8F0" style={{ margin: '0 auto 10px', display: 'block' }} />
-            <p style={{ color: '#94A3B8', fontSize: 14, margin: 0 }}>Nenhuma mensalidade registrada ainda.</p>
-            <p style={{ color: '#CBD5E1', fontSize: 12, margin: '4px 0 0' }}>As mensalidades são geradas após a confirmação do pagamento da implantação.</p>
+          <div style={{ padding: 36, textAlign: 'center' }}>
+            <DollarSign size={32} color={BRAND.faint} style={{ margin: '0 auto 10px', display: 'block' }} />
+            <div style={{ color: BRAND.ink, fontSize: 14, fontWeight: 700 }}>Nenhuma mensalidade registrada ainda.</div>
+            <div style={{ color: BRAND.muted, fontSize: 12.5, marginTop: 4 }}>As mensalidades são geradas após a confirmação do pagamento da implantação.</div>
           </div>
         ) : (
-          <div style={{ maxHeight: 480, overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ maxHeight: 480, overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
               <thead>
-                <tr style={{ background: '#F8FAFC' }}>
-                  {['Descrição', 'Valor', 'Vencimento', 'Status', ''].map(h => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</th>
+                <tr style={{ background: BRAND.softer }}>
+                  {['Descrição', 'Valor', 'Vencimento', 'Situação', ''].map(h => (
+                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: BRAND.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {monthlyPayments.map((p, i) => {
+                {monthlyPayments.map(p => {
                   const st = statusConfig[p.status] || statusConfig.pending
                   const isOverdue = p.status === 'overdue' || (p.status === 'pending' && new Date(p.due_date) < new Date())
                   return (
-                    <tr key={p.id} style={{ borderTop: '1px solid #F1F5F9', background: i % 2 === 0 ? '#fff' : '#FAFBFC' }}>
+                    <tr key={p.id} style={{ borderTop: `1px solid ${BRAND.line}` }}>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: '#475569' }}>{p.description || 'Mensalidade'}</td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{fmtBRL(p.amount)}</td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, color: isOverdue ? '#DC2626' : '#64748B', fontWeight: isOverdue ? 700 : 400 }}>
+                      <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 800, color: BRAND.ink }}>{fmtBRL(p.amount)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: isOverdue ? '#B91C1C' : BRAND.muted, fontWeight: isOverdue ? 800 : 500 }}>
                         {fmtDate(p.due_date)}
-                        {isOverdue && p.status !== 'paid' && <span style={{ fontSize: 10, display: 'block', color: '#DC2626' }}>Em atraso</span>}
+                        {isOverdue && p.status !== 'paid' && <span style={{ fontSize: 11, display: 'block' }}>Em atraso</span>}
                       </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, color: st.color, background: st.bg }}>
-                          {st.label}
-                        </span>
-                      </td>
+                      <td style={{ padding: '12px 16px' }}><Pill tone={st.tone}>{st.label}</Pill></td>
                       <td style={{ padding: '12px 16px' }}>
                         {p.asaas_charge_url && p.status !== 'paid' && (
-                          <a
-                            href={p.asaas_charge_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ padding: '6px 14px', borderRadius: 8, background: isOverdue ? '#DC2626' : '#00A896', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'inline-block', whiteSpace: 'nowrap' }}
-                          >
-                            💳 Pagar
-                          </a>
+                          <a href={p.asaas_charge_url} target="_blank" rel="noopener noreferrer" style={{ ...payLink, background: isOverdue ? '#DC2626' : GRAD }}>Pagar</a>
                         )}
                         {!p.asaas_charge_url && p.status !== 'paid' && (
-                          <button
-                            onClick={() => generateLink(p.id)}
-                            disabled={generatingLink === p.id}
-                            style={{ padding: '6px 14px', borderRadius: 8, background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#64748B', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                          >
-                            {generatingLink === p.id ? '⏳ Gerando...' : '🔗 Gerar link'}
-                          </button>
+                          <GhostButton onClick={() => generateLink(p.id)} disabled={generatingLink === p.id}>{generatingLink === p.id ? 'Gerando…' : 'Gerar link'}</GhostButton>
                         )}
-                        {p.status === 'paid' && p.paid_at && (
-                          <span style={{ fontSize: 11, color: '#16A34A' }}>Pago em {fmtDate(p.paid_at)}</span>
-                        )}
+                        {p.status === 'paid' && p.paid_at && <span style={{ fontSize: 12, color: BRAND.success }}>Pago em {fmtDate(p.paid_at)}</span>}
                       </td>
                     </tr>
                   )
@@ -454,28 +419,11 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
             </table>
           </div>
         )}
-      </div>
-
-      {/* Alerta se tem atraso */}
-      {overdueMonthly.length > 0 && (
-        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: 16, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <AlertCircle size={18} color="#DC2626" style={{ flexShrink: 0, marginTop: 1 }} />
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#DC2626', margin: '0 0 4px' }}>
-              {overdueMonthly.length} mensalidade{overdueMonthly.length > 1 ? 's' : ''} em atraso
-            </p>
-            <p style={{ fontSize: 12, color: '#B91C1C', margin: 0 }}>
-              Regularize o pagamento para evitar a suspensão do sistema. Em caso de dúvidas, entre em contato com seu consultor.
-            </p>
-          </div>
-        </div>
-      )}
-
+      </Card>
     </div>
   )
 }
 
-// ─── SystemSettings Principal ─────────────────────────────────────────────────
 const TABS = [
   { id: 'escola',      label: 'Escola',               icon: GraduationCap },
   { id: 'plano',       label: 'Plano e pagamentos',   icon: DollarSign },
@@ -598,7 +546,7 @@ export default function SystemSettings() {
         {activeTab === 'plano' && <HubSettings rootLabel="Plano e pagamentos" groups={planoGroups} role={role} isMobile={isMobile} section={urlSec} onSectionChange={sectionSetter('plano')} />}
         {activeTab === 'funil' && <HubSettings rootLabel="Funil e leads" groups={funilGroups} role={role} isMobile={isMobile} section={urlSec} onSectionChange={sectionSetter('funil')} />}
         {activeTab === 'whatsapp' && <WhatsAppSettings institutionId={institutionId} role={role} section={urlSec} isMobile={isMobile} onSectionChange={setWaSection} />}
-        {activeTab === 'integracoes' && institutionId && <IntegrationsTab institutionId={institutionId} onToast={showToast} />}
+        {activeTab === 'integracoes' && institutionId && <IntegrationsTab institutionId={institutionId} onToast={showToast} section={urlSec} onSectionChange={sectionSetter('integracoes')} isMobile={isMobile} />}
       </div>
 
       {showSchoolSetup && institutionId && (

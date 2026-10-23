@@ -1,8 +1,10 @@
 // Editor de séries/etapas de ensino (school_grade_levels), usado em Configurações > Escola > Séries.
 import React, { useState, useEffect } from 'react'
-import { Plus, Check, Trash2, Pencil, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Check, Trash2, Pencil, ChevronUp, ChevronDown, Layers } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
+import { Card, Title, input } from './settings/ui'
+import { BRAND, GRAD } from '../../lib/brand'
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
 
@@ -77,16 +79,15 @@ export default function GradeLevelsEditor({ institutionId, onToast }: { institut
   }
 
   return (
-    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24, maxWidth: 560 }}>
-      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>Séries / etapas de ensino</h3>
-      <p style={{ fontSize: 13, color: '#64748B', marginBottom: 18, lineHeight: 1.6 }}>Nomenclatura usada nos formulários de lead, filtros e relatórios. Arraste a ordem com as setas.</p>
+    <Card style={{ maxWidth: 620 }}>
+      <Title Icon={Layers} title="Séries e etapas de ensino" help="Os nomes usados nos formulários de lead, nos filtros e nos relatórios. Use as setas para mudar a ordem." />
 
       {loading ? (
         <div style={{ padding: 20, textAlign: 'center', color: '#94A3B8', fontSize: 12 }}>Carregando...</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
           {rows.map((g, i) => (
-            <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: '#F8FAFC', border: '1px solid #F1F5F9' }}>
+            <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 12, background: '#fff', border: `1px solid ${BRAND.line}` }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <button disabled={i === 0 || saving} onClick={() => moveRow(i, -1)} style={{ width: 20, height: 16, border: 'none', background: 'none', cursor: i === 0 ? 'default' : 'pointer', opacity: i === 0 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ChevronUp size={13} color="#64748B" /></button>
                 <button disabled={i === rows.length - 1 || saving} onClick={() => moveRow(i, 1)} style={{ width: 20, height: 16, border: 'none', background: 'none', cursor: i === rows.length - 1 ? 'default' : 'pointer', opacity: i === rows.length - 1 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ChevronDown size={13} color="#64748B" /></button>
@@ -110,11 +111,11 @@ export default function GradeLevelsEditor({ institutionId, onToast }: { institut
       )}
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRow()} placeholder="Nova série (ex: 1º Ano EF)" className={inputCls} style={{ flex: 1 }} />
-        <button onClick={addRow} disabled={saving || !newName.trim()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 16px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: !newName.trim() ? 0.5 : 1 }}>
+        <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRow()} placeholder="Nova série (ex: 1º Ano EF)" style={{ ...input, flex: 1 }} />
+        <button onClick={addRow} disabled={saving || !newName.trim()} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 44, padding: '0 18px', borderRadius: 14, background: GRAD, color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, fontFamily: 'inherit', cursor: 'pointer', opacity: !newName.trim() ? 0.5 : 1 }}>
           <Plus size={14} />Adicionar
         </button>
       </div>
-    </div>
+    </Card>
   )
 }

@@ -13,23 +13,26 @@
 // Toda escrita passa por funções do banco; o navegador não insere direto em
 // nenhuma tabela da base.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { Database, Plug, Save, Loader2, AlertTriangle } from 'lucide-react'
+import { Database, Save, Loader2, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { canSeeSettingsItem } from '../../lib/settingsAccess'
+import { BRAND, GRAD, SHADOW } from '../../lib/brand'
+import { Plug as PlugIcon, FileSpreadsheet, PencilLine, SlidersHorizontal } from 'lucide-react'
+import HubSettings, { type HubGroup } from './settings/HubSettings'
+import { NowNote, WarnNote, Card, Title } from './settings/ui'
 import RosterUploadCard from './RosterUploadCard'
 import ActivesoftWizard from './ActivesoftWizard'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
 
 type Toast = (msg: string, ok?: boolean) => void
 
-const card: CSSProperties = { background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }
-const h3: CSSProperties = { fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 8 }
-const hint: CSSProperties = { fontSize: 13, color: '#64748B', margin: '0 0 16px', lineHeight: 1.6 }
-const input: CSSProperties = { padding: '8px 10px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', color: '#1A2B4A', boxSizing: 'border-box' }
-const btn: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
-const btnGhost: CSSProperties = { ...btn, background: '#F1F5F9', color: '#94A3B8', cursor: 'not-allowed' }
+const card: CSSProperties = { background: '#fff', borderRadius: 18, border: `1px solid ${BRAND.line}`, padding: 20, boxShadow: SHADOW }
+const h3: CSSProperties = { fontSize: 15, fontWeight: 800, color: BRAND.ink, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 8 }
+const hint: CSSProperties = { fontSize: 12.5, color: BRAND.muted, margin: '0 0 16px', lineHeight: 1.5 }
+const input: CSSProperties = { padding: '9px 12px', borderRadius: 12, border: `1px solid ${BRAND.line}`, fontSize: 14, outline: 'none', color: BRAND.ink, boxSizing: 'border-box', background: '#fff', fontFamily: 'inherit' }
+const btn: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 8, height: 44, padding: '0 20px', borderRadius: 14, border: 'none', background: GRAD, color: '#fff', fontSize: 14, fontWeight: 800, fontFamily: 'inherit', cursor: 'pointer' }
 
 // Colunas do lançamento manual (desenho §4)
 const METRICS = [
@@ -59,15 +62,13 @@ const STATE_BADGE: Record<SourceState, { label: string; color: string; bg: strin
   em_breve:        { label: 'em breve',        color: '#64748B', bg: '#F1F5F9' },
 }
 
-export default function IntegrationsTab({ institutionId, onToast }: { institutionId: string; onToast: Toast }) {
+export default function IntegrationsTab({ institutionId, onToast, section, onSectionChange, isMobile }: { institutionId: string; onToast: Toast; section?: string | null; onSectionChange?: (s: string) => void; isMobile?: boolean }) {
   const { user } = useAuth()
   const role = user?.role
   const [installed, setInstalled] = useState<boolean | null>(null)
   const baseModule = useBaseModuleEnabled(institutionId)
   const [states, setStates] = useState<Record<SourceKey, SourceState> | null>(null)
   const [primary, setPrimary] = useState<string | null>(null)
-  const [chosen, setChosen] = useState<SourceKey | ''>('')
-  const [showSettings, setShowSettings] = useState(false)
 
   // Confere se a migration da base já foi aplicada neste ambiente.
   useEffect(() => {
@@ -108,65 +109,38 @@ export default function IntegrationsTab({ institutionId, onToast }: { institutio
     )
   }
 
-  const options: { key: SourceKey; title: string; item: 'integracoes.activesoft' | 'integracoes.planilha' | 'integracoes.manual' }[] = [
-    { key: 'activesoft', title: 'Sistema da escola (Activesoft)', item: 'integracoes.activesoft' },
-    { key: 'planilha',   title: 'Planilha ou relatório',          item: 'integracoes.planilha' },
-    { key: 'manual',     title: 'Lançamento manual',              item: 'integracoes.manual' },
+  const STATE_TXT: Record<SourceState, string> = { ativa: 'Ativa', nao_configurada: 'Não configurada', em_breve: 'Em breve' }
+  const lead = (k: SourceKey, text: string) => `${states ? STATE_TXT[states[k]] : '…'}${primary === k ? ' · fonte principal' : ''}. ${text}`
+  const soon = (k: SourceKey) => states?.[k] === 'em_breve'
+  const soonNote = <WarnNote>Esta integração ainda não está liberada para a escola. Fale com a Áion para liberar.</WarnNote>
+
+  const groups: HubGroup[] = [
+    {
+      title: 'De onde vêm os dados dos alunos', items: [
+        { key: 'planilha', label: 'Planilha ou relatório', desc: lead('planilha', 'Envie o relatório de alunos do ano anterior e do ano atual.'), item: 'integracoes.planilha', Icon: FileSpreadsheet,
+          render: () => soon('planilha') ? soonNote : <RosterUploadCard institutionId={institutionId} onToast={onToast} /> },
+        { key: 'manual', label: 'Lançamento manual', desc: lead('manual', 'Digite os números de cada série, sem precisar de integração.'), item: 'integracoes.manual', Icon: PencilLine,
+          render: () => <ManualAggregateCard institutionId={institutionId} onToast={onToast} /> },
+        { key: 'activesoft', label: 'Sistema da escola (Activesoft)', desc: lead('activesoft', 'Lê cadastro, turmas e alunos direto do sistema da escola.'), item: 'integracoes.activesoft', Icon: PlugIcon,
+          render: () => soon('activesoft') ? soonNote : (
+            <Card>
+              <Title Icon={PlugIcon} title="Sistema da escola (Activesoft)" help="Só leitura: cadastro, turmas, enturmação e alunos. Notas, frequência, ocorrências e financeiro nunca são lidos." />
+              <ActivesoftWizard institutionId={institutionId} onToast={onToast} />
+            </Card>
+          ) },
+      ],
+    },
+    {
+      title: 'Ajustes', items: [
+        { key: 'config', label: 'Ajustes da rematrícula', desc: 'Ano que está sendo rematriculado e data de abertura.', item: 'integracoes.config', Icon: SlidersHorizontal,
+          render: () => <BaseSettingsCard institutionId={institutionId} onToast={onToast} /> },
+      ],
+    },
   ]
-  const visible = options.filter(o => canSeeSettingsItem(o.item, role))
-  const usable = (k: SourceKey) => states?.[k] !== 'em_breve'
-  const current: SourceKey | '' = chosen
-    || (visible.find(o => o.key === primary && usable(o.key))?.key)
-    || (visible.find(o => states?.[o.key] === 'ativa')?.key)
-    || ''
-  const badge = current && states ? STATE_BADGE[states[current]] : null
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 980 }}>
-      <div style={{ ...card, padding: '28px 28px 24px' }}>
-        <label htmlFor="fonte-alunos" style={{ display: 'block', fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 10 }}>
-          De onde vêm os dados dos alunos?
-        </label>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select id="fonte-alunos" value={current} onChange={e => setChosen(e.target.value as SourceKey)}
-            style={{ ...input, minWidth: 300, padding: '10px 12px', fontSize: 14 }}>
-            <option value="" disabled>Escolha uma opção</option>
-            {visible.map(o => (
-              <option key={o.key} value={o.key} disabled={!usable(o.key)}>
-                {o.title}{!usable(o.key) ? ' (em breve)' : ''}
-              </option>
-            ))}
-          </select>
-          {badge && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: badge.color, background: badge.bg, borderRadius: 999, padding: '3px 10px' }}>
-              {badge.label}
-            </span>
-          )}
-        </div>
-        <p style={{ fontSize: 12, color: '#94A3B8', margin: '10px 0 0' }}>
-          Uma fonte por ano letivo: fontes não se somam (somar contaria o mesmo aluno duas vezes).
-        </p>
-      </div>
-
-      {current === 'activesoft' && (
-        <div style={{ ...card, padding: 28 }}>
-          <h3 style={h3}><Plug size={16} color="#00A896" /> Sistema da escola (Activesoft)</h3>
-          <p style={hint}>Só leitura: cadastro, turmas, enturmação e alunos. Notas, frequência, ocorrências e financeiro nunca são lidos.</p>
-          <ActivesoftWizard institutionId={institutionId} onToast={onToast} />
-        </div>
-      )}
-      {current === 'planilha' && <RosterUploadCard institutionId={institutionId} onToast={onToast} />}
-      {current === 'manual' && <ManualAggregateCard institutionId={institutionId} onToast={onToast} />}
-
-      {canSeeSettingsItem('integracoes.config', role) && (
-        <div>
-          <button onClick={() => setShowSettings(!showSettings)} style={{ all: 'unset', cursor: 'pointer', fontSize: 12, color: '#94A3B8' }}>
-            {showSettings ? '▾' : '▸'} Ajustes da rematrícula (ano e abertura)
-          </button>
-          {showSettings && <div style={{ marginTop: 10 }}><BaseSettingsCard institutionId={institutionId} onToast={onToast} /></div>}
-        </div>
-      )}
-    </div>
+    <HubSettings rootLabel="Integrações" groups={groups} role={role} isMobile={isMobile} section={section} onSectionChange={onSectionChange}
+      header={<NowNote>Uma fonte por ano letivo: as fontes não se somam (somar contaria o mesmo aluno duas vezes).</NowNote>} />
   )
 }
 

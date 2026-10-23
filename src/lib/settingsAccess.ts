@@ -55,12 +55,12 @@ export const SETTINGS_ITEMS = {
   'whatsapp.modelos':              { tab: 'whatsapp', section: 'modelos',   label: 'Modelos da Meta', roles: ADMIN },
   'whatsapp.alertas':              { tab: 'whatsapp', section: 'alertas',   label: 'Alertas', roles: ADMIN },
   // Etapa B passo 4: relatório de alunos (planilha) — admin e gestor; o banco aceita os dois
-  'integracoes.planilha':          { tab: 'integracoes',  label: 'Enviar relatório de alunos (planilha)', roles: BOTH },
+  'integracoes.planilha':          { tab: 'integracoes', section: 'planilha',  label: 'Enviar relatório de alunos (planilha)', roles: BOTH },
   // Fase 2 · marco 1: números manuais por série (admin e gestor; o banco aceita os dois)
-  'integracoes.manual':            { tab: 'integracoes',  label: 'Lançamento manual da base (por série)', roles: BOTH },
+  'integracoes.manual':            { tab: 'integracoes', section: 'manual',  label: 'Lançamento manual da base (por série)', roles: BOTH },
   // Token do ERP, fonte da base e rematrícula: só admin (o banco também exige admin)
-  'integracoes.activesoft':        { tab: 'integracoes',  label: 'Activesoft (token e carga)', roles: ADMIN },
-  'integracoes.config':            { tab: 'integracoes',  label: 'Fonte da base e rematrícula', roles: ADMIN },
+  'integracoes.activesoft':        { tab: 'integracoes', section: 'activesoft',  label: 'Activesoft (token e carga)', roles: ADMIN },
+  'integracoes.config':            { tab: 'integracoes', section: 'config',  label: 'Fonte da base e rematrícula', roles: ADMIN },
 } as const satisfies Record<string, SettingsItem>
 
 export type SettingsItemId = keyof typeof SETTINGS_ITEMS

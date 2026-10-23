@@ -17,9 +17,9 @@ export interface HubItem {
 }
 export interface HubGroup { title: string; items: HubItem[] }
 
-export default function HubSettings({ rootLabel, groups, role, isMobile, section, onSectionChange }: {
+export default function HubSettings({ rootLabel, groups, role, isMobile, section, onSectionChange, header }: {
   rootLabel: string; groups: HubGroup[]; role?: string; isMobile?: boolean; section?: string | null
-  onSectionChange?: (s: string) => void
+  onSectionChange?: (s: string) => void; header?: ReactNode
 }) {
   const visible = groups
     .map(g => ({ ...g, items: g.items.filter(i => !i.hidden && canSeeSettingsItem(i.item, role as SettingsRole | undefined)) }))
@@ -35,6 +35,7 @@ export default function HubSettings({ rootLabel, groups, role, isMobile, section
   if (!current) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+        {header}
         {visible.map(g => (
           <div key={g.title}>
             <div style={{ fontSize: 12, fontWeight: 800, color: BRAND.muted, letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 10 }}>{g.title}</div>
