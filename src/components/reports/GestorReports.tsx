@@ -15,6 +15,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import CampaignGeneratorModal from './CampaignGeneratorModal'
+import AtendimentoIA from './AtendimentoIA'
 import LinkLeadsToCampaignModal from './LinkLeadsToCampaignModal'
 import { aiFetch } from '../../lib/authHeaders'
 import { pickCurrentFunnelRow } from '../../lib/funnelPeriod'
@@ -1731,6 +1732,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
     { label: 'Rematrículas', icon: <RefreshCw size={15} /> },
     { label: 'Transferências', icon: <ArrowUpRight size={15} /> },
     { label: 'Diagnóstico IA', icon: <Sparkles size={15} /> },
+    { label: 'Atendimento IA', icon: <Sparkles size={15} /> },
   ]
 
   // ─── CAMPANHA ENCERRADA ────────────────────────────────────
@@ -1986,6 +1988,23 @@ export default function GestorReports({ institutionId, institutionName }: Props)
             </button>
           )}
           <button
+            onClick={() => {
+              const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
+              const dv = (a: number, m: number) => (m > 0 ? `${Math.round((a - m) / m * 100)}%` : '')
+              const rows: (string | number)[][] = [
+                ['FUNIL'], ['Mês', 'Cadastros', 'Meta cadastros', 'Desvio', 'Agendamentos', 'Meta agend.', 'Desvio', 'Visitas', 'Meta visitas', 'Desvio', 'Matrículas', 'Meta matrículas', 'Desvio'],
+                ...[...metrics].sort((a, b) => a.period.localeCompare(b.period)).map(m => [m.period, m.registrations, m.registrations_target, dv(m.registrations, m.registrations_target), m.schedules, m.schedules_target, dv(m.schedules, m.schedules_target), m.visits, m.visits_target, dv(m.visits, m.visits_target), m.enrollments, m.enrollments_target, dv(m.enrollments, m.enrollments_target)]),
+                [], ['REMATRÍCULAS'], ['Mês', 'Confirmadas', 'Meta', 'Desvio', 'Base'],
+                ...[...reenrollments].sort((a, b) => a.period.localeCompare(b.period)).map(r => [r.period, r.confirmed, r.target, dv(r.confirmed, r.target), r.base_total]),
+              ]
+              const blob = new Blob(['\ufeff' + rows.map(r => r.map(esc).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' })
+              const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `relatorio-campanha-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href)
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600 }}
+          >
+            ⬇ Baixar CSV
+          </button>
+          <button
             onClick={loadData}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, color: '#64748B', cursor: 'pointer' }}
           >
@@ -2069,6 +2088,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
                 todo o estado interno sem precisar caçar cada useEffect. */}
             {activeTab === 4 && <TabTransferencias key={institutionId} institutionId={institutionId} />}
             {activeTab === 5 && <TabDiagnosticoIA key={institutionId} institutionId={institutionId} cycle={cycle} metrics={metrics} reenrollments={reenrollments} />}
+            {activeTab === 6 && <AtendimentoIA key={institutionId} institutionId={institutionId} institutionName={user?.institution_name ?? ''} />}
           </>
         )}
       </div>

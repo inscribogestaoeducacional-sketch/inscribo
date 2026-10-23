@@ -1113,6 +1113,29 @@ ${JSON.stringify(data).slice(0, 30000)}`
       return res.json({ result: report })
     }
 
+    if (action === 'whatsapp_period_report') {
+      const { institutionName, periodo, data } = payload as { institutionName?: string; periodo: string; data: Record<string, unknown> }
+      const prompt = `Você é consultor de atendimento e vendas de escolas particulares brasileiras.
+Leia os dados de atendimento por WhatsApp de ${institutionName || 'a escola'} no período ${periodo} e escreva um relatório para o GESTOR, em português do Brasil, linguagem simples.
+
+REGRAS
+- "por_atendente" tem números completos do período (conversas, mediana em minutos da primeira resposta humana, satisfação média e quantas avaliações). "amostra" é só uma AMOSTRA aleatória de conversas (primeiras mensagens); não a trate como o total e diga que é uma amostra.
+- Use SOMENTE o que aparece nos dados. Nunca invente número, nome ou situação. Se uma conclusão tiver pouco apoio, diga que é uma pista.
+- Não identifique clientes. Exemplos devem ser frases curtas e anônimas, sem nome, telefone ou dado pessoal.
+- Para cada atendente: pontos fortes e pontos a melhorar com base nos números e, se houver, na amostra. Seja justo e construtivo; uma mediana alta de resposta pode ser horário fora do expediente.
+- Dê ações práticas e ordenadas.
+- Não use markdown.
+
+SAÍDA: somente JSON válido: {"resumo":"3 a 5 frases","problemas":[{"titulo":"...","descricao":"...","exemplo":"frase curta anônima ou vazio"}],"solucoes":["..."],"duvidas_frequentes":["..."],"atendentes":[{"nome":"...","forte":"...","melhorar":"..."}],"alertas":["..."]}
+
+DADOS (JSON):
+${JSON.stringify(data).slice(0, 30000)}`
+      const raw = await callClaude(prompt, 4000)
+      let report: unknown
+      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
+      return res.json({ result: report })
+    }
+
     if (action === 'history_sheet_read') {
       const { targetYear, text } = payload as { targetYear: number; text: string }
       const prompt = `Você lê planilhas de escolas particulares brasileiras e extrai o HISTÓRICO DE MATRÍCULAS por ano letivo, para a Campanha de Matrículas ${targetYear}.

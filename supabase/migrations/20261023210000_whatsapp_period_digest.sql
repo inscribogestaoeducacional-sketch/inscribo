@@ -1,0 +1,1 @@
+-- public.whatsapp_period_digest(p_inst uuid, p_from date, p_to date, p_sample int): resumo por atendente (mediana de 1ª resposta, satisfação) + amostra de conversas curtas (150 caracteres por mensagem). Só gestor/admin. Função aplicada via MCP; definição no banco.
