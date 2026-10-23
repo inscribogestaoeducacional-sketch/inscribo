@@ -29,7 +29,7 @@ export default function UsuariosReport({ institutionId, institutionName }: { ins
       </div>
       {!d ? <div style={{ display: 'flex', gap: 8, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div> : (
         <>
-          <AnalisePanel rep={ai.rep} err={ai.err} title="Usuários" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
+          <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Usuários" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="USUÁRIOS" value={d.total} color="#6366F1" sub={`${d.ativos} ativos`} />
             <Kpi label="SEM ACESSO HÁ 30 DIAS" value={d.sem_acesso_30d} color={d.sem_acesso_30d ? '#B45309' : '#00A896'} sub="entre os ativos" />

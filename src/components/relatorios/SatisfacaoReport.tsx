@@ -32,7 +32,7 @@ export default function SatisfacaoReport({ institutionId, institutionName }: { i
       </div>
       {!d ? <div style={{ display: 'flex', gap: 8, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div> : (
         <>
-          <AnalisePanel rep={ai.rep} err={ai.err} title="Satisfação do atendimento" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
+          <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Satisfação do atendimento" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="SATISFAÇÃO" value={satPct(d.media) != null ? `${satPct(d.media)}%` : '—'} color="#F59E0B" now={satPct(d.media) ?? undefined} before={satPct(d.anterior.media) ?? undefined} sub={`nota ${String(d.media ?? '—').replace('.', ',')} de 3`} />
             <Kpi label="AVALIAÇÕES" value={d.avaliacoes} color="#6366F1" now={d.avaliacoes} before={d.anterior.avaliacoes} />

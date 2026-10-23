@@ -31,7 +31,7 @@ export default function TransmissoesReport({ institutionId, institutionName }: {
       </div>
       {!d ? <div style={{ display: 'flex', gap: 8, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div> : (
         <>
-          <AnalisePanel rep={ai.rep} err={ai.err} title="Transmissões" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
+          <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Transmissões" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="CAMPANHAS" value={d.campanhas} color="#0EA5E9" now={d.campanhas} before={d.anterior_campanhas} sub={`${d.destinatarios.toLocaleString('pt-BR')} destinatários`} />
             <Kpi label="ENTREGUES" value={d.entregues.toLocaleString('pt-BR')} color="#00A896" sub={`${pct(d.entregues, d.enviadas)} das enviadas`} />

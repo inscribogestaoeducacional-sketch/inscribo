@@ -123,9 +123,16 @@ export function useAnalise(module: string, moduleTitle: string, institutionId: s
   return { busy, err, rep, run }
 }
 
-export function AnalisePanel({ rep, err, title, periodLabel, institutionId, institutionName }: { rep: Analise | null; err: string; title: string; periodLabel: string; institutionId: string; institutionName: string }) {
+export function AnalisePanel({ rep, err, title, periodLabel, institutionId, institutionName, busy, label }: { rep: Analise | null; err: string; title: string; periodLabel: string; institutionId: string; institutionName: string; busy?: boolean; label?: string }) {
   const [logo, setLogo] = useState<string | null>(null)
   useEffect(() => { supabase.from('institutions').select('logo_url').eq('id', institutionId).maybeSingle().then(({ data }) => setLogo((data as { logo_url?: string | null } | null)?.logo_url ?? null)) }, [institutionId])
+  if (busy) return (
+    <div className="no-print" style={{ ...card, border: `2px solid ${BRAND.primary}`, background: BRAND.softer, display: 'flex', gap: 14, alignItems: 'center' }}>
+      <Loader2 size={28} className="animate-spin" color={BRAND.primary} style={{ flexShrink: 0 }} />
+      <div><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Gerando a análise da IA…</div>
+        <div style={{ fontSize: 13, color: BRAND.text }}>{label || 'Lendo os dados do período.'}</div>
+        <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 2 }}>Isso pode levar de 30 segundos a alguns minutos. Pode continuar na página: o relatório aparece aqui quando ficar pronto.</div></div>
+    </div>)
   if (err) return <div style={{ ...card, color: '#B91C1C', fontSize: 13.5 }}>{err}</div>
   if (!rep) return null
   const h = (t: string) => <div style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, textTransform: 'uppercase', marginBottom: 6 }}>{t}</div>

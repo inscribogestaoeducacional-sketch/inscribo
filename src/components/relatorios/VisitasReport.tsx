@@ -30,7 +30,7 @@ export default function VisitasReport({ institutionId, institutionName }: { inst
       </div>
       {!d ? <div style={{ display: 'flex', gap: 8, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div> : (
         <>
-          <AnalisePanel rep={ai.rep} err={ai.err} title="Visitas" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
+          <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Visitas" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="VISITAS NO PERÍODO" value={d.total} color="#8B5CF6" now={d.total} before={d.anterior_total} />
             <Kpi label="REALIZADAS" value={d.realizadas} color="#00A896" now={d.realizadas} before={d.anterior_realizadas} sub={`${pct(d.realizadas, d.total)} do total`} />

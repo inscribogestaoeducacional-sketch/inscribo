@@ -77,6 +77,33 @@ function extractJsonObject(raw: string): string {
   return cleaned.slice(start) // sem fechamento balanceado — deixa o JSON.parse acusar o erro real
 }
 
+// Lê JSON de resposta do modelo com tolerância: quebras de linha dentro de textos e
+// resposta cortada no limite de tokens (fecha as estruturas abertas a partir do último trecho completo).
+function parseJsonLoose(raw: string): unknown {
+  const cleaned = raw.replace(/```json\s*|```/g, '').trim()
+  const start = cleaned.indexOf('{')
+  if (start === -1) throw new Error('sem JSON')
+  try { return JSON.parse(extractJsonObject(raw)) } catch { /* tenta reparar */ }
+  const stack: string[] = []
+  let inStr = false, esc = false, out = ''
+  let good = -1; let goodStack: string[] = []
+  for (let i = start; i < cleaned.length; i++) {
+    let ch = cleaned[i]
+    if (inStr && (ch === '\n' || ch === '\r' || ch === '\t') && !esc) ch = ' '
+    out += ch
+    if (esc) { esc = false; continue }
+    if (ch === '\\') { if (inStr) esc = true; continue }
+    if (ch === '"') { inStr = !inStr; continue }
+    if (inStr) continue
+    if (ch === '{') stack.push('}')
+    else if (ch === '[') stack.push(']')
+    else if (ch === '}' || ch === ']') { stack.pop(); good = out.length; goodStack = stack.slice(); if (!stack.length) break }
+  }
+  try { return JSON.parse(out) } catch { /* corta no último trecho completo */ }
+  if (good < 0) throw new Error('JSON irrecuperável')
+  return JSON.parse(out.slice(0, good) + goodStack.reverse().join(''))
+}
+
 async function callClaude(prompt: string, maxTokens = 1024): Promise<string> {
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -238,7 +265,7 @@ Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precis
   let isFallback = true
   try {
     const raw = await callClaude(prompt, 700)
-    result = JSON.parse(extractJsonObject(raw))
+    result = parseJsonLoose(raw)
     isFallback = false
   } catch { /* mantém fallback */ }
 
@@ -553,7 +580,7 @@ ${fileContent.slice(0, 8000)}`
 
       let parsed: unknown
       try {
-        parsed = JSON.parse(extractJsonObject(raw))
+        parsed = parseJsonLoose(raw)
       } catch {
         console.error('[extract_file] falha ao parsear resposta da IA. Raw completo:', raw)
         return res.status(422).json({ error: 'Não foi possível extrair dados estruturados do arquivo', raw })
@@ -591,7 +618,7 @@ Respostas: ${JSON.stringify(responses)}
       const raw = await callClaude(prompt, 600)
       let parsed
       try {
-        parsed = JSON.parse(extractJsonObject(raw))
+        parsed = parseJsonLoose(raw)
       } catch {
         parsed = { primary_reason: 'other', confidence: 30, diagnosis: raw.substring(0, 400), risk_factors: [], retention_opportunity: false, retention_note: 'Análise manual necessária' }
       }
@@ -974,7 +1001,7 @@ Comentários: ${JSON.stringify(comments)}
       const raw = await callClaude(prompt, 800)
       let parsed
       try {
-        parsed = JSON.parse(extractJsonObject(raw))
+        parsed = parseJsonLoose(raw)
       } catch {
         parsed = { overall_score: 0, summary: raw.substring(0, 300), strengths: [], weaknesses: [], reenrollment_risk: 'médio', reenrollment_analysis: 'Análise manual necessária.', priority_actions: [], retention_opportunities: 'Análise manual necessária.' }
       }
@@ -1058,9 +1085,9 @@ Use estas seções, nesta ordem (omita só se não houver dado): "Visão geral d
 
 DADOS (JSON):
 ${JSON.stringify(study).slice(0, 60000)}`
-      const raw = await callClaude(prompt, 6000)
+      const raw = await callClaude(prompt, 8000)
       let report: unknown
-      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
+      try { report = parseJsonLoose(raw) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
       return res.json({ result: report })
     }
 
@@ -1083,9 +1110,9 @@ Seções, nesta ordem (omita só se não houver dado): "Placar do mês", "Compen
 
 DADOS (JSON):
 ${JSON.stringify(snapshot).slice(0, 40000)}`
-      const raw = await callClaude(prompt, 6000)
+      const raw = await callClaude(prompt, 8000)
       let report: unknown
-      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
+      try { report = parseJsonLoose(raw) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
       return res.json({ result: report })
     }
 
@@ -1109,7 +1136,7 @@ DADOS (JSON):
 ${JSON.stringify(data).slice(0, 30000)}`
       const raw = await callClaude(prompt, 4000)
       let report: unknown
-      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
+      try { report = parseJsonLoose(raw) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
       return res.json({ result: report })
     }
 
@@ -1130,7 +1157,7 @@ CONVERSAS (JSON):
 ${JSON.stringify(conversas).slice(0, 38000)}`
       const raw = await callClaude(prompt, 4000)
       let out: unknown
-      try { out = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu a leitura fora do formato. Tente de novo.' }) }
+      try { out = parseJsonLoose(raw) } catch { return res.status(502).json({ error: 'A IA devolveu a leitura fora do formato. Tente de novo.' }) }
       return res.json({ result: out })
     }
 
@@ -1150,7 +1177,7 @@ LEITURAS (JSON):
 ${JSON.stringify(extratos).slice(0, 40000)}`
       const raw = await callClaude(prompt, 4000)
       let out: unknown
-      try { out = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu a união fora do formato. Tente de novo.' }) }
+      try { out = parseJsonLoose(raw) } catch { return res.status(502).json({ error: 'A IA devolveu a união fora do formato. Tente de novo.' }) }
       return res.json({ result: out })
     }
 
@@ -1179,15 +1206,16 @@ REGRAS
 - Análise por pessoa deve ser justa e construtiva, baseada nos números; mediana alta de resposta pode ser horário fora do expediente.
 - Ações práticas, em ordem de prioridade, com quem faz e prazo realista.
 - "perguntas_frequentes", "clientes_dizem", "gargalos" e "abordagem" só quando os dados trouxerem a leitura de conversas (omita nos demais módulos). Em "pessoas", se houver leitura de conversas, descreva o método de cada atendente (o que faz bem, o que melhorar, se conduz para a visita ou a matrícula).
+- Seja objetivo para caber no limite: no máximo 6 destaques, 6 pontos de atenção, 8 perguntas frequentes, 6 gargalos, 8 ações e 5 perguntas para a reunião; frases curtas.
 - Se os dados forem poucos, diga isso em "limites". Não use markdown.
 
 SAÍDA: somente JSON válido: {"resumo":"3 a 5 frases","destaques":["..."],"atencao":[{"titulo":"...","descricao":"..."}],"comparacao":"...","perguntas_frequentes":[{"tema":"...","conversas":0,"perguntas":["..."]}],"clientes_dizem":{"elogios":["..."],"reclamacoes":["..."],"objecoes":["..."]},"gargalos":[{"titulo":"...","evidencia":"número ou fato que prova","impacto":"...","correcao":"..."}],"abordagem":{"como_chegam":"...","como_sao_recebidos":"...","onde_esfria":"...","falhas":["..."],"boas_praticas":["..."]},"pessoas":[{"nome":"...","leitura":"..."}],"acoes":[{"acao":"...","quem":"...","prazo":"..."}],"perguntas_reuniao":["..."],"limites":"o que esta análise não mostra"}
 
 DADOS (JSON):
 ${JSON.stringify(data).slice(0, 30000)}`
-      const raw = await callClaude(prompt, 4500)
+      const raw = await callClaude(prompt, 8000)
       let report: unknown
-      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu uma análise fora do formato. Tente de novo.' }) }
+      try { report = parseJsonLoose(raw) } catch { return res.status(502).json({ error: 'A IA devolveu uma análise fora do formato. Tente de novo.' }) }
       return res.json({ result: report })
     }
 
@@ -1212,7 +1240,7 @@ PLANILHA (texto):
 ${String(text).slice(0, 30000)}`
       const raw = await callClaude(prompt, 3000)
       let out: unknown
-      try { out = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA não conseguiu ler a planilha. Tente de novo ou digite os números.' }) }
+      try { out = parseJsonLoose(raw) } catch { return res.status(502).json({ error: 'A IA não conseguiu ler a planilha. Tente de novo ou digite os números.' }) }
       return res.json({ result: out })
     }
 

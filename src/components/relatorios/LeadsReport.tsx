@@ -41,7 +41,7 @@ export default function LeadsReport({ institutionId, institutionName }: { instit
       </div>
       {!d ? <div style={{ display: 'flex', gap: 8, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div> : (
         <>
-          <AnalisePanel rep={ai.rep} err={ai.err} title="Leads" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
+          <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Leads" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="LEADS NO PERÍODO" value={d.total} color="#6366F1" now={d.total} before={d.anterior.total} />
             <Kpi label="AGENDARAM VISITA" value={agend} color="#8B5CF6" sub={`${pc(agend, d.total)} dos leads`} />

@@ -33,7 +33,7 @@ export default function ContatosReport({ institutionId, institutionName }: { ins
       </div>
       {!d ? <div style={{ display: 'flex', gap: 8, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div> : (
         <>
-          <AnalisePanel rep={ai.rep} err={ai.err} title="Contatos" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
+          <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Contatos" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="CONTATOS NA BASE" value={d.base_total.toLocaleString('pt-BR')} color="#0EA5E9" sub="todo o histórico" />
             <Kpi label="NOVOS NO PERÍODO" value={d.novos} color="#00A896" now={d.novos} before={d.anterior_novos} sub={`${d.novos_com_lead} viraram lead`} />

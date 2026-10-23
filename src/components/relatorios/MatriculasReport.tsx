@@ -30,7 +30,7 @@ export default function MatriculasReport({ institutionId, institutionName }: { i
       </div>
       {!d ? <div style={{ display: 'flex', gap: 8, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div> : (
         <>
-          <AnalisePanel rep={ai.rep} err={ai.err} title="Matrículas por pessoa" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
+          <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Matrículas por pessoa" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="MATRÍCULAS NO PERÍODO" value={d.total} color="#00A896" now={d.total} before={d.anterior_total} />
             <Kpi label="PESSOAS QUE MATRICULARAM" value={d.por_pessoa.length} color="#6366F1" sub="inclui “sem responsável”, se houver" />

@@ -41,13 +41,15 @@ export default function WhatsappReport({ institutionId, institutionName }: { ins
   const [choose, setChoose] = useState(false)
   const [garg, setGarg] = useState<Garg | null>(null)
   useEffect(() => { let alive = true; setGarg(null); supabase.rpc('report_whatsapp_gargalos', { p_inst: institutionId, p_from: per.from, p_to: per.to }).then(({ data, error }) => { if (alive && !error) setGarg(data as Garg) }); return () => { alive = false } }, [institutionId, per.from, per.to])
+  // uma tentativa extra só quando for falha de rede ou do servidor (5xx); erro de formato ou de cota não repete, para não gastar IA à toa
   const callAi = async (action: string, payload: unknown) => {
     for (let t = 0; t < 2; t++) {
       try {
         const resp = await aiFetch({ method: 'POST', body: JSON.stringify({ action, payload }) })
         const json = await resp.json().catch(() => ({}))
         if (resp.ok && json.result) return json.result
-      } catch { /* tenta de novo */ }
+        if (resp.status < 500 || resp.status === 502) return null
+      } catch { /* rede: tenta de novo */ }
     }
     return null
   }
@@ -84,7 +86,7 @@ export default function WhatsappReport({ institutionId, institutionName }: { ins
         let done = 0; let next = 0; const res: unknown[] = []
         setReading(`Lendo as conversas (0 de ${lidas})…`)
         const worker = async () => { while (next < batches.length) { const i = next++; const r = await callAi('whatsapp_batch_extract', { institutionName, conversas: batches[i] }); if (r) res.push(r); done += batches[i].length; setReading(`Lendo as conversas (${Math.min(done, lidas)} de ${lidas})…`) } }
-        await Promise.all([worker(), worker(), worker(), worker()])
+        await Promise.all([worker(), worker(), worker()])
         if (!res.length) throw new Error('A IA não conseguiu ler as conversas. Tente de novo em instantes.')
         // une as leituras em rodadas de até 5
         let level = res
@@ -133,7 +135,7 @@ export default function WhatsappReport({ institutionId, institutionName }: { ins
             <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 8 }}>Os textos das conversas são enviados ao provedor de IA só durante a geração, sem nomes nem telefones, e não são guardados. A IA é orientada a não citar dados pessoais. Cada análise fica registrada.</div>
             <button onClick={() => setChoose(false)} style={{ marginTop: 6, background: 'none', border: 'none', color: BRAND.muted, cursor: 'pointer', fontSize: 12.5, fontFamily: 'inherit' }}>Cancelar</button>
           </div>}
-          <AnalisePanel rep={ai.rep} err={ai.err} title="WhatsApp" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
+          <AnalisePanel busy={ai.busy || !!reading} label={reading} rep={ai.rep} err={ai.err} title="WhatsApp" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="CONVERSAS" value={d.total} color="#25D366" now={d.total} before={d.anterior.total} />
             <Kpi label="COM ATENDENTE" value={d.com_atendente} color="#6366F1" sub={`${d.total ? Math.round(d.com_atendente / d.total * 100) : 0}% das conversas`} />

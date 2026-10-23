@@ -28,7 +28,7 @@ export default function PesquisasReport({ institutionId, institutionName }: { in
       </div>
       {!d ? <div style={{ display: 'flex', gap: 8, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div> : (
         <>
-          <AnalisePanel rep={ai.rep} err={ai.err} title="Pesquisas" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
+          <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Pesquisas" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="RESPOSTAS NO PERÍODO" value={d.respostas} color="#6366F1" sub={`${d.pesquisas} pesquisa${d.pesquisas === 1 ? '' : 's'}`} />
             {d.lista.slice(0, 3).map(s => s.nps != null && <Kpi key={s.pesquisa} label="NPS" value={s.nps} color={s.nps >= 50 ? '#00A896' : s.nps >= 0 ? '#F59E0B' : '#EF4444'} sub={s.pesquisa.slice(0, 40)} />)}
