@@ -1075,9 +1075,23 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
           <Card>
             <Title Icon={Clock} title="Se o cliente responder depois" help="Por quanto tempo a resposta ainda conta como avaliação e o que fazer quando ele escreve outra coisa." />
             <label style={label}>A resposta vale por</label>
-            <select style={{ ...input, width: 180 }} value={sv.valid_hours} onChange={e => setSvF('valid_hours', parseInt(e.target.value))}>
-              {[12, 24, 48, 72, 168].map(h => <option key={h} value={h}>{h === 168 ? '7 dias' : `${h} horas`}</option>)}
-            </select>
+            {(() => {
+              const presets = [1, 2, 3, 6, 12, 24, 48, 72, 168, 360, 720]
+              const nameOf = (h: number) => h === 168 ? '7 dias' : h === 360 ? '15 dias' : h === 720 ? '30 dias' : h === 1 ? '1 hora' : `${h} horas`
+              const isPreset = presets.includes(sv.valid_hours)
+              return (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select style={{ ...input, width: 180 }} value={isPreset ? String(sv.valid_hours) : 'outro'}
+                    onChange={e => { if (e.target.value !== 'outro') setSvF('valid_hours', parseInt(e.target.value)) }}>
+                    {presets.map(h => <option key={h} value={h}>{nameOf(h)}</option>)}
+                    {!isPreset && <option value="outro">{sv.valid_hours} horas (personalizado)</option>}
+                  </select>
+                  <span style={{ fontSize: 13, color: BRAND.muted }}>ou escolha o seu prazo, em horas (1 a 720):</span>
+                  <input type="number" min={1} max={720} style={{ ...input, width: 100 }} value={sv.valid_hours}
+                    onChange={e => { const n = parseInt(e.target.value); if (!isNaN(n)) setSvF('valid_hours', Math.min(720, Math.max(1, n))) }} />
+                </div>
+              )
+            })()}
             <label style={{ ...label, marginTop: 14 }}>Se ele escrever outra coisa no lugar da nota</label>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Chip active={sv.other_reply === 'reabrir'} onClick={() => setSvF('other_reply', 'reabrir')}>Abrir um novo atendimento</Chip>
