@@ -7,7 +7,7 @@ import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
 import {
   LayoutDashboard, Users, BookUser,
-  BarChart3, UsersRound, Settings, ArrowRightLeft, ClipboardCheck, CalendarCheck, X, Megaphone, Send, Store, GraduationCap
+  BarChart3, UsersRound, Settings, ArrowRightLeft, ClipboardCheck, CalendarCheck, X, Megaphone, Send, Store, GraduationCap, Flag
 } from 'lucide-react'
 
 type NavItem = { path: string; label: string; iconBg: string; iconColor: string; Icon: typeof Users; roles: string[]; module: string; group?: string; solid?: boolean }
@@ -47,7 +47,8 @@ const NAV_CFG: NavItem[] = [
   { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager','user'], module: 'captacao',     group: 'Comercial' },
   { path: '/vitrine',         label: 'Vitrine',         iconBg: '#CCFBF1', iconColor: '#0D9488', Icon: Store,           roles: ['admin','manager','user'], module: 'vitrine',      group: 'Comercial' },
   { path: '/transmissoes',    label: 'Transmissões',    iconBg: '#E0F2FE', iconColor: '#0284C7', Icon: Send,            roles: ['admin','manager','user'], module: 'transmissoes', group: 'Comercial' },
-  // Matrículas (a Campanha de Matrículas entra aqui quando o módulo estiver pronto)
+  // Matrículas
+  { path: '/campanha',       label: 'Campanha de Matrículas', iconBg: '#FFEDD5', iconColor: '#EA580C', Icon: Flag,       roles: ['admin','manager'],        module: 'campanha',     group: 'Matrículas' },
   { path: '/base-alunos',     label: 'Base de alunos',  iconBg: '#D1FAE5', iconColor: '#059669', Icon: GraduationCap,   roles: ['admin','manager','user'], module: 'base_alunos',  group: 'Matrículas' },
   { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias', group: 'Matrículas' },
   // Análise
