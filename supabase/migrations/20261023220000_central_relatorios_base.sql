@@ -1,0 +1,3 @@
+-- Central de Relatórios (passo 1). Aplicado no banco em partes via MCP (report_audit_table, report_guard_e_leads, report_whatsapp, report_whatsapp_messages).
+-- Tabela report_audit (quem exportou/analisou o quê); funções report_leads, report_whatsapp, report_whatsapp_messages(p_inst, p_from, p_to[, p_limit]).
+-- Todas exigem papel manager/admin na escola (_report_guard). Definições vigentes: consultar o banco.

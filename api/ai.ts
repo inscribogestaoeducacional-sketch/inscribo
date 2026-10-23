@@ -1136,6 +1136,34 @@ ${JSON.stringify(data).slice(0, 30000)}`
       return res.json({ result: report })
     }
 
+    if (action === 'report_module_analysis') {
+      const { module, moduleTitle, institutionName, periodo, data } = payload as { module: string; moduleTitle: string; institutionName?: string; periodo: string; data: Record<string, unknown> }
+      const guia: Record<string, string> = {
+        leads: 'Módulo LEADS: famílias que procuraram a escola. Etapas: new (novo), contact (contato), scheduled (agendou visita), visit (visitou), proposal (proposta), enrolled (matriculou), lost (perdido). Avalie volume, origem dos leads que mais matriculam, gargalos entre as etapas, desempenho por responsável, séries mais procuradas e motivos de perda.',
+        whatsapp: 'Módulo WHATSAPP: atendimento às famílias. Avalie volume, horários de pico, tempo da primeira resposta (mediana em minutos, pode incluir horas fora do expediente), satisfação, carga por atendente e, na amostra de conversas, dúvidas frequentes, problemas recorrentes e boas práticas.',
+      }
+      const prompt = `Você é consultor de gestão e atendimento de escolas particulares brasileiras, falando com o gestor de ${institutionName || 'a escola'}.
+Analise o módulo "${moduleTitle}" no período ${periodo}. ${guia[module] || ''}
+
+REGRAS
+- Linguagem de escola, simples e direta (famílias, secretaria, coordenação, matrícula, rematrícula, visita). Sem jargão técnico nem inglês.
+- Use SOMENTE números que aparecem nos dados. Nunca invente número, nome, causa ou fato. Quando uma conclusão for só uma pista, diga "pode indicar".
+- Compare com o período anterior (campo "anterior") quando existir e diga se melhorou ou piorou.
+- Se houver "amostra" de conversas, é só uma amostra aleatória: não generalize como total. Não cite nome, telefone ou dado pessoal de clientes; exemplos devem ser frases curtas e anônimas.
+- Análise por pessoa deve ser justa e construtiva, baseada nos números; mediana alta de resposta pode ser horário fora do expediente.
+- Ações práticas, em ordem de prioridade, com quem faz e prazo realista.
+- Se os dados forem poucos, diga isso em "limites". Não use markdown.
+
+SAÍDA: somente JSON válido: {"resumo":"3 a 5 frases","destaques":["..."],"atencao":[{"titulo":"...","descricao":"..."}],"comparacao":"...","pessoas":[{"nome":"...","leitura":"..."}],"acoes":[{"acao":"...","quem":"...","prazo":"..."}],"perguntas_reuniao":["..."],"limites":"o que esta análise não mostra"}
+
+DADOS (JSON):
+${JSON.stringify(data).slice(0, 30000)}`
+      const raw = await callClaude(prompt, 4500)
+      let report: unknown
+      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu uma análise fora do formato. Tente de novo.' }) }
+      return res.json({ result: report })
+    }
+
     if (action === 'history_sheet_read') {
       const { targetYear, text } = payload as { targetYear: number; text: string }
       const prompt = `Você lê planilhas de escolas particulares brasileiras e extrai o HISTÓRICO DE MATRÍCULAS por ano letivo, para a Campanha de Matrículas ${targetYear}.

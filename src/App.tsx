@@ -44,7 +44,7 @@ import LeadKanban        from './components/leads/LeadKanban'
 import VisitCalendar     from './components/calendar/VisitCalendar'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
 import HubErrorBoundary  from './components/whatsapp/HubErrorBoundary'
-import GestorReports     from './components/reports/GestorReports'
+import CentralRelatorios from './components/relatorios/CentralRelatorios'
 import ClientsModule    from './components/clients/ClientsModule'
 import ContactsModule  from './components/contacts/ContactsModule'
 import UserManagement    from './components/management/UserManagement'
@@ -145,7 +145,7 @@ function GlobalToast() {
 function ReportsPage() {
   const { user } = useAuth()
   return (
-    <GestorReports
+    <CentralRelatorios
       institutionId={user?.institution_id || ''}
       institutionName={user?.institution_name || user?.full_name || 'Escola'}
     />
