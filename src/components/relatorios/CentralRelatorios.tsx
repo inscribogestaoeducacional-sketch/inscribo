@@ -1,35 +1,25 @@
 // Central de Relatórios: menu horizontal de módulos; cada um com resumo, tabela, CSV e análise da IA.
 import { useState } from 'react'
-import { BarChart3, Users, MessageCircle, Headset, SmilePlus, GraduationCap, CalendarCheck, UserCog, Megaphone, ClipboardList, Contact, ArrowRightLeft, Wallet, RefreshCw } from 'lucide-react'
+import { BarChart3, Users, MessageCircle, Headset, SmilePlus, GraduationCap, UserCog, Contact, RefreshCw } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
 import LeadsReport from './LeadsReport'
 import WhatsappReport from './WhatsappReport'
 import AtendimentoReport from './AtendimentoReport'
 import SatisfacaoReport from './SatisfacaoReport'
 import MatriculasReport from './MatriculasReport'
-import VisitasReport from './VisitasReport'
 import UsuariosReport from './UsuariosReport'
-import TransmissoesReport from './TransmissoesReport'
-import PesquisasReport from './PesquisasReport'
 import ContatosReport from './ContatosReport'
-import TransferenciasReport from './TransferenciasReport'
-import InvestimentoReport from './InvestimentoReport'
 import RematriculasReport from './RematriculasReport'
 
-type Mod = 'leads' | 'whatsapp' | 'atendimento' | 'satisfacao' | 'matriculas' | 'visitas' | 'usuarios' | 'transmissoes' | 'pesquisas' | 'contatos' | 'transferencias' | 'investimento' | 'rematriculas'
+type Mod = 'leads' | 'whatsapp' | 'atendimento' | 'satisfacao' | 'matriculas' | 'usuarios' | 'contatos' | 'rematriculas'
 const MODS: { id: Mod; label: string; Icon: typeof Users }[] = [
   { id: 'leads', label: 'Leads', Icon: Users },
   { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle },
   { id: 'atendimento', label: 'Atendimento', Icon: Headset },
   { id: 'satisfacao', label: 'Satisfação', Icon: SmilePlus },
   { id: 'matriculas', label: 'Matrículas', Icon: GraduationCap },
-  { id: 'pesquisas', label: 'Pesquisas', Icon: ClipboardList },
-  { id: 'visitas', label: 'Visitas', Icon: CalendarCheck },
   { id: 'rematriculas', label: 'Rematrículas', Icon: RefreshCw },
-  { id: 'transferencias', label: 'Transferências', Icon: ArrowRightLeft },
-  { id: 'investimento', label: 'Investimento', Icon: Wallet },
   { id: 'contatos', label: 'Contatos', Icon: Contact },
-  { id: 'transmissoes', label: 'Transmissões', Icon: Megaphone },
   { id: 'usuarios', label: 'Usuários', Icon: UserCog },
 ]
 
@@ -51,13 +41,8 @@ export default function CentralRelatorios({ institutionId, institutionName }: { 
       {mod === 'atendimento' && <AtendimentoReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'satisfacao' && <SatisfacaoReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'rematriculas' && <RematriculasReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
-      {mod === 'transferencias' && <TransferenciasReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
-      {mod === 'investimento' && <InvestimentoReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'contatos' && <ContatosReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
-      {mod === 'pesquisas' && <PesquisasReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
-      {mod === 'transmissoes' && <TransmissoesReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'usuarios' && <UsuariosReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
-      {mod === 'visitas' && <VisitasReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'matriculas' && <MatriculasReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
     </div>
   )
