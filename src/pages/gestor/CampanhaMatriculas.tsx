@@ -93,6 +93,7 @@ export default function CampanhaMatriculas() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null)
   const [openClasses, setOpenClasses] = useState<string | null>(null)
+  const [step, setStep] = useState(1)
   const [geralKind, setGeralKind] = useState<'novos' | 'rematriculas'>('novos')
   const [report, setReport] = useState<Report | null>(null)
   const [reportAt, setReportAt] = useState<string | null>(null)
@@ -346,7 +347,7 @@ export default function CampanhaMatriculas() {
         subtitle={cycle ? `${cycle.label ?? `Campanha ${targetYear}`}${cycle.start_date ? ` · ${cycle.start_date.split('-').reverse().join('/')} a ${(cycle.end_date ?? '').split('-').reverse().join('/')}` : ''}${dayInfo ? ` · dia ${dayInfo.day} de ${dayInfo.total}` : ''}` : ''}
         actions={<>
           {cycle && <Chip c={st.c} bg={st.bg}>{st.t}</Chip>}
-          {cycle && <button onClick={() => setTab('metas')} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'rgba(255,255,255,.18)', cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center' }}><SlidersHorizontal size={15} /> Configuração da campanha</button>}
+          {cycle && <button onClick={() => { setStep(1); setTab('metas') }} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'rgba(255,255,255,.18)', cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center' }}><SlidersHorizontal size={15} /> Configuração da campanha</button>}
           {cycles.length > 1 && (
             <select value={cycleId} onChange={e => { setCycleId(e.target.value); setEd(null) }}
               style={{ padding: '8px 12px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 14, color: BRAND.ink, background: '#fff' }}>
@@ -459,16 +460,15 @@ export default function CampanhaMatriculas() {
       {!loading && cycle && tab === 'metas' && ed && (
         <>
           <button onClick={() => setTab('geral')} style={{ alignSelf: 'flex-start', border: 'none', background: 'none', color: BRAND.primaryDark, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', padding: 0 }}>← Voltar ao acompanhamento</button>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            <div style={{ ...card, flex: '1 1 300px' }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 12 }}>Datas</div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1 }}><label style={lbl}>Início</label><input type="date" disabled={readOnly} style={inputS} value={ed.start} onChange={e => e.target.value && setDates(e.target.value, ed.end)} /></div>
-                <div style={{ flex: 1 }}><label style={lbl}>Fim</label><input type="date" disabled={readOnly} style={inputS} value={ed.end} onChange={e => e.target.value && setDates(ed.start, e.target.value)} /></div>
-              </div>
-              <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 10 }}>Mudar datas ou metas refaz o mês a mês. Depois dá para ajustar cada mês.</div>
+          <Step n={1} cur={step} setStep={setStep} title="Datas da campanha" summary={`${ed.start.split('-').reverse().join('/')} a ${ed.end.split('-').reverse().join('/')} · ${ed.months.length} meses`} hint="Quando a campanha começa e termina">
+            <div style={{ display: 'flex', gap: 12, maxWidth: 480 }}>
+              <div style={{ flex: 1 }}><label style={lbl}>Início</label><input type="date" disabled={readOnly} style={inputS} value={ed.start} onChange={e => e.target.value && setDates(e.target.value, ed.end)} /></div>
+              <div style={{ flex: 1 }}><label style={lbl}>Fim</label><input type="date" disabled={readOnly} style={inputS} value={ed.end} onChange={e => e.target.value && setDates(ed.start, e.target.value)} /></div>
             </div>
-            <div style={{ ...card, flex: '2 1 520px' }}>
+            <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 10 }}>Mudar datas ou metas refaz o mês a mês. Depois dá para ajustar cada mês.</div>
+          </Step>
+          <Step n={2} cur={step} setStep={setStep} title="Plano inicial da campanha (IA)" summary={report ? `Plano gerado em ${reportAt ? new Date(reportAt).toLocaleDateString('pt-BR') : ''}` : 'Histórico da escola e análise da IA'} hint="Entenda o histórico da escola antes de definir a meta">
+            <div>
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 4 }}>O que a escola fez nos últimos anos <Chip>{SOURCE_LABEL[source]}</Chip></div>
               {years.length ? (
                 <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
@@ -482,9 +482,36 @@ export default function CampanhaMatriculas() {
               ) : <div style={{ fontSize: 13, color: BRAND.muted, marginTop: 8 }}>A escola ainda não tem histórico. Digite abaixo os números de hoje; o mês a mês usa uma curva típica de escola particular até as matrículas reais entrarem.</div>}
               {years.length > 0 && <div style={{ fontSize: 12, color: BRAND.faint, marginTop: 8 }}>Retenção = alunos que voltaram ÷ alunos que poderiam voltar (sem os concluintes). Novos = quem não estava no ano anterior; se o primeiro ano do histórico estiver incompleto, o número de novos dele fica inflado.</div>}
             </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 14 }}>
+            <div style={{ maxWidth: 720 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Plano inicial da campanha {targetYear} (IA)</div>
+              <div style={{ fontSize: 13, color: BRAND.muted, marginTop: 3 }}>
+                A IA lê o histórico da escola, a meta que você definiu e o andamento de agora. Ela explica o que cada número quer dizer, mostra onde a escola perde alunos (por série e turma) e diz o que fazer.
+                {reportAt ? ` Gerado em ${new Date(reportAt).toLocaleString('pt-BR')}.` : ''}
+              </div>
+              {report && cycle.plan_edited_at && reportAt && cycle.plan_edited_at > reportAt && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>A meta mudou depois deste relatório. Gere de novo para atualizar.</div>}
+              {ed && ed.dirty && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>Você tem alterações não salvas em Metas e mês a mês. O relatório usa o que está na tela.</div>}
+            </div>
+            <button onClick={generateReport} disabled={genBusy || !ed} style={primaryBtn(genBusy || !ed)}>{genBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{report ? 'Gerar de novo' : 'Gerar plano com IA'}</button>
           </div>
-
-          <div style={card}>
+          {genBusy && <div style={{ color: BRAND.muted, fontSize: 13.5, marginTop: 10 }}>Analisando o histórico da escola. Isso pode levar até um minuto.</div>}
+          {genErr && <div style={{ color: BRAND.danger, fontSize: 13.5, marginTop: 10 }}>{genErr}</div>}
+          {report && (
+            <>
+              {report.resumo && <div style={{ ...card, background: BRAND.softer, border: `1px solid ${BRAND.softLine}` }}><div style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Em resumo</div><div style={{ fontSize: 14.5, color: BRAND.ink, lineHeight: 1.6 }}>{report.resumo}</div></div>}
+              {(report.alertas ?? []).length > 0 && <div style={{ ...card, background: BRAND.warnSoft, border: '1px solid #FCD34D' }}>{(report.alertas ?? []).map((a, i) => <div key={i} style={{ fontSize: 13.5, color: BRAND.warn, display: 'flex', gap: 8, marginBottom: 4 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} />{a}</div>)}</div>}
+              {(report.secoes ?? []).map((sec, i) => (
+                <div key={i} style={card}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>{sec.titulo}</div>
+                  {sec.texto && <div style={{ fontSize: 14, color: BRAND.text, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{sec.texto}</div>}
+                  {(sec.pontos ?? []).length > 0 && <ul style={{ margin: '10px 0 0', paddingLeft: 20, listStyle: 'disc', color: BRAND.text, fontSize: 14, lineHeight: 1.6 }}>{(sec.pontos ?? []).map((p, j) => <li key={j} style={{ marginBottom: 4 }}>{p}</li>)}</ul>}
+                </div>
+              ))}
+            </>
+          )}
+        
+          </Step>
+          <Step n={3} cur={step} setStep={setStep} title="Metas da campanha" summary={`${fmt(ed.total)} alunos · ${fmt(ed.re)} rematrículas · ${fmt(ed.novos)} novos`} hint="Total de alunos, rematrículas e novos (sugestão pelo histórico, tudo editável)">
             <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 12 }}>Meta de {targetYear}: o sistema sugere, você decide</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14 }}>
               <div><label style={lbl}>Alunos que a escola tem hoje</label><Num value={ed.curStudents} onChange={setCur} disabled={readOnly} /></div>
@@ -502,9 +529,9 @@ export default function CampanhaMatriculas() {
               if (ed.total < lastTot * 0.98) return <div style={{ marginTop: 14, padding: '10px 14px', borderRadius: 12, background: BRAND.warnSoft, color: BRAND.warn, fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}><AlertTriangle size={16} />Esta meta fica abaixo dos {fmt(lastTot)} alunos do último ano.</div>
               return null
             })()}
-          </div>
-
-          <div style={card}>
+          </Step>
+          <Step n={4} cur={step} setStep={setStep} title="Mês a mês" summary={`${fmt(sums.re)} rematrículas e ${fmt(sums.novos)} novos distribuídos em ${ed.months.length} meses`} hint="Como a meta se distribui nos meses, pelo jeito que a escola matriculou nos anos anteriores">
+            <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Mês a mês: quanto matricular em cada mês <Chip>{ed.monthsSource === 'historico' ? 'segue o jeito da sua escola' : ed.monthsSource === 'salvo' ? 'plano salvo' : 'curva típica (estimativa)'}</Chip></div>
             </div>
@@ -548,6 +575,9 @@ export default function CampanhaMatriculas() {
             </div>
             {(sums.re !== ed.re || sums.novos !== ed.novos) && <div style={{ marginTop: 10, fontSize: 12.5, color: BRAND.warn }}>Os meses não somam a meta. Se estiver certo assim, ao salvar a meta passa a ser a soma dos meses.</div>}
 
+            </div>
+          </Step>
+          <Step n={5} cur={step} setStep={setStep} title="Funil" summary={`${Math.round(ed.rates.registration_to_schedule * 100)}% → ${Math.round(ed.rates.schedule_to_visit * 100)}% → ${Math.round(ed.rates.visit_to_enrollment * 100)}%`} hint="Taxas de cadastro → agendamento → visita → matrícula">
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${BRAND.line}` }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Taxas do funil usadas para estimar cadastros e visitas</div>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -558,6 +588,12 @@ export default function CampanhaMatriculas() {
               </div>
             </div>
 
+          </Step>
+          <Step n={6} cur={step} setStep={setStep} title={cycle.status === 'active' ? 'Revisar e salvar' : `Revisar e ativar a campanha ${targetYear}`} summary={cycle.status === 'active' ? 'Campanha ativa' : 'Falta ativar'} hint="Resumo final" last>
+            <div style={{ fontSize: 14, color: BRAND.text, lineHeight: 1.8 }}>
+              <b>{ed.start.split('-').reverse().join('/')} a {ed.end.split('-').reverse().join('/')}</b> · meta de <b>{fmt(sums.re + sums.novos)}</b> alunos: <b>{fmt(sums.re)}</b> rematrículas e <b>{fmt(sums.novos)}</b> novos.<br />
+              Para os novos, o funil pede <b>{fmt(ed.months.reduce((a, m) => a + funnelNeeds(m.novos, ed.rates).registrations, 0))}</b> cadastros e <b>{fmt(ed.months.reduce((a, m) => a + funnelNeeds(m.novos, ed.rates).visits, 0))}</b> visitas.
+            </div>
             {!readOnly && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
                 {msg && <span style={{ fontSize: 13, fontWeight: 700, color: msg.ok ? BRAND.success : BRAND.danger }}>{msg.t}</span>}
@@ -572,40 +608,7 @@ export default function CampanhaMatriculas() {
               </div>
             )}
             {cycle && cycle.status !== 'active' && !readOnly && <div style={{ fontSize: 12, color: BRAND.faint, marginTop: 10, textAlign: 'right' }}>Ao ativar, a campanha anterior é encerrada e fica guardada como histórico.</div>}
-          </div>
-        </>
-      )}
-
-      {/* Plano inicial da campanha (IA): faz parte da configuração */}
-      {!loading && cycle && tab === 'metas' && (
-        <>
-          <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <div style={{ maxWidth: 720 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Plano inicial da campanha {targetYear} (IA)</div>
-              <div style={{ fontSize: 13, color: BRAND.muted, marginTop: 3 }}>
-                A IA lê o histórico da escola, a meta que você definiu e o andamento de agora. Ela explica o que cada número quer dizer, mostra onde a escola perde alunos (por série e turma) e diz o que fazer.
-                {reportAt ? ` Gerado em ${new Date(reportAt).toLocaleString('pt-BR')}.` : ''}
-              </div>
-              {report && cycle.plan_edited_at && reportAt && cycle.plan_edited_at > reportAt && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>A meta mudou depois deste relatório. Gere de novo para atualizar.</div>}
-              {ed && ed.dirty && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>Você tem alterações não salvas em Metas e mês a mês. O relatório usa o que está na tela.</div>}
-            </div>
-            <button onClick={generateReport} disabled={genBusy || !ed} style={primaryBtn(genBusy || !ed)}>{genBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{report ? 'Gerar de novo' : 'Gerar plano com IA'}</button>
-          </div>
-          {genBusy && <div style={{ ...card, color: BRAND.muted, fontSize: 13.5 }}>Analisando o histórico da escola. Isso pode levar até um minuto.</div>}
-          {genErr && <div style={{ ...card, color: BRAND.danger, fontSize: 13.5 }}>{genErr}</div>}
-          {report && (
-            <>
-              {report.resumo && <div style={{ ...card, background: BRAND.softer, border: `1px solid ${BRAND.softLine}` }}><div style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Em resumo</div><div style={{ fontSize: 14.5, color: BRAND.ink, lineHeight: 1.6 }}>{report.resumo}</div></div>}
-              {(report.alertas ?? []).length > 0 && <div style={{ ...card, background: BRAND.warnSoft, border: '1px solid #FCD34D' }}>{(report.alertas ?? []).map((a, i) => <div key={i} style={{ fontSize: 13.5, color: BRAND.warn, display: 'flex', gap: 8, marginBottom: 4 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} />{a}</div>)}</div>}
-              {(report.secoes ?? []).map((sec, i) => (
-                <div key={i} style={card}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>{sec.titulo}</div>
-                  {sec.texto && <div style={{ fontSize: 14, color: BRAND.text, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{sec.texto}</div>}
-                  {(sec.pontos ?? []).length > 0 && <ul style={{ margin: '10px 0 0', paddingLeft: 20, listStyle: 'disc', color: BRAND.text, fontSize: 14, lineHeight: 1.6 }}>{(sec.pontos ?? []).map((p, j) => <li key={j} style={{ marginBottom: 4 }}>{p}</li>)}</ul>}
-                </div>
-              ))}
-            </>
-          )}
+          </Step>
         </>
       )}
 
@@ -686,6 +689,31 @@ export default function CampanhaMatriculas() {
           from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} year={targetYear}
           months={ed?.months ?? []} rates={ed?.rates ?? ((cycle.funnel_rates as FunnelRates | null) ?? DEFAULT_FUNNEL)} cur={hist?.current ?? null} years={years}
           prog={{ done: prog.done, pre: prog.pre, pending: prog.pending }} noLead={noLead?.sem_lead ?? 0} openId={searchParams.get('relatorio')} />
+      )}
+    </div>
+  )
+}
+
+function Step({ n, cur, setStep, title, summary, hint, children, last }: { n: number; cur: number; setStep: (n: number) => void; title: string; summary: string; hint: string; children: ReactNode; last?: boolean }) {
+  const open = cur === n, done = cur > n
+  return (
+    <div style={{ ...card, padding: open ? 20 : '14px 20px', border: open ? `2px solid ${BRAND.primary}` : `1px solid ${BRAND.line}` }}>
+      <div onClick={() => !open && setStep(n)} style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: open ? 'default' : 'pointer' }}>
+        <div style={{ width: 30, height: 30, borderRadius: 99, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, background: open ? BRAND.primary : done ? '#DCFCE7' : '#EEF3F2', color: open ? '#fff' : done ? '#15803D' : '#94A3B8' }}>{done ? <Check size={16} /> : n}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>{n}. {title}</div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted }}>{open ? hint : summary}</div>
+        </div>
+        {!open && <span style={{ fontSize: 12.5, fontWeight: 700, color: BRAND.primaryDark }}>{done ? 'Editar' : 'Abrir'}</span>}
+      </div>
+      {open && (
+        <div style={{ marginTop: 16 }}>
+          {children}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 18, paddingTop: 14, borderTop: `1px solid ${BRAND.line}` }}>
+            {n > 1 ? <button onClick={() => setStep(n - 1)} style={secondaryBtn}>← Anterior</button> : <span />}
+            {!last && <button onClick={() => setStep(n + 1)} style={primaryBtn(false)}>Próximo →</button>}
+          </div>
+        </div>
       )}
     </div>
   )
