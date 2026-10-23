@@ -47,7 +47,7 @@ export const SETTINGS_ITEMS = {
   'whatsapp.datas':               { tab: 'whatsapp', section: 'datas',     label: 'Feriados e datas especiais', roles: ADMIN },
   'whatsapp.horario':              { tab: 'whatsapp', section: 'horario',   label: 'Horário e mensagens automáticas', roles: ADMIN },
   'whatsapp.respostas':            { tab: 'whatsapp', section: 'respostas', label: 'Respostas rápidas',        roles: BOTH },
-  'whatsapp.equipe':               { tab: 'whatsapp', section: 'equipe',    label: 'Grupos e tempo de inatividade', roles: BOTH },
+  'whatsapp.equipe':               { tab: 'whatsapp', section: 'equipe',    label: 'Grupos e destino da conversa', roles: BOTH },
   'whatsapp.equipe.horarios':      { tab: 'whatsapp', section: 'equipe',    label: 'Horário por atendente',    roles: ADMIN },
   'whatsapp.bloqueios':            { tab: 'whatsapp', section: 'bloqueios', label: 'Números bloqueados',       roles: BOTH },
   'whatsapp.etiquetas':            { tab: 'whatsapp', section: 'etiquetas', label: 'Etiquetas',                roles: BOTH },
