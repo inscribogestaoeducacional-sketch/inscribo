@@ -28,6 +28,7 @@ import VisaoGeral from '../../components/campanha/VisaoGeral'
 import HistoricoManual from '../../components/campanha/HistoricoManual'
 import SaidasReport from '../../components/campanha/SaidasReport'
 import RelatorioMensal from '../../components/campanha/RelatorioMensal'
+import { FinalizarButton, RelatorioFinal } from '../../components/campanha/FinalizarCampanha'
 import MetaCharts from '../../components/campanha/CampaignCharts'
 import {
   type History, type HistYear, type PlanMonth, type FunnelRates, type PlanSource,
@@ -354,6 +355,7 @@ export default function CampanhaMatriculas() {
         actions={<>
           {cycle && <Chip c={st.c} bg={st.bg}>{st.t}</Chip>}
           {cycle && <button onClick={() => setShowLink(true)} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'rgba(255,255,255,.18)', cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Link2 size={15} /> Vincular leads</button>}
+          {cycle && cycle.status === 'active' && institutionId && <FinalizarButton cycle={cycle} institutionId={institutionId} institutionName={user?.institution_name ?? ''} targetYear={targetYear} onDone={() => { loadCycles(); setTab('relatorio') }} />}
           {cycle && <button onClick={() => { setStep(1); setTab('metas') }} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'rgba(255,255,255,.18)', cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center' }}><SlidersHorizontal size={15} /> Configuração da campanha</button>}
           {cycles.length > 1 && (
             <select value={cycleId} onChange={e => { setCycleId(e.target.value); setEd(null) }}
@@ -691,6 +693,7 @@ export default function CampanhaMatriculas() {
       )}
       {!loading && cycle && tab === 'saidas' && institutionId && <SaidasReport institutionId={institutionId} institutionName={user?.institution_name ?? ''} defaultYear={targetYear - 1} campaignYear={targetYear} />}
 
+      {!loading && cycle && tab === 'relatorio' && institutionId && cycle.final_report && <RelatorioFinal cycle={cycle} institutionId={institutionId} institutionName={user?.institution_name ?? ''} targetYear={targetYear} />}
       {!loading && cycle && tab === 'relatorio' && institutionId && user && (
         <RelatorioMensal institutionId={institutionId} cycleId={cycle.id} institutionName={user.institution_name ?? ''} userId={user.id} userEmail={user.email ?? ''}
           from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} year={targetYear}
