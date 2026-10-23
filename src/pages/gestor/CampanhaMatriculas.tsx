@@ -12,13 +12,14 @@
 // curva padrão, marcada como "estimativa".
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles } from 'lucide-react'
+import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import PageHeader from '../../components/ui/PageHeader'
 import { BRAND, SHADOW } from '../../lib/brand'
 import { applyCampaignCycle } from '../../lib/campaignApply'
 import { aiFetch } from '../../lib/authHeaders'
+import FunilCampanha from '../../components/campanha/FunilCampanha'
 import Matriculometro from '../../components/campanha/Matriculometro'
 import {
   type History, type HistYear, type PlanMonth, type FunnelRates, type PlanSource,
@@ -31,7 +32,7 @@ type PanelRow = {
   grade_level_id: string; grade_name: string; base_prev_year: number; reenrolled: number; reenrolled_declared: number; pending: number
   left_school: number; new_students: number; returning_students: number; graduates: number; pre_enrolled: number
 }
-type Tab = 'geral' | 'metas' | 'serie' | 'matriculometro' | 'relatorio'
+type Tab = 'geral' | 'funil' | 'metas' | 'serie' | 'matriculometro' | 'relatorio'
 type Report = { resumo?: string; secoes?: { titulo: string; texto?: string; pontos?: string[] }[]; alertas?: string[] }
 type Ed = {
   start: string; end: string; curStudents: number; baseStudents: number; retention: number
@@ -81,7 +82,6 @@ export default function CampanhaMatriculas() {
   const [panel, setPanel] = useState<PanelRow[]>([])
   const [info, setInfo] = useState<{ sources: string[] | null; pre_counts: boolean } | null>(null)
   const [tab, setTab] = useState<Tab>('geral')
-  const [funnel, setFunnel] = useState<{ history_since: string | null; months: { m: string; entraram: number; etapas: Record<string, { n: number; inferidos: number }> }[] } | null>(null)
   const [noLead, setNoLead] = useState<{ novos_matriculados: number; sem_lead: number; lista: { student: string; grade: string | null }[] } | null>(null)
   const [ed, setEd] = useState<Ed | null>(null)
   const [loading, setLoading] = useState(true)
@@ -116,14 +116,12 @@ export default function CampanhaMatriculas() {
     let alive = true
     setLoading(true); setEd(null)
     ;(async () => {
-      const [h, p, i, nl, fn] = await Promise.all([
+      const [h, p, i, nl] = await Promise.all([
         supabase.rpc('campaign_history', { p_institution_id: institutionId, p_target_year: targetYear, p_years: 3 }),
         supabase.rpc('base_reenrollment_panel', { p_institution_id: institutionId, p_target_year: targetYear }),
         supabase.rpc('base_sync_info', { p_institution_id: institutionId }),
         supabase.rpc('campaign_enrollments_without_lead', { p_inst: institutionId, p_year: targetYear }),
-        supabase.rpc('campaign_funnel_monthly', { p_inst: institutionId, p_from: cycle.start_date ?? `${targetYear - 1}-09-01`, p_to: cycle.end_date ?? `${targetYear}-03-31` }),
       ])
-      setFunnel(fn.error ? null : (fn.data as typeof funnel))
       if (!alive) return
       setNoLead(nl.error ? null : (nl.data as typeof noLead))
       setHist((h.data ?? null) as History | null)
@@ -342,6 +340,7 @@ export default function CampanhaMatriculas() {
         subtitle={cycle ? `${cycle.label ?? `Campanha ${targetYear}`}${cycle.start_date ? ` · ${cycle.start_date.split('-').reverse().join('/')} a ${(cycle.end_date ?? '').split('-').reverse().join('/')}` : ''}${dayInfo ? ` · dia ${dayInfo.day} de ${dayInfo.total}` : ''}` : ''}
         actions={<>
           {cycle && <Chip c={st.c} bg={st.bg}>{st.t}</Chip>}
+          {cycle && <button onClick={() => setTab('metas')} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'rgba(255,255,255,.18)', cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center' }}><SlidersHorizontal size={15} /> Configuração da campanha</button>}
           {cycles.length > 1 && (
             <select value={cycleId} onChange={e => { setCycleId(e.target.value); setEd(null) }}
               style={{ padding: '8px 12px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 14, color: BRAND.ink, background: '#fff' }}>
@@ -362,8 +361,8 @@ export default function CampanhaMatriculas() {
 
       <div style={{ display: 'inline-flex', gap: 4, background: '#EEF3F2', borderRadius: 14, padding: 5, alignSelf: 'flex-start', flexWrap: 'wrap' }}>
         {tabBtn('geral', 'Visão geral', LayoutGrid)}
-        {tabBtn('metas', 'Metas e mês a mês', SlidersHorizontal)}
-        {tabBtn('serie', 'Retenção por série', Layers)}
+        {tabBtn('funil', 'Funil', Filter)}
+        {tabBtn('serie', 'Séries e turmas', Layers)}
         {tabBtn('matriculometro', 'Matriculômetro', Flag)}
         {tabBtn('relatorio', 'Relatório da IA', Sparkles)}
       </div>
@@ -385,33 +384,6 @@ export default function CampanhaMatriculas() {
                   <span key={i} style={{ background: '#fff', border: '1px solid #FDE68A', borderRadius: 999, padding: '3px 10px' }}>{x.student}{x.grade ? ` · ${x.grade}` : ''}</span>
                 ))}
                 {noLead.lista.length > 12 && <span style={{ color: BRAND.muted }}>+{noLead.lista.length - 12}</span>}
-              </div>
-            </div>
-          )}
-          {funnel && funnel.months.length > 0 && (
-            <div style={card}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 4 }}>Funil mês a mês</div>
-              <div style={{ fontSize: 12, color: BRAND.muted, marginBottom: 10 }}>
-                Leads que entraram e quantos chegaram a cada etapa em cada mês.
-                {funnel.history_since ? ` O histórico de etapas começou em ${new Date(funnel.history_since + 'T12:00:00').toLocaleDateString('pt-BR')}; antes disso as etapas foram estimadas (entre parênteses).` : ''}
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                  <thead><tr style={{ color: BRAND.muted, textAlign: 'right' }}>
-                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Mês</th><th>Entraram</th><th>Contato</th><th>Agendou</th><th>Visitou</th><th>Proposta</th><th>Matriculou</th><th>Perdeu</th>
-                  </tr></thead>
-                  <tbody>
-                    {funnel.months.map(r => {
-                      const c = (k: string) => { const e = r.etapas[k]; return e ? <>{e.n}{e.inferidos > 0 && <span style={{ color: BRAND.muted }}> ({e.inferidos})</span>}</> : '—' }
-                      return (
-                        <tr key={r.m} style={{ borderTop: '1px solid #EEF3F2', textAlign: 'right' }}>
-                          <td style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 700, color: BRAND.ink }}>{monthName(r.m + '-01')}</td>
-                          <td>{r.entraram}</td><td>{c('contact')}</td><td>{c('scheduled')}</td><td>{c('visit')}</td><td>{c('proposal')}</td><td>{c('enrolled')}</td><td>{c('lost')}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
               </div>
             </div>
           )}
@@ -491,6 +463,7 @@ export default function CampanhaMatriculas() {
 
       {!loading && cycle && tab === 'metas' && ed && (
         <>
+          <button onClick={() => setTab('geral')} style={{ alignSelf: 'flex-start', border: 'none', background: 'none', color: BRAND.primaryDark, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', padding: 0 }}>← Voltar ao acompanhamento</button>
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <div style={{ ...card, flex: '1 1 300px' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 12 }}>Datas</div>
@@ -608,20 +581,23 @@ export default function CampanhaMatriculas() {
         </>
       )}
 
+      {!loading && cycle && tab === 'funil' && institutionId && <FunilCampanha institutionId={institutionId} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} />}
+
       {!loading && cycle && tab === 'matriculometro' && institutionId && <Matriculometro institutionId={institutionId} year={targetYear} />}
 
       {!loading && cycle && tab === 'serie' && (
         <div style={card}>
           <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 4 }}>Retenção por série e turma</div>
           <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 12 }}>De cada série do ano anterior, quantos alunos voltaram. Em vermelho: abaixo da média da escola.</div>
-          {!years.length ? <div style={{ fontSize: 13, color: BRAND.muted }}>Ainda não há histórico para mostrar.</div> : years.slice().reverse().map(y => {
+          {!(years.length || hist?.current) ? <div style={{ fontSize: 13, color: BRAND.muted }}>Ainda não há histórico para mostrar.</div> : [...(hist?.current && hist.current.base > 0 ? [hist.current] : []), ...years.slice().reverse()].map(y => {
+            const inProg = y.year === targetYear
             const avg = y.base ? y.retained / y.base : 0
             return (
               <div key={y.year} style={{ marginBottom: 22 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Campanha {y.year}: {pct(avg, 1)} de retenção ({fmt(y.retained)} de {fmt(y.base)}) · {fmt(y.new_students)} novos</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Campanha {y.year}{inProg ? ' (em andamento)' : ''}: {pct(avg, 1)} {inProg ? 'já garantidos' : 'de retenção'} ({fmt(y.retained)} de {fmt(y.base)}) · {fmt(y.new_students)} novos</div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ background: '#F8FAFC' }}><th style={{ ...th, textAlign: 'left' }}>Série (no ano anterior)</th><th style={th}>Alunos</th><th style={th}>Voltaram</th><th style={th}>Não voltaram</th><th style={{ ...th, textAlign: 'left', width: 200 }}>Retenção</th><th style={th}>Novos na série</th><th style={th} /></tr></thead>
+                    <thead><tr style={{ background: '#F8FAFC' }}><th style={{ ...th, textAlign: 'left' }}>Série (no ano anterior)</th><th style={th}>Alunos</th><th style={th}>{inProg ? 'Matriculados ou pré' : 'Voltaram'}</th><th style={th}>{inProg ? 'Ainda sem rematrícula' : 'Não voltaram'}</th><th style={{ ...th, textAlign: 'left', width: 200 }}>Retenção</th><th style={th}>Novos na série</th><th style={th} /></tr></thead>
                     <tbody>
                       {y.by_grade.filter(g => g.base > 0 || g.new_students > 0).map(g => {
                         const r = g.base ? g.retained / g.base : null
