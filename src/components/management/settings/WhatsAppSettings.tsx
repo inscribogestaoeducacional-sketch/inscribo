@@ -8,13 +8,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Wifi, RefreshCw, Loader2, Check, X, Plus, Trash2, Pencil, Bot, Zap, Clock, Coffee, Timer, Star,
-  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History, CalendarDays, BellRing, FileText,
+  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History, CalendarDays, BellRing, FileText, Bell,
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { platformAdmin } from '../../../lib/platformAdmin'
 import FlowEditor from '../../whatsapp/FlowEditor'
 import SpecialDatesSettings from './SpecialDatesSettings'
 import TemplatesSettings from './TemplatesSettings'
+import AlertsSettings, { ALERTS_DEFAULTS, type AlertsForm } from './AlertsSettings'
 import EmbeddedSignupButton from '../../whatsapp/EmbeddedSignupButton'
 import { canSeeSettingsItem, visibleWhatsAppSections } from '../../../lib/settingsAccess'
 import { BRAND, GRAD } from '../../../lib/brand'
@@ -67,6 +68,7 @@ export const WA_SECTION_INFO: Record<string, { label: string; desc: string }> = 
   bloqueios:  { label: 'Números bloqueados', desc: 'Números que o sistema ignora.' },
   pesquisa:   { label: 'Avaliação do atendimento', desc: 'Pergunta ao cliente como foi o atendimento, ao encerrar.' },
   parada:     { label: 'Conversa parada', desc: 'Lembra o cliente que sumiu depois de ser atendido.' },
+  alertas:    { label: 'Alertas', desc: 'Escolha quais avisos a escola recebe no sininho.' },
   modelos:    { label: 'Modelos da Meta', desc: 'Os modelos de mensagem da escola e os padrões, com o status de cada um na Meta.' },
 }
 
@@ -157,6 +159,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const [scheduleMode, setScheduleMode] = useState<'general' | 'individual'>('general')
   const [sv, setSv] = useState<SurveyForm>(SURVEY_DEFAULTS)
   const [idle, setIdle] = useState<IdleForm>(IDLE_DEFAULTS)
+  const [alerts, setAlerts] = useState<AlertsForm>(ALERTS_DEFAULTS)
   const [lunchStart, setLunchStart] = useState('')
   const [lunchEnd, setLunchEnd] = useState('')
   const [history, setHistory] = useState<{ id: string; automation: string; remote_jid: string; content: string | null; created_at: string }[]>([])
@@ -241,6 +244,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
           const c = f.survey_config as Partial<SurveyForm>
           setSv({ ...SURVEY_DEFAULTS, ...c, buttons: Array.isArray(c.buttons) && c.buttons.length === 3 ? (c.buttons as [string, string, string]) : SURVEY_DEFAULTS.buttons })
         }
+        if (f.alerts_config && typeof f.alerts_config === 'object') setAlerts({ ...ALERTS_DEFAULTS, ...(f.alerts_config as Partial<AlertsForm>) })
         if (f.idle_config && typeof f.idle_config === 'object') setIdle({ ...IDLE_DEFAULTS, ...(f.idle_config as Partial<IdleForm>) })
         if (f.lunch_start) setLunchStart(String(f.lunch_start).slice(0, 5))
         if (f.lunch_end) setLunchEnd(String(f.lunch_end).slice(0, 5))
@@ -480,8 +484,9 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
       ],
     },
     {
-      title: 'Mensagens', items: [
+      title: 'Mensagens e avisos', items: [
         ...(allowed.includes('modelos') ? [{ id: 'modelos', Icon: FileText, title: 'Modelos da Meta', desc: 'Modelos de mensagem aprovados pela Meta: os da escola e os padrões.', open: () => go('modelos') }] : []),
+        ...(allowed.includes('alertas') ? [{ id: 'alertas', Icon: Bell, title: 'Alertas', desc: 'Escolha quais avisos a escola recebe no sininho.', open: () => go('alertas') }] : []),
       ],
     },
     {
@@ -1145,8 +1150,9 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const datas = <SpecialDatesSettings institutionId={institutionId} horarioTxt={horarioTxt} onChanged={setSpecialCount} />
 
   const modelos = <TemplatesSettings institutionId={institutionId} />
+  const alertas = <AlertsSettings value={alerts} onChange={setAlerts} saving={savingKey === 'alertas'} saved={savedKey === 'alertas'} onSave={() => saveFlow('alertas', { alerts_config: alerts })} />
 
-  const content: Record<string, React.ReactNode> = { conexao, automacoes, datas, horario, respostas, equipe, bloqueios, etiquetas, pesquisa, parada, modelos }
+  const content: Record<string, React.ReactNode> = { conexao, automacoes, datas, horario, respostas, equipe, bloqueios, etiquetas, pesquisa, parada, modelos, alertas }
 
   return (
     <>
