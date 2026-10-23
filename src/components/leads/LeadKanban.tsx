@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useLeadSources, withCurrent } from '../../lib/leadSources'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DatabaseService, Lead, supabase } from '../../lib/supabase'
+import { stageColumns, getCustomStage, leadCustomStage, leadColumnKey, isCustomColumnKey } from '../../lib/stageLabels'
 import { createNotification } from '../../lib/notifications'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
@@ -775,7 +776,7 @@ export default function LeadKanban() {
 
 
   // ── handleStatusChange — intercept "lost" para pedir motivo ──────────────
-  const handleStatusChange = async (leadId: string, newStatus: Lead['status'], skipLostModal = false) => {
+  const handleStatusChange = async (leadId: string, newStatus: Lead['status'], skipLostModal = false, customStageId?: string | null) => {
     const currentLead = leads.find(l => l.id === leadId)
     if (!currentLead) return
 
@@ -791,7 +792,7 @@ export default function LeadKanban() {
     // Salva normalmente
     try {
       const previousStatus = currentLead.status
-      await DatabaseService.updateLead(leadId, { status: newStatus })
+      await DatabaseService.updateLead(leadId, customStageId === undefined ? { status: newStatus } : { status: newStatus, custom_stage_id: customStageId })
       if (previousStatus !== newStatus) {
         const isReopen = previousStatus === 'lost'
         const { supabase: db } = await import('../../lib/supabase')
@@ -1084,19 +1085,22 @@ export default function LeadKanban() {
   // avulso. `matchesLeadFilters` casa se QUALQUER filho da família passar
   // no filtro (busca por nome de um filho específico, por exemplo, ainda
   // encontra o card da família).
-  const getLeadsByStatus = (status: Lead['status']) => {
+  // `colKey`: a própria etapa (colunas originais) ou 'x:<id>' (etapa extra da escola).
+  // O lead mostrado na coluna extra é o que tem custom_stage_id válido na etapa-mãe dela.
+  const getLeadsByStatus = (colKey: string) => {
+    const status = (isCustomColumnKey(colKey) ? getCustomStage(colKey.slice(2))?.after_stage : colKey) as Lead['status']
     const { start, end } = getPeriodDates()
     const items: Lead[] = []
     const seenFamilies = new Set<string>()
     for (const lead of leads) {
       const family = lead.family_id ? familyInfoMap.get(lead.family_id) : undefined
       if (family) {
-        if (family.effectiveStatus !== status || seenFamilies.has(lead.family_id!)) continue
+        if (family.effectiveStatus !== status || leadColumnKey(family.representative, status) !== colKey || seenFamilies.has(lead.family_id!)) continue
         if (!family.members.some(m => matchesLeadFilters(m, { start, end }))) continue
         seenFamilies.add(lead.family_id!)
         items.push(family.representative)
       } else {
-        if (lead.status !== status || !matchesLeadFilters(lead, { start, end })) continue
+        if (lead.status !== status || leadColumnKey(lead) !== colKey || !matchesLeadFilters(lead, { start, end })) continue
         items.push(lead)
       }
     }
@@ -1116,12 +1120,13 @@ export default function LeadKanban() {
 
   const handleDragStart = (event: DragStartEvent) => { setActiveId(event.active.id as string) }
 
+  const isColumnId = (id: string) => Object.keys(statusConfig).includes(id) || (isCustomColumnKey(id) && !!getCustomStage(id.slice(2)))
   const handleDragOver = (event: DragOverEvent) => {
     const { over } = event
     if (!over) { setOverColumnId(null); return }
     const overId = over.id as string
-    if (Object.keys(statusConfig).includes(overId)) { setOverColumnId(overId) }
-    else { const overLead = leads.find(l => l.id === overId); setOverColumnId(overLead ? overLead.status : null) }
+    if (isColumnId(overId)) { setOverColumnId(overId) }
+    else { const overLead = leads.find(l => l.id === overId); setOverColumnId(overLead ? leadColumnKey(overLead) : null) }
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -1131,12 +1136,21 @@ export default function LeadKanban() {
 
     const overId = over.id as string
     let targetStatus: Lead['status'] | null = null
-    if (Object.keys(statusConfig).includes(overId)) { targetStatus = overId as Lead['status'] }
-    else { const overLead = leads.find(l => l.id === overId); if (overLead) targetStatus = overLead.status }
+    let targetCustom: string | null = null
+    if (isColumnId(overId)) {
+      if (isCustomColumnKey(overId)) { const c = getCustomStage(overId.slice(2)); targetStatus = c!.after_stage as Lead['status']; targetCustom = c!.id }
+      else targetStatus = overId as Lead['status']
+    } else {
+      const overLead = leads.find(l => l.id === overId)
+      if (overLead) { targetStatus = overLead.status; targetCustom = leadCustomStage(overLead)?.id ?? null }
+    }
     if (!targetStatus) return
 
     const draggedLead = leads.find(l => l.id === active.id as string)
-    if (!draggedLead || draggedLead.status === targetStatus) return
+    if (!draggedLead) return
+    const sameStatus = draggedLead.status === targetStatus
+    const sameCustom = (leadCustomStage(draggedLead)?.id ?? null) === targetCustom
+    if (sameStatus && sameCustom) return
 
     const previousLeads = [...leads]
     const family = draggedLead.family_id ? familyInfoMap.get(draggedLead.family_id) : undefined
@@ -1157,11 +1171,11 @@ export default function LeadKanban() {
         return
       }
 
-      setLeads(prev => prev.map(l => openIds.includes(l.id) ? { ...l, status: targetStatus! } : l))
+      setLeads(prev => prev.map(l => openIds.includes(l.id) ? { ...l, status: targetStatus!, custom_stage_id: targetCustom } : l))
       setFlashingLeadId(draggedLead.id)
       setTimeout(() => setFlashingLeadId(null), 1000)
 
-      Promise.all(openIds.map(id => handleStatusChange(id, targetStatus!, true))).catch(() => {
+      Promise.all(openIds.map(id => handleStatusChange(id, targetStatus!, true, targetCustom))).catch(() => {
         setLeads(previousLeads)
         showToast('Erro ao mover o card. Tente novamente.', 'error')
       })
@@ -1179,11 +1193,11 @@ export default function LeadKanban() {
     }
 
     // Outros status — fluxo normal
-    setLeads(prev => prev.map(l => l.id === active.id ? { ...l, status: targetStatus! } : l))
+    setLeads(prev => prev.map(l => l.id === active.id ? { ...l, status: targetStatus!, custom_stage_id: targetCustom } : l))
     setFlashingLeadId(active.id as string)
     setTimeout(() => setFlashingLeadId(null), 1000)
 
-    handleStatusChange(active.id as string, targetStatus, true).catch(() => {
+    handleStatusChange(active.id as string, targetStatus, true, targetCustom).catch(() => {
       setLeads(previousLeads)
       showToast('Erro ao mover o card. Tente novamente.', 'error')
     })
@@ -1200,8 +1214,10 @@ export default function LeadKanban() {
 
   const stats = getLeadStats()
   const activeLead = activeId ? leads.find(l => l.id === activeId) : null
-  const visibleStatuses = filterStatus ? Object.keys(statusConfig).filter(s => s === filterStatus) : Object.keys(statusConfig)
-  const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s as Lead['status']).length, 0)
+  // colunas: cada etapa original seguida das extras da escola (filtrar por uma etapa mostra também as extras dela)
+  const columns = stageColumns().filter(c => !filterStatus || c.status === filterStatus)
+  const visibleStatuses = columns.map(c => c.key)
+  const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s).length, 0)
   const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'all' || noContactFilter || (unitCfg.enabled && unitFilter !== UNIT_FILTER_ALL)
 
   // ── Consolidação de família — decisão individual por filho, dentro do
@@ -1424,7 +1440,7 @@ export default function LeadKanban() {
                     <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 6,
                       background: cfg?.accent ? `${cfg.accent}22` : '#f1f5f9',
                       color: cfg?.accent ?? '#64748B' }}>
-                      {cfg?.label ?? lead.status}
+                      {leadCustomStage(lead)?.label ?? cfg?.label ?? lead.status}
                     </span>
                   </div>
                   <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0' }}>
@@ -1565,8 +1581,9 @@ export default function LeadKanban() {
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max">
             {visibleStatuses.map((status) => {
-              const config = statusConfig[status as keyof typeof statusConfig]
-              const colLeads = getLeadsByStatus(status as Lead['status'])
+              const col = columns.find(c => c.key === status)!
+              const config = col.custom ? { ...statusConfig[col.status as keyof typeof statusConfig], label: col.custom.label } : statusConfig[col.status as keyof typeof statusConfig]
+              const colLeads = getLeadsByStatus(status)
               return (
                 <div key={status} className="flex-shrink-0 min-w-[260px] max-w-[260px] flex flex-col">
                   {/* Item 13 — clicável pra colapsar/expandir a coluna */}
@@ -1624,7 +1641,7 @@ export default function LeadKanban() {
           {activeLead ? (
             <div className="w-[260px] rotate-1 cursor-grabbing">
               <CardContent
-                lead={activeLead} config={statusConfig[activeLead.status]} isFlashing={false} overlay
+                lead={activeLead} config={leadCustomStage(activeLead) ? { ...statusConfig[activeLead.status], label: leadCustomStage(activeLead)!.label } : statusConfig[activeLead.status]} isFlashing={false} overlay
                 reminderOpts={optsFor(activeLead.id)}
                 compact={compactView}
                 assignedUser={activeLead.assigned_to ? usersById.get(activeLead.assigned_to) ?? null : null}

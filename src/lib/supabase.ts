@@ -54,6 +54,8 @@ export interface Lead {
   contest_name?: string | null
   family_id?: string | null
   lost_reason?: string | null
+  // Etapa extra da escola (sub-etapa da etapa original em `status`); ver lead_custom_stages.
+  custom_stage_id?: string | null
   lost_reason_detail?: string | null
   // Campo de unidade do lead (opcional por escola — ver src/lib/leadUnits.ts).
   unit_id?: string | null

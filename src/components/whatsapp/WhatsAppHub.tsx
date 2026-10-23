@@ -22,6 +22,7 @@ import { useLeadUnits, matchesUnitFilter, UNIT_FILTER_ALL, UNIT_FILTER_NONE } fr
 import { getAuthHeaders } from '../../lib/authHeaders'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { statusConfig } from '../leads/leadFormShared'
+import { leadCustomStage } from '../../lib/stageLabels'
 import { CAPTURE_CHANNELS, type CaptureChannel } from '../../lib/captureTriggers'
 import LeadVisitsPanel from '../visits/LeadVisitsPanel'
 import { advanceLeadTo } from '../../lib/visitOutcome'
@@ -1691,7 +1692,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     // Carregar dados do lead imediatamente no painel direito
     const { data: lead } = await supabase
       .from('leads')
-      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at, unit_id')
+      .select('id, student_name, responsible_name, phone, email, grade_interest, status, custom_stage_id, source, created_at, unit_id')
       .eq('id', leadId)
       .single()
     if (lead) {
@@ -1960,7 +1961,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
       const { data: refreshed } = await supabase
         .from('leads')
-        .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at, unit_id')
+        .select('id, student_name, responsible_name, phone, email, grade_interest, status, custom_stage_id, source, created_at, unit_id')
         .eq('id', leadId)
         .single()
       if (refreshed) setLeadData(refreshed)
@@ -2916,7 +2917,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!leadId) { setLeadData(null); return }
     supabase
       .from('leads')
-      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at, unit_id')
+      .select('id, student_name, responsible_name, phone, email, grade_interest, status, custom_stage_id, source, created_at, unit_id')
       .eq('id', leadId)
       .single()
       .then(({ data }) => {
@@ -6193,7 +6194,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                                   <span style={{ color: '#64748B' }}>Status</span>
                                   <span style={{ color: statusConfig[leadData.status as keyof typeof statusConfig]?.accent || '#1A2B4A', fontWeight: 700 }}>
-                                    {statusConfig[leadData.status as keyof typeof statusConfig]?.label || leadData.status}
+                                    {leadCustomStage(leadData)?.label || statusConfig[leadData.status as keyof typeof statusConfig]?.label || leadData.status}
                                   </span>
                                 </div>
                                 {unitCfg.enabled && (

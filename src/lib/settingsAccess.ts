@@ -39,7 +39,7 @@ export const SETTINGS_ITEMS = {
   'plano.creditos':                { tab: 'plano', section: 'creditos',    label: 'Créditos de Transmissões',    roles: ADMIN },
   'funil.origens':                 { tab: 'funil', section: 'origens', label: 'Origens do lead', roles: BOTH },
   'funil.motivos':                 { tab: 'funil', section: 'motivos', label: 'Motivos de perda', roles: BOTH },
-  'funil.etapas':                  { tab: 'funil', section: 'etapas', label: 'Nomes das etapas', roles: BOTH },
+  'funil.etapas':                  { tab: 'funil', section: 'etapas', label: 'Etapas do funil', roles: BOTH },
   'funil.unidade':                 { tab: 'funil', section: 'unidade', label: 'Campo de unidade do lead',    roles: BOTH },
   'funil.lembrete':                { tab: 'funil', section: 'lembrete', label: 'Lembrete de lead sem contato', roles: ADMIN },
   'whatsapp.conexao':              { tab: 'whatsapp', section: 'conexao',   label: 'Conexão e robô',           roles: ADMIN },

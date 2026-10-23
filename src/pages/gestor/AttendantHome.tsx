@@ -12,6 +12,7 @@ import {
 import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
 import { useLeadInteractions } from '../../hooks/useLeadInteractions'
 import { statusConfig } from '../../components/leads/leadFormShared'
+import { leadCustomStage } from '../../lib/stageLabels'
 
 const REMINDERS_PAGE_SIZE = 5
 
@@ -225,7 +226,7 @@ export default function AttendantHome() {
     ] = await Promise.all([
       // Leads recentes (lista) — não usado pra contagem, só preview.
       supabase.from('leads')
-        .select('id, student_name, responsible_name, status, created_at, phone, grade_interest')
+        .select('id, student_name, responsible_name, status, custom_stage_id, created_at, phone, grade_interest')
         .eq('institution_id', institutionId).eq('assigned_to', userId)
         .order('created_at', { ascending: false }).limit(10),
       // Leads hoje (KPI) — filtrado por data direto no banco (count), não
@@ -441,7 +442,7 @@ export default function AttendantHome() {
                       )}
                     </div>
                     <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, color: cfg.color, background: cfg.bg, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                      {cfg.label}
+                      {leadCustomStage(lead)?.label ?? cfg.label}
                     </span>
                     {lead.phone && (
                       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
