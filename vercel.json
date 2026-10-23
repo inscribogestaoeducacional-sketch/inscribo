@@ -30,6 +30,7 @@
     }
   ],
   "functions": {
+    "api/ai.ts": { "maxDuration": 60 },
     "api/whatsapp/template-definitions.ts": { "maxDuration": 60 }
   },
   "headers": [

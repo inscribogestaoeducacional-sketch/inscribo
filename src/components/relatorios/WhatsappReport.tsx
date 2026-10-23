@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { Loader2, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
-import { ActionBar, AnalisePanel, BarList, DayLine, Kpi, KpiGrid, PeriodBar, card, downloadCsv, logAudit, td, th, useAnalise, usePeriod } from './shared'
+import { aiFetch } from '../../lib/authHeaders'
+import { ActionBar, AnalisePanel, BarList, DayLine, Kpi, KpiGrid, PeriodBar, card, downloadCsv, logAudit, satPct, td, th, useAnalise, usePeriod } from './shared'
 
 interface At { atendente: string; conversas: number; resp_mediana_min: number | null; satisfacao_media: number | null; avaliacoes: number }
 interface D {
@@ -35,10 +36,35 @@ export default function WhatsappReport({ institutionId, institutionName }: { ins
     downloadCsv(`whatsapp-mensagens-${per.from}-${per.to}.csv`, rows); logAudit(institutionId, 'whatsapp', 'csv_mensagens', per.from, per.to, rows.length)
     if (rows.length >= 60000) alert('O arquivo chegou ao limite de 60.000 mensagens. Use um período menor para ter tudo.')
   }
+  const [reading, setReading] = useState('')
   const analisar = async () => {
     if (!d) return
-    const { data: dig } = await supabase.rpc('whatsapp_period_digest', { p_inst: institutionId, p_from: per.from, p_to: per.to, p_sample: 50 })
-    ai.run({ conversas: d.total, com_atendente: d.com_atendente, anterior: d.anterior, mensagens_recebidas: d.msgs_recebidas, enviadas_por_pessoas: d.msgs_enviadas_humano, enviadas_pelo_robo: d.msgs_enviadas_robo, satisfacao_media: d.satisfacao_media, avaliacoes: d.avaliacoes, por_atendente: d.por_atendente, mensagens_por_hora: d.por_hora, por_dia: d.por_dia, amostra: (dig as { amostra?: unknown } | null)?.amostra ?? [] })
+    try {
+      setReading('Sorteando conversas…')
+      const { data: amostra, error } = await supabase.rpc('report_whatsapp_sample', { p_inst: institutionId, p_from: per.from, p_to: per.to, p_per_att: 30, p_max: 140 })
+      if (error) throw new Error(error.message)
+      const conv = (amostra ?? []) as { atendente: string; msgs: unknown[] }[]
+      // lotes de ~26 conversas, misturando atendentes
+      const nBatches = Math.min(5, Math.max(1, Math.ceil(conv.length / 26)))
+      const batches: unknown[][] = Array.from({ length: nBatches }, () => [])
+      conv.forEach((c, i) => batches[i % nBatches].push(c))
+      let done = 0
+      setReading(`Lendo as conversas (0 de ${nBatches})…`)
+      const extratos = (await Promise.all(batches.filter(b => b.length).map(async b => {
+        try {
+          const resp = await aiFetch({ method: 'POST', body: JSON.stringify({ action: 'whatsapp_batch_extract', payload: { institutionName, conversas: b } }) })
+          const json = await resp.json().catch(() => ({}))
+          if (!resp.ok) return null
+          return json.result
+        } finally { done++; setReading(`Lendo as conversas (${done} de ${nBatches})…`) }
+      }))).filter(Boolean)
+      setReading('Escrevendo o relatório…')
+      await ai.run({
+        conversas: d.total, com_atendente: d.com_atendente, anterior: d.anterior, mensagens_recebidas: d.msgs_recebidas, enviadas_por_pessoas: d.msgs_enviadas_humano, enviadas_pelo_robo: d.msgs_enviadas_robo,
+        satisfacao_indice_pct: satPct(d.satisfacao_media), satisfacao_media_1a3: d.satisfacao_media, avaliacoes: d.avaliacoes, por_atendente: d.por_atendente, mensagens_por_hora: d.por_hora, por_dia: d.por_dia,
+        conversas_lidas_pela_ia: conv.length, leitura_das_conversas: extratos,
+      })
+    } catch (e) { alert(e instanceof Error ? e.message : 'Não foi possível analisar.') } finally { setReading('') }
   }
   const maxH = Math.max(1, ...(d?.por_hora ?? []).map(h => h.n))
 
@@ -46,7 +72,7 @@ export default function WhatsappReport({ institutionId, institutionName }: { ins
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="no-print" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
         <PeriodBar p={per} />
-        <ActionBar onCsv={csv} csvLabel="CSV das conversas" csvDisabled={!d || !d.linhas.length} onAi={analisar} aiBusy={ai.busy}
+        <ActionBar onCsv={csv} csvLabel="CSV das conversas" csvDisabled={!d || !d.linhas.length} onAi={analisar} aiBusy={ai.busy || !!reading} aiLabel={reading || 'Analisando…'}
           extra={<button onClick={csvMsgs} disabled={busyMsg || !d} style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center', color: BRAND.ink, fontFamily: 'inherit' }}>{busyMsg ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />} CSV das mensagens (texto completo)</button>} />
       </div>
       {!d ? <div style={{ display: 'flex', gap: 8, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div> : (
@@ -57,7 +83,7 @@ export default function WhatsappReport({ institutionId, institutionName }: { ins
             <Kpi label="COM ATENDENTE" value={d.com_atendente} color="#6366F1" sub={`${d.total ? Math.round(d.com_atendente / d.total * 100) : 0}% das conversas`} />
             <Kpi label="MENSAGENS RECEBIDAS" value={d.msgs_recebidas.toLocaleString('pt-BR')} color="#0EA5E9" sub="das famílias" />
             <Kpi label="ENVIADAS POR PESSOAS" value={d.msgs_enviadas_humano.toLocaleString('pt-BR')} color="#00A896" sub={`${d.msgs_enviadas_robo.toLocaleString('pt-BR')} pelo robô`} />
-            <Kpi label="SATISFAÇÃO MÉDIA" value={d.satisfacao_media ?? '—'} color="#F59E0B" now={d.satisfacao_media ?? undefined} before={d.anterior.satisfacao ?? undefined} sub={`${d.avaliacoes} avaliações`} />
+            <Kpi label="SATISFAÇÃO" value={satPct(d.satisfacao_media) != null ? `${satPct(d.satisfacao_media)}%` : '—'} color="#F59E0B" now={satPct(d.satisfacao_media) ?? undefined} before={satPct(d.anterior.satisfacao) ?? undefined} sub={`nota ${String(d.satisfacao_media ?? '—').replace('.', ',')} de 3 · ${d.avaliacoes} avaliações`} />
           </KpiGrid>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ ...card, flex: '1.4 1 420px' }}><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Conversas novas por dia</div><DayLine rows={d.por_dia} color="#25D366" /></div>
@@ -70,12 +96,12 @@ export default function WhatsappReport({ institutionId, institutionName }: { ins
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ ...card, flex: '1.6 1 420px', overflowX: 'auto' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Por atendente</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Atendente</th><th style={{ ...th, textAlign: 'right' }}>Conversas</th><th style={{ ...th, textAlign: 'right' }} title="Metade das conversas foi respondida em menos que isso">1ª resposta (mediana)</th><th style={{ ...th, textAlign: 'right' }}>Satisfação</th><th style={{ ...th, textAlign: 'right' }}>Avaliações</th></tr></thead>
-                <tbody>{d.por_atendente.map(a => <tr key={a.atendente}><td style={{ ...td, fontWeight: 700 }}>{a.atendente}</td><td style={{ ...td, textAlign: 'right' }}>{a.conversas}</td><td style={{ ...td, textAlign: 'right' }}>{fmtMin(a.resp_mediana_min)}</td><td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{a.satisfacao_media ?? '—'}</td><td style={{ ...td, textAlign: 'right', color: '#94A3B8' }}>{a.avaliacoes}</td></tr>)}</tbody></table>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Atendente</th><th style={{ ...th, textAlign: 'right' }}>Conversas</th><th style={{ ...th, textAlign: 'right' }} title="Metade das conversas foi respondida em menos que isso">1ª resposta (mediana)</th><th style={{ ...th, textAlign: 'right' }}>Satisfação</th><th style={{ ...th, textAlign: 'right' }}>Nota (1 a 3)</th><th style={{ ...th, textAlign: 'right' }}>Avaliações</th></tr></thead>
+                <tbody>{d.por_atendente.map(a => <tr key={a.atendente}><td style={{ ...td, fontWeight: 700 }}>{a.atendente}</td><td style={{ ...td, textAlign: 'right' }}>{a.conversas}</td><td style={{ ...td, textAlign: 'right' }}>{fmtMin(a.resp_mediana_min)}</td><td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{satPct(a.satisfacao_media) != null ? `${satPct(a.satisfacao_media)}%` : '—'}</td><td style={{ ...td, textAlign: 'right', color: '#64748B' }}>{a.satisfacao_media ?? '—'}</td><td style={{ ...td, textAlign: 'right', color: '#94A3B8' }}>{a.avaliacoes}</td></tr>)}</tbody></table>
             </div>
             <div style={{ ...card, flex: '1 1 260px' }}><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Carga por atendente</div><BarList color="#6366F1" rows={d.por_atendente.slice(0, 8).map(a => ({ label: a.atendente, n: a.conversas }))} /></div>
           </div>
-          <div style={{ fontSize: 12.5, color: BRAND.muted }}>O CSV das conversas traz uma linha por conversa{d.truncado ? ' (limite de 5.000; reduza o período)' : ''}. O CSV das mensagens traz o texto completo e só é liberado para gestor e admin; cada download fica registrado. A IA lê só uma amostra de até 50 conversas e não guarda o texto.</div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted }}>O CSV das conversas traz uma linha por conversa{d.truncado ? ' (limite de 5.000; reduza o período)' : ''}. O CSV das mensagens traz o texto completo e só é liberado para gestor e admin; cada download fica registrado. A IA lê uma amostra sorteada de até 140 conversas (até 30 por atendente), sem nomes nem telefones, e não guarda o texto. Satisfação em %: 100% é só nota Ótimo, 0% só nota Ruim (a mesma conta da Home).</div>
         </>
       )}
     </div>

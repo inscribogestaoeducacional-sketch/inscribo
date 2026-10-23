@@ -9,6 +9,7 @@ export const card: React.CSSProperties = { background: '#fff', border: '1px soli
 export const sel: React.CSSProperties = { padding: '7px 10px', borderRadius: 9, border: '1px solid #E2E8F0', fontSize: 13, background: '#fff', color: BRAND.ink, fontWeight: 600, fontFamily: 'inherit' }
 export const th: React.CSSProperties = { fontSize: 11.5, color: '#94A3B8', textTransform: 'uppercase', padding: '8px', textAlign: 'left', fontWeight: 700, whiteSpace: 'nowrap' }
 export const td: React.CSSProperties = { padding: '8px', fontSize: 13, borderTop: '1px solid #EEF2F1' }
+export const satPct = (score: number | null | undefined) => (score == null ? null : Math.round(((score - 1) / 2) * 100))
 export const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 export const br = (s: string) => s.split('-').reverse().join('/')
 
@@ -95,18 +96,18 @@ export async function logAudit(institutionId: string, module: string, action: 'c
   } catch { /* auditoria é melhor esforço */ }
 }
 
-export function ActionBar({ onCsv, csvLabel = 'Baixar CSV', csvDisabled, extra, onAi, aiBusy }: { onCsv: () => void; csvLabel?: string; csvDisabled?: boolean; extra?: React.ReactNode; onAi: () => void; aiBusy: boolean }) {
+export function ActionBar({ onCsv, csvLabel = 'Baixar CSV', csvDisabled, extra, onAi, aiBusy, aiLabel }: { onCsv: () => void; csvLabel?: string; csvDisabled?: boolean; extra?: React.ReactNode; onAi: () => void; aiBusy: boolean; aiLabel?: string }) {
   const b: React.CSSProperties = { padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center', fontFamily: 'inherit' }
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
       <button onClick={onCsv} disabled={csvDisabled} style={{ ...b, border: '1px solid #E2E8F0', background: '#fff', color: BRAND.ink, opacity: csvDisabled ? 0.5 : 1 }}><Download size={15} /> {csvLabel}</button>
       {extra}
-      <button onClick={onAi} disabled={aiBusy} style={{ ...b, border: 'none', background: 'linear-gradient(135deg,#065F52,#00A896)', color: '#fff', opacity: aiBusy ? 0.6 : 1 }}>{aiBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{aiBusy ? 'Analisando…' : 'Análise da IA'}</button>
+      <button onClick={onAi} disabled={aiBusy} style={{ ...b, border: 'none', background: 'linear-gradient(135deg,#065F52,#00A896)', color: '#fff', opacity: aiBusy ? 0.6 : 1 }}>{aiBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{aiBusy ? (aiLabel ?? 'Analisando…') : 'Análise da IA'}</button>
     </div>
   )
 }
 
-interface Analise { resumo?: string; destaques?: string[]; atencao?: { titulo: string; descricao: string }[]; comparacao?: string; pessoas?: { nome: string; leitura: string }[]; acoes?: { acao: string; quem?: string; prazo?: string }[]; perguntas_reuniao?: string[]; limites?: string }
+interface Analise { resumo?: string; destaques?: string[]; atencao?: { titulo: string; descricao: string }[]; comparacao?: string; pessoas?: { nome: string; leitura: string }[]; acoes?: { acao: string; quem?: string; prazo?: string }[]; perguntas_reuniao?: string[]; limites?: string; perguntas_frequentes?: { tema: string; conversas?: number; perguntas?: string[] }[]; clientes_dizem?: { elogios?: string[]; reclamacoes?: string[] } }
 export function useAnalise(module: string, moduleTitle: string, institutionId: string, institutionName: string, period: PeriodState) {
   const [busy, setBusy] = useState(false); const [err, setErr] = useState(''); const [rep, setRep] = useState<Analise | null>(null)
   useEffect(() => { setRep(null); setErr('') }, [module, period.from, period.to])
@@ -139,6 +140,10 @@ export function AnalisePanel({ rep, err, title, periodLabel, institutionId, inst
       {rep.resumo && <div style={{ ...card, background: BRAND.softer, border: `1px solid ${BRAND.softLine}`, fontSize: 14.5, lineHeight: 1.65, color: BRAND.ink }}>{h('Em resumo')}{rep.resumo}</div>}
       {(rep.destaques ?? []).length > 0 && <div style={card}>{h('O que está indo bem')}{(rep.destaques ?? []).map((x, i) => <div key={i} style={{ fontSize: 13.5, padding: '3px 0', display: 'flex', gap: 8 }}><span style={{ color: '#15803D' }}>✓</span>{x}</div>)}</div>}
       {(rep.atencao ?? []).length > 0 && <div style={{ ...card, background: '#FFFBEB', border: '1px solid #FCD34D' }}>{h('Pontos de atenção')}{(rep.atencao ?? []).map((x, i) => <div key={i} style={{ padding: '6px 0', borderTop: i ? '1px solid #FDE68A' : 'none' }}><div style={{ fontWeight: 700, fontSize: 13.5, color: '#92400E' }}>{x.titulo}</div><div style={{ fontSize: 13, color: BRAND.text, lineHeight: 1.55 }}>{x.descricao}</div></div>)}</div>}
+      {(rep.perguntas_frequentes ?? []).length > 0 && <div style={card}>{h('Perguntas mais frequentes das famílias')}{(rep.perguntas_frequentes ?? []).map((q, i) => <div key={i} style={{ padding: '6px 0', borderTop: i ? '1px solid #EEF2F1' : 'none' }}><div style={{ fontWeight: 700, fontSize: 13.5, color: BRAND.ink }}>{q.tema}{q.conversas ? <span style={{ fontWeight: 500, color: '#94A3B8', fontSize: 12 }}> · {q.conversas} conversas</span> : null}</div>{(q.perguntas ?? []).map((x, j) => <div key={j} style={{ fontSize: 13, color: BRAND.text }}>• {x}</div>)}</div>)}</div>}
+      {rep.clientes_dizem && ((rep.clientes_dizem.elogios ?? []).length > 0 || (rep.clientes_dizem.reclamacoes ?? []).length > 0) && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+        <div style={{ ...card, background: '#F0FDF4', border: '1px solid #BBF7D0' }}>{h('O que as famílias elogiam')}{(rep.clientes_dizem.elogios ?? []).map((x, i) => <div key={i} style={{ fontSize: 13.5, padding: '2px 0' }}>• {x}</div>)}</div>
+        <div style={{ ...card, background: '#FEF2F2', border: '1px solid #FECACA' }}>{h('O que as famílias reclamam')}{(rep.clientes_dizem.reclamacoes ?? []).map((x, i) => <div key={i} style={{ fontSize: 13.5, padding: '2px 0' }}>• {x}</div>)}</div></div>}
       {rep.comparacao && <div style={card}>{h('Comparado ao período anterior')}<div style={{ fontSize: 13.5, lineHeight: 1.6 }}>{rep.comparacao}</div></div>}
       {(rep.pessoas ?? []).length > 0 && <div style={card}>{h('Por pessoa')}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>{(rep.pessoas ?? []).map(p => <div key={p.nome} style={{ border: '1px solid #E3E8F0', borderRadius: 12, padding: '10px 12px' }}><div style={{ fontWeight: 800, color: BRAND.ink }}>{p.nome}</div><div style={{ fontSize: 13, lineHeight: 1.55, marginTop: 2 }}>{p.leitura}</div></div>)}</div></div>}
       {(rep.acoes ?? []).length > 0 && <div style={card}>{h('O que fazer, em ordem')}{(rep.acoes ?? []).map((a, i) => <div key={i} style={{ display: 'flex', gap: 10, padding: '6px 0', borderTop: i ? '1px solid #EEF2F1' : 'none', fontSize: 13.5 }}><b style={{ color: BRAND.primary }}>{i + 1}.</b><div style={{ flex: 1 }}>{a.acao}{(a.quem || a.prazo) && <div style={{ fontSize: 12, color: '#64748B' }}>{a.quem ? `Quem: ${a.quem}` : ''}{a.quem && a.prazo ? ' · ' : ''}{a.prazo ? `Até: ${a.prazo}` : ''}</div>}</div></div>)}</div>}

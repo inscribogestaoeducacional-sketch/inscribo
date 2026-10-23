@@ -1113,14 +1113,34 @@ ${JSON.stringify(data).slice(0, 30000)}`
       return res.json({ result: report })
     }
 
+    if (action === 'whatsapp_batch_extract') {
+      const { institutionName, conversas } = payload as { institutionName?: string; conversas: { atendente: string; nota: number | null; comentario?: string | null; msgs: { quem: string; texto: string }[] }[] }
+      const prompt = `Você lê conversas reais de WhatsApp entre famílias e a equipe de ${institutionName || 'uma escola particular'} e extrai fatos para um relatório de gestão. Em cada conversa "cliente" é a família e "escola" é a equipe. "nota": 1 Ruim, 2 Regular, 3 Ótimo (a família avaliou o atendimento ao fim).
+
+REGRAS
+- Use SOMENTE o que está escrito nas conversas. Nada de inventar.
+- Não copie nome, telefone nem dado pessoal. Exemplos devem ser frases curtas e anônimas (troque nomes por "a família").
+- Agrupe por TEMA (ex.: valores e mensalidade, vagas e séries, visita à escola, horários, documentos, uniforme, transporte, bolsas e descontos, rematrícula, financeiro).
+- Para cada atendente, observe o MÉTODO: cordialidade, clareza, se responde a pergunta, se conduz para a visita ou matrícula, se pergunta o nome e a série, se faz follow-up, erros ou respostas confusas. Seja objetivo e justo.
+
+SAÍDA: somente JSON válido: {"temas":[{"tema":"...","conversas":N,"perguntas":["pergunta típica da família, anônima"],"exemplo":"frase curta anônima"}],"clientes_dizem":{"elogios":["..."],"reclamacoes":["..."],"duvidas_que_travam":["..."]},"problemas_atendimento":[{"problema":"...","atendentes":["..."],"exemplo":"..."}],"por_atendente":[{"nome":"...","conversas_lidas":N,"pontos_fortes":["..."],"pontos_a_melhorar":["..."],"conduz_para_visita":"sim|às vezes|raramente|não dá para saber"}]}
+
+CONVERSAS (JSON):
+${JSON.stringify(conversas).slice(0, 38000)}`
+      const raw = await callClaude(prompt, 3500)
+      let out: unknown
+      try { out = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu a leitura fora do formato. Tente de novo.' }) }
+      return res.json({ result: out })
+    }
+
     if (action === 'report_module_analysis') {
       const { module, moduleTitle, institutionName, periodo, data } = payload as { module: string; moduleTitle: string; institutionName?: string; periodo: string; data: Record<string, unknown> }
       const guia: Record<string, string> = {
         leads: 'Módulo LEADS: famílias que procuraram a escola. Etapas: new (novo), contact (contato), scheduled (agendou visita), visit (visitou), proposal (proposta), enrolled (matriculou), lost (perdido). Avalie volume, origem dos leads que mais matriculam, gargalos entre as etapas, desempenho por responsável, séries mais procuradas e motivos de perda.',
         atendimento: 'Módulo ATENDIMENTO: desempenho de cada atendente no WhatsApp. Avalie carga de conversas, mediana e p90 (90% das conversas) do tempo da primeira resposta em minutos (inclui horas fora do expediente), tempo mediano até encerrar a conversa (horas), conversas sem resposta de pessoa, mensagens enviadas e satisfação (escala 1 Ruim, 2 Regular, 3 Ótimo). Compare os atendentes com justiça, sem rankear de forma cruel; aponte o que cada um faz bem e o que melhorar.',
-        satisfacao: 'Módulo SATISFAÇÃO DO ATENDIMENTO: notas dadas pelas famílias ao fim das conversas de WhatsApp na escala 1 Ruim, 2 Regular, 3 Ótimo. Avalie média, distribuição, taxa de resposta (avaliações / pesquisas enviadas), atendentes com mais notas baixas e comentários (se existirem). Muitas notas "Regular" podem indicar atendimento correto, mas sem encantamento; diga isso com cuidado. Sugira como aumentar notas 3 e a taxa de resposta.',
+        satisfacao: 'Módulo SATISFAÇÃO DO ATENDIMENTO: notas dadas pelas famílias ao fim das conversas de WhatsApp na escala 1 Ruim, 2 Regular, 3 Ótimo. Avalie o índice de satisfação em % ((média - 1) / 2), a distribuição, a taxa de resposta (avaliações / pesquisas enviadas), atendentes com mais notas baixas e comentários (se existirem). Dê atenção às notas 1 e 2 e ao que os comentários dizem. Sugira como manter as notas 3 e aumentar a taxa de resposta.',
         matriculas: 'Módulo MATRÍCULAS POR PESSOA: matrículas registradas no período e quem as registrou. Avalie volume, comparação com o período anterior, séries e origens que mais matriculam, e a contribuição de cada pessoa. O tempo do lead até a matrícula pode ser 0 quando o lead é cadastrado já na matrícula; trate com cautela. Algumas datas podem ser estimadas.',
-        whatsapp: 'Módulo WHATSAPP: atendimento às famílias. Avalie volume, horários de pico, tempo da primeira resposta (mediana em minutos, pode incluir horas fora do expediente), satisfação, carga por atendente e, na amostra de conversas, dúvidas frequentes, problemas recorrentes e boas práticas.',
+        whatsapp: 'Módulo WHATSAPP: atendimento às famílias. Os dados trazem números do período (conversas, mensagens, horários, atendentes) e "leitura_das_conversas": extratos de conversas REAIS lidas pela IA em lotes (temas e perguntas frequentes, o que as famílias elogiam e reclamam, o que trava a conversa, e o método de cada atendente). Use essa leitura como base principal: ordene as perguntas frequentes por número de conversas, explique o que as famílias estão achando, descreva o método de cada atendente (pontos fortes e a melhorar, se conduz para a visita) e proponha melhorias concretas (respostas prontas, ajustes de abordagem). A leitura vem de uma amostra de conversas sorteadas por atendente: diga isso em "limites". Satisfação: escala 1 Ruim, 2 Regular, 3 Ótimo; o índice em % é (média - 1) / 2. Tempo de primeira resposta é mediana em minutos e pode incluir horas fora do expediente.',
       }
       const prompt = `Você é consultor de gestão e atendimento de escolas particulares brasileiras, falando com o gestor de ${institutionName || 'a escola'}.
 Analise o módulo "${moduleTitle}" no período ${periodo}. ${guia[module] || ''}
@@ -1132,9 +1152,10 @@ REGRAS
 - Se houver "amostra" de conversas, é só uma amostra aleatória: não generalize como total. Não cite nome, telefone ou dado pessoal de clientes; exemplos devem ser frases curtas e anônimas.
 - Análise por pessoa deve ser justa e construtiva, baseada nos números; mediana alta de resposta pode ser horário fora do expediente.
 - Ações práticas, em ordem de prioridade, com quem faz e prazo realista.
+- "perguntas_frequentes" e "clientes_dizem" só quando os dados trouxerem a leitura de conversas (omita nos demais módulos). Em "pessoas", se houver leitura de conversas, descreva o método de cada atendente (o que faz bem, o que melhorar, se conduz para a visita ou a matrícula).
 - Se os dados forem poucos, diga isso em "limites". Não use markdown.
 
-SAÍDA: somente JSON válido: {"resumo":"3 a 5 frases","destaques":["..."],"atencao":[{"titulo":"...","descricao":"..."}],"comparacao":"...","pessoas":[{"nome":"...","leitura":"..."}],"acoes":[{"acao":"...","quem":"...","prazo":"..."}],"perguntas_reuniao":["..."],"limites":"o que esta análise não mostra"}
+SAÍDA: somente JSON válido: {"resumo":"3 a 5 frases","destaques":["..."],"atencao":[{"titulo":"...","descricao":"..."}],"comparacao":"...","perguntas_frequentes":[{"tema":"...","conversas":0,"perguntas":["..."]}],"clientes_dizem":{"elogios":["..."],"reclamacoes":["..."]},"pessoas":[{"nome":"...","leitura":"..."}],"acoes":[{"acao":"...","quem":"...","prazo":"..."}],"perguntas_reuniao":["..."],"limites":"o que esta análise não mostra"}
 
 DADOS (JSON):
 ${JSON.stringify(data).slice(0, 30000)}`

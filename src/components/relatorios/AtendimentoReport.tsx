@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
-import { ActionBar, AnalisePanel, BarList, Kpi, KpiGrid, PeriodBar, card, downloadCsv, logAudit, td, th, useAnalise, usePeriod } from './shared'
+import { ActionBar, AnalisePanel, BarList, Kpi, KpiGrid, PeriodBar, card, downloadCsv, logAudit, satPct, td, th, useAnalise, usePeriod } from './shared'
 
 interface At { atendente: string; conversas: number; encerradas: number; sem_resposta_humana: number; resp_mediana_min: number | null; resp_p90_min: number | null; resolucao_mediana_h: number | null; satisfacao: number | null; avaliacoes: number; mensagens_enviadas: number }
 interface D { total: number; anterior_total: number; sem_atendente: number; por_atendente: At[] }
@@ -20,7 +20,7 @@ export default function AtendimentoReport({ institutionId, institutionName }: { 
     return () => { alive = false }
   }, [institutionId, per.from, per.to])
   if (err) return <div style={{ ...card, color: '#B91C1C' }}>{err.includes('permiss') ? 'Somente gestores podem ver os relatórios.' : err}</div>
-  const rows = (d?.por_atendente ?? []).map(a => ({ Atendente: a.atendente, Conversas: a.conversas, Encerradas: a.encerradas, 'Sem resposta de pessoa': a.sem_resposta_humana, 'Primeira resposta, mediana (min)': a.resp_mediana_min, 'Primeira resposta, 90% (min)': a.resp_p90_min, 'Tempo até encerrar, mediana (h)': a.resolucao_mediana_h, 'Mensagens enviadas': a.mensagens_enviadas, 'Satisfação média (1 a 3)': a.satisfacao, Avaliações: a.avaliacoes }))
+  const rows = (d?.por_atendente ?? []).map(a => ({ Atendente: a.atendente, Conversas: a.conversas, Encerradas: a.encerradas, 'Sem resposta de pessoa': a.sem_resposta_humana, 'Primeira resposta, mediana (min)': a.resp_mediana_min, 'Primeira resposta, 90% (min)': a.resp_p90_min, 'Tempo até encerrar, mediana (h)': a.resolucao_mediana_h, 'Mensagens enviadas': a.mensagens_enviadas, 'Satisfação (%)': satPct(a.satisfacao), 'Nota média (1 a 3)': a.satisfacao, Avaliações: a.avaliacoes }))
   const sel = d?.por_atendente.find(a => a.atendente === pick)
   const tot = (k: keyof At) => (d?.por_atendente ?? []).reduce((x, a) => x + (Number(a[k]) || 0), 0)
   return (
@@ -42,7 +42,7 @@ export default function AtendimentoReport({ institutionId, institutionName }: { 
             <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Cada atendente</div>
             <div style={{ fontSize: 12, color: BRAND.muted, marginBottom: 6 }}>Clique numa pessoa para ver o resumo dela. A mediana é o tempo em que metade das conversas já tinha sido respondida; "90%" é o tempo das conversas mais demoradas.</div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Atendente</th><th style={{ ...th, textAlign: 'right' }}>Conversas</th><th style={{ ...th, textAlign: 'right' }}>1ª resposta (mediana)</th><th style={{ ...th, textAlign: 'right' }}>1ª resposta (90%)</th><th style={{ ...th, textAlign: 'right' }}>Até encerrar</th><th style={{ ...th, textAlign: 'right' }}>Mensagens</th><th style={{ ...th, textAlign: 'right' }}>Satisfação</th></tr></thead>
-              <tbody>{d.por_atendente.map(a => <tr key={a.atendente} onClick={() => setPick(pick === a.atendente ? '' : a.atendente)} style={{ cursor: 'pointer', background: pick === a.atendente ? '#E6F7F5' : undefined }}><td style={{ ...td, fontWeight: 700 }}>{a.atendente}</td><td style={{ ...td, textAlign: 'right' }}>{a.conversas}</td><td style={{ ...td, textAlign: 'right' }}>{fmtMin(a.resp_mediana_min)}</td><td style={{ ...td, textAlign: 'right' }}>{fmtMin(a.resp_p90_min)}</td><td style={{ ...td, textAlign: 'right' }}>{fmtH(a.resolucao_mediana_h)}</td><td style={{ ...td, textAlign: 'right' }}>{a.mensagens_enviadas.toLocaleString('pt-BR')}</td><td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{a.satisfacao ?? '—'} <span style={{ color: '#94A3B8', fontWeight: 400 }}>({a.avaliacoes})</span></td></tr>)}</tbody></table>
+              <tbody>{d.por_atendente.map(a => <tr key={a.atendente} onClick={() => setPick(pick === a.atendente ? '' : a.atendente)} style={{ cursor: 'pointer', background: pick === a.atendente ? '#E6F7F5' : undefined }}><td style={{ ...td, fontWeight: 700 }}>{a.atendente}</td><td style={{ ...td, textAlign: 'right' }}>{a.conversas}</td><td style={{ ...td, textAlign: 'right' }}>{fmtMin(a.resp_mediana_min)}</td><td style={{ ...td, textAlign: 'right' }}>{fmtMin(a.resp_p90_min)}</td><td style={{ ...td, textAlign: 'right' }}>{fmtH(a.resolucao_mediana_h)}</td><td style={{ ...td, textAlign: 'right' }}>{a.mensagens_enviadas.toLocaleString('pt-BR')}</td><td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{satPct(a.satisfacao) != null ? `${satPct(a.satisfacao)}%` : '—'} <span style={{ color: '#94A3B8', fontWeight: 400 }}>({a.avaliacoes})</span></td></tr>)}</tbody></table>
           </div>
           {sel && (
             <div style={{ ...card, borderColor: BRAND.primary }}>
@@ -51,7 +51,7 @@ export default function AtendimentoReport({ institutionId, institutionName }: { 
                 <Kpi label="CONVERSAS" value={sel.conversas} color="#6366F1" sub={`${d.total ? Math.round(sel.conversas / d.total * 100) : 0}% do total da equipe`} />
                 <Kpi label="ENCERRADAS" value={sel.encerradas} color="#00A896" sub={`${sel.conversas ? Math.round(sel.encerradas / sel.conversas * 100) : 0}% das conversas`} />
                 <Kpi label="SEM RESPOSTA DE PESSOA" value={sel.sem_resposta_humana} color="#B91C1C" sub="das conversas dela" />
-                <Kpi label="SATISFAÇÃO" value={sel.satisfacao ?? '—'} color="#F59E0B" sub={`${sel.avaliacoes} avaliações · escala 1 a 3`} />
+                <Kpi label="SATISFAÇÃO" value={satPct(sel.satisfacao) != null ? `${satPct(sel.satisfacao)}%` : '—'} color="#F59E0B" sub={`nota ${String(sel.satisfacao ?? '—').replace('.', ',')} de 3 · ${sel.avaliacoes} avaliações`} />
               </KpiGrid>
             </div>
           )}
