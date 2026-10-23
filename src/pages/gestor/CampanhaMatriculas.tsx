@@ -12,7 +12,7 @@
 // curva padrão, marcada como "estimativa".
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet } from 'lucide-react'
+import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet, LogOut } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import PageHeader from '../../components/ui/PageHeader'
@@ -23,6 +23,7 @@ import { NovatosTab, RematriculaTab } from '../../components/campanha/NovatosRem
 import Investimento from '../../components/campanha/Investimento'
 import FunilCampanha from '../../components/campanha/FunilCampanha'
 import Matriculometro from '../../components/campanha/Matriculometro'
+import SaidasReport from '../../components/campanha/SaidasReport'
 import RelatorioMensal from '../../components/campanha/RelatorioMensal'
 import MetaCharts from '../../components/campanha/CampaignCharts'
 import {
@@ -36,7 +37,7 @@ type PanelRow = {
   grade_level_id: string; grade_name: string; base_prev_year: number; reenrolled: number; reenrolled_declared: number; pending: number
   left_school: number; new_students: number; returning_students: number; graduates: number; pre_enrolled: number
 }
-type Tab = 'geral' | 'funil' | 'novatos' | 'rematricula' | 'invest' | 'metas' | 'serie' | 'matriculometro' | 'relatorio'
+type Tab = 'geral' | 'funil' | 'novatos' | 'rematricula' | 'invest' | 'metas' | 'serie' | 'matriculometro' | 'saidas' | 'relatorio'
 type Report = { resumo?: string; secoes?: { titulo: string; texto?: string; pontos?: string[] }[]; alertas?: string[] }
 type Ed = {
   start: string; end: string; curStudents: number; baseStudents: number; retention: number
@@ -374,6 +375,7 @@ export default function CampanhaMatriculas() {
         {tabBtn('invest', 'Investimento', Wallet)}
         {tabBtn('serie', 'Séries e turmas', Layers)}
         {tabBtn('matriculometro', 'Matriculômetro', Flag)}
+        {tabBtn('saidas', 'Saídas', LogOut)}
         {tabBtn('relatorio', 'Relatório do mês', Sparkles)}
       </div>
 
@@ -684,6 +686,8 @@ export default function CampanhaMatriculas() {
           })}
         </div>
       )}
+      {!loading && cycle && tab === 'saidas' && institutionId && <SaidasReport institutionId={institutionId} institutionName={user?.institution_name ?? ''} defaultYear={targetYear - 1} campaignYear={targetYear} />}
+
       {!loading && cycle && tab === 'relatorio' && institutionId && user && (
         <RelatorioMensal institutionId={institutionId} cycleId={cycle.id} institutionName={user.institution_name ?? ''} userId={user.id} userEmail={user.email ?? ''}
           from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} year={targetYear}

@@ -1089,6 +1089,30 @@ ${JSON.stringify(snapshot).slice(0, 40000)}`
       return res.json({ result: report })
     }
 
+    if (action === 'transfers_report') {
+      const { institutionName, year, data } = payload as { institutionName?: string; year: number; data: Record<string, unknown> }
+      const prompt = `Você é consultor especialista em retenção de alunos de escolas particulares brasileiras.
+Escreva um RELATÓRIO ESTRATÉGICO DE SAÍDAS (transferências e cancelamentos) de ${year} para o gestor de ${institutionName || 'a escola'}, em português do Brasil, linguagem simples.
+
+REGRAS
+- Use SOMENTE os números dos dados abaixo. Nunca invente número, série, motivo ou causa.
+- "saidas_activesoft" são os alunos que o sistema de gestão (Activesoft) marcou como transferidos ou cancelados no ano. "registros_aqui" são as transferências cadastradas no Áion Edu, com motivo e pesquisa de saída quando existirem. Se não houver motivo nem pesquisa, diga com franqueza que a escola ainda não sabe por que os alunos saem e que isso é o primeiro ponto a resolver.
+- Compare com os anos anteriores (campo "anos") e diga se a perda está subindo ou caindo.
+- Aponte as séries com mais saídas e o que isso pode significar para a rematrícula e para a meta da campanha, sem afirmar causas que os dados não mostram.
+- Dê ações concretas e ordenadas: quem abordar, em que época, em qual série, que pergunta fazer na saída.
+- Não use markdown. Cada seção tem título curto, texto corrido e, quando útil, pontos curtos.
+
+SAÍDA: somente um JSON válido: {"resumo":"3 a 5 frases","secoes":[{"titulo":"...","texto":"...","pontos":["..."]}],"alertas":["..."]}
+Seções (omita só se não houver dado): "Quadro geral", "Comparação com os anos anteriores", "Onde mais se perde aluno", "O que ainda não sabemos", "Impacto na campanha", "O que fazer agora".
+
+DADOS (JSON):
+${JSON.stringify(data).slice(0, 30000)}`
+      const raw = await callClaude(prompt, 4000)
+      let report: unknown
+      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
+      return res.json({ result: report })
+    }
+
     return res.status(400).json({ error: `Action desconhecida: ${action}` })
 
   } catch (error) {

@@ -1,0 +1,1 @@
+-- Relatório de saídas (Activesoft + registros de Transferências); a função está no banco (aplicada via MCP): public.transfers_report(p_inst uuid, p_year int) jsonb.

@@ -11,6 +11,7 @@ import AuditModal from '../../components/common/AuditModal'
 import { createNotification } from '../../lib/notifications'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { aiFetch } from '../../lib/authHeaders'
+import SaidasReport from '../../components/campanha/SaidasReport'
 import SaidasActivesoft from '../../components/transfers/SaidasActivesoft'
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ export default function GestorTransfers() {
 
   const [transfers, setTransfers]             = useState<Transfer[]>([])
   const [deletedTransfers, setDeletedTransfers] = useState<Transfer[]>([])
-  const [activeTab, setActiveTab]             = useState<'active' | 'deleted'>('active')
+  const [activeTab, setActiveTab]             = useState<'active' | 'deleted' | 'report'>('active')
   const [loading, setLoading]                 = useState(true)
   const [showNewModal, setShowNewModal]       = useState(false)
   const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null)
@@ -562,7 +563,7 @@ export default function GestorTransfers() {
 
       {/* ── Tabs ───────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, width: 'fit-content' }}>
-        {(['active', 'deleted'] as const).map(tab => (
+        {(['active', 'deleted', 'report'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             padding: '6px 18px', borderRadius: 7, border: 'none', fontSize: 13, fontWeight: 600,
             cursor: 'pointer', transition: 'all 0.15s',
@@ -570,10 +571,12 @@ export default function GestorTransfers() {
             color: activeTab === tab ? '#1e2d6b' : '#64748b',
             boxShadow: activeTab === tab ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
           }}>
-            {tab === 'active' ? `Ativos (${transfers.length})` : `Excluídos (${deletedTransfers.length})`}
+            {tab === 'active' ? `Ativos (${transfers.length})` : tab === 'deleted' ? `Excluídos (${deletedTransfers.length})` : 'Relatório'}
           </button>
         ))}
       </div>
+
+      {activeTab === 'report' && <SaidasReport institutionId={institutionId} institutionName={user?.institution_name ?? ''} defaultYear={new Date().getFullYear()} />}
 
       {/* ── KPI cards (aba Ativos) ─────────────────────────────────────────── */}
       {activeTab === 'active' && (
