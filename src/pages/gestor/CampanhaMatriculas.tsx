@@ -12,12 +12,13 @@
 // curva padrão, marcada como "estimativa".
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers } from 'lucide-react'
+import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import PageHeader from '../../components/ui/PageHeader'
 import { BRAND, SHADOW } from '../../lib/brand'
 import { applyCampaignCycle } from '../../lib/campaignApply'
+import { aiFetch } from '../../lib/authHeaders'
 import {
   type History, type HistYear, type PlanMonth, type FunnelRates, type PlanSource,
   DEFAULT_FUNNEL, MONTH_ABBR, monthName, monthsBetween, retention, suggestGoals, suggestMonths, funnelNeeds, sourceFromSources,
@@ -29,7 +30,8 @@ type PanelRow = {
   grade_level_id: string; grade_name: string; base_prev_year: number; reenrolled: number; reenrolled_declared: number; pending: number
   left_school: number; new_students: number; returning_students: number; graduates: number; pre_enrolled: number
 }
-type Tab = 'geral' | 'metas' | 'serie'
+type Tab = 'geral' | 'metas' | 'serie' | 'relatorio'
+type Report = { resumo?: string; secoes?: { titulo: string; texto?: string; pontos?: string[] }[]; alertas?: string[] }
 type Ed = {
   start: string; end: string; curStudents: number; baseStudents: number; retention: number
   total: number; re: number; novos: number; months: PlanMonth[]; after: { rematriculas: number; novos: number }
@@ -83,6 +85,10 @@ export default function CampanhaMatriculas() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null)
   const [openClasses, setOpenClasses] = useState<string | null>(null)
+  const [report, setReport] = useState<Report | null>(null)
+  const [reportAt, setReportAt] = useState<string | null>(null)
+  const [genBusy, setGenBusy] = useState(false)
+  const [genErr, setGenErr] = useState('')
 
   const cycle = useMemo(() => cycles.find(c => c.id === cycleId) ?? null, [cycles, cycleId])
   const targetYear: number = cycle ? (cycle.target_school_year ?? cycle.year) : 0
@@ -161,6 +167,7 @@ export default function CampanhaMatriculas() {
     setEd({ ...e, dirty: false })
   }, [cycle, hist, ed, configured, ret.rate, build, targetYear])
 
+  useEffect(() => { setReport((cycle?.ai_report ?? null) as Report | null); setReportAt(cycle?.ai_report_at ?? null); setGenErr('') }, [cycle?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (cycle) setTab(cycle.status === 'active' && configured ? 'geral' : 'metas') }, [cycle?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── edições do gestor: cada uma refaz o mês a mês (as edições mês a mês ficam só enquanto não mexer na meta)
@@ -242,6 +249,47 @@ export default function CampanhaMatriculas() {
     } finally { setSaving(false) }
   }
 
+
+  // ── relatório da IA: manda o histórico, a meta e o andamento; a IA explica e diz o que fazer
+  const generateReport = async () => {
+    if (!cycle || !ed) return
+    setGenBusy(true); setGenErr('')
+    try {
+      const rate = (a: number, b: number) => (b ? Math.round((a / b) * 1000) / 10 : null)
+      const study = {
+        ano_da_campanha: targetYear, alunos_hoje: ed.curStudents, alunos_que_podem_rematricular: ed.baseStudents, retencao_esperada_pct: Math.round(ed.retention * 1000) / 10,
+        anos: years.map(y => {
+          const seg: Record<string, { alunos: number; voltaram: number }> = {}
+          for (const g of y.by_grade) { const k = g.segment ?? 'outro'; seg[k] = seg[k] ?? { alunos: 0, voltaram: 0 }; seg[k].alunos += g.base; seg[k].voltaram += g.retained }
+          return {
+            ano: y.year, alunos_na_base: y.base, voltaram: y.retained, nao_voltaram: y.lost, retencao_pct: rate(y.retained, y.base), novos: y.new_students,
+            total_de_alunos_no_ano: y.total_students, concluintes: y.graduates, saiu_durante_o_ano: y.left_during_year, matriculas_por_mes: y.monthly,
+            por_segmento: Object.entries(seg).map(([k, v]) => ({ segmento: k, ...v, nao_voltaram: v.alunos - v.voltaram, retencao_pct: rate(v.voltaram, v.alunos) })),
+            por_serie: y.by_grade.map(g => ({ serie: g.name, segmento: g.segment, alunos: g.base, voltaram: g.retained, nao_voltaram: g.lost, retencao_pct: rate(g.retained, g.base), novos_na_serie: g.new_students })),
+            turmas_com_mais_perda: y.by_class.filter(c => c.base >= 8 && c.lost >= 3).sort((a, b) => b.lost - a.lost).slice(0, 20)
+              .map(c => ({ turma: c.name, alunos: c.base, voltaram: c.retained, nao_voltaram: c.lost, retencao_pct: rate(c.retained, c.base) })),
+          }
+        }),
+        meta: {
+          total_de_alunos: sums.re + sums.novos, rematriculas: sums.re, novos: sums.novos, crescimento_pct: ed.curStudents ? Math.round(((sums.re + sums.novos) / ed.curStudents - 1) * 1000) / 10 : null,
+          taxas_do_funil_pct: { cadastro_para_agendamento: Math.round(ed.rates.registration_to_schedule * 100), agendamento_para_visita: Math.round(ed.rates.schedule_to_visit * 100), visita_para_matricula: Math.round(ed.rates.visit_to_enrollment * 100) },
+          meses: ed.months.map(m => ({ mes: m.m, rematriculas: m.rematriculas, novos: m.novos, ...(() => { const f = funnelNeeds(m.novos, ed.rates); return { cadastros_necessarios: f.registrations, visitas_necessarias: f.visits } })() })),
+          depois_do_fim: ed.after,
+        },
+        andamento_agora: { matriculados: prog.done, pre_matriculados: prog.pre, ainda_nao_rematricularam: prog.pending, saiu: prog.left, por_mes: hist?.current?.monthly ?? [] },
+      }
+      const resp = await aiFetch({ method: 'POST', body: JSON.stringify({ action: 'campaign_study', payload: { institutionId, targetYear, source, study } }) })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(json?.error || `Erro ${resp.status}`)
+      const rep = json.result as Report
+      const at = new Date().toISOString()
+      setReport(rep); setReportAt(at)
+      await supabase.from('campaign_cycles').update({ ai_report: rep, ai_report_at: at }).eq('id', cycle.id)
+    } catch (e) {
+      setGenErr(e instanceof Error ? e.message : 'Não foi possível gerar o relatório.')
+    } finally { setGenBusy(false) }
+  }
+
   // ── andamento real do ano da campanha (vem da Base de alunos)
   const prog = useMemo(() => {
     const s = (k: keyof PanelRow) => panel.reduce((a, r) => a + ((r[k] as number) || 0), 0)
@@ -309,6 +357,7 @@ export default function CampanhaMatriculas() {
         {tabBtn('geral', 'Visão geral', LayoutGrid)}
         {tabBtn('metas', 'Metas e mês a mês', SlidersHorizontal)}
         {tabBtn('serie', 'Retenção por série', Layers)}
+        {tabBtn('relatorio', 'Relatório da IA', Sparkles)}
       </div>
 
       {loading && <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div>}
@@ -558,6 +607,37 @@ export default function CampanhaMatriculas() {
             )
           })}
         </div>
+      )}
+      {!loading && cycle && tab === 'relatorio' && (
+        <>
+          <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ maxWidth: 720 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Estudo da campanha {targetYear}</div>
+              <div style={{ fontSize: 13, color: BRAND.muted, marginTop: 3 }}>
+                A IA lê o histórico da escola, a meta que você definiu e o andamento de agora. Ela explica o que cada número quer dizer, mostra onde a escola perde alunos (por série e turma) e diz o que fazer.
+                {reportAt ? ` Gerado em ${new Date(reportAt).toLocaleString('pt-BR')}.` : ''}
+              </div>
+              {report && cycle.plan_edited_at && reportAt && cycle.plan_edited_at > reportAt && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>A meta mudou depois deste relatório. Gere de novo para atualizar.</div>}
+              {ed && ed.dirty && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>Você tem alterações não salvas em Metas e mês a mês. O relatório usa o que está na tela.</div>}
+            </div>
+            <button onClick={generateReport} disabled={genBusy || !ed} style={primaryBtn(genBusy || !ed)}>{genBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{report ? 'Gerar de novo' : 'Gerar relatório'}</button>
+          </div>
+          {genBusy && <div style={{ ...card, color: BRAND.muted, fontSize: 13.5 }}>Analisando o histórico da escola. Isso pode levar até um minuto.</div>}
+          {genErr && <div style={{ ...card, color: BRAND.danger, fontSize: 13.5 }}>{genErr}</div>}
+          {report && (
+            <>
+              {report.resumo && <div style={{ ...card, background: BRAND.softer, border: `1px solid ${BRAND.softLine}` }}><div style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Em resumo</div><div style={{ fontSize: 14.5, color: BRAND.ink, lineHeight: 1.6 }}>{report.resumo}</div></div>}
+              {(report.alertas ?? []).length > 0 && <div style={{ ...card, background: BRAND.warnSoft, border: '1px solid #FCD34D' }}>{(report.alertas ?? []).map((a, i) => <div key={i} style={{ fontSize: 13.5, color: BRAND.warn, display: 'flex', gap: 8, marginBottom: 4 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} />{a}</div>)}</div>}
+              {(report.secoes ?? []).map((sec, i) => (
+                <div key={i} style={card}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>{sec.titulo}</div>
+                  {sec.texto && <div style={{ fontSize: 14, color: BRAND.text, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{sec.texto}</div>}
+                  {(sec.pontos ?? []).length > 0 && <ul style={{ margin: '10px 0 0', paddingLeft: 20, listStyle: 'disc', color: BRAND.text, fontSize: 14, lineHeight: 1.6 }}>{(sec.pontos ?? []).map((p, j) => <li key={j} style={{ marginBottom: 4 }}>{p}</li>)}</ul>}
+                </div>
+              ))}
+            </>
+          )}
+        </>
       )}
     </div>
   )

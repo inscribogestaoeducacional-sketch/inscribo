@@ -1023,6 +1023,47 @@ Gere uma análise em 3 parágrafos curtos:
       return res.json({ result: extractClaudeText(data) })
     }
 
+    // ── ESTUDO DA CAMPANHA DE MATRÍCULAS (relatório detalhado) ────────────────
+    // Recebe o histórico da escola (retenção por segmento, série e turma, novos, mês a mês), a meta
+    // que o gestor definiu e o andamento atual, e devolve um relatório explicando número por número
+    // e dizendo o que fazer. Vale para qualquer ano (2028, 2029…) e para qualquer origem dos dados.
+    if (action === 'campaign_study') {
+      const { institutionName, targetYear, source, study } = payload as {
+        institutionName?: string; targetYear: number
+        source: 'activesoft' | 'planilha' | 'manual' | 'estimativa'; study: Record<string, unknown>
+      }
+      const sourceNote: Record<string, string> = {
+        activesoft: 'Os números vêm do sistema de gestão da escola (Activesoft), portanto são dados reais.',
+        planilha: 'Os números vêm de planilhas enviadas pela escola; podem ter lacunas.',
+        manual: 'Os números foram digitados pela escola; confira se estão completos.',
+        estimativa: 'A escola NÃO tem histórico: tudo abaixo é estimativa por uma curva típica de escola particular e deve ser avisado assim, com franqueza.',
+      }
+      const prompt = `Você é consultor especialista em captação e retenção de alunos de escolas particulares brasileiras.
+Escreva um RELATÓRIO DETALHADO para o gestor de ${institutionName || 'a escola'} sobre a Campanha de Matrículas ${targetYear}, em português do Brasil, linguagem simples (o leitor não é analista de dados), explicando o que cada número quer dizer e o que ele deve fazer.
+
+${sourceNote[source] ?? ''}
+
+REGRAS
+- Use SOMENTE os números dos dados abaixo. Nunca invente número, série, turma ou causa. Se um dado não existir, diga que não existe.
+- Retenção = alunos que voltaram ÷ alunos que poderiam voltar (concluintes ficam de fora). "Novos" = alunos que não estavam na escola no ano anterior.
+- Se o primeiro ano do histórico parecer incompleto (muitos "novos" no primeiro ano com base menor), avise que esse número pode estar inflado.
+- Aponte as séries e turmas onde a retenção ficou abaixo da média da escola, com os números (quantos alunos tinha, quantos voltaram, quantos não voltaram), por segmento (infantil, fundamental I, fundamental II, médio) e por série. Compare com o ano anterior quando houver.
+- Explique o que a meta definida exige (novos necessários, cadastros e visitas por mês) e diga se é realista frente ao histórico.
+- Dê ações concretas, ordenadas por prioridade, citando série/turma/mês quando fizer sentido. Não escreva ações genéricas.
+- Não use markdown (sem #, **, tabelas). Cada seção tem um título curto, um texto corrido e, quando útil, uma lista de pontos curtos.
+
+SAÍDA: somente um JSON válido neste formato, sem texto fora dele:
+{"resumo":"2 a 4 frases com o quadro geral","secoes":[{"titulo":"...","texto":"parágrafo(s) explicando","pontos":["...","..."]}],"alertas":["avisos sobre qualidade dos dados, se houver"]}
+Use estas seções, nesta ordem (omita só se não houver dado): "Visão geral da escola", "Retenção: quem fica e quem sai", "Séries e turmas que pedem atenção", "Novos alunos e o ritmo mês a mês", "O que a meta de ${targetYear} exige", "O que fazer agora", "Como acompanhar daqui para frente".
+
+DADOS (JSON):
+${JSON.stringify(study).slice(0, 60000)}`
+      const raw = await callClaude(prompt, 6000)
+      let report: unknown
+      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
+      return res.json({ result: report })
+    }
+
     return res.status(400).json({ error: `Action desconhecida: ${action}` })
 
   } catch (error) {
