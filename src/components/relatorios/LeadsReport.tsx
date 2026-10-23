@@ -9,9 +9,10 @@ interface D {
   total: number; anterior: { total: number; matriculados: number; perdidos: number }; por_etapa: Record<string, number>; por_dia: { d: string; n: number }[]
   por_origem: { origem: string; leads: number; matriculados: number; perdidos: number }[]
   por_responsavel: { responsavel: string; leads: number; agendaram: number; visitaram: number; matriculados: number; perdidos: number }[]
-  por_serie: { serie: string; leads: number; matriculados: number }[]; perdas: { motivo: string; n: number }[]; truncado: boolean; linhas: Record<string, string | number | null>[]
+  por_serie: { serie: string; leads: number; matriculados: number }[]; perdas: { motivo: string; n: number }[]; truncado: boolean; historico_desde: string | null; linhas: Record<string, string | number | null>[]
 }
 const ETAPA: Record<string, string> = { new: 'Novo', contact: 'Contato', scheduled: 'Agendou', visit: 'Visitou', proposal: 'Proposta', enrolled: 'Matriculado', lost: 'Perdido' }
+const COLS = ['Criado em', 'Aluno', 'Responsável', 'Telefone', 'Série de interesse', 'Origem', 'Etapa', 'Atendente', 'Histórico de etapas']
 const pc = (a: number, b: number) => (b > 0 ? `${Math.round(a / b * 100)}%` : '—')
 
 export default function LeadsReport({ institutionId, institutionName }: { institutionId: string; institutionName: string }) {
@@ -71,9 +72,9 @@ export default function LeadsReport({ institutionId, institutionName }: { instit
               <select value={origem} onChange={e => setOrigem(e.target.value)} style={sel}><option value="">Origem: todas</option>{d.por_origem.map(o => <option key={o.origem} value={o.origem === 'Não informada' ? '__none' : o.origem}>{o.origem}</option>)}</select>
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar nome, telefone…" style={{ ...sel, minWidth: 200 }} />
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['Criado em', 'Aluno', 'Responsável', 'Telefone', 'Série de interesse', 'Origem', 'Etapa', 'Atendente'].map(c => <th key={c} style={th}>{c}</th>)}</tr></thead>
-              <tbody>{shown.slice(0, 100).map((l, i) => <tr key={i}>{['Criado em', 'Aluno', 'Responsável', 'Telefone', 'Série de interesse', 'Origem', 'Etapa', 'Atendente'].map(c => <td key={c} style={td}>{String(l[c] ?? '—')}</td>)}</tr>)}</tbody></table>
-            <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 8 }}>{shown.length > 100 ? `Mostrando 100 de ${shown.length}. ` : ''}O CSV leva todos os leads do período com todos os campos{d.truncado ? ' (limite de 5.000 leads por arquivo; reduza o período)' : ''}. CPF não é exportado.</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{COLS.map(c => <th key={c} style={th}>{c}</th>)}</tr></thead>
+              <tbody>{shown.slice(0, 100).map((l, i) => <tr key={i}>{COLS.map(c => <td key={c} style={{ ...td, minWidth: c === 'Histórico de etapas' ? 320 : undefined, fontSize: c === 'Histórico de etapas' ? 12 : 13 }}>{String(l[c] ?? '—')}</td>)}</tr>)}</tbody></table>
+            <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 8 }}>{shown.length > 100 ? `Mostrando 100 de ${shown.length}. ` : ''}As datas de cada etapa vêm do histórico de mudanças de etapa, registrado desde {d.historico_desde ? d.historico_desde.split('-').reverse().join('/') : 'o início do uso'}; leads mais antigos aparecem sem datas, e “(estimada)” indica etapa deduzida. O CSV leva todos os leads do período com todos os campos, incluindo a data de entrada em cada etapa{d.truncado ? ' (limite de 5.000 leads por arquivo; reduza o período)' : ''}. CPF não é exportado.</div>
           </div>
         </>
       )}
