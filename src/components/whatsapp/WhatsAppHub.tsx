@@ -1,4 +1,5 @@
-﻿import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+﻿import { resolveSlotTemplate } from '../../lib/templateSlots'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import EmojiPicker from '@emoji-mart/react'
 import emojiData from '@emoji-mart/data'
 import {
@@ -3741,6 +3742,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         .eq('remote_jid', rJid)
         .maybeSingle()
 
+      // Modelos de visita: o da escola, se ela trocou o padrão e ele está aprovado.
+      const confirmTemplate = await resolveSlotTemplate(effectiveInstitutionId, 'confirmacao_visita')
+      const reminderTemplate = await resolveSlotTemplate(effectiveInstitutionId, 'lembrete_visita')
+
       // 1) Confirmação imediata
       try {
         const res = await fetch('/api/whatsapp/send-template', {
@@ -3749,7 +3754,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           body: JSON.stringify({
             institution_id: effectiveInstitutionId,
             to,
-            template_name: 'confirmacao_visita',
+            template_name: confirmTemplate,
             language: 'pt_BR',
             components: [{
               type: 'body',
@@ -3795,7 +3800,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             conversation_id:    conv.id,
             remote_jid:         rJid,
             visit_id:           newVisit.id,
-            template_name:      'lembrete_visita',
+            template_name:      reminderTemplate,
             template_variables: { '1': institutionName || '', '2': timeLabel },
             scheduled_for:      reminderDate.toISOString(),
             created_by:         user.id,
