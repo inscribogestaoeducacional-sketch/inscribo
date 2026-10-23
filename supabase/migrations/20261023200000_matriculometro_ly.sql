@@ -1,0 +1,2 @@
+-- campaign_matriculometro: adiciona ly_base, ly_mesmo_dia, ly_final por turma (comparação com o mesmo dia do ano passado).
+-- Função aplicada diretamente no banco via MCP; ver definição atual no banco.

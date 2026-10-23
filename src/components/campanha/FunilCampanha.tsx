@@ -66,9 +66,10 @@ export default function FunilCampanha({ institutionId, from, to, planMonths, rat
               <option value="">Campanha toda</option>{data.months.map(m => <option key={m.m} value={m.m}>{monthName(m.m + '-01')}</option>)}
             </select>
           </div>
+          <Story data={data} mes={mes} planMonths={planMonths} rates={rates} />
           <FunnelShape data={data} mes={mes} planMonths={planMonths} rates={rates} />
-          <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0' }}>
-            {data.history_since ? `O histórico de etapas começou em ${fmtDate(data.history_since)}. ` : ''}Números entre parênteses são etapas estimadas. A meta de cada etapa vem do plano (metas e taxas do funil, em “Configuração da campanha”).
+          <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0', lineHeight: 1.6 }}>
+            {data.history_since ? `O registro de etapas começou em ${fmtDate(data.history_since)}. ` : ''}<b>~N estimados</b>: quando um lead aparece numa etapa mais à frente (por exemplo, matriculado) sem registro de ter passado pela anterior (por exemplo, visita), o sistema entende que ele passou e marca como estimado. A meta de cada etapa vem do plano (metas e taxas do funil, em “Configuração da campanha”).
           </p>
         </div>
         <div style={{ ...card, flex: '1 1 280px' }}>
@@ -80,20 +81,7 @@ export default function FunilCampanha({ institutionId, from, to, planMonths, rat
           ))}
         </div>
       </div>
-      <div style={card}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Mês a mês</div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={{ ...th, textAlign: 'left' }}>Mês</th><th style={th}>Entraram</th>{STAGES.map(([k, l]) => <th key={k} style={th}>{l}</th>)}<th style={th}>Perdeu</th></tr></thead>
-            <tbody>
-              {data.months.map(r => (
-                <tr key={r.m}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(r.m + '-01')}</td><td style={td}>{r.entraram}</td>
-                  {STAGES.map(([k]) => <td key={k} style={td}>{cell(r.etapas[k])}</td>)}<td style={td}>{cell(r.etapas.lost)}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <MonthTable data={data} planMonths={planMonths} rates={rates} />
     </div>
   )
 }
@@ -122,7 +110,7 @@ function FunnelShape({ data, mes, planMonths, rates }: { data: Data; mes: string
             <div style={{ flex: 1, position: 'relative', height: 58 }}>
               <div style={{ position: 'absolute', inset: 0, background: '#E2E8F0', clipPath: poly(w(meta[i]), nextM), opacity: 0.8 }} />
               <div style={{ position: 'absolute', inset: 0, background: color, clipPath: poly(w(real[i]), nextR), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 15 }}>
-                <span style={{ textShadow: '0 1px 2px rgba(0,0,0,.25)' }}>{real[i]}{inf[i] > 0 ? <span style={{ fontWeight: 600, fontSize: 12 }}> ({inf[i]})</span> : ''}</span>
+                <span style={{ textShadow: '0 1px 2px rgba(0,0,0,.25)' }}>{real[i]}{inf[i] > 0 ? <span title={`${inf[i]} destes foram deduzidos: o lead aparece numa etapa mais à frente sem registro de ter passado por esta`} style={{ fontWeight: 700, fontSize: 10.5, marginLeft: 6, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,255,255,.28)' }}>~{inf[i]} estimados</span> : ''}</span>
               </div>
             </div>
             <div style={{ width: 190, fontSize: 12.5, lineHeight: 1.5 }}>
@@ -133,6 +121,82 @@ function FunnelShape({ data, mes, planMonths, rates }: { data: Data; mes: string
           </div>
         )
       })}
+    </div>
+  )
+}
+
+const lostN = (e?: { n: number }) => e?.n ?? 0
+function stagesOf(data: Data, mes: string) {
+  const mrow = data.months.find(m => m.m === mes)
+  return STG.map(([k]) => k === 'entraram' ? (mes ? (mrow?.entraram ?? 0) : data.entraram) : (mes ? (mrow?.etapas[k]?.n ?? 0) : (data.totais[k]?.n ?? 0)))
+}
+const pc = (a: number, b: number) => (b > 0 ? `${Math.round(a / b * 100)}%` : '—')
+
+function Story({ data, mes, planMonths, rates }: { data: Data; mes: string; planMonths: PlanMonth[]; rates: FunnelRates }) {
+  const real = stagesOf(data, mes)
+  const novos = mes ? (planMonths.find(m => m.m === mes)?.novos ?? 0) : planMonths.reduce((a, m) => a + m.novos, 0)
+  const need = funnelNeeds(novos, rates)
+  const meta = [need.registrations, need.schedules, need.visits, novos]
+  const lost = mes ? lostN(data.months.find(m => m.m === mes)?.etapas.lost) : lostN(data.totais.lost)
+  const names = ['entraram no cadastro', 'agendaram uma visita', 'visitaram a escola', 'se matricularam']
+  const per = mes ? monthName(mes + '-01') : 'a campanha toda'
+  const dev = (a: number, m: number) => (m > 0 ? Math.round((a - m) / m * 100) : null)
+  return (
+    <div style={{ background: '#F8FAFC', border: '1px solid #E3E8F0', borderRadius: 12, padding: '12px 14px', marginBottom: 12, fontSize: 13.5, lineHeight: 1.75, color: BRAND.text }}>
+      <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Em {per}:</div>
+      {real.map((v, i) => {
+        const d = dev(v, meta[i])
+        return (
+          <div key={i}>
+            {i === 0 ? <b>{v} pessoas</b> : <><b>{v}</b> <span style={{ color: '#64748B' }}>({pc(v, real[i - 1])} da etapa anterior)</span></>} {names[i]}
+            {meta[i] > 0 && <span style={{ color: '#64748B' }}> · meta {meta[i]} · <b style={{ color: d != null && d >= 0 ? '#15803D' : d != null && d > -30 ? '#B45309' : '#B91C1C' }}>desvio {d != null && d > 0 ? '+' : ''}{d}%</b></span>}
+          </div>
+        )
+      })}
+      <div style={{ color: '#64748B' }}>{lost} leads foram perdidos no período.</div>
+    </div>
+  )
+}
+
+function MonthTable({ data, planMonths, rates }: { data: Data; planMonths: PlanMonth[]; rates: FunnelRates }) {
+  const th2: React.CSSProperties = { ...th, textAlign: 'center' }
+  const cellS = (feito: number, meta: number, inf: number, fut: boolean) => {
+    const d = meta > 0 ? Math.round((feito - meta) / meta * 100) : null
+    return (
+      <td style={{ ...td, textAlign: 'center', lineHeight: 1.35 }}>
+        <div style={{ fontWeight: 800, fontSize: 14 }}>{fut ? '—' : feito}{!fut && inf > 0 && <span title={`${inf} estimados: deduzidos por o lead estar em etapa mais à frente`} style={{ fontSize: 10, fontWeight: 700, color: '#0F766E', background: '#CCFBF1', borderRadius: 99, padding: '0 6px', marginLeft: 4 }}>~{inf}</span>}</div>
+        <div style={{ fontSize: 11, color: '#94A3B8' }}>meta {meta || '—'}</div>
+        {!fut && d != null && <div style={{ fontSize: 11.5, fontWeight: 800, color: d >= 0 ? '#15803D' : d > -30 ? '#B45309' : '#B91C1C' }}>{d > 0 ? '+' : ''}{d}%</div>}
+      </td>
+    )
+  }
+  const now = new Date().toISOString().slice(0, 7)
+  return (
+    <div style={card}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Mês a mês: cada etapa contra a meta</div>
+      <div style={{ fontSize: 12.5, color: BRAND.muted, margin: '2px 0 10px' }}>Em cada célula: o que aconteceu, a meta do mês e o desvio. O selo ~N indica etapas estimadas.</div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th style={{ ...th, textAlign: 'left' }}>Mês</th><th style={th2}>Leads (entraram)</th><th style={th2}>Agendaram</th><th style={th2}>Visitaram</th><th style={th2}>Matricularam</th><th style={th2}>Perdidos</th></tr></thead>
+          <tbody>
+            {data.months.map(r => {
+              const pm = planMonths.find(m => m.m === r.m)
+              const need = funnelNeeds(pm?.novos ?? 0, rates)
+              const fut = r.m > now
+              return (
+                <tr key={r.m} style={{ background: r.m === now ? '#FFFBEB' : undefined }}>
+                  <td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(r.m + '-01')}{r.m === now ? <span style={{ color: '#94A3B8', fontWeight: 500 }}> · em andamento</span> : ''}</td>
+                  {cellS(r.entraram, need.registrations, 0, fut)}
+                  {cellS(r.etapas.scheduled?.n ?? 0, need.schedules, r.etapas.scheduled?.inferidos ?? 0, fut)}
+                  {cellS(r.etapas.visit?.n ?? 0, need.visits, r.etapas.visit?.inferidos ?? 0, fut)}
+                  {cellS(r.etapas.enrolled?.n ?? 0, pm?.novos ?? 0, r.etapas.enrolled?.inferidos ?? 0, fut)}
+                  <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: '#B91C1C' }}>{fut ? '—' : lostN(r.etapas.lost)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

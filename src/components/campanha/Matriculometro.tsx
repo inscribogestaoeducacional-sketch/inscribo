@@ -5,18 +5,31 @@ import { Loader2, Printer, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
 
-interface Row { turma: string; serie: string | null; segment: string | null; base: number; matriculados: number; pre: number }
+interface Row { turma: string; serie: string | null; segment: string | null; base: number; matriculados: number; pre: number; ly_base?: number | null; ly_mesmo_dia?: number | null; ly_final?: number | null }
+type Agg = { base: number; matriculados: number; pre: number; ly_base?: number | null; ly_mesmo_dia?: number | null; ly_final?: number | null }
+// ritmo do ano passado no mesmo dia: quantos já estariam matriculados hoje se fosse como em %ANO%
+const expected = (r: Agg) => (r.ly_base ? Math.round(r.base * (r.ly_mesmo_dia ?? 0) / r.ly_base) : null)
+const devOf = (r: Agg) => { const e = expected(r); return e == null ? null : r.matriculados - e }
+function Dev({ r, year }: { r: Agg; year: number }) {
+  const d = devOf(r)
+  if (d == null) return <span style={{ width: 64 }} />
+  return <span title={`Hoje: ${r.matriculados} matriculados. No mesmo dia de ${year - 1} a turma estaria com ${expected(r)} (ritmo de ${year - 1}). Diferença: ${d > 0 ? '+' : ''}${d}.`} style={{ width: 64, textAlign: 'center', fontSize: 11.5, fontWeight: 800, padding: '1px 6px', borderRadius: 99, background: d < 0 ? '#FEE2E2' : '#DCFCE7', color: d < 0 ? '#B91C1C' : '#15803D' }}>{d > 0 ? '+' : ''}{d} vs {year - 1}</span>
+}
 interface Stu { student: string; turma: string; serie: string | null; status: 'matriculado' | 'pre' | 'falta' | 'saiu'; responsavel: string | null; telefone: string | null }
 const SEG: [string, string][] = [['infantil', 'Educação Infantil'], ['fund1', 'Fundamental I'], ['fund2', 'Fundamental II'], ['medio', 'Ensino Médio']]
 const COL = { matriculado: '#059669', pre: '#8B5CF6', falta: '#CBD5E1' }
 const ST: Record<string, string> = { matriculado: 'Matriculados', pre: 'Pré-matriculados', falta: 'Faltam', saiu: 'Saíram' }
 const card: React.CSSProperties = { border: '1px solid #E2E8F0', borderRadius: 14, padding: '14px 16px', background: '#fff' }
 
-function Stack({ r, withPre }: { r: { base: number; matriculados: number; pre: number }; withPre: boolean }) {
+function Stack({ r, withPre }: { r: Agg; withPre: boolean }) {
   const b = r.base || 1, m = r.matriculados / b * 100, p = withPre ? r.pre / b * 100 : 0
+  const e = expected(r)
+  const falta = r.base - r.matriculados - r.pre
+  const tip = `${r.matriculados} matriculados · ${r.pre} pré-matriculados · ${falta} faltam de ${r.base} veteranos${e != null ? ` · ritmo do ano passado no mesmo dia: ${e}` : ''}`
   return (
-    <div style={{ flex: 1, display: 'flex', height: 14, background: COL.falta, borderRadius: 7, overflow: 'hidden' }}>
-      <div style={{ width: `${m}%`, background: COL.matriculado }} /><div style={{ width: `${p}%`, background: COL.pre }} />
+    <div title={tip} style={{ flex: 1, display: 'flex', height: 14, background: COL.falta, borderRadius: 7, overflow: 'hidden', position: 'relative' }}>
+      <div style={{ width: `${m}%`, background: COL.matriculado, transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /><div style={{ width: `${p}%`, background: COL.pre, transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} />
+      {e != null && <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.min(99, e / b * 100)}%`, width: 2, background: '#1A2B4A' }} />}
     </div>
   )
 }
@@ -38,11 +51,11 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
   }, [institutionId, year])
 
   const series = useMemo(() => {
-    const m = new Map<string, { serie: string; segment: string | null; base: number; matriculados: number; pre: number }>()
+    const m = new Map<string, { serie: string; segment: string | null; base: number; matriculados: number; pre: number; ly_base: number; ly_mesmo_dia: number; ly_final: number }>()
     for (const r of rows ?? []) {
       const k = r.serie ?? '—'
-      const x = m.get(k) ?? { serie: k, segment: r.segment, base: 0, matriculados: 0, pre: 0 }
-      x.base += r.base; x.matriculados += r.matriculados; x.pre += r.pre; m.set(k, x)
+      const x = m.get(k) ?? { serie: k, segment: r.segment, base: 0, matriculados: 0, pre: 0, ly_base: 0, ly_mesmo_dia: 0, ly_final: 0 }
+      x.base += r.base; x.matriculados += r.matriculados; x.pre += r.pre; x.ly_base += r.ly_base ?? 0; x.ly_mesmo_dia += r.ly_mesmo_dia ?? 0; x.ly_final += r.ly_final ?? 0; m.set(k, x)
     }
     return [...m.values()]
   }, [rows])
@@ -52,7 +65,8 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
 
   const val = (r: { matriculados: number; pre: number }) => r.matriculados + (withPre ? r.pre : 0)
   const pct = (r: { base: number; matriculados: number; pre: number }) => (r.base ? val(r) / r.base : 0)
-  const tot = rows.reduce((a, r) => ({ base: a.base + r.base, matriculados: a.matriculados + r.matriculados, pre: a.pre + r.pre }), { base: 0, matriculados: 0, pre: 0 })
+  const sum = (list: Row[]): Agg => list.reduce((a, r) => ({ base: a.base + r.base, matriculados: a.matriculados + r.matriculados, pre: a.pre + r.pre, ly_base: (a.ly_base ?? 0) + (r.ly_base ?? 0), ly_mesmo_dia: (a.ly_mesmo_dia ?? 0) + (r.ly_mesmo_dia ?? 0), ly_final: (a.ly_final ?? 0) + (r.ly_final ?? 0) }), { base: 0, matriculados: 0, pre: 0, ly_base: 0, ly_mesmo_dia: 0, ly_final: 0 })
+  const tot = sum(rows)
   const today = new Date().toLocaleDateString('pt-BR')
   const link: React.CSSProperties = { all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, width: '100%', margin: '5px 0', fontSize: 12.5 }
 
@@ -82,14 +96,32 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
           </div>
         </div>
         <div style={{ marginTop: 12 }}><Stack r={tot} withPre={true} /></div>
+        {expected(tot) != null && <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 8 }}>A linha escura marca onde a escola estaria no mesmo dia de {year - 1}: <b>{expected(tot)}</b> matriculados. Hoje: <b>{tot.matriculados}</b> (<b style={{ color: (devOf(tot) ?? 0) < 0 ? '#B91C1C' : '#15803D' }}>{(devOf(tot) ?? 0) > 0 ? '+' : ''}{devOf(tot)}</b>). No fim de {year - 1} voltaram {tot.ly_final} de {tot.ly_base} ({tot.ly_base ? Math.round((tot.ly_final ?? 0) / tot.ly_base * 100) : 0}%).</div>}
       </div>
+
+      {(() => {
+        const worse = rows.filter(r => devOf(r) != null && (devOf(r) as number) < 0).sort((a, c) => (devOf(a) as number) - (devOf(c) as number)).slice(0, 8)
+        if (!worse.length) return null
+        return (
+          <div style={{ ...card, marginBottom: 14, borderColor: '#FECACA', background: '#FFFBFB' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#B91C1C', marginBottom: 2 }}>Turmas correndo perigo</div>
+            <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 8 }}>Comparando com o mesmo dia de {year - 1}: turmas com menos alunos garantidos do que naquela época. Clique para ver quem falta.</div>
+            {worse.map(r => (
+              <button key={r.turma + r.serie} style={link} onClick={() => setSel({ turma: r.turma, serie: r.serie, title: r.turma })}>
+                <span style={{ width: 110, color: BRAND.text, flexShrink: 0, fontWeight: 700 }}>{r.turma}</span><Stack r={r} withPre={withPre} />
+                <span style={{ width: 96, textAlign: 'right' }}>{r.matriculados} (era {expected(r)})</span><Dev r={r} year={year} />
+              </button>
+            ))}
+          </div>
+        )
+      })()}
 
       <div style={{ ...card, marginBottom: 14 }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Por série</div>
         {series.map(s => (
           <button key={s.serie} className="no-print-btn" style={link} onClick={() => setSel({ turma: null, serie: s.serie, title: s.serie })}>
             <span style={{ width: 120, color: BRAND.text, flexShrink: 0 }}>{s.serie}</span><Stack r={s} withPre={withPre} />
-            <span style={{ width: 96, textAlign: 'right', fontWeight: 700 }}>{val(s)}/{s.base} · {Math.round(pct(s) * 100)}%</span>
+            <span style={{ width: 96, textAlign: 'right', fontWeight: 700 }}>{val(s)}/{s.base} · {Math.round(pct(s) * 100)}%</span><Dev r={s} year={year} />
           </button>
         ))}
       </div>
@@ -103,12 +135,12 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
             <div key={key} style={{ ...card, breakInside: 'avoid' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
                 <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, flex: 1 }}>{title}</div>
-                <div style={{ fontSize: 12.5, color: BRAND.muted }}>{v}/{b} · {b ? Math.round(v / b * 100) : 0}%</div>
+                <div style={{ fontSize: 12.5, color: BRAND.muted }}>{v}/{b} · {b ? Math.round(v / b * 100) : 0}%</div><Dev r={sum(list)} year={year} />
               </div>
               {[...list].sort((a, c) => pct(c) - pct(a)).map(r => (
                 <button key={r.turma + r.serie} style={link} onClick={() => setSel({ turma: r.turma, serie: r.serie, title: `${r.turma}` })}>
                   <span style={{ width: 96, color: BRAND.text, flexShrink: 0 }}>{r.turma}</span><Stack r={r} withPre={withPre} />
-                  <span style={{ width: 84, textAlign: 'right', fontWeight: 700 }}>{val(r)}/{r.base} · {Math.round(pct(r) * 100)}%</span>
+                  <span style={{ width: 84, textAlign: 'right', fontWeight: 700 }}>{val(r)}/{r.base} · {Math.round(pct(r) * 100)}%</span><Dev r={r} year={year} />
                 </button>
               ))}
             </div>

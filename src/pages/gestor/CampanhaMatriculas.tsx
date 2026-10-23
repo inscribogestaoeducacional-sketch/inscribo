@@ -23,6 +23,7 @@ import { NovatosTab, RematriculaTab } from '../../components/campanha/NovatosRem
 import Investimento from '../../components/campanha/Investimento'
 import FunilCampanha from '../../components/campanha/FunilCampanha'
 import Matriculometro from '../../components/campanha/Matriculometro'
+import VisaoGeral from '../../components/campanha/VisaoGeral'
 import HistoricoManual from '../../components/campanha/HistoricoManual'
 import SaidasReport from '../../components/campanha/SaidasReport'
 import RelatorioMensal from '../../components/campanha/RelatorioMensal'
@@ -405,56 +406,10 @@ export default function CampanhaMatriculas() {
             <div style={card}><div style={{ fontSize: 14, color: BRAND.text }}>Esta campanha ainda não tem meta. Abra <b>Metas e mês a mês</b> para configurar.</div></div>
           ) : (
             <>
-              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                <div style={{ ...card, flex: '1.6 1 420px' }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 12 }}>Meta da campanha: {fmt(goalTotal)} alunos</div>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14 }}>
-                    <div style={{ fontSize: 34, fontWeight: 800, color: '#059669', lineHeight: 1 }}>{fmt(prog.done)}</div>
-                    <div><div style={{ fontSize: 13.5, fontWeight: 700 }}>matriculados</div>
-                      <div style={{ fontSize: 12, color: BRAND.faint }}>{goalTotal ? pct(prog.done / goalTotal) : '–'} da meta{dayInfo ? ` · ${pct(dayInfo.day / dayInfo.total)} do tempo da campanha já passou` : ''}</div></div>
-                  </div>
-                  <div style={{ height: 14, borderRadius: 99, background: '#EDF1F0', marginTop: 14, overflow: 'hidden', position: 'relative' }}>
-                    <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${Math.min(100, goalTotal ? (prog.done / goalTotal) * 100 : 0)}%`, background: '#10B981', borderRadius: 99 }} />
-                  </div>
-                  {prog.pre > 0 && (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, marginTop: 18 }}>
-                        <div style={{ fontSize: 34, fontWeight: 800, color: '#7C3AED', lineHeight: 1 }}>{fmt(prog.pre)}</div>
-                        <div><div style={{ fontSize: 13.5, fontWeight: 700 }}>pré-matriculados</div>
-                          <div style={{ fontSize: 12, color: BRAND.faint }}>reservaram a vaga e ainda não efetivaram · matriculados + pré = {fmt(prog.done + prog.pre)}</div></div>
-                      </div>
-                      <div style={{ height: 14, borderRadius: 99, background: '#EDF1F0', marginTop: 14, overflow: 'hidden', position: 'relative' }}>
-                        <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${Math.min(100, goalTotal ? (prog.done / goalTotal) * 100 : 0)}%`, background: '#10B981' }} />
-                        <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.min(100, goalTotal ? (prog.done / goalTotal) * 100 : 0)}%`, width: `${Math.min(100 - Math.min(100, goalTotal ? (prog.done / goalTotal) * 100 : 0), goalTotal ? (prog.pre / goalTotal) * 100 : 0)}%`, background: '#8B5CF6' }} />
-                      </div>
-                    </>
-                  )}
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 14 }}>
-                    <thead><tr style={{ background: '#F8FAFC' }}><th style={{ ...th, textAlign: 'left' }}>Meta</th><th style={th}>Meta</th><th style={th}>Matriculados</th><th style={th}>Faltam para efetivar</th></tr></thead>
-                    <tbody>
-                      <tr style={{ borderTop: `1px solid ${BRAND.line}` }}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>Rematrículas</td><td style={td}>{fmt(cycle.goal_reenrollments ?? 0)}</td><td style={td}>{fmt(prog.reMat)}</td><td style={{ ...td, fontWeight: 700 }}>{fmt(Math.max(0, (cycle.goal_reenrollments ?? 0) - prog.reMat))}</td></tr>
-                      <tr style={{ borderTop: `1px solid ${BRAND.line}` }}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>Alunos novos</td><td style={td}>{fmt(cycle.target_new_students ?? 0)}</td><td style={td}>{fmt(prog.novos)}</td><td style={{ ...td, fontWeight: 700 }}>{fmt(Math.max(0, (cycle.target_new_students ?? 0) - prog.novos))}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ ...card, flex: '1 1 300px' }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Avisos da campanha</div>
-                  {prog.pre > 0 && <Aviso t={`${fmt(prog.pre)} pré-matrículas esperando efetivar`} d="Veja a lista na Base de alunos." go={() => navigate('/base-alunos')} />}
-                  {prog.pending > 0 && <Aviso t={`${fmt(prog.pending)} alunos sem rematrícula nem pré`} d="Ainda não rematricularam. Veja quem são." go={() => navigate('/base-alunos')} />}
-                  {prog.left > 0 && <Aviso t={`${fmt(prog.left)} alunos saíram`} d="Transferidos ou cancelados no ano." go={() => navigate('/base-alunos')} />}
-                  {!prog.pre && !prog.pending && !prog.left && <div style={{ fontSize: 13, color: BRAND.muted }}>Nada pendente por enquanto.</div>}
-                </div>
-              </div>
-
-              {ed && (
-                <>
-                  <div style={{ display: 'inline-flex', gap: 4, background: '#EEF3F2', borderRadius: 12, padding: 4, alignSelf: 'flex-start' }}>
-                    {([['novos', 'Alunos novos'], ['rematriculas', 'Rematrículas']] as const).map(([k, l]) => (
-                      <button key={k} onClick={() => setGeralKind(k)} style={{ padding: '7px 16px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, background: geralKind === k ? '#fff' : 'transparent', color: geralKind === k ? BRAND.primaryDark : BRAND.muted }}>{l}</button>
-                    ))}
-                  </div>
-                  <MetaCharts key={geralKind} kind={geralKind} months={ed.months} cur={hist?.current ?? null} years={years} targetYear={targetYear} label={geralKind === 'novos' ? 'Alunos novos' : 'Rematrículas'} />
-                </>
+              {institutionId && ed && (
+                <VisaoGeral institutionId={institutionId} targetYear={targetYear} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`}
+                  months={ed.months} rates={ed.rates} cur={hist?.current ?? null} years={years} prog={prog}
+                  goals={{ total: goalTotal, re: cycle.goal_reenrollments ?? 0, novos: cycle.target_new_students ?? 0 }} go={t => setTab(t)} goBase={() => navigate('/base-alunos')} />
               )}
             </>
           )}
