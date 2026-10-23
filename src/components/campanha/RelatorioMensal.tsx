@@ -42,6 +42,8 @@ export default function RelatorioMensal(p: Props) {
   const [email, setEmail] = useState(p.userEmail)
   const [mailMsg, setMailMsg] = useState<{ ok: boolean; t: string } | null>(null)
   const [mailBusy, setMailBusy] = useState(false)
+  const [logo, setLogo] = useState<string | null>(null)
+  useEffect(() => { supabase.from('institutions').select('logo_url').eq('id', p.institutionId).maybeSingle().then(({ data }) => setLogo((data as { logo_url?: string | null } | null)?.logo_url ?? null)) }, [p.institutionId])
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('campaign_month_reports').select('id, month, report, snapshot, created_at, emailed_at, emailed_to').eq('cycle_id', p.cycleId).order('month', { ascending: false })
@@ -127,7 +129,7 @@ export default function RelatorioMensal(p: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <style>{`@media print { body * { visibility: hidden !important } #rel-print, #rel-print * { visibility: visible !important } #rel-print { position: absolute; left: 0; top: 0; width: 100%; padding: 12px } .no-print { display: none !important } }`}</style>
+      <style>{`@page { size: A4; margin: 12mm } @media print { body * { visibility: hidden !important } #rel-print, #rel-print * { visibility: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact } #rel-print { position: absolute; left: 0; top: 0; width: 100%; padding: 0 } #rel-print > div { break-inside: avoid; page-break-inside: avoid; box-shadow: none !important } .no-print { display: none !important } .print-only { display: block !important } }`}</style>
       <div style={{ ...card, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }} className="no-print">
         <div style={{ maxWidth: 640 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Relatório do mês</div>
@@ -159,10 +161,14 @@ export default function RelatorioMensal(p: Props) {
             {open.emailed_at && !mailMsg && <span style={{ fontSize: 12.5, color: BRAND.muted }}>Enviado em {new Date(open.emailed_at).toLocaleDateString('pt-BR')} para {open.emailed_to}</span>}
           </div>
           <div id="rel-print" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ ...card, background: 'linear-gradient(135deg,#065F52,#00A896)', color: '#fff', border: 'none' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85 }}>RELATÓRIO MENSAL · CAMPANHA {p.year}</div>
-              <div style={{ fontSize: 24, fontWeight: 800, marginTop: 2 }}>{label(open.month)}{s.escola ? ` · ${s.escola}` : ''}</div>
-              <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 2 }}>Gerado em {new Date(open.created_at).toLocaleString('pt-BR')}</div>
+            <div style={{ ...card, background: 'linear-gradient(135deg,#065F52,#00A896)', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: 18 }}>
+              {logo && <div style={{ width: 84, height: 84, borderRadius: 18, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8, flexShrink: 0, boxSizing: 'border-box' }}><img src={logo} alt={s.escola ?? ''} crossOrigin="anonymous" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /></div>}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85, letterSpacing: 0.5 }}>RELATÓRIO MENSAL · CAMPANHA DE MATRÍCULAS {p.year}</div>
+                <div style={{ fontSize: 26, fontWeight: 800, marginTop: 2 }}>{label(open.month)}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.95 }}>{s.escola ?? p.institutionName}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>Gerado em {new Date(open.created_at).toLocaleString('pt-BR')}</div>
+              </div>
             </div>
             {rep?.resumo && <div style={{ ...card, background: BRAND.softer, border: `1px solid ${BRAND.softLine}` }}><div style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, textTransform: 'uppercase', marginBottom: 6 }}>Em resumo</div><div style={{ fontSize: 14.5, color: BRAND.ink, lineHeight: 1.6 }}>{rep.resumo}</div></div>}
             {(rep?.alertas ?? []).length > 0 && <div style={{ ...card, background: BRAND.warnSoft, border: '1px solid #FCD34D' }}>{(rep?.alertas ?? []).map((a, i) => <div key={i} style={{ fontSize: 13.5, color: BRAND.warn, display: 'flex', gap: 8, marginBottom: 4 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} />{a}</div>)}</div>}
@@ -209,6 +215,7 @@ export default function RelatorioMensal(p: Props) {
                 {(sec.pontos ?? []).length > 0 && <ul style={{ margin: '10px 0 0', paddingLeft: 20, listStyle: 'disc', color: BRAND.text, fontSize: 14, lineHeight: 1.6 }}>{(sec.pontos ?? []).map((q, j) => <li key={j} style={{ marginBottom: 4 }}>{q}</li>)}</ul>}
               </div>
             ))}
+            <div className="print-only" style={{ display: 'none', textAlign: 'center', fontSize: 11, color: '#94A3B8', paddingTop: 6 }}>Relatório gerado pelo Áion Edu · {s.escola ?? p.institutionName}</div>
           </div>
         </>
       )}

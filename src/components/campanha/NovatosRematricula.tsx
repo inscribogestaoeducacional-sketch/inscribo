@@ -62,14 +62,25 @@ export function NovatosTab({ institutionId, from, to, rates, goal, done, months,
         </div>
         <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0' }}>Metas do mês e taxas do funil são editáveis em “Configuração da campanha”. Leads e visitas reais vêm do funil.</p>
       </div>
-      {grades.length > 0 && (
-        <div style={card}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Novatos por série</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {grades.map(g => <span key={g.grade_id} style={{ background: '#F5F3FF', color: '#6D28D9', borderRadius: 99, padding: '4px 12px', fontSize: 12.5, fontWeight: 700 }}>{g.name}: {g.new_students}</span>)}
+      {grades.length > 0 && (() => {
+        const tot = grades.reduce((x, g) => x + g.new_students, 0), mx = Math.max(...grades.map(g => g.new_students))
+        return (
+          <div style={card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Novatos por série</div>
+              <div style={{ fontSize: 12.5, color: BRAND.muted }}>{tot} novatos no total</div>
+            </div>
+            {grades.map(g => (
+              <div key={g.grade_id} title={`${g.name}: ${g.new_students} novatos (${Math.round(g.new_students / tot * 100)}% do total)`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: 13 }}>
+                <span style={{ width: 150, color: BRAND.text, flexShrink: 0 }}>{g.name}</span>
+                <div style={{ flex: 1, height: 14, borderRadius: 7, background: '#F3F0FF', overflow: 'hidden' }}><div style={{ width: `${g.new_students / mx * 100}%`, height: '100%', background: 'linear-gradient(90deg,#8B5CF6,#7C3AED)', borderRadius: 7, transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /></div>
+                <b style={{ width: 28, textAlign: 'right', color: '#6D28D9' }}>{g.new_students}</b>
+                <span style={{ width: 40, textAlign: 'right', color: '#94A3B8', fontSize: 12 }}>{Math.round(g.new_students / tot * 100)}%</span>
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
@@ -99,12 +110,21 @@ export function RematriculaTab({ goal, done, months, hist, pre, pending, bySegme
           </table>
           <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0' }}>Entram só os alunos com data de matrícula informada.</p>
         </div>
-        <div style={{ ...card, flex: '1 1 260px' }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Quem falta, por série</div>
-          {bySegment.filter(x => x.pending > 0).map(x => (
-            <div key={x.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '6px 0', borderTop: '1px solid #EEF2F1' }}><span>{x.name}</span><b>{x.pending}</b></div>
-          ))}
-          {!bySegment.some(x => x.pending > 0) && <div style={{ fontSize: 13, color: BRAND.muted }}>Ninguém pendente.</div>}
+        <div style={{ ...card, flex: '1 1 320px' }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Por série: já voltaram × faltam</div>
+          <div style={{ fontSize: 12, color: BRAND.muted, marginBottom: 8 }}>Verde: matriculados ou pré. Cinza: ainda sem resposta.</div>
+          {(hist?.by_grade ?? []).filter(g => g.base > 0).map(g => {
+            const r = g.retained / g.base, low = r < 0.5
+            return (
+              <div key={g.grade_id} title={`${g.name}: ${g.retained} de ${g.base} garantidos, faltam ${g.lost}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 12.5 }}>
+                <span style={{ width: 118, flexShrink: 0 }}>{g.name}</span>
+                <div style={{ flex: 1, height: 12, borderRadius: 6, background: '#E5E7EB', overflow: 'hidden' }}><div style={{ width: `${r * 100}%`, height: '100%', background: low ? '#F59E0B' : '#10B981', transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /></div>
+                <b style={{ width: 70, textAlign: 'right' }}>{g.retained}/{g.base}</b>
+                <span style={{ width: 34, textAlign: 'right', color: low ? '#B45309' : '#15803D', fontWeight: 700 }}>{Math.round(r * 100)}%</span>
+              </div>
+            )
+          })}
+          {!(hist?.by_grade ?? []).some(g => g.base > 0) && <div style={{ fontSize: 13, color: BRAND.muted }}>Sem dados por série ainda.</div>}
         </div>
       </div>
     </div>
