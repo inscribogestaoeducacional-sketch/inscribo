@@ -11,6 +11,7 @@ import { advanceLeadTo, isPastVisit } from '../../lib/visitOutcome'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { BRAND } from '../../lib/brand'
 import PageHeader from '../ui/PageHeader'
+import { sendVisitMessages, isVisitAutoMessageOn, setVisitAutoMessage } from '../../lib/visitMessages'
 import VisitOutcomePicker from '../visits/VisitOutcomePicker'
 import { DEFAULT_REASONS, useVisitReasons, type ReasonKind } from '../../lib/visitReasons'
 import AuditModal from '../common/AuditModal'
@@ -200,11 +201,15 @@ function ReasonsEditor({ institutionId, onClose, onSaved }: { institutionId: str
   const [lists, setLists] = useState<Record<ReasonKind, string[]> | null>(null)
   const [draft, setDraft] = useState<Record<ReasonKind, string>>({ no_show: '', cancelled: '' })
   const [saving, setSaving] = useState(false)
+  const { user: me } = useAuth()
+  const [autoMsg, setAutoMsg] = useState(false)
+  useEffect(() => { isVisitAutoMessageOn(institutionId).then(setAutoMsg) }, [institutionId])
   useEffect(() => { setLists({ no_show: labelsFor('no_show'), cancelled: labelsFor('cancelled') }) }, [rows.length]) // eslint-disable-line
   if (!lists) return null
   const kinds: [ReasonKind, string][] = [['no_show', 'Quando a família faltou'], ['cancelled', 'Quando a visita foi cancelada']]
   const save = async () => {
     setSaving(true)
+    if (me?.id) await setVisitAutoMessage(institutionId, autoMsg, me.id).catch(() => undefined)
     for (const [k] of kinds) {
       await supabase.from('visit_reasons').delete().eq('institution_id', institutionId).eq('kind', k)
       if (lists[k].length) await supabase.from('visit_reasons').insert(lists[k].map((label, i) => ({ institution_id: institutionId, kind: k, label, sort_order: i })))
@@ -215,10 +220,14 @@ function ReasonsEditor({ institutionId, onClose, onSaved }: { institutionId: str
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(15,23,42,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 520, maxHeight: '88vh', overflowY: 'auto', padding: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-          <div style={{ flex: 1, fontSize: 16, fontWeight: 800, color: BRAND.ink }}>Motivos de a visita não acontecer</div>
+          <div style={{ flex: 1, fontSize: 16, fontWeight: 800, color: BRAND.ink }}>Configurar visitas</div>
           <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={18} color={BRAND.muted} /></button>
         </div>
         <p style={{ margin: '0 0 12px', fontSize: 12.5, color: BRAND.muted }}>Essas opções aparecem para quem dá baixa na visita. “Outro” sempre existe.</p>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: BRAND.softer, border: `1px solid ${BRAND.softLine}`, borderRadius: 12, padding: 10, marginBottom: 14, cursor: 'pointer' }}>
+          <input type="checkbox" checked={autoMsg} onChange={e => setAutoMsg(e.target.checked)} style={{ width: 18, height: 18, marginTop: 2, accentColor: BRAND.primary }} />
+          <span style={{ fontSize: 12.5, color: BRAND.text, lineHeight: 1.45 }}><b style={{ color: BRAND.ink }}>Enviar confirmação e lembrete pelo WhatsApp ao agendar</b><br />Vale para visitas marcadas no calendário e no cartão do lead. Sai pela API oficial, com os modelos de confirmação e lembrete da escola (editáveis em Configurações).</span>
+        </label>
         {kinds.map(([k, title]) => (
           <div key={k} style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: BRAND.ink, marginBottom: 6 }}>{title}</div>
@@ -284,6 +293,8 @@ export default function VisitCalendar() {
   const [showReasons, setShowReasons] = useState(false)
   const [auditVisitId, setAuditVisitId] = useState<string | null>(null)
   const [baixaId, setBaixaId] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t) }, [toast])
   const { refresh: refreshReasons } = useVisitReasons(user?.institution_id)
   const canEdit = user?.role === 'admin' || user?.role === 'manager'
 
@@ -349,6 +360,19 @@ export default function VisitCalendar() {
     })
     await advanceLeadTo(data.lead_id, 'scheduled')
     if (newVisit?.id) await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: newVisit.id, action: 'created', new_value: `${data.student_name} — ${data.date}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+    if (newVisit?.id) {
+      const lead = leadById.get(data.lead_id)
+      if (lead) {
+        const r = await sendVisitMessages({ institutionId: user!.institution_id!, lead, visitId: newVisit.id, visitDate, userId: user!.id }).catch(() => null)
+        setToast(r?.sent ? 'Visita agendada. Confirmação enviada pelo WhatsApp.' : r?.note ? 'Visita agendada. ' + r.note : 'Visita agendada.')
+      }
+    }
+    await loadData()
+  }
+
+  const confirmVisit = async (v: Visit, on: boolean) => {
+    await DatabaseService.updateVisit(v.id, { confirmed_at: on ? new Date().toISOString() : null, confirmed_via: on ? 'atendente' : null } as Partial<Visit>)
+    await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: v.id, action: 'updated', field_changed: 'confirmação da família', new_value: on ? 'confirmou' : 'desfeita', user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     await loadData()
   }
 
@@ -399,6 +423,9 @@ export default function VisitCalendar() {
         <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 9, borderTop: '1px solid #F1F5F4', flexWrap: 'wrap' }}>
           {v.lead_id && <button type="button" onClick={() => navigate(`/leads?open=${v.lead_id}`)} style={{ background: '#EEF2FF', color: '#4338CA', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer' }}>Ver lead</button>}
           {lead?.phone && <button type="button" onClick={() => openChat(v)} style={{ background: '#DCFCE7', color: '#15803D', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><MessageCircle size={13} />Conversa</button>}
+          {v.status === 'scheduled' && !past && (v.confirmed_at
+            ? <button type="button" onClick={() => confirmVisit(v, false)} style={{ background: '#F1F5F9', color: '#475569', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer' }}>Desfazer confirmação</button>
+            : <button type="button" onClick={() => confirmVisit(v, true)} style={{ background: '#DCFCE7', color: '#15803D', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><Check size={13} />Família confirmou</button>)}
           {v.status === 'scheduled' && !past && baixaId !== v.id && <button type="button" onClick={() => setBaixaId(v.id)} style={{ background: '#FFF7ED', color: '#C2410C', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer' }}>Dar baixa</button>}
           <button type="button" onClick={() => setAuditVisitId(v.id)} style={{ background: '#F1F5F9', color: '#475569', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><History size={13} />Histórico</button>
         </div>
@@ -518,6 +545,7 @@ export default function VisitCalendar() {
 
       <NovaVisitaModal isOpen={showModal} onClose={() => setShowModal(false)} onSave={handleCreateVisit} defaultDate={selectedStr} leads={leads} />
       {auditVisitId && <AuditModal recordId={auditVisitId} moduleName="visits" isOpen={!!auditVisitId} onClose={() => setAuditVisitId(null)} />}
+      {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100, background: '#15803D', color: '#fff', padding: '12px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, maxWidth: 360, boxShadow: '0 10px 24px rgba(0,0,0,.2)' }}>{toast}</div>}
       {showReasons && user?.institution_id && <ReasonsEditor institutionId={user.institution_id} onClose={() => setShowReasons(false)} onSaved={refreshReasons} />}
     </div>
   )

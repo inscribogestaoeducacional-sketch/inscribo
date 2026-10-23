@@ -33,6 +33,7 @@ import PageHeader from '../ui/PageHeader'
 import { BRAND } from '../../lib/brand'
 import { AttentionStrip, WaitingList, LEADS_CSS, useLeadWaiting, waitLabel, daysSince, type AttentionKey, type StripCounts, type WaitingRow } from './LeadsAttention'
 import IntegrationGap from './IntegrationGap'
+import { sendVisitMessages } from '../../lib/visitMessages'
 import NewLeadModal from './NewLeadModal'
 import ScheduleVisitModal from './ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
@@ -977,7 +978,7 @@ export default function LeadKanban() {
       const [hours, minutes] = data.scheduled_time.split(':')
       const [year, month, day] = data.scheduled_date.split('-')
       const visitDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes), 0, 0)
-      await DatabaseService.createVisit({ institution_id: user!.institution_id, lead_id: leadToSchedule.id, student_name: leadToSchedule.student_name, scheduled_date: visitDate.toISOString(), notes: data.notes, status: 'scheduled' })
+      const createdVisit = await DatabaseService.createVisit({ institution_id: user!.institution_id, lead_id: leadToSchedule.id, student_name: leadToSchedule.student_name, scheduled_date: visitDate.toISOString(), notes: data.notes, status: 'scheduled' })
       await advanceLeadTo(leadToSchedule.id, 'scheduled')  // Fase 0A: só avança, nunca volta
       const { supabase: db } = await import('../../lib/supabase')
       await db.from('audit_logs').insert({
@@ -990,7 +991,13 @@ export default function LeadKanban() {
       await loadData()
       setShowScheduleVisitModal(false)
       setLeadToSchedule(null)
-      showToast('Visita agendada com sucesso!', 'success')
+      let extra = ''
+      if (createdVisit?.id) {
+        const r = await sendVisitMessages({ institutionId: user!.institution_id, lead: leadToSchedule, visitId: createdVisit.id, visitDate, userId: user!.id }).catch(() => null)
+        if (r?.sent) extra = ' Confirmação enviada pelo WhatsApp.'
+        else if (r?.note) extra = ' ' + r.note
+      }
+      showToast('Visita agendada com sucesso!' + extra, 'success')
     } catch (err) {
       console.error('Erro ao agendar visita:', err); setError('Erro ao agendar visita: ' + (err as Error).message)
     }
