@@ -4,14 +4,14 @@ import {
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
-  ChevronUp, ChevronDown, Pencil, Send, Plug, Filter, Layers, Tag, ThumbsDown, Bell,
+  ChevronUp, ChevronDown, Pencil, Send, Plug, Filter, Layers, Tag, ThumbsDown, Bell, Eye,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import SchoolSetupModal from '../onboarding/SchoolSetupModal'
 import WhatsAppSettings from './settings/WhatsAppSettings'
 import PageHeader from '../ui/PageHeader'
-import { SettingsStyles, Card, GhostButton } from './settings/ui'
+import { SettingsStyles, Card, GhostButton, Title, SaveButton, NowNote, WarnNote, input, label } from './settings/ui'
 import { BRAND } from '../../lib/brand'
 import FinanceTab from '../transmissoes/FinanceTab'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
@@ -64,8 +64,9 @@ function GeralTab({ institutionId, onToast, part }: { institutionId: string; onT
     }
   }
 
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const save = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (!data.name.trim()) { onToast('Informe o nome da escola', false); return }
     setSaving(true)
     const { error } = await supabase
       .from('institutions')
@@ -84,88 +85,61 @@ function GeralTab({ institutionId, onToast, part }: { institutionId: string; onT
     </div>
   )
 
+  const set = (k: string, v: string) => setData({ ...data, [k]: v })
+  const field = (lbl: string, key: string, opts: { placeholder?: string; type?: string; Icon?: any; full?: boolean } = {}) => (
+    <div style={{ gridColumn: opts.full ? '1 / -1' : undefined }}>
+      <label style={label}>{lbl}</label>
+      <div style={{ position: 'relative' }}>
+        {opts.Icon && <opts.Icon size={15} color={BRAND.faint} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />}
+        <input type={opts.type || 'text'} style={{ ...input, paddingLeft: opts.Icon ? 36 : 12 }} value={(data as any)[key] || ''} placeholder={opts.placeholder} onChange={e => set(key, e.target.value)} />
+      </div>
+    </div>
+  )
+  const stat = (lbl: string, value: string) => (
+    <div style={{ background: BRAND.softer, border: `1px solid ${BRAND.softLine}`, borderRadius: 14, padding: '12px 16px' }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: BRAND.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>{lbl}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: BRAND.ink }}>{value}</div>
+    </div>
+  )
+  const planStatus = (data as any).plan_status === 'active' ? 'Ativo' : (data as any).plan_status === 'trial' ? 'Período de teste' : (data as any).plan_status || '—'
+
   return (
-    <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 700 }}>
-      {/* Dados básicos */}
-      {part === 'dados' && <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-          <Building size={16} color="#64748B" />
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Dados da Instituição</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>Nome da Instituição *</label>
-            <input required className={inputCls} value={data.name} onChange={e => setData({ ...data, name: e.target.value })} placeholder="Nome completo da escola" />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>E-mail</label>
-            <div style={{ position: 'relative' }}>
-              <Mail size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
-              <input type="email" className={inputCls} style={{ paddingLeft: 32 }} value={data.email || ''} onChange={e => setData({ ...data, email: e.target.value })} placeholder="contato@escola.com" />
+    <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 720 }}>
+      {part === 'dados' && (
+        <Card>
+          <Title Icon={Building} title="Dados da escola" help="Aparecem em documentos, mensagens e relatórios." />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+            {field('Nome da escola *', 'name', { placeholder: 'Nome completo da escola', full: true })}
+            {field('E-mail', 'email', { placeholder: 'contato@escola.com', type: 'email', Icon: Mail })}
+            {field('Telefone', 'phone', { placeholder: '(83) 99999-9999', Icon: Phone })}
+            {field('CNPJ', 'cnpj', { placeholder: '00.000.000/0001-00', Icon: FileText })}
+            {field('Cidade', 'city', { placeholder: 'Patos', Icon: MapPin })}
+            <div>
+              <label style={label}>Estado</label>
+              <select style={input} value={data.state || ''} onChange={e => set('state', e.target.value)}>
+                <option value="">Selecione…</option>
+                {ESTADOS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
           </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>Telefone</label>
-            <div style={{ position: 'relative' }}>
-              <Phone size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
-              <input className={inputCls} style={{ paddingLeft: 32 }} value={data.phone || ''} onChange={e => setData({ ...data, phone: e.target.value })} placeholder="(83) 99999-9999" />
-            </div>
-          </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>CNPJ</label>
-            <div style={{ position: 'relative' }}>
-              <FileText size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
-              <input className={inputCls} style={{ paddingLeft: 32 }} value={data.cnpj || ''} onChange={e => setData({ ...data, cnpj: e.target.value })} placeholder="00.000.000/0001-00" />
-            </div>
-          </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>Cidade</label>
-            <div style={{ position: 'relative' }}>
-              <MapPin size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
-              <input className={inputCls} style={{ paddingLeft: 32 }} value={data.city || ''} onChange={e => setData({ ...data, city: e.target.value })} placeholder="Patos" />
-            </div>
-          </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>Estado</label>
-            <select className={inputCls} value={data.state || ''} onChange={e => setData({ ...data, state: e.target.value })}>
-              <option value="">Selecione...</option>
-              {ESTADOS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-        </div>
-      </div>}
+        </Card>
+      )}
 
-      {/* Plano — somente leitura */}
-      {part === 'plano' && <div style={{ background: '#F8FAFC', borderRadius: 16, border: '1px solid #E2E8F0', padding: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <DollarSign size={16} color="#64748B" />
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Plano e Faturamento</span>
-          <span style={{ fontSize: 11, color: '#94A3B8', marginLeft: 4 }}>— gerenciado pelo admin</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-          {[
-            { label: 'Plano atual', value: (data as any).plan || 'Básico' },
-            { label: 'Status', value: (data as any).plan_status === 'active' ? '✅ Ativo' : (data as any).plan_status === 'trial' ? '🕐 Trial' : (data as any).plan_status || '—' },
-            { label: 'Mensalidade do plano Áion', value: (data as any).monthly_value ? `R$ ${Number((data as any).monthly_value).toLocaleString('pt-BR')}` : '—' },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ background: '#fff', borderRadius: 10, border: '1px solid #E2E8F0', padding: '12px 16px' }}>
-              <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 4px' }}>{label}</p>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{value}</p>
-            </div>
-          ))}
-        </div>
-        {(data as any).trial_ends_at && (
-          <p style={{ fontSize: 12, color: '#F59E0B', marginTop: 10, marginBottom: 0 }}>
-            ⚠️ Trial encerra em: {new Date((data as any).trial_ends_at).toLocaleDateString('pt-BR')}
-          </p>
-        )}
-      </div>}
+      {part === 'plano' && (
+        <Card>
+          <Title Icon={DollarSign} title="Plano e faturamento" help="Quem altera o plano é a equipe da Áion." />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+            {stat('Plano atual', (data as any).plan || 'Básico')}
+            {stat('Situação', planStatus)}
+            {stat('Mensalidade do plano Áion', (data as any).monthly_value ? `R$ ${Number((data as any).monthly_value).toLocaleString('pt-BR')}` : '—')}
+          </div>
+          {(data as any).trial_ends_at && (
+            <div style={{ marginTop: 12 }}><WarnNote>O período de teste termina em {new Date((data as any).trial_ends_at).toLocaleDateString('pt-BR')}.</WarnNote></div>
+          )}
+        </Card>
+      )}
 
-      {part === 'dados' && <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button type="submit" disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
-          {saving ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : <><Save size={13} />Salvar configurações</>}
-        </button>
-      </div>}
+      {part === 'dados' && <div><SaveButton onClick={() => save()} saving={saving} text="Salvar dados da escola" /></div>}
     </form>
   )
 }
@@ -216,66 +190,62 @@ function IdentidadeTab({ institutionId, onToast }: { institutionId: string; onTo
     else onToast('Identidade visual salva!')
   }
 
+  const colorRow = (lbl: string, val: string, setVal: (v: string) => void) => (
+    <div key={lbl}>
+      <label style={label}>{lbl}</label>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <input type="color" aria-label={lbl} value={val} onChange={e => setVal(e.target.value)} style={{ width: 44, height: 44, borderRadius: 12, border: `1px solid ${BRAND.line}`, cursor: 'pointer', padding: 3, background: '#fff' }} />
+        <input type="text" value={val} onChange={e => setVal(e.target.value)} maxLength={7} style={{ ...input, flex: 1, fontFamily: 'ui-monospace, monospace' }} />
+      </div>
+    </div>
+  )
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 900, alignItems: 'start' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 980 }}>
       {/* Fase 6.1: a Vitrine guarda logo e tema próprios (podem ser diferentes de
           propósito); lá há o atalho "usar a logo da escola". */}
-      <p style={{ fontSize: 12, color: '#475569', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '8px 12px', margin: '0 0 12px', lineHeight: 1.5 }}>
-        A página da Vitrine tem logo e cores próprias. Para usar as daqui, abra <a href="/vitrine" style={{ color: '#00A896', fontWeight: 600 }}>Vitrine → Aparência</a> e toque em "usar a logo da escola".
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {/* Logo */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px' }}>Logo da escola</h3>
-          <div onClick={() => document.getElementById('logo-input')?.click()}
-            style={{ border: '2px dashed #CBD5E1', borderRadius: 12, padding: '28px 16px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC', marginBottom: 12 }}>
-            <input id="logo-input" type="file" accept=".png,.jpg,.jpeg,.svg,.webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f) }} />
-            {uploading ? <Loader2 size={28} color="#00A896" className="animate-spin" style={{ margin: '0 auto' }} />
-              : logoUrl ? <><img src={logoUrl} alt="logo" style={{ height: 48, objectFit: 'contain', margin: '0 auto 8px', display: 'block' }} /><p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Clique para trocar</p></>
-              : <><Upload size={28} color="#CBD5E1" style={{ margin: '0 auto 8px', display: 'block' }} /><p style={{ fontSize: 13, fontWeight: 600, color: '#64748B', margin: '0 0 4px' }}>Clique para selecionar</p><p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>PNG, JPG, SVG — máx 2MB</p></>}
-          </div>
-        </div>
-
-        {/* Cores */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px' }}>Cores da marca</h3>
-          {[{ label: 'Cor primária', val: primaryColor, set: setPrimaryColor }, { label: 'Cor secundária', val: secondaryColor, set: setSecondaryColor }].map(({ label, val, set }) => (
-            <div key={label} style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, display: 'block' }}>{label}</label>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <input type="color" value={val} onChange={e => set(e.target.value)} style={{ width: 44, height: 44, borderRadius: 10, border: '2px solid #E2E8F0', cursor: 'pointer', padding: 3 }} />
-                <input type="text" value={val} onChange={e => set(e.target.value)} maxLength={7} style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 14, fontFamily: 'monospace', outline: 'none' }} />
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: val, border: '1px solid #E2E8F0' }} />
-              </div>
+      <NowNote>A página da Vitrine tem logo e cores próprias. Para usar as daqui, abra <a href="/vitrine" style={{ color: BRAND.primaryDark, fontWeight: 700 }}>Vitrine → Aparência</a> e toque em "usar a logo da escola".</NowNote>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, alignItems: 'start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card>
+            <Title Icon={Upload} title="Logo da escola" help="PNG, JPG, SVG ou WebP, até 2 MB." />
+            <div onClick={() => document.getElementById('logo-input')?.click()} role="button" tabIndex={0}
+              style={{ border: `2px dashed ${BRAND.line}`, borderRadius: 14, padding: '26px 16px', textAlign: 'center', cursor: 'pointer', background: BRAND.softer }}>
+              <input id="logo-input" type="file" accept=".png,.jpg,.jpeg,.svg,.webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f) }} />
+              {uploading ? <Loader2 size={26} color={BRAND.primary} className="animate-spin" style={{ margin: '0 auto' }} />
+                : logoUrl ? <><img src={logoUrl} alt="logo" style={{ height: 56, objectFit: 'contain', margin: '0 auto 8px', display: 'block' }} /><div style={{ fontSize: 12.5, color: BRAND.muted }}>Toque para trocar a logo</div></>
+                : <><Upload size={26} color={BRAND.faint} style={{ margin: '0 auto 8px', display: 'block' }} /><div style={{ fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>Toque para escolher a logo</div></>}
             </div>
-          ))}
-        </div>
-
-        <button onClick={save} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 10, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-start', opacity: saving ? 0.7 : 1 }}>
-          {saving ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : <><Save size={13} />Salvar identidade visual</>}
-        </button>
-      </div>
-
-      {/* Preview */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px' }}>Preview</h3>
-        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #E2E8F0' }}>
-          <header style={{ backgroundColor: primaryColor, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            {logoUrl ? <img src={logoUrl} alt={institutionName} style={{ height: 32, objectFit: 'contain' }} />
-              : <div style={{ width: 32, height: 32, background: 'rgba(255,255,255,0.2)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700 }}>{institutionName.charAt(0) || 'E'}</div>}
-            <span style={{ color: 'white', fontWeight: 600, fontSize: 16 }}>{institutionName || 'Nome da Escola'}</span>
-          </header>
-          <div style={{ padding: 16, background: '#F8FAFC' }}>
-            <div style={{ background: 'white', borderRadius: 10, padding: 14, border: '1px solid #E2E8F0' }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', margin: '0 0 12px' }}>Como você avalia a escola?</p>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {[1,2,3,4,5].map(n => <div key={n} style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: `2px solid ${n === 5 ? primaryColor : '#E2E8F0'}`, background: n === 5 ? primaryColor : 'white', color: n === 5 ? 'white' : '#374151', textAlign: 'center', fontWeight: 700 }}>{n}</div>)}
-              </div>
+          </Card>
+          <Card>
+            <Title Icon={Palette} title="Cores da marca" help="Usadas nas pesquisas de satisfação e nas telas do cliente." />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {colorRow('Cor primária', primaryColor, setPrimaryColor)}
+              {colorRow('Cor secundária', secondaryColor, setSecondaryColor)}
             </div>
-            <div style={{ marginTop: 10, padding: '10px', background: primaryColor, borderRadius: 10, textAlign: 'center', color: 'white', fontWeight: 700, fontSize: 13 }}>Próxima →</div>
-          </div>
+          </Card>
+          <div><SaveButton onClick={save} saving={saving} text="Salvar logo e cores" /></div>
         </div>
-        <p style={{ fontSize: 11, color: '#94A3B8', margin: '10px 0 0', textAlign: 'center' }}>Aparece nas pesquisas de satisfação e transferência</p>
+
+        <Card>
+          <Title Icon={Eye} title="Como o cliente vê" help="Prévia da pesquisa de satisfação com a logo e as cores acima." />
+          <div style={{ borderRadius: 14, overflow: 'hidden', border: `1px solid ${BRAND.line}` }}>
+            <header style={{ backgroundColor: primaryColor, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              {logoUrl ? <img src={logoUrl} alt={institutionName} style={{ height: 32, objectFit: 'contain' }} />
+                : <div style={{ width: 32, height: 32, background: 'rgba(255,255,255,0.2)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700 }}>{institutionName?.[0] || 'E'}</div>}
+              <span style={{ color: 'white', fontWeight: 700, fontSize: 16 }}>{institutionName || 'Nome da escola'}</span>
+            </header>
+            <div style={{ padding: 16, background: BRAND.softer }}>
+              <div style={{ background: '#fff', borderRadius: 12, padding: 14, border: `1px solid ${BRAND.line}` }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: BRAND.ink, margin: '0 0 12px' }}>Como você avalia a escola?</p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[1, 2, 3, 4, 5].map(n => <div key={n} style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: `2px solid ${n === 5 ? primaryColor : BRAND.line}`, background: n === 5 ? primaryColor : '#fff', color: n === 5 ? '#fff' : BRAND.muted, textAlign: 'center', fontSize: 13, fontWeight: 700 }}>{n}</div>)}
+                </div>
+              </div>
+              <div style={{ marginTop: 10, padding: 10, background: primaryColor, borderRadius: 12, textAlign: 'center', color: '#fff', fontWeight: 700, fontSize: 13 }}>Próxima →</div>
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   )
