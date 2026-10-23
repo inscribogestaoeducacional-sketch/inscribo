@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
-import { monthName } from '../../lib/campaignPlan'
+import { funnelNeeds, monthName, type FunnelRates, type PlanMonth } from '../../lib/campaignPlan'
 
 type Et = Record<string, { n: number; inferidos: number }>
 interface Data {
@@ -18,7 +18,8 @@ const card: React.CSSProperties = { background: '#fff', border: '1px solid #E3E8
 const th: React.CSSProperties = { fontSize: 11.5, color: '#94A3B8', textTransform: 'uppercase', padding: '8px', textAlign: 'right', fontWeight: 700 }
 const td: React.CSSProperties = { padding: '8px', textAlign: 'right', fontSize: 13, borderTop: '1px solid #EEF2F1' }
 
-export default function FunilCampanha({ institutionId, from, to }: { institutionId: string; from: string; to: string }) {
+export default function FunilCampanha({ institutionId, from, to, planMonths, rates }: { institutionId: string; from: string; to: string; planMonths: PlanMonth[]; rates: FunnelRates }) {
+  const [mes, setMes] = useState('')
   const [data, setData] = useState<Data | null>(null)
   const [source, setSource] = useState('')
   const [grade, setGrade] = useState('')
@@ -58,24 +59,16 @@ export default function FunilCampanha({ institutionId, from, to }: { institution
         <span style={{ fontSize: 12.5, color: BRAND.muted }}>Período da campanha: {fmtDate(from)} a {fmtDate(to)}</span>
       </div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ ...card, flex: '1.3 1 420px' }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Funil geral</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={{ ...th, textAlign: 'left' }}>Etapa</th><th style={th}>Leads</th><th style={th}>% dos que entraram</th><th style={th}>% da etapa anterior</th><th style={{ ...th, textAlign: 'left', width: 140 }} /></tr></thead>
-            <tbody>
-              <tr><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>Entraram</td><td style={td}>{ent}</td><td style={td}>100%</td><td style={td}>—</td>
-                <td style={td}><div style={{ height: 10, borderRadius: 99, background: '#00A896' }} /></td></tr>
-              {rows.map(r => (
-                <tr key={r.k}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{r.label}</td><td style={td}>{cell(r.e)}</td>
-                  <td style={td}>{ent ? Math.round(r.ofTotal * 100) + '%' : '—'}</td><td style={td}>{r.n ? Math.round(r.ofPrev * 100) + '%' : '—'}</td>
-                  <td style={td}><div style={{ height: 10, borderRadius: 99, background: '#EDF1F0' }}><div style={{ width: `${Math.min(100, r.ofTotal * 100)}%`, height: '100%', borderRadius: 99, background: r.k === 'enrolled' ? '#059669' : '#00A896' }} /></div></td></tr>
-              ))}
-              <tr><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>Perdeu</td><td style={td}>{cell(lost)}</td><td style={td}>{ent && lost ? Math.round(lost.n / ent * 100) + '%' : '—'}</td><td style={td}>—</td>
-                <td style={td}><div style={{ height: 10, borderRadius: 99, background: '#EDF1F0' }}><div style={{ width: `${ent && lost ? Math.min(100, lost.n / ent * 100) : 0}%`, height: '100%', borderRadius: 99, background: '#DC2626' }} /></div></td></tr>
-            </tbody>
-          </table>
+        <div style={{ ...card, flex: '1.5 1 520px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, flex: 1 }}>Funil de matrículas: meta × realizado</div>
+            <select value={mes} onChange={e => setMes(e.target.value)} style={sel}>
+              <option value="">Campanha toda</option>{data.months.map(m => <option key={m.m} value={m.m}>{monthName(m.m + '-01')}</option>)}
+            </select>
+          </div>
+          <FunnelShape data={data} mes={mes} planMonths={planMonths} rates={rates} />
           <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0' }}>
-            {data.history_since ? `O histórico de etapas começou em ${fmtDate(data.history_since)}. ` : ''}Números entre parênteses são etapas estimadas (o lead já estava adiante quando o registro começou). Entraram = leads cadastrados no período.
+            {data.history_since ? `O histórico de etapas começou em ${fmtDate(data.history_since)}. ` : ''}Números entre parênteses são etapas estimadas. A meta de cada etapa vem do plano (metas e taxas do funil, em “Configuração da campanha”).
           </p>
         </div>
         <div style={{ ...card, flex: '1 1 280px' }}>
@@ -101,6 +94,45 @@ export default function FunilCampanha({ institutionId, from, to }: { institution
           </table>
         </div>
       </div>
+    </div>
+  )
+}
+
+const STG: [string, string, string][] = [['entraram', 'Leads', '#0EA5E9'], ['scheduled', 'Agendamentos', '#14B8A6'], ['visit', 'Visitas', '#10B981'], ['enrolled', 'Matrículas novas', '#059669']]
+
+function FunnelShape({ data, mes, planMonths, rates }: { data: Data; mes: string; planMonths: PlanMonth[]; rates: FunnelRates }) {
+  const novosMeta = mes ? (planMonths.find(m => m.m === mes)?.novos ?? 0) : planMonths.reduce((a, m) => a + m.novos, 0)
+  const need = funnelNeeds(novosMeta, rates)
+  const meta = [need.registrations, need.schedules, need.visits, novosMeta]
+  const mrow = data.months.find(m => m.m === mes)
+  const real = STG.map(([k]) => k === 'entraram' ? (mes ? (mrow?.entraram ?? 0) : data.entraram) : (mes ? (mrow?.etapas[k]?.n ?? 0) : (data.totais[k]?.n ?? 0)))
+  const inf = STG.map(([k]) => k === 'entraram' ? 0 : (mes ? (mrow?.etapas[k]?.inferidos ?? 0) : (data.totais[k]?.inferidos ?? 0)))
+  const top = Math.max(meta[0], real[0], 1)
+  const w = (n: number) => Math.max(14, Math.min(100, (n / top) * 100))
+  const poly = (tw: number, bw: number) => `polygon(${(100 - tw) / 2}% 0, ${(100 + tw) / 2}% 0, ${(100 + bw) / 2}% 100%, ${(100 - bw) / 2}% 100%)`
+  return (
+    <div>
+      {STG.map(([k, label, color], i) => {
+        const nextR = i < 3 ? w(real[i + 1]) : Math.max(10, w(real[i]) * 0.7)
+        const nextM = i < 3 ? w(meta[i + 1]) : Math.max(10, w(meta[i]) * 0.7)
+        const dev = meta[i] > 0 ? Math.round((real[i] - meta[i]) / meta[i] * 100) : null
+        const conv = i > 0 && real[i - 1] > 0 ? Math.round(real[i] / real[i - 1] * 100) : null
+        return (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+            <div style={{ flex: 1, position: 'relative', height: 58 }}>
+              <div style={{ position: 'absolute', inset: 0, background: '#E2E8F0', clipPath: poly(w(meta[i]), nextM), opacity: 0.8 }} />
+              <div style={{ position: 'absolute', inset: 0, background: color, clipPath: poly(w(real[i]), nextR), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 15 }}>
+                <span style={{ textShadow: '0 1px 2px rgba(0,0,0,.25)' }}>{real[i]}{inf[i] > 0 ? <span style={{ fontWeight: 600, fontSize: 12 }}> ({inf[i]})</span> : ''}</span>
+              </div>
+            </div>
+            <div style={{ width: 190, fontSize: 12.5, lineHeight: 1.5 }}>
+              <div style={{ color: '#64748B' }}>Meta: <b style={{ color: BRAND.ink }}>{meta[i] || '—'}</b></div>
+              <div>{dev === null ? <span style={{ color: '#94A3B8' }}>sem meta definida</span> : <span style={{ fontWeight: 800, color: dev >= 0 ? '#15803D' : dev > -30 ? '#B45309' : '#B91C1C' }}>Desvio {dev > 0 ? '+' : ''}{dev}%</span>}
+                {conv !== null && <span style={{ color: '#94A3B8' }}> · converte {conv}%</span>}</div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

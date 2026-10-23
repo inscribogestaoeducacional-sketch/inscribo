@@ -586,7 +586,7 @@ export default function CampanhaMatriculas() {
         </>
       )}
 
-      {!loading && cycle && tab === 'funil' && institutionId && <FunilCampanha institutionId={institutionId} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} />}
+      {!loading && cycle && tab === 'funil' && institutionId && <FunilCampanha institutionId={institutionId} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} planMonths={ed?.months ?? []} rates={ed?.rates ?? ((cycle.funnel_rates as FunnelRates | null) ?? DEFAULT_FUNNEL)} />}
 
       {!loading && cycle && tab === 'novatos' && institutionId && (
         <NovatosTab institutionId={institutionId} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`}
