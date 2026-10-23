@@ -6,29 +6,56 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
 import {
-  LayoutDashboard, Users, BookUser, Calendar,
-  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList, X, Megaphone, Send, Store, GraduationCap
+  LayoutDashboard, Users, BookUser,
+  BarChart3, UsersRound, Settings, ArrowRightLeft, ClipboardCheck, CalendarCheck, X, Megaphone, Send, Store, GraduationCap
 } from 'lucide-react'
 
-type NavItem = { path: string; label: string; iconBg: string; iconColor: string; Icon: typeof Users; roles: string[]; module: string; group?: string }
+type NavItem = { path: string; label: string; iconBg: string; iconColor: string; Icon: typeof Users; roles: string[]; module: string; group?: string; solid?: boolean }
+
+// Logo do WhatsApp (o lucide não tem marcas)
+function WhatsAppIcon({ size = 16, color = '#fff' }: { size?: number; color?: string; strokeWidth?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2Zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 4.54 0 8.24 3.7 8.24 8.24 0 4.55-3.7 8.24-8.24 8.24Zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.16.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.42h-.48c-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.23-.17-.48-.29Z" />
+    </svg>
+  )
+}
+
+// Quadradinho colorido do item (igual nas três versões do menu)
+function NavTile({ item }: { item: NavItem }) {
+  const Icon = item.Icon
+  return (
+    <span style={{
+      width: 30, height: 30, borderRadius: 10, flexShrink: 0,
+      background: item.solid ? 'linear-gradient(135deg,#34D96B,#16A34A)' : `linear-gradient(135deg, ${item.iconBg}, ${item.iconBg}cc)`,
+      boxShadow: '0 1px 2px rgba(15,23,42,0.08)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Icon size={16} color={item.solid ? '#FFFFFF' : item.iconColor} strokeWidth={2.1} />
+    </span>
+  )
+}
 
 const NAV_CFG: NavItem[] = [
   { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager'],        module: 'inicio' },
-  { path: '/atendente',      label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['user'],                   module: 'inicio' },
-  { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: Users,           roles: ['admin','manager','user'], module: 'leads' },
-  { path: '/contacts',        label: 'Contatos',        iconBg: '#EFF6FF', iconColor: '#3B82F6', Icon: BookUser,        roles: ['admin','manager','user'], module: 'contatos' },
-  { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar,        roles: ['admin','manager','user'], module: 'visitas' },
-  { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#10B981', Icon: MessageCircle,   roles: ['admin','manager','user'], module: 'whatsapp' },
-  { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager','user'], module: 'captacao' },
-  { path: '/vitrine',         label: 'Vitrine',         iconBg: '#E6F7F5', iconColor: '#00A896', Icon: Store,           roles: ['admin','manager','user'], module: 'vitrine' },
-  { path: '/transmissoes',    label: 'Transmissões',    iconBg: '#E0F2FE', iconColor: '#0284C7', Icon: Send,            roles: ['admin','manager','user'], module: 'transmissoes' },
-  // Sub-item do grupo "Matrículas" (posição final na Fase 6.3); só com o módulo liberado pela Áion
-  { path: '/base-alunos',     label: 'Base de alunos',  iconBg: '#E6F7F5', iconColor: '#0D9488', Icon: GraduationCap,   roles: ['admin','manager','user'], module: 'base_alunos', group: 'Matrículas' },
-  { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'], module: 'relatorios' },
-  { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias' },
-  { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFF7ED', iconColor: '#F97316', Icon: ClipboardList,   roles: ['admin','manager'], module: 'pesquisas' },
-  { path: '/users',           label: 'Usuários',        iconBg: '#F1F5F9', iconColor: '#64748B', Icon: UserCog,         roles: ['admin'], module: 'usuarios' },
-  { path: '/settings',        label: 'Config.',         iconBg: '#F1F5F9', iconColor: '#64748B', Icon: Settings,        roles: ['admin','manager'], module: 'configuracoes' },
+  { path: '/atendente',       label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['user'],                   module: 'inicio' },
+  // Comercial
+  { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#7C3AED', Icon: Users,           roles: ['admin','manager','user'], module: 'leads',        group: 'Comercial' },
+  { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#D97706', Icon: CalendarCheck,   roles: ['admin','manager','user'], module: 'visitas',      group: 'Comercial' },
+  { path: '/contacts',        label: 'Contatos',        iconBg: '#DBEAFE', iconColor: '#2563EB', Icon: BookUser,        roles: ['admin','manager','user'], module: 'contatos',     group: 'Comercial' },
+  { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#16A34A', Icon: WhatsAppIcon as unknown as typeof Users, roles: ['admin','manager','user'], module: 'whatsapp', group: 'Comercial', solid: true },
+  { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager','user'], module: 'captacao',     group: 'Comercial' },
+  { path: '/vitrine',         label: 'Vitrine',         iconBg: '#CCFBF1', iconColor: '#0D9488', Icon: Store,           roles: ['admin','manager','user'], module: 'vitrine',      group: 'Comercial' },
+  { path: '/transmissoes',    label: 'Transmissões',    iconBg: '#E0F2FE', iconColor: '#0284C7', Icon: Send,            roles: ['admin','manager','user'], module: 'transmissoes', group: 'Comercial' },
+  // Matrículas (a Campanha de Matrículas entra aqui quando o módulo estiver pronto)
+  { path: '/base-alunos',     label: 'Base de alunos',  iconBg: '#D1FAE5', iconColor: '#059669', Icon: GraduationCap,   roles: ['admin','manager','user'], module: 'base_alunos',  group: 'Matrículas' },
+  { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias', group: 'Matrículas' },
+  // Análise
+  { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'], module: 'relatorios', group: 'Análise' },
+  { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFEDD5', iconColor: '#F97316', Icon: ClipboardCheck,  roles: ['admin','manager'], module: 'pesquisas',  group: 'Análise' },
+  // Administração
+  { path: '/users',           label: 'Usuários',        iconBg: '#E0E7FF', iconColor: '#4F46E5', Icon: UsersRound,      roles: ['admin'], module: 'usuarios',      group: 'Administração' },
+  { path: '/settings',        label: 'Configurações',   iconBg: '#E2E8F0', iconColor: '#334155', Icon: Settings,        roles: ['admin','manager'], module: 'configuracoes', group: 'Administração' },
 ]
 
 function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
@@ -107,9 +134,6 @@ export default function Sidebar() {
   const groupHeader = (h: string) => (
     <div key={'grp-' + h} style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', padding: '10px 10px 2px', flexShrink: 0 }}>{h}</div>
   )
-  const initials = (user?.full_name || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
-  const userName = user?.full_name || 'Usuário'
-  const userRole = user?.role === 'admin' ? 'Administrador' : user?.role === 'manager' ? 'Gestor' : 'Usuário'
 
   // ── Mobile drawer ───────────────────────────────────────────────────────────
   if (isMobile) {
@@ -154,14 +178,12 @@ export default function Sidebar() {
               <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: item.group ? '9px 10px 9px 20px' : '9px 10px', width: '100%', height: 44, borderRadius: 12,
-                background: active ? item.iconBg : 'transparent',
-                border: active ? `1.5px solid ${item.iconColor}25` : '1.5px solid transparent',
+                background: active ? '#F0FDFB' : 'transparent',
+                border: active ? '1.5px solid #99E6DC' : '1.5px solid transparent',
                 textDecoration: 'none', boxSizing: 'border-box', flexShrink: 0, position: 'relative',
               }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: active ? item.iconColor : item.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon size={14} color={active ? '#FFFFFF' : item.iconColor} strokeWidth={active ? 2.2 : 1.8} />
-                </div>
-                <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? item.iconColor : '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', flex: 1 }}>
+                <NavTile item={item} />
+                <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#1A2B4A' : '#475569', whiteSpace: 'nowrap', overflow: 'hidden', flex: 1 }}>
                   {item.label}
                 </span>
                 {showBadge && (
@@ -173,20 +195,6 @@ export default function Sidebar() {
             )
           })}
 
-          {/* Usuário */}
-          <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '0.5px solid #D1FAE5', flexShrink: 0 }}>
-            <Link to="/profile" onClick={() => setMobileOpen(false)} style={{ textDecoration: 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 12, cursor: 'pointer' }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #00A896, #0DD3BF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>
-                  {initials}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{userName}</div>
-                  <div style={{ fontSize: 10, color: '#94A3B8' }}>{userRole}</div>
-                </div>
-              </div>
-            </Link>
-          </div>
         </aside>
       </>
     )
@@ -245,7 +253,7 @@ export default function Sidebar() {
 
       {/* Nav items */}
       {navEntries.map(entry => {
-        if ('header' in entry) return expanded ? groupHeader(entry.header) : null
+        if ('header' in entry) return expanded ? groupHeader(entry.header) : <div key={'sep-' + entry.header} style={{ height: 1, background: '#E2E8F0', margin: '8px 12px', width: 36, flexShrink: 0 }} />
         const item = entry
         const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
         const Icon = item.Icon
@@ -258,26 +266,24 @@ export default function Sidebar() {
             <Tooltip key={item.path} text={item.group ? `${item.group} › ${item.label}` : item.label}>
               <Link to={item.path} style={{
                 width: 44, height: 44, borderRadius: 14,
-                background: active ? item.iconBg : 'transparent',
+                background: active ? '#F0FDFB' : 'transparent',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: active ? `1.5px solid ${item.iconColor}30` : '1.5px solid transparent',
+                border: active ? '1.5px solid #99E6DC' : '1.5px solid transparent',
                 textDecoration: 'none', position: 'relative',
                 transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
                 flexShrink: 0,
               }}
               onMouseEnter={e => {
                 if (!active) {
-                  (e.currentTarget as HTMLElement).style.background = item.iconBg
-                  ;(e.currentTarget as HTMLElement).style.opacity = '0.75'
+                  (e.currentTarget as HTMLElement).style.background = '#F8FAFC'
                 }
               }}
               onMouseLeave={e => {
                 if (!active) {
                   (e.currentTarget as HTMLElement).style.background = 'transparent'
-                  ;(e.currentTarget as HTMLElement).style.opacity = '1'
                 }
               }}>
-                <Icon size={18} color={active ? item.iconColor : '#94A3B8'} strokeWidth={active ? 2.2 : 1.8} />
+                <NavTile item={item} />
                 {showBadge && (
                   <div style={{ position: 'absolute', top: 6, right: 6, minWidth: 14, height: 14, borderRadius: 999, background: '#F43F5E', border: '1.5px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: 'white', padding: '0 2px' }}>
                     {badgeCount > 9 ? '9+' : badgeCount}
@@ -300,8 +306,8 @@ export default function Sidebar() {
               width: '100%',
               height: 44,
               borderRadius: 12,
-              background: active ? item.iconBg : 'transparent',
-              border: active ? `1.5px solid ${item.iconColor}25` : '1.5px solid transparent',
+              background: active ? '#F0FDFB' : 'transparent',
+              border: active ? '1.5px solid #99E6DC' : '1.5px solid transparent',
               textDecoration: 'none',
               transition: 'all 0.15s',
               flexShrink: 0,
@@ -311,30 +317,21 @@ export default function Sidebar() {
             }}
             onMouseEnter={e => {
               if (!active) {
-                (e.currentTarget as HTMLElement).style.background = item.iconBg
-                ;(e.currentTarget as HTMLElement).style.opacity = '0.75'
+                (e.currentTarget as HTMLElement).style.background = '#F8FAFC'
               }
             }}
             onMouseLeave={e => {
               if (!active) {
                 (e.currentTarget as HTMLElement).style.background = 'transparent'
-                ;(e.currentTarget as HTMLElement).style.opacity = '1'
               }
             }}
           >
-            {/* Icon */}
-            <div style={{
-              width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-              background: active ? item.iconColor : item.iconBg,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Icon size={14} color={active ? '#FFFFFF' : item.iconColor} strokeWidth={active ? 2.2 : 1.8} />
-            </div>
+            <NavTile item={item} />
 
             {/* Label */}
             <span style={{
               fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? item.iconColor : '#64748B',
+              color: active ? '#1A2B4A' : '#475569',
               whiteSpace: 'nowrap', overflow: 'hidden', flex: 1,
             }}>
               {item.label}
@@ -348,53 +345,6 @@ export default function Sidebar() {
         )
       })}
 
-      {/* User avatar at bottom */}
-      <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '0.5px solid #D1FAE5', flexShrink: 0 }}>
-        {!expanded ? (
-          <Tooltip text={userName}>
-            <Link to="/profile" style={{ textDecoration: 'none' }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #00A896, #0DD3BF)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 13, fontWeight: 700, color: 'white', cursor: 'pointer',
-                margin: '0 auto',
-              }}>
-                {initials}
-              </div>
-            </Link>
-          </Tooltip>
-        ) : (
-          <Link to="/profile" style={{ textDecoration: 'none' }}>
-            <div style={{
-              display: 'flex', alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              borderRadius: 12, cursor: 'pointer',
-              height: 44,
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <div style={{
-                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                background: 'linear-gradient(135deg, #00A896, #0DD3BF)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 700, color: 'white',
-              }}>
-                {initials}
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>
-                  {userName}
-                </div>
-                <div style={{ fontSize: 10, color: '#94A3B8' }}>{userRole}</div>
-              </div>
-            </div>
-          </Link>
-        )}
-      </div>
     </aside>
   )
 }
