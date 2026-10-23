@@ -17,6 +17,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useAuth } from '../../contexts/AuthContext'
+import { useLeadSources, withCurrent } from '../../lib/leadSources'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DatabaseService, Lead, supabase } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
@@ -33,7 +34,7 @@ import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
 import { LOST_REASONS, LostReasonModal, lostReasonLabel } from './lostReasons'
 import {
   type SimpleUser, type AuditEntry, type StudentEntry,
-  statusConfig, sourceOptions, LEAD_TEMPERATURES, LEAD_STAGES,
+  statusConfig, LEAD_TEMPERATURES, LEAD_STAGES,
 } from './leadFormShared'
 
 // Motivos de perda e LostReasonModal: ./lostReasons.tsx (também usados pelo formulário).
@@ -406,6 +407,7 @@ interface FilterDrawerProps {
   customEnd: string; setCustomEnd: (v: string) => void
   gradeFilter: string; setGradeFilter: (v: string) => void
   gradeNames: string[]
+  schoolSources: string[]
   shiftFilter: string; setShiftFilter: (v: string) => void
   temperatureFilter: string; setTemperatureFilter: (v: any) => void
   ownerFilter: string; setOwnerFilter: (v: string) => void
@@ -418,7 +420,7 @@ interface FilterDrawerProps {
 }
 
 function FilterDrawer(props: FilterDrawerProps) {
-  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, noContactFilter, setNoContactFilter, noContactDays, setNoContactDays, unitFilterCfg, onClear } = props
+  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, schoolSources, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, noContactFilter, setNoContactFilter, noContactDays, setNoContactDays, unitFilterCfg, onClear } = props
   if (!open) return null
 
   const section = (label: string) => (
@@ -486,7 +488,7 @@ function FilterDrawer(props: FilterDrawerProps) {
           {section('Origem')}
           <select value={filterSource} onChange={e => setFilterSource(e.target.value)} style={selCls}>
             <option value="">Todas as origens</option>
-            {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            {withCurrent(schoolSources, filterSource).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
 
           {section('Série de interesse')}
@@ -570,6 +572,7 @@ export default function LeadKanban() {
   const [searchParams] = useSearchParams()
   const { names: gradeNames } = useGradeLevels(user?.institution_id)
   const unitCfg = useLeadUnits(user?.institution_id)
+  const { sources: schoolSources } = useLeadSources(user?.institution_id)
   const [unitFilter, setUnitFilter] = useState<string>(UNIT_FILTER_ALL)
   // Edição em lote "Definir unidade" (só com o campo ligado).
   const [selectMode, setSelectMode] = useState(false)
@@ -1297,7 +1300,7 @@ export default function LeadKanban() {
     <FilterDrawer
       open={filterDrawerOpen} onClose={() => setFilterDrawerOpen(false)}
       filterStatus={filterStatus} setFilterStatus={setFilterStatus}
-      filterSource={filterSource} setFilterSource={setFilterSource}
+      filterSource={filterSource} setFilterSource={setFilterSource} schoolSources={schoolSources}
       periodFilter={periodFilter} setPeriodFilter={setPeriodFilter}
       customStart={customStart} setCustomStart={setCustomStart}
       customEnd={customEnd} setCustomEnd={setCustomEnd}

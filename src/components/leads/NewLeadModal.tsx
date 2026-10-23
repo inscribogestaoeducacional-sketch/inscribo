@@ -16,6 +16,7 @@ import {
   Plus, X, Save, Tag, Megaphone, UserPlus2,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useLeadSources, withCurrent } from '../../lib/leadSources'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { supabase, type Lead } from '../../lib/supabase'
 import { LostReasonModal } from './lostReasons'
@@ -23,7 +24,7 @@ import { useLeadUnits, unitOptionsFor } from '../../lib/leadUnits'
 import LeadVisitsPanel from '../visits/LeadVisitsPanel'
 import {
   type SimpleUser, type AuditEntry, type StudentEntry, type FamilyMatch,
-  statusConfig, sourceOptions, LEAD_TEMPERATURES, LEAD_STAGES,
+  statusConfig, LEAD_TEMPERATURES, LEAD_STAGES,
   avatarColor, applyPhoneMask,
 } from './leadFormShared'
 
@@ -64,6 +65,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
   const [lostReason, setLostReason] = useState<{ reason: string; detail: string } | null>(null)
   const { names: gradeNames } = useGradeLevels(institutionId)
   const unitCfg = useLeadUnits(institutionId)
+  const { sources: schoolSources } = useLeadSources(institutionId)
   const [activeTab, setActiveTab] = useState<'dados' | 'historico' | 'anotacoes'>('dados')
   const [saving, setSaving] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
@@ -564,7 +566,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                     <select value={formData.source} onChange={e => setFormData(f => ({ ...f, source: e.target.value }))}
                       style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
                       <option value="">Selecione</option>
-                      {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                      {withCurrent(schoolSources, formData.source).map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
                   <div>

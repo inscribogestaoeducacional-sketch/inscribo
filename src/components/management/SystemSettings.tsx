@@ -4,7 +4,7 @@ import {
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
-  ChevronUp, ChevronDown, Pencil, Send, Plug,
+  ChevronUp, ChevronDown, Pencil, Send, Plug, Filter,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -16,6 +16,7 @@ import { BRAND } from '../../lib/brand'
 import FinanceTab from '../transmissoes/FinanceTab'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import EscolaSettings from './settings/EscolaSettings'
+import FunilSettings from './settings/FunilSettings'
 import IntegrationsTab from './IntegrationsTab'
 import { useSearchParams } from 'react-router-dom'
 import { canSeeSettingsItem, canSeeSettingsTab, type SettingsTabId } from '../../lib/settingsAccess'
@@ -505,6 +506,7 @@ const TABS = [
   { id: 'geral',      label: 'Geral',      icon: Building },
   { id: 'pagamentos', label: 'Pagamentos', icon: DollarSign },
   { id: 'escola',     label: 'Escola',     icon: GraduationCap },
+  { id: 'funil',      label: 'Funil e leads', icon: Filter },
   { id: 'identidade', label: 'Identidade', icon: Palette },
   { id: 'whatsapp',   label: 'WhatsApp',   icon: MessageCircle },
   // Fase 2 · marco 1: base de alunos (lançamento manual, Activesoft, fonte)
@@ -534,6 +536,7 @@ export default function SystemSettings() {
   const activeTab = visibleTabs.some(t => t.id === urlTab) ? (urlTab as string) : (visibleTabs[0]?.id ?? 'escola')
   const setActiveTab = (tab: string) => setSearchParams({ tab }, { replace: true })
   const setEscolaSection = (sec: string) => setSearchParams(sec ? { tab: 'escola', sec } : { tab: 'escola' }, { replace: true })
+  const setFunilSection = (sec: string) => setSearchParams(sec ? { tab: 'funil', sec } : { tab: 'funil' }, { replace: true })
   const setWaSection = (sec: string) => setSearchParams(sec ? { tab: 'whatsapp', sec } : { tab: 'whatsapp' }, { replace: true })
 
   useEffect(() => {
@@ -584,6 +587,7 @@ export default function SystemSettings() {
         {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
         {activeTab === 'integracoes' && institutionId && <IntegrationsTab institutionId={institutionId} onToast={showToast} />}
         {activeTab === 'transmissoes' && broadcastEnabled && <FinanceTab institutionId={institutionId} />}
+        {activeTab === 'funil' && <FunilSettings institutionId={institutionId} role={role} isMobile={isMobile} section={urlSec} onSectionChange={setFunilSection} onToast={showToast} />}
         {activeTab === 'escola' && <EscolaSettings institutionId={institutionId} role={role} isMobile={isMobile} section={urlSec} onSectionChange={setEscolaSection} onToast={showToast} onEditSchool={() => setShowSchoolSetup(true)} />}
       </div>
 

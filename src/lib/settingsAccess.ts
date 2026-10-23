@@ -15,7 +15,7 @@
 
 export type SettingsRole = 'admin' | 'manager'
 
-export type SettingsTabId = 'geral' | 'pagamentos' | 'transmissoes' | 'escola' | 'identidade' | 'whatsapp' | 'integracoes'
+export type SettingsTabId = 'geral' | 'pagamentos' | 'transmissoes' | 'escola' | 'funil' | 'identidade' | 'whatsapp' | 'integracoes'
 
 export interface SettingsItem {
   tab: SettingsTabId
@@ -37,6 +37,7 @@ export const SETTINGS_ITEMS = {
   'escola.series':                 { tab: 'escola', section: 'series', label: 'Séries',                      roles: BOTH },
   'escola.unidade':                { tab: 'escola', section: 'unidade', label: 'Campo de unidade do lead',    roles: BOTH },
   'escola.lembrete':               { tab: 'escola', section: 'lembrete', label: 'Lembrete de lead sem contato', roles: ADMIN },
+  'funil.origens':                 { tab: 'funil', section: 'origens', label: 'Origens do lead', roles: BOTH },
   'whatsapp.conexao':              { tab: 'whatsapp', section: 'conexao',   label: 'Conexão e robô',           roles: ADMIN },
   'whatsapp.automacoes':           { tab: 'whatsapp', section: 'automacoes', label: 'Automações',              roles: ADMIN },
   'whatsapp.datas':               { tab: 'whatsapp', section: 'datas',     label: 'Feriados e datas especiais', roles: ADMIN },
