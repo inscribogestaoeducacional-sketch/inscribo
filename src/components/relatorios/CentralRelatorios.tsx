@@ -1,6 +1,6 @@
 // Central de Relatórios: menu horizontal de módulos; cada um com resumo, tabela, CSV e análise da IA.
 import { useState } from 'react'
-import { BarChart3, Users, MessageCircle, Headset, SmilePlus, GraduationCap, CalendarCheck, UserCog, Megaphone, ClipboardList } from 'lucide-react'
+import { BarChart3, Users, MessageCircle, Headset, SmilePlus, GraduationCap, CalendarCheck, UserCog, Megaphone, ClipboardList, Contact } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
 import LeadsReport from './LeadsReport'
 import WhatsappReport from './WhatsappReport'
@@ -11,8 +11,9 @@ import VisitasReport from './VisitasReport'
 import UsuariosReport from './UsuariosReport'
 import TransmissoesReport from './TransmissoesReport'
 import PesquisasReport from './PesquisasReport'
+import ContatosReport from './ContatosReport'
 
-type Mod = 'leads' | 'whatsapp' | 'atendimento' | 'satisfacao' | 'matriculas' | 'visitas' | 'usuarios' | 'transmissoes' | 'pesquisas'
+type Mod = 'leads' | 'whatsapp' | 'atendimento' | 'satisfacao' | 'matriculas' | 'visitas' | 'usuarios' | 'transmissoes' | 'pesquisas' | 'contatos'
 const MODS: { id: Mod; label: string; Icon: typeof Users }[] = [
   { id: 'leads', label: 'Leads', Icon: Users },
   { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle },
@@ -21,6 +22,7 @@ const MODS: { id: Mod; label: string; Icon: typeof Users }[] = [
   { id: 'matriculas', label: 'Matrículas', Icon: GraduationCap },
   { id: 'pesquisas', label: 'Pesquisas', Icon: ClipboardList },
   { id: 'visitas', label: 'Visitas', Icon: CalendarCheck },
+  { id: 'contatos', label: 'Contatos', Icon: Contact },
   { id: 'transmissoes', label: 'Transmissões', Icon: Megaphone },
   { id: 'usuarios', label: 'Usuários', Icon: UserCog },
 ]
@@ -42,6 +44,7 @@ export default function CentralRelatorios({ institutionId, institutionName }: { 
       {mod === 'whatsapp' && <WhatsappReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'atendimento' && <AtendimentoReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'satisfacao' && <SatisfacaoReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
+      {mod === 'contatos' && <ContatosReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'pesquisas' && <PesquisasReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'transmissoes' && <TransmissoesReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'usuarios' && <UsuariosReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
