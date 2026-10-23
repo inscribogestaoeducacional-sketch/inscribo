@@ -80,6 +80,7 @@ export default function CampanhaMatriculas() {
   const [panel, setPanel] = useState<PanelRow[]>([])
   const [info, setInfo] = useState<{ sources: string[] | null; pre_counts: boolean } | null>(null)
   const [tab, setTab] = useState<Tab>('geral')
+  const [noLead, setNoLead] = useState<{ novos_matriculados: number; sem_lead: number; lista: { student: string; grade: string | null }[] } | null>(null)
   const [ed, setEd] = useState<Ed | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -113,12 +114,14 @@ export default function CampanhaMatriculas() {
     let alive = true
     setLoading(true); setEd(null)
     ;(async () => {
-      const [h, p, i] = await Promise.all([
+      const [h, p, i, nl] = await Promise.all([
         supabase.rpc('campaign_history', { p_institution_id: institutionId, p_target_year: targetYear, p_years: 3 }),
         supabase.rpc('base_reenrollment_panel', { p_institution_id: institutionId, p_target_year: targetYear }),
         supabase.rpc('base_sync_info', { p_institution_id: institutionId }),
+        supabase.rpc('campaign_enrollments_without_lead', { p_inst: institutionId, p_year: targetYear }),
       ])
       if (!alive) return
+      setNoLead(nl.error ? null : (nl.data as typeof noLead))
       setHist((h.data ?? null) as History | null)
       setPanel(((p.data ?? []) as PanelRow[]))
       setInfo(((i.data ?? [])[0] ?? null) as { sources: string[] | null; pre_counts: boolean } | null)
@@ -364,6 +367,22 @@ export default function CampanhaMatriculas() {
 
       {!loading && cycle && tab === 'geral' && (
         <>
+          {noLead && noLead.sem_lead > 0 && (
+            <div style={{ ...card, borderColor: '#FDE68A', background: '#FFFBEB' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#92400E', marginBottom: 4 }}>
+                {noLead.sem_lead} de {noLead.novos_matriculados} alunos novos matriculados em {targetYear} não têm lead
+              </div>
+              <div style={{ fontSize: 12.5, color: '#92400E', marginBottom: 8 }}>
+                O telefone do responsável não aparece em nenhum lead. Sem o lead, o funil e a origem da matrícula ficam incompletos.
+              </div>
+              <div style={{ fontSize: 12.5, color: BRAND.text, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {noLead.lista.slice(0, 12).map((x, i) => (
+                  <span key={i} style={{ background: '#fff', border: '1px solid #FDE68A', borderRadius: 999, padding: '3px 10px' }}>{x.student}{x.grade ? ` · ${x.grade}` : ''}</span>
+                ))}
+                {noLead.lista.length > 12 && <span style={{ color: BRAND.muted }}>+{noLead.lista.length - 12}</span>}
+              </div>
+            </div>
+          )}
           {!configured ? (
             <div style={card}><div style={{ fontSize: 14, color: BRAND.text }}>Esta campanha ainda não tem meta. Abra <b>Metas e mês a mês</b> para configurar.</div></div>
           ) : (
