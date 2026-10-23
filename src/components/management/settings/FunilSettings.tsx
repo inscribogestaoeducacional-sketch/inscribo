@@ -19,6 +19,11 @@ export default function FunilSettings({ institutionId, role, isMobile, section, 
   const go = (v: string) => { setView(v); onSectionChange?.(v) }
   const goHome = () => { setView('inicio'); onSectionChange?.('') }
 
+  // Com um assunto só, a aba abre direto nele (sem cartão no meio).
+  if (allowed.length === 1) {
+    return <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>{allowed[0] === 'origens' && <LeadSourcesEditor institutionId={institutionId} onToast={onToast} />}</div>
+  }
+
   if (view === 'inicio' || !INFO[view] || !allowed.includes(view)) {
     return (
       <div>
