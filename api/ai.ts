@@ -1083,7 +1083,7 @@ Seções, nesta ordem (omita só se não houver dado): "Placar do mês", "Compen
 
 DADOS (JSON):
 ${JSON.stringify(snapshot).slice(0, 40000)}`
-      const raw = await callClaude(prompt, 4500)
+      const raw = await callClaude(prompt, 6000)
       let report: unknown
       try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
       return res.json({ result: report })
@@ -1115,21 +1115,42 @@ ${JSON.stringify(data).slice(0, 30000)}`
 
     if (action === 'whatsapp_batch_extract') {
       const { institutionName, conversas } = payload as { institutionName?: string; conversas: { atendente: string; nota: number | null; comentario?: string | null; msgs: { quem: string; texto: string }[] }[] }
-      const prompt = `Você lê conversas reais de WhatsApp entre famílias e a equipe de ${institutionName || 'uma escola particular'} e extrai fatos para um relatório de gestão. Em cada conversa "cliente" é a família e "escola" é a equipe. "nota": 1 Ruim, 2 Regular, 3 Ótimo (a família avaliou o atendimento ao fim).
+      const prompt = `Você lê conversas reais de WhatsApp entre famílias (possíveis novos alunos e pais atuais) e a equipe de ${institutionName || 'uma escola particular'} e extrai fatos para um relatório de gestão sobre o atendimento e a captação. Em cada conversa "cliente" é a família e "escola" é a equipe. "nota": 1 Ruim, 2 Regular, 3 Ótimo (a família avaliou o atendimento ao fim).
 
 REGRAS
-- Use SOMENTE o que está escrito nas conversas. Nada de inventar.
+- Use SOMENTE o que está escrito. Nada de inventar. Conte de verdade: "conversas" é quantas conversas deste lote tocam no tema.
 - Não copie nome, telefone nem dado pessoal. Exemplos devem ser frases curtas e anônimas (troque nomes por "a família").
-- Agrupe por TEMA (ex.: valores e mensalidade, vagas e séries, visita à escola, horários, documentos, uniforme, transporte, bolsas e descontos, rematrícula, financeiro).
-- Para cada atendente, observe o MÉTODO: cordialidade, clareza, se responde a pergunta, se conduz para a visita ou matrícula, se pergunta o nome e a série, se faz follow-up, erros ou respostas confusas. Seja objetivo e justo.
+- Temas: valores e mensalidade, vagas e séries, visita à escola, horários e turnos, documentos, uniforme e material, transporte, bolsas e descontos, rematrícula, financeiro/boletos, proposta pedagógica, localização, etc.
+- ABORDAGEM: como a família chega (o que pergunta na primeira mensagem), como a equipe a recebe (cumprimento, pergunta nome e série, apresenta a escola, envia material), se conduz para a VISITA ou a matrícula, se faz follow-up, e onde a conversa esfria (a família para de responder depois de quê? preço enviado? falta de resposta?).
+- MÉTODO por atendente: cordialidade, clareza, se responde exatamente o que foi perguntado, se usa mensagens prontas que não combinam com a pergunta, erros, demora entre respostas, se deixa a família sem resposta, se encerra sem proposta de próximo passo.
 
-SAÍDA: somente JSON válido: {"temas":[{"tema":"...","conversas":N,"perguntas":["pergunta típica da família, anônima"],"exemplo":"frase curta anônima"}],"clientes_dizem":{"elogios":["..."],"reclamacoes":["..."],"duvidas_que_travam":["..."]},"problemas_atendimento":[{"problema":"...","atendentes":["..."],"exemplo":"..."}],"por_atendente":[{"nome":"...","conversas_lidas":N,"pontos_fortes":["..."],"pontos_a_melhorar":["..."],"conduz_para_visita":"sim|às vezes|raramente|não dá para saber"}]}
+SAÍDA: somente JSON válido: {"lidas":N,"temas":[{"tema":"...","conversas":N,"perguntas":["pergunta típica, anônima"],"exemplo":"frase curta"}],"clientes_dizem":{"elogios":["..."],"reclamacoes":["..."],"objecoes":["motivos de hesitar ou desistir, ex.: preço"],"duvidas_que_travam":["..."]},"abordagem":{"primeira_mensagem_das_familias":["..."],"como_a_equipe_recebe":["..."],"conduz_para_visita":{"sim":N,"nao":N},"onde_esfria":["situação em que a família sumiu, com quantas conversas"],"falhas":["..."],"boas_praticas":["..."]},"problemas_atendimento":[{"problema":"...","atendentes":["..."],"conversas":N,"exemplo":"..."}],"por_atendente":[{"nome":"...","conversas_lidas":N,"pontos_fortes":["..."],"pontos_a_melhorar":["..."],"conduz_para_visita":"sim|às vezes|raramente|não dá para saber"}]}
 
 CONVERSAS (JSON):
 ${JSON.stringify(conversas).slice(0, 38000)}`
-      const raw = await callClaude(prompt, 3500)
+      const raw = await callClaude(prompt, 4000)
       let out: unknown
       try { out = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu a leitura fora do formato. Tente de novo.' }) }
+      return res.json({ result: out })
+    }
+
+    if (action === 'whatsapp_merge_extracts') {
+      const { extratos } = payload as { extratos: unknown[] }
+      const prompt = `Você recebe várias leituras parciais (JSON) de conversas de WhatsApp de uma escola, cada uma de um lote diferente de conversas. Una tudo numa única leitura, no MESMO formato.
+
+REGRAS
+- Some as contagens ("conversas", "lidas", "sim"/"nao") de verdade ao unir temas iguais ou parecidos; não invente números.
+- Una temas, perguntas, elogios, reclamações, objeções, falhas e boas práticas semelhantes; mantenha só os 12 temas e os itens mais frequentes de cada lista (ordenados do mais para o menos frequente). Preserve exemplos curtos e anônimos.
+- Una por atendente (mesmo nome) somando "conversas_lidas" e juntando os pontos mais repetidos.
+- Mantenha anonimato. Não use markdown.
+
+SAÍDA: somente JSON válido no mesmo formato das leituras de entrada: {"lidas":N,"temas":[...],"clientes_dizem":{...},"abordagem":{...},"problemas_atendimento":[...],"por_atendente":[...]}
+
+LEITURAS (JSON):
+${JSON.stringify(extratos).slice(0, 40000)}`
+      const raw = await callClaude(prompt, 4000)
+      let out: unknown
+      try { out = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu a união fora do formato. Tente de novo.' }) }
       return res.json({ result: out })
     }
 
@@ -1140,7 +1161,7 @@ ${JSON.stringify(conversas).slice(0, 38000)}`
         atendimento: 'Módulo ATENDIMENTO: desempenho de cada atendente no WhatsApp. Avalie carga de conversas, mediana e p90 (90% das conversas) do tempo da primeira resposta em minutos (inclui horas fora do expediente), tempo mediano até encerrar a conversa (horas), conversas sem resposta de pessoa, mensagens enviadas e satisfação (escala 1 Ruim, 2 Regular, 3 Ótimo). Compare os atendentes com justiça, sem rankear de forma cruel; aponte o que cada um faz bem e o que melhorar.',
         satisfacao: 'Módulo SATISFAÇÃO DO ATENDIMENTO: notas dadas pelas famílias ao fim das conversas de WhatsApp na escala 1 Ruim, 2 Regular, 3 Ótimo. Avalie o índice de satisfação em % ((média - 1) / 2), a distribuição, a taxa de resposta (avaliações / pesquisas enviadas), atendentes com mais notas baixas e comentários (se existirem). Dê atenção às notas 1 e 2 e ao que os comentários dizem. Sugira como manter as notas 3 e aumentar a taxa de resposta.',
         matriculas: 'Módulo MATRÍCULAS POR PESSOA: matrículas registradas no período e quem as registrou. Avalie volume, comparação com o período anterior, séries e origens que mais matriculam, e a contribuição de cada pessoa. O tempo do lead até a matrícula pode ser 0 quando o lead é cadastrado já na matrícula; trate com cautela. Algumas datas podem ser estimadas.',
-        whatsapp: 'Módulo WHATSAPP: atendimento às famílias. Os dados trazem números do período (conversas, mensagens, horários, atendentes) e "leitura_das_conversas": extratos de conversas REAIS lidas pela IA em lotes (temas e perguntas frequentes, o que as famílias elogiam e reclamam, o que trava a conversa, e o método de cada atendente). Use essa leitura como base principal: ordene as perguntas frequentes por número de conversas, explique o que as famílias estão achando, descreva o método de cada atendente (pontos fortes e a melhorar, se conduz para a visita) e proponha melhorias concretas (respostas prontas, ajustes de abordagem). A leitura vem de uma amostra de conversas sorteadas por atendente: diga isso em "limites". Satisfação: escala 1 Ruim, 2 Regular, 3 Ótimo; o índice em % é (média - 1) / 2. Tempo de primeira resposta é mediana em minutos e pode incluir horas fora do expediente.',
+        whatsapp: 'Módulo WHATSAPP: atendimento e captação pelas conversas. Os dados trazem (1) números do período; (2) "gargalos_medidos": medições exatas por atendente (percentual de falas da família respondidas em 5, 30 e 60 minutos entre 7h e 19h, falas sem resposta, conversas em que a última mensagem é da família e ficou mais de 24h sem resposta — pode incluir mensagens de agradecimento —, famílias que não voltaram depois de a escola falar por último, e quantas conversas viraram agendamento, visita ou matrícula) e a resposta por hora do dia; (3) "leitura_das_conversas": leitura de conversas REAIS pela IA, completa ou em amostra ("modo_leitura"), com temas e perguntas frequentes, o que as famílias elogiam, reclamam e as objeções, a abordagem (como a família chega, como a equipe recebe, se conduz para a visita, onde a conversa esfria) e o método de cada atendente. Faça um diagnóstico profundo e honesto para o gestor: gargalos (com a medida que os prova), defeitos de abordagem, problemas por atendente (justo e construtivo, ligando método aos números de conversão), horários críticos e correções concretas, como respostas prontas melhores, rotina de follow-up, escala por horário e treinamento. Ordene perguntas frequentes por número de conversas. Satisfação: escala 1 Ruim, 2 Regular, 3 Ótimo; índice em % = (média - 1) / 2. Se o modo for amostra, diga em "limites" que não cobre todas as conversas.',
       }
       const prompt = `Você é consultor de gestão e atendimento de escolas particulares brasileiras, falando com o gestor de ${institutionName || 'a escola'}.
 Analise o módulo "${moduleTitle}" no período ${periodo}. ${guia[module] || ''}
@@ -1152,10 +1173,10 @@ REGRAS
 - Se houver "amostra" de conversas, é só uma amostra aleatória: não generalize como total. Não cite nome, telefone ou dado pessoal de clientes; exemplos devem ser frases curtas e anônimas.
 - Análise por pessoa deve ser justa e construtiva, baseada nos números; mediana alta de resposta pode ser horário fora do expediente.
 - Ações práticas, em ordem de prioridade, com quem faz e prazo realista.
-- "perguntas_frequentes" e "clientes_dizem" só quando os dados trouxerem a leitura de conversas (omita nos demais módulos). Em "pessoas", se houver leitura de conversas, descreva o método de cada atendente (o que faz bem, o que melhorar, se conduz para a visita ou a matrícula).
+- "perguntas_frequentes", "clientes_dizem", "gargalos" e "abordagem" só quando os dados trouxerem a leitura de conversas (omita nos demais módulos). Em "pessoas", se houver leitura de conversas, descreva o método de cada atendente (o que faz bem, o que melhorar, se conduz para a visita ou a matrícula).
 - Se os dados forem poucos, diga isso em "limites". Não use markdown.
 
-SAÍDA: somente JSON válido: {"resumo":"3 a 5 frases","destaques":["..."],"atencao":[{"titulo":"...","descricao":"..."}],"comparacao":"...","perguntas_frequentes":[{"tema":"...","conversas":0,"perguntas":["..."]}],"clientes_dizem":{"elogios":["..."],"reclamacoes":["..."]},"pessoas":[{"nome":"...","leitura":"..."}],"acoes":[{"acao":"...","quem":"...","prazo":"..."}],"perguntas_reuniao":["..."],"limites":"o que esta análise não mostra"}
+SAÍDA: somente JSON válido: {"resumo":"3 a 5 frases","destaques":["..."],"atencao":[{"titulo":"...","descricao":"..."}],"comparacao":"...","perguntas_frequentes":[{"tema":"...","conversas":0,"perguntas":["..."]}],"clientes_dizem":{"elogios":["..."],"reclamacoes":["..."],"objecoes":["..."]},"gargalos":[{"titulo":"...","evidencia":"número ou fato que prova","impacto":"...","correcao":"..."}],"abordagem":{"como_chegam":"...","como_sao_recebidos":"...","onde_esfria":"...","falhas":["..."],"boas_praticas":["..."]},"pessoas":[{"nome":"...","leitura":"..."}],"acoes":[{"acao":"...","quem":"...","prazo":"..."}],"perguntas_reuniao":["..."],"limites":"o que esta análise não mostra"}
 
 DADOS (JSON):
 ${JSON.stringify(data).slice(0, 30000)}`
