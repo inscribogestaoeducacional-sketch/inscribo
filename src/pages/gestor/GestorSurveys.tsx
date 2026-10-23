@@ -877,6 +877,36 @@ export default function GestorSurveys() {
     else setShowLinkModal({ survey: data })
   }
 
+  // Modelo pronto: pesquisa de satisfação dos colaboradores (anônima, perguntas padrão), já ativa e com link para enviar.
+  async function createStaffSurvey() {
+    if (!confirm('Criar a pesquisa de satisfação dos colaboradores? Ela vem pronta, é anônima e já fica ativa para você enviar o link.')) return
+    setSaving(true)
+    const { data, error } = await supabase.from('satisfaction_surveys').insert({
+      institution_id: institutionId, title: `Satisfação dos colaboradores ${new Date().getFullYear()}`,
+      description: 'Queremos ouvir você. Suas respostas são anônimas e vão ajudar a melhorar o dia a dia da escola.',
+      require_identification: false, status: 'active', survey_mode: 'custom', created_by: user?.full_name ?? null,
+    }).select().single()
+    if (error || !data) { setSaving(false); showToast('Erro ao criar a pesquisa.'); return }
+    const sc = (title: string, min_label?: string, max_label?: string) => ({ question_type: 'scale', title, required: true, options: { min: 1, max: 5, min_label: min_label ?? 'Nada satisfeito', max_label: max_label ?? 'Muito satisfeito' } })
+    const qs = [
+      { question_type: 'nps', title: 'De 0 a 10, o quanto você recomendaria a nossa escola como um bom lugar para trabalhar?', required: true, options: { min_label: 'Nada provável', max_label: 'Muito provável' } },
+      sc('Como você avalia o ambiente de trabalho (relacionamento com colegas e clima)?'),
+      sc('Como você avalia a liderança e o apoio da direção/coordenação?'),
+      sc('Como você avalia a comunicação interna (você recebe as informações de que precisa)?'),
+      sc('Como você avalia os recursos e a estrutura para fazer o seu trabalho?'),
+      sc('Você sente que o seu trabalho é reconhecido e valorizado?'),
+      sc('Como você avalia as oportunidades de crescimento e capacitação?'),
+      { question_type: 'multiple_choice', title: 'O que mais pesa positivamente no seu dia a dia aqui?', required: false, options: { options: ['Colegas', 'Direção/coordenação', 'Estrutura', 'Alunos e famílias', 'Horários', 'Remuneração e benefícios', 'Outro'] } },
+      { question_type: 'multiple_choice', title: 'O que mais precisa melhorar?', required: false, options: { options: ['Comunicação', 'Organização dos processos', 'Estrutura e materiais', 'Carga de trabalho', 'Reconhecimento', 'Remuneração e benefícios', 'Outro'] } },
+      { question_type: 'text', title: 'Se pudesse mudar uma coisa na escola amanhã, o que seria?', required: false, options: null },
+    ].map((q, i) => ({ ...q, survey_id: data.id, institution_id: institutionId, order_index: i, description: null }))
+    const { error: qe } = await supabase.from('satisfaction_questions').insert(qs)
+    setSaving(false)
+    if (qe) { showToast('A pesquisa foi criada, mas houve erro nas perguntas. Abra "Editar perguntas".'); load(); return }
+    await load()
+    setShowLinkModal({ survey: data })
+  }
+
   async function closeSurvey(id: string) {
     if (!confirm('Encerrar esta pesquisa? Ela não aceitará mais respostas.')) return
     await supabase.from('satisfaction_surveys')
@@ -1731,9 +1761,14 @@ export default function GestorSurveys() {
             <p style={{ fontSize: 13, color: '#94a3b8', margin: '2px 0 0' }}>Entenda o que as famílias pensam e antecipe rematrículas</p>
           </div>
         </div>
-        <button onClick={openNewModal} style={btn('#00A896')}>
-          <Plus size={16} /> Nova pesquisa
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button onClick={createStaffSurvey} disabled={saving} style={{ ...btn('#fff'), color: '#00796B', border: '1.5px solid #00A896' }}>
+            <Users size={16} /> Pesquisa dos colaboradores
+          </button>
+          <button onClick={openNewModal} style={btn('#00A896')}>
+            <Plus size={16} /> Nova pesquisa
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
