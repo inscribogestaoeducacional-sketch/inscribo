@@ -1,0 +1,4 @@
+-- Leads: linha do tempo completa, espera de conversa e diferença com a integração.
+-- (Aplicado direto no banco em 23/10/2026; este arquivo só documenta.)
+-- Funções: lead_timeline(uuid,int), lead_waiting(uuid), _nk(text),
+--          integration_enrolled_gap(uuid,int), integration_import_enrolled(uuid,uuid[]).

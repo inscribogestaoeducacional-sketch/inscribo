@@ -32,13 +32,14 @@ import VisitOutcomeDialog from '../visits/VisitOutcomeDialog'
 import PageHeader from '../ui/PageHeader'
 import { BRAND } from '../../lib/brand'
 import { AttentionStrip, WaitingList, LEADS_CSS, useLeadWaiting, waitLabel, daysSince, type AttentionKey, type StripCounts, type WaitingRow } from './LeadsAttention'
+import IntegrationGap from './IntegrationGap'
 import NewLeadModal from './NewLeadModal'
 import ScheduleVisitModal from './ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
 import { LostReasonModal, lostReasonLabel, useLostReasons } from './lostReasons'
 import {
   type SimpleUser, type AuditEntry, type StudentEntry,
-  statusConfig, LEAD_TEMPERATURES, LEAD_STAGES,
+  statusConfig, LEAD_TEMPERATURES, LEAD_STAGES, avatarColor,
 } from './leadFormShared'
 
 // Motivos de perda e LostReasonModal: ./lostReasons.tsx (também usados pelo formulário).
@@ -169,42 +170,50 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
   const reminder = getLeadReminderInfo(lead, reminderOpts)
   const reminderColors = reminder ? REMINDER_COLORS[reminder.urgency] : null
 
+  const hot = waitingInfo?.side === 'us' && lead.status !== 'lost' && lead.status !== 'enrolled'
+  const stripe = hot ? '#EF4444' : config.accent
+  const nameForColor = lead.responsible_name || lead.student_name || '?'
+  const avatarBg = avatarColor(nameForColor)
+  const initials = nameForColor.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
+  const assignedInitials = assignedUser ? assignedUser.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() : null
+  const pill = (bg: string, color: string): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 4, background: bg, color, fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 999, maxWidth: '100%' })
+
   return (
     <div
-      className={`group relative rounded-xl border ld-card ld-in overflow-hidden ${
-        selectMode && selected ? 'bg-indigo-50/60 border-indigo-400 ring-2 ring-indigo-400 shadow-sm'
-        : isFlashing ? 'bg-teal-50/40 border-teal-400 ring-2 ring-teal-500 shadow-md animate-pulse'
-        : overlay ? 'bg-white border-gray-200 shadow-xl scale-105 opacity-50'
-        : 'bg-white border-gray-200 shadow-sm hover:shadow-md hover:border-teal-300'
-      }`}
-      style={{ borderLeft: `3px solid ${config.accent}` }}
+      className={`group relative ld-card ld-in overflow-hidden ${isFlashing ? 'animate-pulse' : ''}`}
+      style={{
+        background: selectMode && selected ? '#EEF2FF' : '#fff', borderRadius: 16, borderLeft: `4px solid ${stripe}`,
+        border: `1px solid ${selectMode && selected ? '#818CF8' : isFlashing ? '#14B8A6' : '#fff'}`, borderLeftWidth: 4, borderLeftColor: stripe,
+        boxShadow: overlay ? '0 18px 32px -12px rgba(26,43,74,.35)' : '0 1px 2px rgba(26,43,74,.05), 0 6px 16px -10px rgba(26,43,74,.22)',
+        opacity: overlay ? 0.6 : 1,
+      }}
     >
       {selectMode && (
         <div className="absolute top-2 right-2 z-10 pointer-events-none">
           <input type="checkbox" readOnly checked={!!selected} className="h-4 w-4 accent-indigo-600" aria-label="Selecionado" />
         </div>
       )}
-      {/* Card body — clicável para editar */}
-      <div className={compact ? 'p-2' : 'p-3'}>
-        {/* Item 9a — responsável/família em destaque, aluno(s) como subtítulo */}
-        <div className="flex items-start gap-2 mb-1.5">
-          <div className={`${compact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'} rounded-full bg-[#1e2d6b] text-white font-bold flex items-center justify-center flex-shrink-0 mt-0.5`}>
-            {(lead.responsible_name || '?').charAt(0).toUpperCase()}
+      <div style={{ padding: compact ? 9 : 12 }}>
+        {/* Responsável/família em destaque, aluno(s) como subtítulo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <div style={{ width: compact ? 32 : 38, height: compact ? 32 : 38, borderRadius: 13, background: `linear-gradient(135deg, ${avatarBg}, ${avatarBg}CC)`, color: '#fff', fontWeight: 700, fontSize: compact ? 12 : 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials}</div>
+            {temperature && (
+              <span title={temperature.label} style={{ position: 'absolute', right: -4, bottom: -4, width: 18, height: 18, borderRadius: '50%', background: temperature.bg, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <temperature.icon size={10} color={temperature.color} />
+              </span>
+            )}
           </div>
-          <div className="flex-1 min-w-0">
-            <h4 className={`${compact ? 'text-sm' : 'text-[15px]'} font-bold text-gray-900 leading-tight truncate`}>{lead.responsible_name}</h4>
-            <p className="text-xs text-gray-500 truncate">
-              🎓 {lead.student_name}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h4 style={{ margin: 0, fontSize: compact ? 13.5 : 14.5, fontWeight: 700, color: '#1A2B4A', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.responsible_name}</h4>
+            <p style={{ margin: 0, fontSize: 12, color: '#5B6B86', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <GraduationCap size={12} style={{ flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{lead.student_name}</span>
               {hasFamily && (
-                <span style={{ marginLeft: 5, fontWeight: 600, color: '#8B5CF6' }}>
-                  +{familyMembers!.length - 1} irmão{familyMembers!.length - 1 === 1 ? '' : 's'}
-                </span>
+                <span style={{ fontWeight: 700, color: '#7C3AED', flexShrink: 0 }}>+{familyMembers!.length - 1} irmão{familyMembers!.length - 1 === 1 ? '' : 's'}</span>
               )}
             </p>
           </div>
-          {temperature && (
-            <span title={temperature.label} style={{ display: 'inline-flex', flexShrink: 0, marginTop: 2 }}><temperature.icon size={15} color={temperature.color} /></span>
-          )}
           {!overlay && (
             <button
               title="Excluir"
@@ -217,18 +226,50 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
           )}
         </div>
 
-        {/* Linha única: série · origem · unidade. O resto fica na ficha. */}
-        {(unitName || lead.grade_interest || lead.source) && (
-          <p className="text-xs text-gray-500 truncate mb-1.5" title={lead.campaign_cycle_id ? 'Vinculado a uma campanha' : undefined}>
-            {[unitName, lead.grade_interest, lead.source === 'embed' ? 'Via site' : lead.source].filter(Boolean).join(' · ')}
-          </p>
+        {/* Selos: unidade, série, ano, origem, temperatura, campanha */}
+        {(unitName || lead.grade_interest || lead.source || temperature || lead.campaign_cycle_id || lead.year_interest) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+            {unitName && <span style={pill('#EEF2FF', '#4338CA')}><MapPin size={10} />{unitName}</span>}
+            {lead.grade_interest && <span style={pill('#E6F7F5', '#007A6E')}>{lead.grade_interest}</span>}
+            {lead.year_interest && !compact && <span title="Ano de interesse" style={pill('#FEF3C7', '#B45309')}>{lead.year_interest}</span>}
+            {lead.source && (lead.source === 'embed'
+              ? <span style={pill('#E0F2FE', '#0369A1')}>Via site</span>
+              : <span style={pill('#F1F5F9', '#475569')}>{lead.source}</span>)}
+            {temperature && !compact && (
+              <span title={temperature.label} style={{ ...pill(temperature.bg, temperature.color), border: `1px solid ${temperature.border}` }}><temperature.icon size={10} />{temperature.label}</span>
+            )}
+            {lead.campaign_cycle_id && !compact && (
+              <span title={lead.cycle_link_kind === 'herdado' ? 'Pipeline herdado: criado antes do início da campanha (não conta como lead da campanha)' : 'Vinculado a uma campanha'} style={pill(lead.cycle_link_kind === 'herdado' ? '#F1F5F9' : '#F5F3FF', lead.cycle_link_kind === 'herdado' ? '#64748B' : '#7C3AED')}>
+                <Megaphone size={10} />{lead.cycle_link_kind === 'herdado' ? 'Herdado' : 'Campanha'}
+              </span>
+            )}
+          </div>
         )}
 
-        {/* Espera da conversa: só a informação que pede ação */}
+        {/* Tags */}
+        {!compact && lead.tags && lead.tags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+            {lead.tags.map(tag => <span key={tag} style={{ ...pill('#EEF2FF', '#4338CA'), fontSize: 10, padding: '1px 7px' }}><Tag size={9} />{tag}</span>)}
+          </div>
+        )}
+
+        {/* Espera da conversa */}
         {!overlay && waitingInfo && lead.status !== 'lost' && lead.status !== 'enrolled' && (
-          <p style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 4, color: waitingInfo.side === 'us' ? '#B91C1C' : '#B45309' }}>
+          <div style={{ ...pill(waitingInfo.side === 'us' ? '#FEE2E2' : '#FEF3C7', waitingInfo.side === 'us' ? '#B91C1C' : '#B45309'), marginBottom: 8, borderRadius: 9, padding: '4px 9px' }}>
             <Clock size={11} />{waitingInfo.side === 'us' ? 'família esperando' : 'sem retorno da família'} {waitLabel(waitingInfo.since)}
-          </p>
+          </div>
+        )}
+
+        {/* Telefone + atendente */}
+        {!compact && (lead.phone || assignedUser) && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+            {lead.phone ? <span style={{ fontSize: 12, color: '#5B6B86', display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={11} />{lead.phone}</span> : <span />}
+            {assignedUser && (
+              <span title={`Responsável: ${assignedUser.full_name}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, color: '#1e2d6b', background: '#EEF2FF', padding: '2px 8px', borderRadius: 999, flexShrink: 0 }}>
+                <UserCog size={10} />{assignedInitials}
+              </span>
+            )}
+          </div>
         )}
 
         {/* Fase 0A — visita que já passou sem baixa */}
@@ -326,14 +367,14 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
         )}
       </div>
 
-      {/* Footer sempre visível */}
+      {/* Rodapé sempre visível */}
       {!overlay && (
-        <div style={{ borderTop: '1px solid #F1F5F9', padding: '5px 8px', display: 'flex', gap: 5 }}>
+        <div style={{ borderTop: '1px solid #F1F5F4', padding: '7px 10px', display: 'flex', gap: 6 }}>
           {lead.status === 'lost' ? (
             <button
               onPointerDown={e => e.stopPropagation()}
               onClick={e => { e.stopPropagation(); hasFamily ? onReopenAll() : onStatusChange(lead.id, 'contact') }}
-              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: 7, background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '6px 0', borderRadius: 10, background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
             >
               🔄 Reabrir
             </button>
@@ -342,16 +383,16 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); onWhatsApp(lead) }}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: 7, background: '#DCFCE7', border: 'none', color: '#15803D', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '6px 0', borderRadius: 10, background: '#DCFCE7', border: 'none', color: '#15803D', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
               >
-                <MessageCircle style={{ width: 12, height: 12 }} /> WA
+                <MessageCircle style={{ width: 13, height: 13 }} /> WhatsApp
               </button>
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); onSchedule(lead) }}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: 7, background: '#DBEAFE', border: 'none', color: '#1D4ED8', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '6px 0', borderRadius: 10, background: '#EDE9FE', border: 'none', color: '#6D28D9', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
               >
-                <Calendar style={{ width: 12, height: 12 }} /> Visita
+                <Calendar style={{ width: 13, height: 13 }} /> Visita
               </button>
             </>
           )}
@@ -525,11 +566,11 @@ function SortableCard(props: Omit<CardContentProps, 'overlay'>) {
 // ─── DroppableColumn ──────────────────────────────────────────────────────────
 // Item 13 — colunas colapsáveis (útil pra colunas com poucos cards, tipo
 // "Matriculado"/"Perdido", ficarem compactas sem sumir do board).
-function DroppableColumn({ id, isOver, collapsed, children }: { id: string; isOver: boolean; collapsed?: boolean; children: React.ReactNode }) {
+function DroppableColumn({ id, isOver, collapsed, tint, children }: { id: string; isOver: boolean; collapsed?: boolean; tint?: string; children: React.ReactNode }) {
   const { setNodeRef } = useDroppable({ id })
   if (collapsed) return <div ref={setNodeRef} style={{ display: 'none' }}>{children}</div>
   return (
-    <div ref={setNodeRef} className={`flex-1 overflow-y-auto space-y-3 p-3 rounded-b-xl transition-all duration-200 ${isOver ? 'bg-[#14b8a6]/8 ring-2 ring-dashed ring-[#14b8a6] ring-inset' : 'bg-gray-100/60'}`} style={{ maxHeight: '72vh' }}>
+    <div ref={setNodeRef} className={`flex-1 overflow-y-auto space-y-3 p-2.5 transition-all duration-200 ${isOver ? 'ring-2 ring-dashed ring-[#14b8a6] ring-inset' : ''}`} style={{ maxHeight: '72vh', borderRadius: '0 0 18px 18px', background: isOver ? '#14b8a614' : (tint ? `${tint}12` : '#F1F5F4') }}>
       {children}
     </div>
   )
@@ -1256,6 +1297,7 @@ export default function LeadKanban() {
   const attentionBlock = (
     <>
       <style>{LEADS_CSS}</style>
+      {user?.institution_id && <IntegrationGap institutionId={user.institution_id} role={user.role} onDone={loadData} toast={showToast} />}
       <AttentionStrip counts={stripCounts} active={attention} onPick={k => { setAttention(k); if (k) refreshWaiting() }} />
       {(attention === 'us' || attention === 'family') && (
         <WaitingList title={attentionTitle[attention]} color={attention === 'us' ? '#B91C1C' : '#B45309'} rows={waitingRows}
@@ -1664,17 +1706,18 @@ export default function LeadKanban() {
                   {/* Item 13 — clicável pra colapsar/expandir a coluna */}
                   <div
                     onClick={() => setCollapsedColumns(prev => { const next = new Set(prev); if (next.has(status)) next.delete(status); else next.add(status); return next })}
-                    className={`${config.headerBg} rounded-t-xl px-4 py-3 flex items-center justify-between border-b-2 cursor-pointer select-none`}
-                    style={{ borderBottomColor: config.accent }}
+                    className="px-4 py-3 flex items-center justify-between cursor-pointer select-none"
+                    style={{ background: `${config.accent}22`, borderRadius: collapsedColumns.has(status) ? 18 : '18px 18px 0 0' }}
                   >
-                    <span className={`text-sm font-bold ${config.headerText} flex items-center gap-1.5`}>
+                    <span className="text-sm font-bold flex items-center gap-1.5" style={{ color: '#1A2B4A' }}>
+                      <span style={{ width: 9, height: 9, borderRadius: 99, background: config.accent }} />
                       {collapsedColumns.has(status) ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       {config.label}
                     </span>
-                    <span className={`${config.badgeBg} text-white text-xs font-bold px-2.5 py-0.5 rounded-full min-w-[24px] text-center`}>{colLeads.length}</span>
+                    <span style={{ background: '#fff', color: '#1A2B4A' }} className="text-xs font-bold px-2.5 py-0.5 rounded-full min-w-[24px] text-center">{colLeads.length}</span>
                   </div>
                   {!collapsedColumns.has(status) && (
-                    <DroppableColumn id={status} isOver={overColumnId === status && activeId !== null}>
+                    <DroppableColumn id={status} tint={config.accent} isOver={overColumnId === status && activeId !== null}>
                       <SortableContext items={colLeads.map(l => l.id)} strategy={verticalListSortingStrategy}>
                         {colLeads.map((lead) => {
                           const family = lead.family_id ? familyInfoMap.get(lead.family_id) : undefined
