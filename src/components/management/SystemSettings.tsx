@@ -4,19 +4,23 @@ import {
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
-  ChevronUp, ChevronDown, Pencil, Send, Plug, Filter,
+  ChevronUp, ChevronDown, Pencil, Send, Plug, Filter, Layers, Tag, ThumbsDown, Bell,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import SchoolSetupModal from '../onboarding/SchoolSetupModal'
 import WhatsAppSettings from './settings/WhatsAppSettings'
 import PageHeader from '../ui/PageHeader'
-import { SettingsStyles } from './settings/ui'
+import { SettingsStyles, Card, GhostButton } from './settings/ui'
 import { BRAND } from '../../lib/brand'
 import FinanceTab from '../transmissoes/FinanceTab'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
-import EscolaSettings from './settings/EscolaSettings'
-import FunilSettings from './settings/FunilSettings'
+import HubSettings, { type HubGroup } from './settings/HubSettings'
+import GradeLevelsEditor from './GradeLevelsEditor'
+import LeadUnitFieldEditor from './LeadUnitFieldEditor'
+import LeadReminderSettingsEditor from './LeadReminderSettingsEditor'
+import LeadSourcesEditor from './LeadSourcesEditor'
+import LostReasonsEditor from './LostReasonsEditor'
 import IntegrationsTab from './IntegrationsTab'
 import { useSearchParams } from 'react-router-dom'
 import { canSeeSettingsItem, canSeeSettingsTab, type SettingsTabId } from '../../lib/settingsAccess'
@@ -33,7 +37,7 @@ function Toast({ msg, ok }: { msg: string; ok: boolean }) {
 }
 
 // ─── Aba: Geral ───────────────────────────────────────────────────────────────
-function GeralTab({ institutionId, onToast }: { institutionId: string; onToast: (msg: string, ok?: boolean) => void }) {
+function GeralTab({ institutionId, onToast, part }: { institutionId: string; onToast: (msg: string, ok?: boolean) => void; part: 'dados' | 'plano' }) {
   const [data, setData] = useState({
     name: '', email: '', phone: '', city: '', state: '', cnpj: '', plan: '', plan_status: ''
   })
@@ -83,7 +87,7 @@ function GeralTab({ institutionId, onToast }: { institutionId: string; onToast: 
   return (
     <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 700 }}>
       {/* Dados básicos */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+      {part === 'dados' && <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
           <Building size={16} color="#64748B" />
           <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Dados da Instituição</span>
@@ -129,10 +133,10 @@ function GeralTab({ institutionId, onToast }: { institutionId: string; onToast: 
             </select>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Plano — somente leitura */}
-      <div style={{ background: '#F8FAFC', borderRadius: 16, border: '1px solid #E2E8F0', padding: 20 }}>
+      {part === 'plano' && <div style={{ background: '#F8FAFC', borderRadius: 16, border: '1px solid #E2E8F0', padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
           <DollarSign size={16} color="#64748B" />
           <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Plano e Faturamento</span>
@@ -155,13 +159,13 @@ function GeralTab({ institutionId, onToast }: { institutionId: string; onToast: 
             ⚠️ Trial encerra em: {new Date((data as any).trial_ends_at).toLocaleDateString('pt-BR')}
           </p>
         )}
-      </div>
+      </div>}
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      {part === 'dados' && <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button type="submit" disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
           {saving ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : <><Save size={13} />Salvar configurações</>}
         </button>
-      </div>
+      </div>}
     </form>
   )
 }
@@ -503,52 +507,91 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
 
 // ─── SystemSettings Principal ─────────────────────────────────────────────────
 const TABS = [
-  { id: 'geral',      label: 'Geral',      icon: Building },
-  { id: 'pagamentos', label: 'Pagamentos', icon: DollarSign },
-  { id: 'escola',     label: 'Escola',     icon: GraduationCap },
-  { id: 'funil',      label: 'Funil e leads', icon: Filter },
-  { id: 'identidade', label: 'Identidade', icon: Palette },
-  { id: 'whatsapp',   label: 'WhatsApp',   icon: MessageCircle },
-  // Fase 2 · marco 1: base de alunos (lançamento manual, Activesoft, fonte)
-  { id: 'integracoes', label: 'Integrações', icon: Plug },
+  { id: 'escola',      label: 'Escola',               icon: GraduationCap },
+  { id: 'plano',       label: 'Plano e pagamentos',   icon: DollarSign },
+  { id: 'funil',       label: 'Funil e leads',        icon: Filter },
+  { id: 'whatsapp',    label: 'WhatsApp',             icon: MessageCircle },
+  { id: 'integracoes', label: 'Integrações',          icon: Plug },
 ]
+
+// Links antigos (?tab=geral, identidade, pagamentos, transmissoes e as seções que
+// mudaram de aba) levam ao lugar novo, sem quebrar favoritos nem botões internos.
+function normalizeTarget(tab: string | null, sec: string | null): { tab: string | null; sec: string | null } {
+  if (tab === 'geral') return { tab: 'escola', sec: 'dados' }
+  if (tab === 'identidade') return { tab: 'escola', sec: 'identidade' }
+  if (tab === 'pagamentos') return { tab: 'plano', sec: 'pagamentos' }
+  if (tab === 'transmissoes') return { tab: 'plano', sec: 'creditos' }
+  if (tab === 'escola' && (sec === 'unidade' || sec === 'lembrete')) return { tab: 'funil', sec }
+  return { tab, sec }
+}
 
 export default function SystemSettings() {
   const { user } = useAuth()
   const role = user?.role
   // Fase 6.2: aba e seção na URL (?tab=whatsapp&sec=horario). Antes ?tab= era ignorado.
   const [searchParams, setSearchParams] = useSearchParams()
-  const urlTab = searchParams.get('tab')
-  const urlSec = searchParams.get('sec')
+  const { tab: urlTab, sec: urlSec } = normalizeTarget(searchParams.get('tab'), searchParams.get('sec'))
   const [showSchoolSetup, setShowSchoolSetup] = useState(false)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
   const institutionId = user?.institution_id || ''
 
-  // Aba "Transmissões" só com o módulo liberado pela Áion (mesma regra do menu).
+  // Créditos de Transmissões só aparecem com o módulo liberado pela Áion (mesma regra do menu).
   const broadcastEnabled = useBroadcastEnabled(institutionId)
-  const visibleTabs = (broadcastEnabled
-    ? [...TABS.slice(0, 2), { id: 'transmissoes', label: 'Transmissões', icon: Send }, ...TABS.slice(2)]
-    : TABS
-  ).filter(t => canSeeSettingsTab(t.id as SettingsTabId, role))
+  const visibleTabs = TABS.filter(t => canSeeSettingsTab(t.id as SettingsTabId, role))
   // Aba pedida na URL vale só se o perfil vê; senão, a primeira visível.
   const activeTab = visibleTabs.some(t => t.id === urlTab) ? (urlTab as string) : (visibleTabs[0]?.id ?? 'escola')
   const setActiveTab = (tab: string) => setSearchParams({ tab }, { replace: true })
-  const setEscolaSection = (sec: string) => setSearchParams(sec ? { tab: 'escola', sec } : { tab: 'escola' }, { replace: true })
-  const setFunilSection = (sec: string) => setSearchParams(sec ? { tab: 'funil', sec } : { tab: 'funil' }, { replace: true })
-  const setWaSection = (sec: string) => setSearchParams(sec ? { tab: 'whatsapp', sec } : { tab: 'whatsapp' }, { replace: true })
+  const sectionSetter = (tab: string) => (sec: string) => setSearchParams(sec ? { tab, sec } : { tab }, { replace: true })
+  const setWaSection = sectionSetter('whatsapp')
+
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const escolaGroups: HubGroup[] = [{
+    title: 'Sobre a escola', items: [
+      { key: 'dados', label: 'Dados da escola', desc: 'Nome, contato, CNPJ e cidade da escola.', item: 'escola.dados', Icon: Building, render: () => <GeralTab institutionId={institutionId} onToast={showToast} part="dados" /> },
+      { key: 'identidade', label: 'Logo e cores', desc: 'A logo e as cores da escola nas telas e mensagens.', item: 'escola.identidade', Icon: Palette, render: () => <IdentidadeTab institutionId={institutionId} onToast={showToast} /> },
+      { key: 'series', label: 'Séries', desc: 'As séries e etapas de ensino da escola, na ordem em que aparecem em todo o sistema.', item: 'escola.series', Icon: Layers, render: () => <GradeLevelsEditor institutionId={institutionId} onToast={showToast} /> },
+      { key: 'campanha', label: 'Dados da campanha', desc: 'As informações que o assistente usa para falar da escola: séries oferecidas, mensalidade média e dados da campanha.', item: 'escola.campanha', Icon: GraduationCap, render: () => (
+        <Card style={{ maxWidth: 560 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Dados da campanha</div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted, margin: '4px 0 14px', lineHeight: 1.5 }}>Abre o passo a passo com as informações da escola, as séries oferecidas e a mensalidade média.</div>
+          <GhostButton onClick={() => setShowSchoolSetup(true)}><GraduationCap size={15} /> Editar dados da campanha</GhostButton>
+        </Card>
+      ) },
+    ],
+  }]
+  const planoGroups: HubGroup[] = [{
+    title: 'Plano e cobrança', items: [
+      { key: 'plano', label: 'Plano e faturamento', desc: 'Seu plano na Áion, status e mensalidade.', item: 'plano.plano', Icon: FileText, render: () => <GeralTab institutionId={institutionId} onToast={showToast} part="plano" /> },
+      { key: 'pagamentos', label: 'Pagamentos', desc: 'Cobranças da mensalidade e links de pagamento.', item: 'plano.pagamentos', Icon: DollarSign, render: () => <PagamentosTab institutionId={institutionId} /> },
+      { key: 'creditos', label: 'Créditos de Transmissões', desc: 'Saldo e recargas para os disparos em massa.', item: 'plano.creditos', Icon: Send, hidden: !broadcastEnabled, render: () => <FinanceTab institutionId={institutionId} /> },
+    ],
+  }]
+  const funilGroups: HubGroup[] = [{
+    title: 'Funil e leads', items: [
+      { key: 'origens', label: 'Origens do lead', desc: 'De onde os contatos chegam: escolha as que a escola usa e acrescente as suas.', item: 'funil.origens', Icon: Tag, render: () => <LeadSourcesEditor institutionId={institutionId} onToast={showToast} /> },
+      { key: 'motivos', label: 'Motivos de perda', desc: 'Por que um lead foi perdido: a lista usada ao marcar como perdido e nos relatórios de recusa.', item: 'funil.motivos', Icon: ThumbsDown, render: () => <LostReasonsEditor institutionId={institutionId} onToast={showToast} /> },
+      { key: 'unidade', label: 'Campo de unidade do lead', desc: 'Para escolas com mais de uma unidade: liga o campo e cadastra as opções (Unidade, Campus, Polo…).', item: 'funil.unidade', Icon: MapPin, render: () => <LeadUnitFieldEditor institutionId={institutionId} onToast={showToast} /> },
+      { key: 'lembrete', label: 'Lead sem contato', desc: 'Depois de quantos dias sem conversa o lead aparece como "Sem contato".', item: 'funil.lembrete', Icon: Bell, render: () => <LeadReminderSettingsEditor institutionId={institutionId} onToast={showToast} /> },
+    ],
+  }]
+
+  // Link antigo: troca a URL pelo endereço novo (sem criar histórico).
+  useEffect(() => {
+    const t = searchParams.get('tab'); const sc = searchParams.get('sec')
+    if (t !== urlTab || sc !== urlSec) setSearchParams(urlSec ? { tab: urlTab as string, sec: urlSec } : { tab: urlTab as string }, { replace: true })
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
     window.addEventListener('resize', handler)
     return () => window.removeEventListener('resize', handler)
   }, [])
-
-  const showToast = (msg: string, ok = true) => {
-    setToast({ msg, ok })
-    setTimeout(() => setToast(null), 3000)
-  }
 
   return (
     <div style={{ padding: isMobile ? '14px 14px 96px' : '20px 24px 32px', maxWidth: 1200, margin: '0 auto', boxSizing: 'border-box', minHeight: '100%' }}>
@@ -581,14 +624,11 @@ export default function SystemSettings() {
 
       {/* Conteúdo */}
       <div>
-        {activeTab === 'geral' && <GeralTab institutionId={institutionId} onToast={showToast} />}
-        {activeTab === 'identidade' && <IdentidadeTab institutionId={institutionId} onToast={showToast} />}
+        {activeTab === 'escola' && <HubSettings rootLabel="Escola" groups={escolaGroups} role={role} isMobile={isMobile} section={urlSec} onSectionChange={sectionSetter('escola')} />}
+        {activeTab === 'plano' && <HubSettings rootLabel="Plano e pagamentos" groups={planoGroups} role={role} isMobile={isMobile} section={urlSec} onSectionChange={sectionSetter('plano')} />}
+        {activeTab === 'funil' && <HubSettings rootLabel="Funil e leads" groups={funilGroups} role={role} isMobile={isMobile} section={urlSec} onSectionChange={sectionSetter('funil')} />}
         {activeTab === 'whatsapp' && <WhatsAppSettings institutionId={institutionId} role={role} section={urlSec} isMobile={isMobile} onSectionChange={setWaSection} />}
-        {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
         {activeTab === 'integracoes' && institutionId && <IntegrationsTab institutionId={institutionId} onToast={showToast} />}
-        {activeTab === 'transmissoes' && broadcastEnabled && <FinanceTab institutionId={institutionId} />}
-        {activeTab === 'funil' && <FunilSettings institutionId={institutionId} role={role} isMobile={isMobile} section={urlSec} onSectionChange={setFunilSection} onToast={showToast} />}
-        {activeTab === 'escola' && <EscolaSettings institutionId={institutionId} role={role} isMobile={isMobile} section={urlSec} onSectionChange={setEscolaSection} onToast={showToast} onEditSchool={() => setShowSchoolSetup(true)} />}
       </div>
 
       {showSchoolSetup && institutionId && (

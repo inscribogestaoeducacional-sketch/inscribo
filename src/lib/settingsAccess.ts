@@ -15,7 +15,8 @@
 
 export type SettingsRole = 'admin' | 'manager'
 
-export type SettingsTabId = 'geral' | 'pagamentos' | 'transmissoes' | 'escola' | 'funil' | 'identidade' | 'whatsapp' | 'integracoes'
+// 5 abas (reorganização de 23/10): escola, plano, funil, whatsapp, integracoes.
+export type SettingsTabId = 'escola' | 'plano' | 'funil' | 'whatsapp' | 'integracoes'
 
 export interface SettingsItem {
   tab: SettingsTabId
@@ -29,16 +30,17 @@ const BOTH: SettingsRole[] = ['admin', 'manager']
 const ADMIN: SettingsRole[] = ['admin']
 
 export const SETTINGS_ITEMS = {
-  'geral':                         { tab: 'geral',        label: 'Dados da escola e plano',     roles: ADMIN },
-  'pagamentos':                    { tab: 'pagamentos',   label: 'Pagamentos',                  roles: ADMIN },
-  'transmissoes':                  { tab: 'transmissoes', label: 'Créditos de Transmissões',    roles: ADMIN },
-  'identidade':                    { tab: 'identidade',   label: 'Logo e cores',                roles: ADMIN },
-  'escola.dados':                  { tab: 'escola', section: 'campanha', label: 'Dados da campanha (assistente)', roles: ADMIN },
-  'escola.series':                 { tab: 'escola', section: 'series', label: 'Séries',                      roles: BOTH },
-  'escola.unidade':                { tab: 'escola', section: 'unidade', label: 'Campo de unidade do lead',    roles: BOTH },
-  'escola.lembrete':               { tab: 'escola', section: 'lembrete', label: 'Lembrete de lead sem contato', roles: ADMIN },
+  'escola.dados':                  { tab: 'escola', section: 'dados',      label: 'Dados da escola',             roles: ADMIN },
+  'escola.identidade':             { tab: 'escola', section: 'identidade', label: 'Logo e cores',                roles: ADMIN },
+  'escola.series':                 { tab: 'escola', section: 'series',     label: 'Séries',                      roles: BOTH },
+  'escola.campanha':               { tab: 'escola', section: 'campanha',   label: 'Dados da campanha (assistente)', roles: ADMIN },
+  'plano.plano':                   { tab: 'plano', section: 'plano',       label: 'Plano e faturamento',         roles: ADMIN },
+  'plano.pagamentos':              { tab: 'plano', section: 'pagamentos',  label: 'Pagamentos',                  roles: ADMIN },
+  'plano.creditos':                { tab: 'plano', section: 'creditos',    label: 'Créditos de Transmissões',    roles: ADMIN },
   'funil.origens':                 { tab: 'funil', section: 'origens', label: 'Origens do lead', roles: BOTH },
   'funil.motivos':                 { tab: 'funil', section: 'motivos', label: 'Motivos de perda', roles: BOTH },
+  'funil.unidade':                 { tab: 'funil', section: 'unidade', label: 'Campo de unidade do lead',    roles: BOTH },
+  'funil.lembrete':                { tab: 'funil', section: 'lembrete', label: 'Lembrete de lead sem contato', roles: ADMIN },
   'whatsapp.conexao':              { tab: 'whatsapp', section: 'conexao',   label: 'Conexão e robô',           roles: ADMIN },
   'whatsapp.automacoes':           { tab: 'whatsapp', section: 'automacoes', label: 'Automações',              roles: ADMIN },
   'whatsapp.datas':               { tab: 'whatsapp', section: 'datas',     label: 'Feriados e datas especiais', roles: ADMIN },

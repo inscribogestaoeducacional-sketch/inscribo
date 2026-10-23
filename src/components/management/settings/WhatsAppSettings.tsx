@@ -468,31 +468,31 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const statusBg = connected ? GRAD : 'linear-gradient(130deg, #B91C1C 0%, #DC2626 100%)'
   const hubGroups: { title: string; items: { id: string; Icon: any; title: string; desc: string; hl?: boolean; open: () => void }[] }[] = [
     {
-      title: 'Automação', items: [
-        ...(allowed.includes('automacoes') ? [{ id: 'automacoes', Icon: Zap, title: 'Automações', desc: 'Veja tudo que o sistema manda sozinho e o que está ligado.', hl: true, open: () => go('automacoes') }] : []),
+      title: 'Conexão e robô', items: [
         ...(allowed.includes('conexao') ? [{ id: 'robo', Icon: Bot, title: 'Robô de atendimento', desc: 'Monte o menu e o caminho de cada conversa.', hl: true, open: () => setShowFlowEditor(true) }] : []),
-        ...(allowed.includes('pesquisa') ? [{ id: 'pesquisa', Icon: Star, title: 'Avaliação do atendimento', desc: 'Nota do cliente ao encerrar.', open: () => go('pesquisa') }] : []),
-        ...(allowed.includes('parada') ? [{ id: 'parada', Icon: Hourglass, title: 'Conversa parada', desc: 'Avisa o cliente que sumiu depois de ser atendido.', open: () => go('parada') }] : []),
       ],
     },
     {
       title: 'Atendimento', items: [
-        ...(allowed.includes('datas') ? [{ id: 'datas', Icon: CalendarDays, title: 'Feriados e datas especiais', desc: 'Avisos nos dias em que a escola não atende ou atende menos.', open: () => go('datas') }] : []),
-        ...(allowed.includes('horario') ? [{ id: 'horario', Icon: Clock, title: 'Horário de atendimento', desc: 'Quando a escola atende e o que o robô responde fora do horário.', open: () => go('horario') }] : []),
         ...(allowed.includes('equipe') ? [{ id: 'equipe', Icon: Users, title: 'Equipe e distribuição', desc: 'Grupos de atendimento e quem recebe cada conversa.', open: () => go('equipe') }] : []),
         ...(allowed.includes('respostas') ? [{ id: 'respostas', Icon: MessageSquareText, title: 'Respostas rápidas', desc: 'Textos prontos para a equipe usar com "/" no chat.', open: () => go('respostas') }] : []),
-      ],
-    },
-    {
-      title: 'Mensagens e avisos', items: [
-        ...(allowed.includes('modelos') ? [{ id: 'modelos', Icon: FileText, title: 'Modelos da Meta', desc: 'Modelos de mensagem aprovados pela Meta: os da escola e os padrões.', open: () => go('modelos') }] : []),
-        ...(allowed.includes('alertas') ? [{ id: 'alertas', Icon: Bell, title: 'Alertas', desc: 'Escolha quais avisos a escola recebe no sininho.', open: () => go('alertas') }] : []),
-      ],
-    },
-    {
-      title: 'Organização', items: [
         ...(allowed.includes('etiquetas') ? [{ id: 'etiquetas', Icon: Tag, title: 'Etiquetas', desc: 'Organize as conversas por cor.', open: () => go('etiquetas') }] : []),
         ...(allowed.includes('bloqueios') ? [{ id: 'bloqueios', Icon: Ban, title: 'Números bloqueados', desc: 'Números que o sistema ignora.', open: () => go('bloqueios') }] : []),
+        ...(allowed.includes('pesquisa') ? [{ id: 'pesquisa', Icon: Star, title: 'Avaliação do atendimento', desc: 'Nota do cliente ao encerrar.', open: () => go('pesquisa') }] : []),
+      ],
+    },
+    {
+      title: 'Mensagens automáticas', items: [
+        ...(allowed.includes('automacoes') ? [{ id: 'automacoes', Icon: Zap, title: 'Automações', desc: 'Veja tudo que o sistema manda sozinho e o que está ligado.', hl: true, open: () => go('automacoes') }] : []),
+        ...(allowed.includes('horario') ? [{ id: 'horario', Icon: Clock, title: 'Horário de atendimento', desc: 'Quando a escola atende e o que o robô responde fora do horário.', open: () => go('horario') }] : []),
+        ...(allowed.includes('datas') ? [{ id: 'datas', Icon: CalendarDays, title: 'Feriados e datas especiais', desc: 'Avisos nos dias em que a escola não atende ou atende menos.', open: () => go('datas') }] : []),
+        ...(allowed.includes('parada') ? [{ id: 'parada', Icon: Hourglass, title: 'Conversa parada', desc: 'Avisa o cliente que sumiu depois de ser atendido.', open: () => go('parada') }] : []),
+        ...(allowed.includes('modelos') ? [{ id: 'modelos', Icon: FileText, title: 'Modelos da Meta', desc: 'Modelos de mensagem aprovados pela Meta: os da escola e os padrões.', open: () => go('modelos') }] : []),
+      ],
+    },
+    {
+      title: 'Alertas', items: [
+        ...(allowed.includes('alertas') ? [{ id: 'alertas', Icon: Bell, title: 'Alertas', desc: 'Escolha quais avisos a escola recebe no sininho.', open: () => go('alertas') }] : []),
       ],
     },
   ].filter(g => g.items.length)
