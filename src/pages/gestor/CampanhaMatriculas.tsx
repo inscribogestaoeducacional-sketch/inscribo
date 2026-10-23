@@ -19,6 +19,7 @@ import PageHeader from '../../components/ui/PageHeader'
 import { BRAND, SHADOW } from '../../lib/brand'
 import { applyCampaignCycle } from '../../lib/campaignApply'
 import { aiFetch } from '../../lib/authHeaders'
+import Matriculometro from '../../components/campanha/Matriculometro'
 import {
   type History, type HistYear, type PlanMonth, type FunnelRates, type PlanSource,
   DEFAULT_FUNNEL, MONTH_ABBR, monthName, monthsBetween, retention, suggestGoals, suggestMonths, funnelNeeds, sourceFromSources,
@@ -30,7 +31,7 @@ type PanelRow = {
   grade_level_id: string; grade_name: string; base_prev_year: number; reenrolled: number; reenrolled_declared: number; pending: number
   left_school: number; new_students: number; returning_students: number; graduates: number; pre_enrolled: number
 }
-type Tab = 'geral' | 'metas' | 'serie' | 'relatorio'
+type Tab = 'geral' | 'metas' | 'serie' | 'matriculometro' | 'relatorio'
 type Report = { resumo?: string; secoes?: { titulo: string; texto?: string; pontos?: string[] }[]; alertas?: string[] }
 type Ed = {
   start: string; end: string; curStudents: number; baseStudents: number; retention: number
@@ -363,6 +364,7 @@ export default function CampanhaMatriculas() {
         {tabBtn('geral', 'Visão geral', LayoutGrid)}
         {tabBtn('metas', 'Metas e mês a mês', SlidersHorizontal)}
         {tabBtn('serie', 'Retenção por série', Layers)}
+        {tabBtn('matriculometro', 'Matriculômetro', Flag)}
         {tabBtn('relatorio', 'Relatório da IA', Sparkles)}
       </div>
 
@@ -605,6 +607,8 @@ export default function CampanhaMatriculas() {
           </div>
         </>
       )}
+
+      {!loading && cycle && tab === 'matriculometro' && institutionId && <Matriculometro institutionId={institutionId} year={targetYear} />}
 
       {!loading && cycle && tab === 'serie' && (
         <div style={card}>
