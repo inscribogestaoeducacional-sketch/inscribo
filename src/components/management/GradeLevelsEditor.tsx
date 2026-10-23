@@ -1,6 +1,6 @@
 // Editor de séries/etapas de ensino (school_grade_levels), usado em Configurações > Escola > Séries.
 import React, { useState, useEffect } from 'react'
-import { Plus, Check, Trash2, Pencil, ChevronUp, ChevronDown, Layers } from 'lucide-react'
+import { Plus, Check, EyeOff, Pencil, ChevronUp, ChevronDown, Layers } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 import { Card, Title, input } from './settings/ui'
@@ -14,7 +14,7 @@ const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg foc
 // automático no cadastro. Editar/reordenar aqui aciona useGradeLevels nos
 // outros lugares (create-lead, filtros, etc.) via reload().
 export default function GradeLevelsEditor({ institutionId, onToast }: { institutionId: string; onToast: (msg: string, ok?: boolean) => void }) {
-  const { gradeLevels, loading, reload } = useGradeLevels(institutionId)
+  const { gradeLevels, loading, reload } = useGradeLevels(institutionId, { includeInactive: true })
   const [rows, setRows] = useState<GradeLevel[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -54,21 +54,28 @@ export default function GradeLevelsEditor({ institutionId, onToast }: { institut
     } catch { onToast('Erro ao salvar. Nome já existe?', false) } finally { setSaving(false) }
   }
 
-  const removeRow = async (g: GradeLevel) => {
-    if (!window.confirm(`Remover "${g.name}"? Leads já cadastrados com essa série não serão afetados.`)) return
+  // Desativar em vez de apagar: apagar levaria junto os apelidos da importação (ActiveSoft/planilha)
+  // e quebraria o vínculo com alunos. Desativada some dos formulários e filtros, e pode voltar.
+  const setActive = async (g: GradeLevel, active: boolean) => {
+    if (!active && !window.confirm(`Desativar "${g.name}"? Ela some dos formulários e filtros, mas leads, alunos e apelidos da importação continuam guardados. Você pode reativar quando quiser.`)) return
     setSaving(true)
     try {
-      const { error } = await supabase.from('school_grade_levels').delete().eq('id', g.id)
+      const { error } = await supabase.from('school_grade_levels').update({ active }).eq('id', g.id)
       if (error) throw error
       await reload()
-      onToast('Série removida.')
-    } catch { onToast('Erro ao remover série', false) } finally { setSaving(false) }
+      onToast(active ? 'Série reativada.' : 'Série desativada.')
+    } catch { onToast('Erro ao atualizar série', false) } finally { setSaving(false) }
   }
 
   const addRow = async () => {
     if (!newName.trim() || !institutionId) return
     setSaving(true)
     try {
+      const same = rows.find(r => r.name.trim().toLowerCase() === newName.trim().toLowerCase())
+      if (same) {
+        if (same.active === false) { await setActive(same, true); setNewName(''); return }
+        onToast('Essa série já existe.', false); return
+      }
       const nextOrder = (rows[rows.length - 1]?.sort_order ?? 0) + 1
       const { error } = await supabase.from('school_grade_levels').insert({ institution_id: institutionId, name: newName.trim(), sort_order: nextOrder })
       if (error) throw error
@@ -96,14 +103,18 @@ export default function GradeLevelsEditor({ institutionId, onToast }: { institut
                 <input autoFocus value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveEdit()}
                   style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1.5px solid #00A896', fontSize: 13, outline: 'none' }} />
               ) : (
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{g.name}</span>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: g.active === false ? '#94A3B8' : '#1A2B4A' }}>{g.name}{g.active === false && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700 }}>desativada</span>}</span>
               )}
               {editingId === g.id ? (
                 <button onClick={saveEdit} disabled={saving} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Check size={13} color="#00A896" /></button>
               ) : (
                 <button onClick={() => startEdit(g)} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Pencil size={13} color="#94A3B8" /></button>
               )}
-              <button onClick={() => removeRow(g)} disabled={saving} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Trash2 size={13} color="#EF4444" /></button>
+              {g.active === false ? (
+                <button onClick={() => setActive(g, true)} disabled={saving} title="Reativar" style={{ height: 28, padding: '0 10px', borderRadius: 8, border: 'none', background: '#E6F7F5', color: '#00A896', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>Reativar</button>
+              ) : (
+                <button onClick={() => setActive(g, false)} disabled={saving} title="Desativar" style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><EyeOff size={13} color="#94A3B8" /></button>
+              )}
             </div>
           ))}
           {rows.length === 0 && <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: 12 }}>Nenhuma série cadastrada ainda.</p>}

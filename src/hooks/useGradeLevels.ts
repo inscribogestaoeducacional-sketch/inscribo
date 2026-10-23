@@ -12,9 +12,13 @@ export interface GradeLevel {
   institution_id: string
   name: string
   sort_order: number
+  active?: boolean
 }
 
-export function useGradeLevels(institutionId: string | undefined | null) {
+// Séries desativadas (active=false) ficam de fora de formulários e filtros; só o editor de
+// Configurações pede includeInactive para poder reativá-las.
+export function useGradeLevels(institutionId: string | undefined | null, opts?: { includeInactive?: boolean }) {
+  const includeInactive = !!opts?.includeInactive
   const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -23,13 +27,14 @@ export function useGradeLevels(institutionId: string | undefined | null) {
     setLoading(true)
     const { data, error } = await supabase
       .from('school_grade_levels')
-      .select('id, institution_id, name, sort_order')
+      .select('id, institution_id, name, sort_order, active')
       .eq('institution_id', institutionId)
       .order('sort_order', { ascending: true })
     if (error) console.error('[useGradeLevels] erro ao carregar séries:', error)
-    setGradeLevels((data as GradeLevel[]) ?? [])
+    const all = (data as GradeLevel[]) ?? []
+    setGradeLevels(includeInactive ? all : all.filter(g => g.active !== false))
     setLoading(false)
-  }, [institutionId])
+  }, [institutionId, includeInactive])
 
   useEffect(() => { reload() }, [reload])
 
