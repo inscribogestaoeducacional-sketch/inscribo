@@ -1,4 +1,4 @@
-// Aba Investimento: gastos da campanha por categoria e mês, meta de gasto e custo por aquisição (lead, visita, matrícula nova).
+// Aba Investimento: gastos da campanha por categoria e mês, meta de investimento e custo por aquisição (lead, visita, matrícula nova).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -111,7 +111,7 @@ export default function Investimento({ institutionId, year, from, to }: { instit
           <p style={{ fontSize: 12, color: BRAND.muted, margin: '8px 0 0' }}>Valores em reais. A meta de cada categoria é editável na própria célula.</p>
         </div>
         <div style={{ ...card, flex: '1 1 300px' }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Lançar gasto</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Lançar investimento</div>
           <div style={lbl}>Categoria</div>
           <select value={cat} onChange={e => setCat(e.target.value)} style={inp}>{CATS.map(c => <option key={c}>{c}</option>)}<option value="__novo">Outra (digitar)…</option></select>
           {cat === '__novo' && <input value={customCat} onChange={e => setCustomCat(e.target.value)} placeholder="Nome da categoria" style={{ ...inp, marginTop: 6 }} />}
@@ -125,25 +125,25 @@ export default function Investimento({ institutionId, year, from, to }: { instit
           <select value={channel} onChange={e => setChannel(e.target.value)} style={inp}><option value="">Sem canal específico</option>{base.by_origin.map(o => <option key={o.source}>{o.source}</option>)}</select>
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, margin: '10px 0', cursor: 'pointer' }}><input type="checkbox" checked={paid} onChange={e => setPaid(e.target.checked)} /> Tráfego pago (anúncio)</label>
           {err && <div style={{ color: '#B91C1C', fontSize: 12.5, marginBottom: 6 }}>{err}</div>}
-          <button onClick={add} disabled={saving} style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#065F52,#00A896)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>Salvar gasto</button>
+          <button onClick={add} disabled={saving} style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#065F52,#00A896)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>Salvar investimento</button>
         </div>
       </div>
 
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Por canal de origem: quanto custa cada aluno</div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th style={{ ...th, textAlign: 'left' }}>Origem</th><th style={th}>Leads</th><th style={th}>Matrículas</th><th style={th}>Gasto ligado</th><th style={th}>Custo/lead</th><th style={th}>Custo/matrícula</th></tr></thead>
+          <thead><tr><th style={{ ...th, textAlign: 'left' }}>Origem</th><th style={th}>Leads</th><th style={th}>Matrículas</th><th style={th}>Investimento ligado</th><th style={th}>Custo/lead</th><th style={th}>Custo/matrícula</th></tr></thead>
           <tbody>{channels.map(c => (
             <tr key={c.source}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{c.source} {c.pago && <span style={{ background: '#DBEAFE', color: '#2563EB', borderRadius: 99, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>pago</span>}</td>
               <td style={td}>{c.leads}</td><td style={td}>{c.matriculas}</td><td style={td}>{c.gasto ? brl(c.gasto) : '—'}</td><td style={td}>{c.gasto ? per(c.gasto, c.leads) : '—'}</td><td style={td}>{c.gasto && c.matriculas ? per(c.gasto, c.matriculas) : '—'}</td></tr>
           ))}</tbody>
         </table>
-        <p style={{ fontSize: 12, color: BRAND.muted, margin: '8px 0 0' }}>Só entram aqui os gastos em que você escolheu o canal. Os demais contam no total e no CPA geral.</p>
+        <p style={{ fontSize: 12, color: BRAND.muted, margin: '8px 0 0' }}>Só entram aqui os investimentos em que você escolheu o canal. Os demais contam no total e no CPA geral.</p>
       </div>
 
       {exps.length > 0 && (
         <div style={card}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Gastos lançados</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Investimentos lançados</div>
           {[...exps].reverse().map(x => (
             <div key={x.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: '1px solid #EEF2F1', fontSize: 13 }}>
               <span style={{ width: 90, color: BRAND.muted }}>{monthName(x.month + '-01')}</span>
