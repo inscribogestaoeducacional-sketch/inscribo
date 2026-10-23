@@ -17,6 +17,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Navigate } from 'react-router-dom'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
+import { useActiveCampaignYear } from '../../lib/activeCampaign'
 import PageHeader from '../../components/ui/PageHeader'
 import { BRAND, SHADOW } from '../../lib/brand'
 
@@ -88,6 +89,9 @@ export default function BaseAlunos() {
   const [capDraft, setCapDraft] = useState<Record<string, string>>({})
   const [headDraft, setHeadDraft] = useState<Record<string, string>>({})
   const moduleOn = useBaseModuleEnabled(institutionId)
+  // o ano abre no da campanha ativa (chave mestra); depois o gestor pode trocar à mão
+  const campaignYear = useActiveCampaignYear(institutionId)
+  useEffect(() => { if (campaignYear) setYear(campaignYear) }, [campaignYear])
 
   const load = useCallback(async () => {
     if (!institutionId) return

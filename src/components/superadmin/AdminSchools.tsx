@@ -1263,6 +1263,7 @@ export default function AdminSchools() {
 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [releaseYear, setReleaseYear] = useState(new Date().getFullYear() + 1)
   const [releasing, setReleasing] = useState(false)
 
   const [editForm, setEditForm] = useState({
@@ -1439,26 +1440,29 @@ export default function AdminSchools() {
     if (!releaseModal) return
     setReleasing(true)
     try {
-      const campaignYear = new Date().getFullYear() + 1
-      const sd = startDate || `${new Date().getFullYear()}-08-01`
-      const ed = endDate || `${campaignYear}-02-28`
-      // Sempre derivado de `sd` no momento do submit — mesmo padrão já usado
-      // em InstitutionDetails.tsx e no wizard (CampaignGeneratorModal.tsx).
-      // Antes existia um estado `startMonth` separado, só sincronizado com
-      // `startDate` quando o admin clicava no botão de mês — editar a data
-      // manualmente sem clicar num botão deixava `startMonth` desatualizado.
-      const startMonthNum = new Date(sd + 'T12:00:00').getMonth() + 1
-      const existing = getBestCycle(releaseModal.id)
+      // A Áion libera só o ANO LETIVO. As datas começam sugeridas (set/ano anterior a mar/ano) e o gestor da
+      // escola acerta, junto com a meta, na página Campanha de Matrículas.
+      const campaignYear = releaseYear
+      const sd = `${campaignYear - 1}-09-01`
+      const ed = `${campaignYear}-03-31`
+      const startMonthNum = 9
+      const existing = cycles.find(c => c.institution_id === releaseModal.id && (c.target_school_year ?? c.year) === campaignYear && !['completed', 'archived'].includes(c.status))
 
+      if (existing?.status === 'active') {
+        showToast(`A campanha ${campaignYear} já está ativa nesta escola.`, false)
+        setReleasing(false)
+        return
+      }
       if (existing) {
         const { error } = await supabase.from('campaign_cycles').update({
-          status: 'released', campaign_start_month: startMonthNum, start_date: sd, end_date: ed,
+          status: 'released', campaign_start_month: existing.start_date ? new Date(existing.start_date + 'T12:00:00').getMonth() + 1 : startMonthNum,
+          start_date: existing.start_date ?? sd, end_date: existing.end_date ?? ed,
         }).eq('id', existing.id)
         if (error) throw error
       } else {
         const { error } = await supabase.from('campaign_cycles').insert({
           institution_id: releaseModal.id, status: 'released',
-          campaign_start_month: startMonthNum, year: campaignYear,
+          campaign_start_month: startMonthNum, year: campaignYear - 1, target_school_year: campaignYear,
           label: `Campanha ${campaignYear}`, start_date: sd, end_date: ed,
           target_new_students: 0, target_reenrollment_rate: toReenrollFraction(85),
           base_students: 0, monthly_targets: [], market_data: {},
@@ -1471,7 +1475,7 @@ export default function AdminSchools() {
       await supabase.from('system_notifications').insert({
         institution_id: releaseModal.id,
         title: `Campanha ${campaignYear} liberada! 🎉`,
-        message: `Sua campanha de matrículas ${campaignYear} foi liberada. Acesse Relatórios para configurar suas metas.`,
+        message: `Sua campanha de matrículas ${campaignYear} foi liberada. Abra Campanha de Matrículas para conferir a meta sugerida e ativar.`,
         type: 'info', read: false,
       })
 
@@ -1681,8 +1685,7 @@ export default function AdminSchools() {
                           <button onClick={() => {
                             const bestCycle = getBestCycle(inst.id)
                             setReleaseModal(inst)
-                            setStartDate(bestCycle?.start_date || `${new Date().getFullYear()}-08-01`)
-                            setEndDate(bestCycle?.end_date || `${new Date().getFullYear() + 1}-02-28`)
+                            setReleaseYear(bestCycle?.target_school_year ?? bestCycle?.year ?? new Date().getFullYear() + 1)
                           }} className="flex items-center gap-1 text-xs px-2 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 font-medium">
                             <Megaphone className="w-3 h-3" /> Liberar
                           </button>
@@ -1854,29 +1857,17 @@ export default function AdminSchools() {
             </div>
             <div className="space-y-4">
               <div>
-                <label className={lbl}>Mês de início das matrículas</label>
-                <div className="grid grid-cols-4 gap-2 mt-1">
-                  {months.map(m => (
-                    <button key={m.v} onClick={() => setStartDate(`${new Date().getFullYear()}-${String(m.v).padStart(2,'0')}-01`)}
-                      className={`py-2 rounded-lg text-sm font-medium transition-colors ${(startDate ? new Date(startDate + 'T12:00:00').getMonth() + 1 : null) === m.v ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                      {m.l}
-                    </button>
+                <label className={lbl}>Ano letivo da campanha</label>
+                <div className="grid grid-cols-3 gap-2 mt-1">
+                  {[new Date().getFullYear(), new Date().getFullYear() + 1, new Date().getFullYear() + 2].map(y => (
+                    <button key={y} onClick={() => setReleaseYear(y)}
+                      className={`py-2 rounded-lg text-sm font-medium transition-colors ${releaseYear === y ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{y}</button>
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={lbl}>Data de início</label>
-                  <input type="date" className={inp} value={startDate} onChange={e => setStartDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className={lbl}>Data de fim</label>
-                  <input type="date" className={inp} value={endDate} onChange={e => setEndDate(e.target.value)} />
-                </div>
-              </div>
               <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-3 text-sm text-cyan-700">
-                <p className="font-semibold">Campanha {new Date().getFullYear() + 1}</p>
-                <p className="text-xs mt-1">O gestor será notificado automaticamente no sistema.</p>
+                <p className="font-semibold">Campanha {releaseYear}</p>
+                <p className="text-xs mt-1">A escola recebe o card, define datas e meta (sugeridas pelo histórico dela) e ativa. O gestor é avisado no sistema.</p>
               </div>
             </div>
             <div className="flex gap-3 mt-5">
