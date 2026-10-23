@@ -1,3 +1,4 @@
+import { stageLabel } from '../../lib/stageLabels'
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -323,10 +324,8 @@ export default function ContactCard({
       }
 
       // Activity logs (mudanças de status, ações manuais)
-      const STATUS_LABELS: Record<string, string> = {
-        new: 'Novo', contact: 'Em Contato', scheduled: 'Visita Agendada',
-        visit: 'Visitou', proposal: 'Proposta', enrolled: 'Matriculado', lost: 'Perdido',
-      }
+      const STATUS_LABELS: Record<string, string> = Object.fromEntries(
+        ['new', 'contact', 'scheduled', 'visit', 'proposal', 'enrolled', 'lost'].map(k => [k, stageLabel(k)]))
       const { data: actLogs } = await supabase.from('activity_logs')
         .select('id, action, details, created_at, user_name')
         .eq('institution_id', institutionId).eq('entity_id', leadId)

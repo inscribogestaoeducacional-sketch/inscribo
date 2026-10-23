@@ -1,3 +1,4 @@
+import { stageLabel } from '../../lib/stageLabels'
 import React, { useState, useEffect, useCallback } from 'react'
 import { X, Pencil, Trash2, Check, XCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -39,7 +40,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 function translateStatus(status: string): string {
-  return STATUS_LABELS[status] ?? status
+  return stageLabel(status, STATUS_LABELS[status])
 }
 
 function translateAction(action: string): string {

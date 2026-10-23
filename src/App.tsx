@@ -1,3 +1,4 @@
+import { useStageLabelsVersion } from './lib/stageLabels'
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -82,6 +83,12 @@ import InstitutionDetails     from './components/superadmin/InstitutionDetails'
 import ConsultantHome         from './components/superadmin/ConsultantHome'
 import ConsultantSchools      from './components/superadmin/ConsultantSchools'
 import ConsultantContracts    from './components/superadmin/ConsultantContracts'
+
+// Nomes das etapas do funil (por escola): carrega e redesenha as telas quando mudam.
+function StageLabelsGate({ institutionId, children }: { institutionId?: string | null; children: React.ReactNode }) {
+  const version = useStageLabelsVersion(institutionId)
+  return <React.Fragment key={version}>{children}</React.Fragment>
+}
 
 // ─── Guards ───────────────────────────────────────────────────────────────
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) {
@@ -357,6 +364,7 @@ function AppContent() {
         {isGestor && user.institution_id && <GestorUpdatePopup institutionId={user.institution_id} />}
         <InternalChatWidget />
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
+          <StageLabelsGate institutionId={user.institution_id}>
           <Routes>
             <Route path="/" element={<Navigate to={schoolDefault} replace />} />
             <Route path="/home" element={<RequireRole roles={['admin','manager']}><GestorHome /></RequireRole>} />
@@ -386,6 +394,7 @@ function AppContent() {
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
             <Route path="*"             element={<Navigate to={schoolDefault} replace />} />
           </Routes>
+          </StageLabelsGate>
         </main>
       </div>
     </div>

@@ -4,7 +4,7 @@ import {
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
-  ChevronUp, ChevronDown, Pencil, Send, Plug, Filter, Layers, Tag, ThumbsDown, Bell, Eye,
+  ChevronUp, ChevronDown, Pencil, Send, Plug, Filter, Layers, Tag, ThumbsDown, Bell, Eye, Workflow,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -21,6 +21,7 @@ import LeadUnitFieldEditor from './LeadUnitFieldEditor'
 import LeadReminderSettingsEditor from './LeadReminderSettingsEditor'
 import LeadSourcesEditor from './LeadSourcesEditor'
 import LostReasonsEditor from './LostReasonsEditor'
+import StageLabelsEditor from './StageLabelsEditor'
 import IntegrationsTab from './IntegrationsTab'
 import { useSearchParams } from 'react-router-dom'
 import { canSeeSettingsItem, canSeeSettingsTab, type SettingsTabId } from '../../lib/settingsAccess'
@@ -494,6 +495,7 @@ export default function SystemSettings() {
     title: 'Funil e leads', items: [
       { key: 'origens', label: 'Origens do lead', desc: 'De onde os contatos chegam: escolha as que a escola usa e acrescente as suas.', item: 'funil.origens', Icon: Tag, render: () => <LeadSourcesEditor institutionId={institutionId} onToast={showToast} /> },
       { key: 'motivos', label: 'Motivos de perda', desc: 'Por que um lead foi perdido: a lista usada ao marcar como perdido e nos relatórios de recusa.', item: 'funil.motivos', Icon: ThumbsDown, render: () => <LostReasonsEditor institutionId={institutionId} onToast={showToast} /> },
+      { key: 'etapas', label: 'Nomes das etapas', desc: 'Renomeie as etapas do funil (Novo, Em contato, Visita…). Só o nome muda.', item: 'funil.etapas', Icon: Workflow, render: () => <StageLabelsEditor institutionId={institutionId} onToast={showToast} /> },
       { key: 'unidade', label: 'Campo de unidade do lead', desc: 'Para escolas com mais de uma unidade: liga o campo e cadastra as opções (Unidade, Campus, Polo…).', item: 'funil.unidade', Icon: MapPin, render: () => <LeadUnitFieldEditor institutionId={institutionId} onToast={showToast} /> },
       { key: 'lembrete', label: 'Lead sem contato', desc: 'Depois de quantos dias sem conversa o lead aparece como "Sem contato".', item: 'funil.lembrete', Icon: Bell, render: () => <LeadReminderSettingsEditor institutionId={institutionId} onToast={showToast} /> },
     ],
