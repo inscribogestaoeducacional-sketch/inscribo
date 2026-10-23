@@ -1297,7 +1297,8 @@ export default function LeadKanban() {
   const attentionBlock = (
     <>
       <style>{LEADS_CSS}</style>
-      {user?.institution_id && <IntegrationGap institutionId={user.institution_id} role={user.role} onDone={loadData} toast={showToast} />}
+      {/* Aviso da integração desligado até a comparação por nome parecido/telefone ficar pronta (evita duplicar leads). */}
+      {false && user?.institution_id && <IntegrationGap institutionId={user.institution_id} role={user.role} onDone={loadData} toast={showToast} />}
       <AttentionStrip counts={stripCounts} active={attention} onPick={k => { setAttention(k); if (k) refreshWaiting() }} />
       {(attention === 'us' || attention === 'family') && (
         <WaitingList title={attentionTitle[attention]} color={attention === 'us' ? '#B91C1C' : '#B45309'} rows={waitingRows}
