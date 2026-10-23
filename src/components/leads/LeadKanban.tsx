@@ -42,6 +42,8 @@ import {
   statusConfig, LEAD_TEMPERATURES, LEAD_STAGES, avatarColor,
 } from './leadFormShared'
 
+const SHOW_INTEGRATION_GAP: boolean = false
+
 // Motivos de perda e LostReasonModal: ./lostReasons.tsx (também usados pelo formulário).
 
 // Séries — antes existiam DUAS listas hardcoded divergentes aqui mesmo
@@ -1298,7 +1300,7 @@ export default function LeadKanban() {
     <>
       <style>{LEADS_CSS}</style>
       {/* Aviso da integração desligado até a comparação por nome parecido/telefone ficar pronta (evita duplicar leads). */}
-      {false && user?.institution_id && <IntegrationGap institutionId={user.institution_id} role={user.role} onDone={loadData} toast={showToast} />}
+      {SHOW_INTEGRATION_GAP && user?.institution_id && <IntegrationGap institutionId={user.institution_id} role={user.role} onDone={loadData} toast={showToast} />}
       <AttentionStrip counts={stripCounts} active={attention} onPick={k => { setAttention(k); if (k) refreshWaiting() }} />
       {(attention === 'us' || attention === 'family') && (
         <WaitingList title={attentionTitle[attention]} color={attention === 'us' ? '#B91C1C' : '#B45309'} rows={waitingRows}
