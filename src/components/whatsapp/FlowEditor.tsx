@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { stageLabel } from '../../lib/stageLabels'
 
 // Mesmo bucket/padrão de src/lib/whatsappTemplate.ts (uploadTemplateHeaderMedia),
 // que já funciona para mídia de header de template — os nós de mídia do fluxo
@@ -703,9 +704,9 @@ function NodeBody({
                     {/* Valores = leads_status_check (antes 'novo'/'contato'/
                         'matriculado', rejeitados pelo banco; o webhook ainda
                         traduz esses valores antigos). */}
-                    <option value="new">Novo</option>
-                    <option value="contact">Em contato</option>
-                    <option value="enrolled">Matriculado</option>
+                    <option value="new">{stageLabel('new', 'Novo')}</option>
+                    <option value="contact">{stageLabel('contact', 'Em contato')}</option>
+                    <option value="enrolled">{stageLabel('enrolled', 'Matriculado')}</option>
                   </select>
                 </>
               )}

@@ -22,7 +22,7 @@ import { useLeadUnits, matchesUnitFilter, UNIT_FILTER_ALL, UNIT_FILTER_NONE } fr
 import { getAuthHeaders } from '../../lib/authHeaders'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { statusConfig } from '../leads/leadFormShared'
-import { leadCustomStage } from '../../lib/stageLabels'
+import { leadCustomStage, leadStageName } from '../../lib/stageLabels'
 import { CAPTURE_CHANNELS, type CaptureChannel } from '../../lib/captureTriggers'
 import LeadVisitsPanel from '../visits/LeadVisitsPanel'
 import { advanceLeadTo } from '../../lib/visitOutcome'
@@ -1902,15 +1902,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     setLeadCrmLoading(true)
     try {
       const [{ data: lead }, { data: visits }] = await Promise.all([
-        supabase.from('leads').select('status, created_at, responsible_name, student_name').eq('id', leadId).single(),
+        supabase.from('leads').select('status, custom_stage_id, created_at, responsible_name, student_name').eq('id', leadId).single(),
         supabase.from('visits').select('scheduled_date, status').eq('lead_id', leadId).order('scheduled_date', { ascending: true }),
       ])
       const fmtDate = (d: string) =>
         new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-      const STATUS_LABEL: Record<string, string> = {
-        new: 'Lead criado', contact: 'Contato realizado', scheduled: 'Visita agendada',
-        visit: 'Visita realizada', proposal: 'Proposta enviada', enrolled: 'Matriculado', lost: 'Lead perdido',
-      }
       const STATUS_COLOR: Record<string, string> = {
         new: '#60A5FA', contact: '#2DD4BF', scheduled: '#FBBF24',
         visit: '#A78BFA', proposal: '#F97316', enrolled: '#34D399', lost: '#F87171',
@@ -1918,7 +1914,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       const events = []
       if (lead) {
         events.push({ label: `Lead criado (${lead.responsible_name || lead.student_name})`, time: fmtDate(lead.created_at), color: '#60A5FA' })
-        if (lead.status !== 'new') events.push({ label: STATUS_LABEL[lead.status] || lead.status, time: fmtDate(lead.created_at), color: STATUS_COLOR[lead.status] || '#94A3B8' })
+        // Nome da etapa conforme a escola configurou (inclui etapas extras)
+        if (lead.status !== 'new') events.push({ label: `Etapa: ${leadStageName(lead as any)}`, time: fmtDate(lead.created_at), color: STATUS_COLOR[lead.status] || '#94A3B8' })
       }
       ;(visits || []).forEach(v => {
         events.push({ label: `Visita ${v.status === 'completed' ? 'realizada' : 'agendada'}`, time: fmtDate(v.scheduled_date), color: '#FBBF24' })

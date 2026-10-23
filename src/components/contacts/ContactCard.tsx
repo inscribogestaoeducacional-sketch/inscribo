@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { getInitials as initials } from '../../lib/initials'
+import { useLeadSources, withCurrent } from '../../lib/leadSources'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { useLeadUnits, unitOptionsFor } from '../../lib/leadUnits'
@@ -15,7 +16,6 @@ import {
 // Item 4c — GRADES antes hardcoded aqui; agora vem de school_grade_levels via
 // useGradeLevels() dentro do componente (precisa de institutionId).
 const TURNS   = ['Manhã','Tarde','Integral']
-const ORIGINS = ['WhatsApp','Indicação','Instagram','Facebook','Site','Outros']
 
 const CONTACT_TYPES = [
   { key: 'lead',     label: 'Nova Família',    icon: '👨‍👩‍👧' },
@@ -108,6 +108,7 @@ export default function ContactCard({
   const mountedRef = useRef(true)
   const { names: GRADES } = useGradeLevels(institutionId)
   const unitCfg = useLeadUnits(institutionId)
+  const { sources: schoolSources } = useLeadSources(institutionId) // origens configuradas pela escola
 
   // All state hooks — unconditional
   const [loading, setLoading]           = useState(true)
@@ -852,7 +853,7 @@ export default function ContactCard({
               <select value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
                 className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none">
                 <option value="">Selecionar...</option>
-                {ORIGINS.map(o => <option key={o} value={o}>{o}</option>)}
+                {withCurrent(schoolSources, form.source).map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
             {unitCfg.enabled && (

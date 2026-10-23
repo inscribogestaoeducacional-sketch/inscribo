@@ -4,6 +4,9 @@ import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Lead, User as AppUser } from '../../lib/supabase'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 
+import { stageLabel } from '../../lib/stageLabels'
+// Nome da etapa como a escola configurou (padrão se não houver)
+const stageName = (k: string) => stageLabel(k, (statusConfig as any)[k]?.label)
 const statusConfig = {
   new: { label: 'Novo', color: 'bg-blue-500', bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
   contact: { label: 'Contato', color: 'bg-yellow-500', bgColor: 'bg-yellow-50', textColor: 'text-yellow-700', borderColor: 'border-yellow-200' },
@@ -601,7 +604,7 @@ export default function LeadKanban() {
         action: 'Status alterado',
         user: 'Victor Almeida',
         date: lead.updated_at,
-        details: `Status alterado para ${statusConfig[lead.status]?.label}`
+        details: `Status alterado para ${stageName(lead.status as string)}`
       }
     ]
   }
@@ -741,7 +744,7 @@ export default function LeadKanban() {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center">
                   <div className={`w-4 h-4 rounded-full ${config.color} mr-3`}></div>
-                  <h3 className={`font-bold ${config.textColor}`}>{config.label}</h3>
+                  <h3 className={`font-bold ${config.textColor}`}>{stageName(status)}</h3>
                 </div>
                 <span className={`${config.color} text-white text-sm px-3 py-1 rounded-full font-medium`}>
                   {statusLeads.length}
@@ -863,7 +866,7 @@ export default function LeadKanban() {
                       >
                         {Object.entries(statusConfig).map(([value, config]) => (
                           <option key={value} value={value}>
-                            {config.label}
+                            {stageName(value)}
                           </option>
                         ))}
                       </select>
@@ -939,7 +942,7 @@ export default function LeadKanban() {
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                     statusConfig[selectedLead.status]?.bgColor
                   } ${statusConfig[selectedLead.status]?.textColor}`}>
-                    {statusConfig[selectedLead.status]?.label}
+                    {stageName(selectedLead.status as string)}
                   </span>
                 </div>
                 <div>
@@ -989,8 +992,8 @@ export default function LeadKanban() {
                         <div className="text-sm text-gray-600 mb-2">
                           {(item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado')) && (
                             <p>
-                              Status alterado de <strong>{statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label || item.details.previous_status}</strong> 
-                              {' '}para <strong>{statusConfig[item.details.new_status as keyof typeof statusConfig]?.label || item.details.new_status}</strong>
+                              Status alterado de <strong>{stageName(item.details.previous_status as keyof typeof statusConfig as string) || item.details.previous_status}</strong> 
+                              {' '}para <strong>{stageName(item.details.new_status as keyof typeof statusConfig as string) || item.details.new_status}</strong>
                             </p>
                           )}
                           {(item.action.includes('criado') || item.action.includes('Lead criado')) && (
@@ -1023,7 +1026,7 @@ export default function LeadKanban() {
                             <div>
                               <p>Lead <strong>{item.details.student_name || 'N/A'}</strong> foi excluído permanentemente</p>
                               <p className="text-xs">Responsável: <strong>{item.details.responsible_name || 'N/A'}</strong></p>
-                              <p className="text-xs">Status: <strong>{statusConfig[item.details.status as keyof typeof statusConfig]?.label || item.details.status}</strong></p>
+                              <p className="text-xs">Status: <strong>{stageName(item.details.status as keyof typeof statusConfig as string) || item.details.status}</strong></p>
                             </div>
                           )}
                         </div>

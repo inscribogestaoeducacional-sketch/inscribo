@@ -175,6 +175,9 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const [newBlockReason, setNewBlockReason] = useState('')
   const [savingBlock, setSavingBlock] = useState(false)
   const [waTags, setWaTags] = useState<{ id: string; name: string; color: string }[]>([])
+  const [editTagId, setEditTagId] = useState<string | null>(null)
+  const [editTagName, setEditTagName] = useState('')
+  const [tagMsg, setTagMsg] = useState<string | null>(null)
   const [newTagName, setNewTagName] = useState('')
   const [newTagColor, setNewTagColor] = useState('#6366f1')
   const [savingTag, setSavingTag] = useState(false)
@@ -955,18 +958,39 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   // ───────────────────────────── Etiquetas ─────────────────────────────
   const etiquetas = (
     <Card>
-      <Title Icon={Tag} title="Etiquetas" help="Crie etiquetas para organizar as conversas e os leads, inclusive no fluxo do robô." />
+      <Title Icon={Tag} title="Etiquetas" help="Crie etiquetas para organizar as conversas e os leads, inclusive no fluxo do robô. Ao renomear, as conversas, os contatos e o fluxo do robô acompanham o novo nome." />
       {waTags.length > 0 ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
           {waTags.map(tag => (
             <span key={tag.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999, background: tag.color, color: '#fff', fontSize: 12.5, fontWeight: 700 }}>
-              {tag.name}
-              <button type="button" aria-label={`Excluir ${tag.name}`} onClick={async () => { await supabase.from('whatsapp_tags').delete().eq('id', tag.id); setWaTags(prev => prev.filter(t => t.id !== tag.id)) }}
+              {editTagId === tag.id ? (
+                <input autoFocus value={editTagName} maxLength={30} onChange={e => setEditTagName(e.target.value)}
+                  onKeyDown={async e => {
+                    if (e.key === 'Escape') { setEditTagId(null); return }
+                    if (e.key !== 'Enter') return
+                    const novo = editTagName.trim()
+                    if (!novo || novo === tag.name) { setEditTagId(null); return }
+                    const { error } = await supabase.rpc('whatsapp_tag_apply', { p_tag_id: tag.id, p_new_name: novo })
+                    if (error) { setTagMsg(error.message); return }
+                    setWaTags(prev => prev.map(t => t.id === tag.id ? { ...t, name: novo } : t).sort((a, b) => a.name.localeCompare(b.name)))
+                    setEditTagId(null); setTagMsg(null)
+                  }}
+                  style={{ width: 110, border: 'none', borderRadius: 6, padding: '2px 6px', fontSize: 12.5, fontWeight: 700, color: '#1A2B4A', outline: 'none' }} />
+              ) : tag.name}
+              <button type="button" aria-label={`Renomear ${tag.name}`} title="Renomear (Enter salva, Esc cancela)" onClick={() => { setEditTagId(tag.id); setEditTagName(tag.name); setTagMsg(null) }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.9)', fontSize: 12, lineHeight: 1, padding: 0 }}>✎</button>
+              <button type="button" aria-label={`Excluir ${tag.name}`} onClick={async () => {
+                if (!window.confirm(`Excluir a etiqueta "${tag.name}"? Ela sai de todas as conversas e contatos. Fluxos do robô que a citam precisam ser ajustados.`)) return
+                const { error } = await supabase.rpc('whatsapp_tag_apply', { p_tag_id: tag.id })
+                if (error) { setTagMsg(error.message); return }
+                setWaTags(prev => prev.filter(t => t.id !== tag.id)); setTagMsg(null)
+              }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.9)', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
             </span>
           ))}
         </div>
       ) : <p style={{ fontSize: 13, color: BRAND.faint, margin: '0 0 16px' }}>Nenhuma etiqueta criada ainda.</p>}
+      {tagMsg && <p style={{ fontSize: 12.5, color: '#DC2626', margin: '-8px 0 12px' }}>{tagMsg}</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div><label style={label}>Nome da etiqueta</label><input style={input} value={newTagName} onChange={e => setNewTagName(e.target.value)} placeholder="Ex.: VIP, Interessado, Aguardando…" maxLength={30} /></div>
         <div>
