@@ -40,6 +40,13 @@ const BLOCKED_SHORT: Record<string, string> = {
   suppressed: 'opt-out', blacklisted: 'blacklist', invalid_phone: 'número inválido', non_br: 'número estrangeiro',
 }
 
+const RELATIONS = [
+  { id: 'aluno', label: 'Alunos (matriculados e a rematricular)' },
+  { id: 'pre_matriculado', label: 'Pré-matriculados' },
+  { id: 'ex_aluno', label: 'Ex-alunos' },
+  { id: 'transferido', label: 'Transferidos' },
+]
+
 interface AudienceRowView {
   contact_id: string | null; phone: string; phone_key: string; name: string | null
   source: 'filter' | 'import' | 'manual'; excluded_reason: string | null
@@ -67,6 +74,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
   const [tags, setTags] = useState<string[]>([])
   const [types, setTypes] = useState<string[]>([])
   const [grades, setGrades] = useState<string[]>([])
+  const [relations, setRelations] = useState<string[]>([])
   const [triggerIds, setTriggerIds] = useState<string[]>([])
   const [prevCampaign, setPrevCampaign] = useState<{ id: string; only: 'sent' | 'replied' | 'clicked' } | null>(null)
   const [importRows, setImportRows] = useState<ImportRow[]>([])
@@ -164,10 +172,11 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
     if (tags.length) f.tags = tags
     if (types.length) f.contact_types = types
     if (grades.length) f.grades = grades
+    if (relations.length) f.relations = relations
     if (triggerIds.length) f.capture_trigger_ids = triggerIds
     if (prevCampaign) f.previous_campaign = prevCampaign
     return f
-  }, [allContacts, tags, types, grades, triggerIds, prevCampaign])
+  }, [allContacts, tags, types, grades, relations, triggerIds, prevCampaign])
 
   const manual = useMemo(() => ({ include_contact_ids: includeIds, exclude_phone_keys: excludeKeys }), [includeIds, excludeKeys])
   const manualCount = includeIds.length + excludeKeys.length
@@ -402,6 +411,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
               <strong>Todos os contatos da escola</strong> <span style={{ color: '#94a3b8' }}>(os filtros abaixo restringem)</span>
             </label>
             <Chips label="Etiquetas (tem alguma)" options={lk.tags.map(t => ({ id: t, label: t }))} value={tags} onChange={v => { setTags(v); setPreview(null) }} />
+            <Chips label="Clientes (relação com a escola)" options={RELATIONS} value={relations} onChange={v => { setRelations(v); setPreview(null) }} />
             <Chips label="Tipo de contato" options={CONTACT_TYPES} value={types} onChange={v => { setTypes(v); setPreview(null) }} />
             {lk.grades.length > 0 && <Chips label="Turma" options={lk.grades.map(g => ({ id: g, label: g }))} value={grades} onChange={v => { setGrades(v); setPreview(null) }} />}
             {lk.triggers.length > 0 && <Chips label="Veio da Captação (gatilho)" options={lk.triggers.map(t => ({ id: t.id, label: t.name }))} value={triggerIds} onChange={v => { setTriggerIds(v); setPreview(null) }} />}

@@ -23,7 +23,7 @@ import { Plug as PlugIcon, FileSpreadsheet, PencilLine, SlidersHorizontal } from
 import HubSettings, { type HubGroup } from './settings/HubSettings'
 import { NowNote, WarnNote, Card, Title } from './settings/ui'
 import RosterUploadCard from './RosterUploadCard'
-import ActivesoftWizard from './ActivesoftWizard'
+import ActivesoftSimple from './ActivesoftSimple'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
 
 type Toast = (msg: string, ok?: boolean) => void
@@ -125,7 +125,7 @@ export default function IntegrationsTab({ institutionId, onToast, section, onSec
           render: () => soon('activesoft') ? soonNote : (
             <Card>
               <Title Icon={PlugIcon} title="Sistema da escola (Activesoft)" help="Só leitura: cadastro, turmas, enturmação e alunos. Notas, frequência, ocorrências e financeiro nunca são lidos." />
-              <ActivesoftWizard institutionId={institutionId} onToast={onToast} />
+              <ActivesoftSimple institutionId={institutionId} onToast={onToast} />
             </Card>
           ) },
       ],

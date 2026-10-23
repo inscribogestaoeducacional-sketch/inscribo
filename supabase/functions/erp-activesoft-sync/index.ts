@@ -228,7 +228,9 @@ async function actionStep(sb: Supa, inst: string, runId: string) {
   const names = settings?.names_allowed === true && (run.counts as Record<string, unknown> | null)?.guardar_nomes === true
   const years = periodYears()
   // modo 'turma': as etapas do ano seguinte saem das turmas de 2027 já guardadas
-  const buildPlan = async () => plan(names, { ...years, modo: periodMode, valor: periodValue,
+  // carga leve (sincronização automática de hora em hora): só ano atual + seguinte, sem o histórico
+  const leve = (run.counts as Record<string, unknown> | null)?.modo === 'leve'
+  const buildPlan = async () => plan(names, { ...years, anteriores: leve ? [] : years.anteriores, modo: periodMode, valor: periodValue,
     turmasSeguinte: periodMode === 'turma' ? [...await stagedTurmasDoAno(sb, runId, years.seguinte)].sort() : [] })
   let steps = await buildPlan()
   let idx = Math.max(0, steps.findIndex(s => s.key === run.step))
