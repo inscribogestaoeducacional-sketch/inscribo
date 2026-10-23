@@ -1,0 +1,3 @@
+-- Histórico manual/planilha para escolas sem integração (aplicado no banco via MCP):
+--   tabela campaign_manual_history (RLS admin/gestor), funções campaign_manual_history_save/get,
+--   e campaign_history_year passa a usar esse histórico quando a escola não tem aluno a aluno nos anos pedidos.

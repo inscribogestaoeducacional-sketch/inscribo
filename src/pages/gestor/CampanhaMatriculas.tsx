@@ -23,6 +23,7 @@ import { NovatosTab, RematriculaTab } from '../../components/campanha/NovatosRem
 import Investimento from '../../components/campanha/Investimento'
 import FunilCampanha from '../../components/campanha/FunilCampanha'
 import Matriculometro from '../../components/campanha/Matriculometro'
+import HistoricoManual from '../../components/campanha/HistoricoManual'
 import SaidasReport from '../../components/campanha/SaidasReport'
 import RelatorioMensal from '../../components/campanha/RelatorioMensal'
 import MetaCharts from '../../components/campanha/CampaignCharts'
@@ -95,6 +96,7 @@ export default function CampanhaMatriculas() {
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null)
   const [openClasses, setOpenClasses] = useState<string | null>(null)
   const [step, setStep] = useState(1)
+  const [reloadKey, setReloadKey] = useState(0)
   const [geralKind, setGeralKind] = useState<'novos' | 'rematriculas'>('novos')
   const [report, setReport] = useState<Report | null>(null)
   const [reportAt, setReportAt] = useState<string | null>(null)
@@ -138,7 +140,7 @@ export default function CampanhaMatriculas() {
       setLoading(false)
     })()
     return () => { alive = false }
-  }, [cycle?.id, institutionId, targetYear]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cycle?.id, institutionId, targetYear, reloadKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const years: HistYear[] = hist?.years ?? []
   const ret = useMemo(() => retention(years), [years])
@@ -470,6 +472,7 @@ export default function CampanhaMatriculas() {
             <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 10 }}>Mudar datas ou metas refaz o mês a mês. Depois dá para ajustar cada mês.</div>
           </Step>
           <Step n={2} cur={step} setStep={setStep} title="Plano inicial da campanha (IA)" summary={report ? `Plano gerado em ${reportAt ? new Date(reportAt).toLocaleDateString('pt-BR') : ''}` : 'Histórico da escola e análise da IA'} hint="Entenda o histórico da escola antes de definir a meta">
+            {!info?.sources?.includes('activesoft') && !readOnly && <div style={{ marginBottom: 16 }}><HistoricoManual institutionId={institutionId} targetYear={targetYear} onSaved={() => { setEd(null); setReloadKey(k => k + 1) }} /></div>}
             <div>
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 4 }}>O que a escola fez nos últimos anos <Chip>{SOURCE_LABEL[source]}</Chip></div>
               {years.length ? (

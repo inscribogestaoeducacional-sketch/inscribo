@@ -1113,6 +1113,31 @@ ${JSON.stringify(data).slice(0, 30000)}`
       return res.json({ result: report })
     }
 
+    if (action === 'history_sheet_read') {
+      const { targetYear, text } = payload as { targetYear: number; text: string }
+      const prompt = `Você lê planilhas de escolas particulares brasileiras e extrai o HISTÓRICO DE MATRÍCULAS por ano letivo, para a Campanha de Matrículas ${targetYear}.
+Só interessam os anos de ${targetYear - 3} a ${targetYear - 1}. Para cada ano letivo Y encontrado, extraia:
+- base: alunos do ano Y-1 que poderiam voltar em Y (alunos do ano anterior, sem concluintes do último ano da escola)
+- rematriculados: quantos desses voltaram em Y
+- novos: alunos novos em Y
+- total_alunos: total de alunos no ano Y
+- concluintes: quem concluiu o último ano; saidas: transferidos/cancelados/desistentes durante o ano
+- meses: matrículas por mês, se houver (lista de {mes:"YYYY-MM", novos, rematriculas})
+REGRAS
+- Use SOMENTE números que aparecem na planilha. Se um campo não aparece, use null. Nunca invente nem estime.
+- Se um número puder ser somado a partir de linhas claramente por série ou turma do mesmo ano, some; se tiver dúvida, use null e explique em "observacoes".
+- Se a planilha for uma LISTA DE ALUNOS (uma linha por aluno), não conte linha a linha: devolva "tipo":"lista_de_alunos" e "anos":[].
+- Em "observacoes" explique em linguagem simples o que entendeu e o que ficou de fora.
+SAÍDA: somente JSON válido: {"tipo":"resumo_por_ano"|"lista_de_alunos"|"nao_entendi","anos":[{"ano":2026,"base":null,"rematriculados":null,"novos":null,"total_alunos":null,"concluintes":null,"saidas":null,"meses":[]}],"observacoes":["..."]}
+
+PLANILHA (texto):
+${String(text).slice(0, 30000)}`
+      const raw = await callClaude(prompt, 3000)
+      let out: unknown
+      try { out = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA não conseguiu ler a planilha. Tente de novo ou digite os números.' }) }
+      return res.json({ result: out })
+    }
+
     return res.status(400).json({ error: `Action desconhecida: ${action}` })
 
   } catch (error) {
