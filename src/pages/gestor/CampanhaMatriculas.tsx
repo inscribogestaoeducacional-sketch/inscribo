@@ -11,7 +11,7 @@
 // Escola sem histórico (sem integração nem planilha): digita os números base e o sistema usa uma
 // curva padrão, marcada como "estimativa".
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -23,6 +23,8 @@ import { NovatosTab, RematriculaTab } from '../../components/campanha/NovatosRem
 import Investimento from '../../components/campanha/Investimento'
 import FunilCampanha from '../../components/campanha/FunilCampanha'
 import Matriculometro from '../../components/campanha/Matriculometro'
+import RelatorioMensal from '../../components/campanha/RelatorioMensal'
+import MetaCharts from '../../components/campanha/CampaignCharts'
 import {
   type History, type HistYear, type PlanMonth, type FunnelRates, type PlanSource,
   DEFAULT_FUNNEL, MONTH_ABBR, monthName, monthsBetween, retention, suggestGoals, suggestMonths, funnelNeeds, sourceFromSources,
@@ -77,6 +79,7 @@ function Num({ value, onChange, disabled, suffix, step }: { value: number; onCha
 export default function CampanhaMatriculas() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const institutionId = user?.institution_id || ''
   const [cycles, setCycles] = useState<Cycle[]>([])
   const [cycleId, setCycleId] = useState('')
@@ -90,6 +93,7 @@ export default function CampanhaMatriculas() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null)
   const [openClasses, setOpenClasses] = useState<string | null>(null)
+  const [geralKind, setGeralKind] = useState<'novos' | 'rematriculas'>('novos')
   const [report, setReport] = useState<Report | null>(null)
   const [reportAt, setReportAt] = useState<string | null>(null)
   const [genBusy, setGenBusy] = useState(false)
@@ -175,7 +179,7 @@ export default function CampanhaMatriculas() {
   }, [cycle, hist, ed, configured, ret.rate, build, targetYear])
 
   useEffect(() => { setReport((cycle?.ai_report ?? null) as Report | null); setReportAt(cycle?.ai_report_at ?? null); setGenErr('') }, [cycle?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (cycle) setTab(cycle.status === 'active' && configured ? 'geral' : 'metas') }, [cycle?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (cycle) setTab(searchParams.get('relatorio') ? 'relatorio' : cycle.status === 'active' && configured ? 'geral' : 'metas') }, [cycle?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── edições do gestor: cada uma refaz o mês a mês (as edições mês a mês ficam só enquanto não mexer na meta)
   const rebuild = (patch: Partial<Ed>) => setEd(prev => prev ? build({ ...prev, ...patch }, prev.rates) : prev)
@@ -369,7 +373,7 @@ export default function CampanhaMatriculas() {
         {tabBtn('invest', 'Investimento', Wallet)}
         {tabBtn('serie', 'Séries e turmas', Layers)}
         {tabBtn('matriculometro', 'Matriculômetro', Flag)}
-        {tabBtn('relatorio', 'Relatório da IA', Sparkles)}
+        {tabBtn('relatorio', 'Relatório do mês', Sparkles)}
       </div>
 
       {loading && <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div>}
@@ -438,28 +442,14 @@ export default function CampanhaMatriculas() {
               </div>
 
               {ed && (
-                <div style={card}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 4 }}>Mês a mês: meta × feito</div>
-                  <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 10 }}>Só entram os alunos com data de matrícula informada.</div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead><tr style={{ background: '#F8FAFC' }}><th style={{ ...th, textAlign: 'left' }}>Mês</th><th style={th}>Rematrículas meta</th><th style={th}>Feito</th><th style={th}>Novos meta</th><th style={th}>Feito</th></tr></thead>
-                      <tbody>
-                        {ed.months.map(m => {
-                          const real = hist?.current?.monthly.find(x => x.m === m.m)
-                          const future = m.m > todaySP.slice(0, 7)
-                          return (
-                            <tr key={m.m} style={{ borderTop: `1px solid ${BRAND.line}`, background: m.m === todaySP.slice(0, 7) ? '#FFFBEB' : undefined }}>
-                              <td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(m.m)}/{m.m.slice(0, 4)}{m.m === todaySP.slice(0, 7) && <span style={{ color: BRAND.faint, fontWeight: 500 }}> · em andamento</span>}</td>
-                              <td style={td}>{fmt(m.rematriculas)}</td><td style={{ ...td, fontWeight: 700, color: '#059669' }}>{future ? '–' : fmt(real?.rematriculas ?? 0)}</td>
-                              <td style={td}>{fmt(m.novos)}</td><td style={{ ...td, fontWeight: 700, color: '#2563EB' }}>{future ? '–' : fmt(real?.novos ?? 0)}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
+                <>
+                  <div style={{ display: 'inline-flex', gap: 4, background: '#EEF3F2', borderRadius: 12, padding: 4, alignSelf: 'flex-start' }}>
+                    {([['novos', 'Alunos novos'], ['rematriculas', 'Rematrículas']] as const).map(([k, l]) => (
+                      <button key={k} onClick={() => setGeralKind(k)} style={{ padding: '7px 16px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, background: geralKind === k ? '#fff' : 'transparent', color: geralKind === k ? BRAND.primaryDark : BRAND.muted }}>{l}</button>
+                    ))}
                   </div>
-                </div>
+                  <MetaCharts key={geralKind} kind={geralKind} months={ed.months} cur={hist?.current ?? null} years={years} targetYear={targetYear} label={geralKind === 'novos' ? 'Alunos novos' : 'Rematrículas'} />
+                </>
               )}
             </>
           )}
@@ -586,6 +576,39 @@ export default function CampanhaMatriculas() {
         </>
       )}
 
+      {/* Plano inicial da campanha (IA): faz parte da configuração */}
+      {!loading && cycle && tab === 'metas' && (
+        <>
+          <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ maxWidth: 720 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Plano inicial da campanha {targetYear} (IA)</div>
+              <div style={{ fontSize: 13, color: BRAND.muted, marginTop: 3 }}>
+                A IA lê o histórico da escola, a meta que você definiu e o andamento de agora. Ela explica o que cada número quer dizer, mostra onde a escola perde alunos (por série e turma) e diz o que fazer.
+                {reportAt ? ` Gerado em ${new Date(reportAt).toLocaleString('pt-BR')}.` : ''}
+              </div>
+              {report && cycle.plan_edited_at && reportAt && cycle.plan_edited_at > reportAt && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>A meta mudou depois deste relatório. Gere de novo para atualizar.</div>}
+              {ed && ed.dirty && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>Você tem alterações não salvas em Metas e mês a mês. O relatório usa o que está na tela.</div>}
+            </div>
+            <button onClick={generateReport} disabled={genBusy || !ed} style={primaryBtn(genBusy || !ed)}>{genBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{report ? 'Gerar de novo' : 'Gerar plano com IA'}</button>
+          </div>
+          {genBusy && <div style={{ ...card, color: BRAND.muted, fontSize: 13.5 }}>Analisando o histórico da escola. Isso pode levar até um minuto.</div>}
+          {genErr && <div style={{ ...card, color: BRAND.danger, fontSize: 13.5 }}>{genErr}</div>}
+          {report && (
+            <>
+              {report.resumo && <div style={{ ...card, background: BRAND.softer, border: `1px solid ${BRAND.softLine}` }}><div style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Em resumo</div><div style={{ fontSize: 14.5, color: BRAND.ink, lineHeight: 1.6 }}>{report.resumo}</div></div>}
+              {(report.alertas ?? []).length > 0 && <div style={{ ...card, background: BRAND.warnSoft, border: '1px solid #FCD34D' }}>{(report.alertas ?? []).map((a, i) => <div key={i} style={{ fontSize: 13.5, color: BRAND.warn, display: 'flex', gap: 8, marginBottom: 4 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} />{a}</div>)}</div>}
+              {(report.secoes ?? []).map((sec, i) => (
+                <div key={i} style={card}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>{sec.titulo}</div>
+                  {sec.texto && <div style={{ fontSize: 14, color: BRAND.text, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{sec.texto}</div>}
+                  {(sec.pontos ?? []).length > 0 && <ul style={{ margin: '10px 0 0', paddingLeft: 20, listStyle: 'disc', color: BRAND.text, fontSize: 14, lineHeight: 1.6 }}>{(sec.pontos ?? []).map((p, j) => <li key={j} style={{ marginBottom: 4 }}>{p}</li>)}</ul>}
+                </div>
+              ))}
+            </>
+          )}
+        </>
+      )}
+
       {!loading && cycle && tab === 'funil' && institutionId && <FunilCampanha institutionId={institutionId} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} planMonths={ed?.months ?? []} rates={ed?.rates ?? ((cycle.funnel_rates as FunnelRates | null) ?? DEFAULT_FUNNEL)} />}
 
       {!loading && cycle && tab === 'novatos' && institutionId && (
@@ -593,12 +616,14 @@ export default function CampanhaMatriculas() {
           rates={ed?.rates ?? ((cycle.funnel_rates as FunnelRates | null) ?? DEFAULT_FUNNEL)} goal={cycle.target_new_students ?? 0} done={prog.novos}
           months={ed?.months ?? []} hist={hist?.current ?? null} />
       )}
+      {!loading && cycle && tab === 'novatos' && ed && <MetaCharts kind="novos" months={ed.months} cur={hist?.current ?? null} years={years} targetYear={targetYear} label="Alunos novos" />}
 
       {!loading && cycle && tab === 'rematricula' && (
         <RematriculaTab goal={cycle.goal_reenrollments ?? 0} done={prog.reMat} months={ed?.months ?? []} hist={hist?.current ?? null}
           pre={prog.pre || panel.reduce((a, r) => a + (r.pre_enrolled || 0), 0)} pending={prog.pending}
           bySegment={panel.map(r => ({ name: r.grade_name, pending: r.pending }))} />
       )}
+      {!loading && cycle && tab === 'rematricula' && ed && <MetaCharts kind="rematriculas" months={ed.months} cur={hist?.current ?? null} years={years} targetYear={targetYear} label="Rematrículas" />}
 
       {!loading && cycle && tab === 'invest' && institutionId && <Investimento institutionId={institutionId} year={targetYear} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} />}
 
@@ -656,36 +681,11 @@ export default function CampanhaMatriculas() {
           })}
         </div>
       )}
-      {!loading && cycle && tab === 'relatorio' && (
-        <>
-          <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <div style={{ maxWidth: 720 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Estudo da campanha {targetYear}</div>
-              <div style={{ fontSize: 13, color: BRAND.muted, marginTop: 3 }}>
-                A IA lê o histórico da escola, a meta que você definiu e o andamento de agora. Ela explica o que cada número quer dizer, mostra onde a escola perde alunos (por série e turma) e diz o que fazer.
-                {reportAt ? ` Gerado em ${new Date(reportAt).toLocaleString('pt-BR')}.` : ''}
-              </div>
-              {report && cycle.plan_edited_at && reportAt && cycle.plan_edited_at > reportAt && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>A meta mudou depois deste relatório. Gere de novo para atualizar.</div>}
-              {ed && ed.dirty && <div style={{ fontSize: 12.5, color: BRAND.warn, marginTop: 6 }}>Você tem alterações não salvas em Metas e mês a mês. O relatório usa o que está na tela.</div>}
-            </div>
-            <button onClick={generateReport} disabled={genBusy || !ed} style={primaryBtn(genBusy || !ed)}>{genBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{report ? 'Gerar de novo' : 'Gerar relatório'}</button>
-          </div>
-          {genBusy && <div style={{ ...card, color: BRAND.muted, fontSize: 13.5 }}>Analisando o histórico da escola. Isso pode levar até um minuto.</div>}
-          {genErr && <div style={{ ...card, color: BRAND.danger, fontSize: 13.5 }}>{genErr}</div>}
-          {report && (
-            <>
-              {report.resumo && <div style={{ ...card, background: BRAND.softer, border: `1px solid ${BRAND.softLine}` }}><div style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Em resumo</div><div style={{ fontSize: 14.5, color: BRAND.ink, lineHeight: 1.6 }}>{report.resumo}</div></div>}
-              {(report.alertas ?? []).length > 0 && <div style={{ ...card, background: BRAND.warnSoft, border: '1px solid #FCD34D' }}>{(report.alertas ?? []).map((a, i) => <div key={i} style={{ fontSize: 13.5, color: BRAND.warn, display: 'flex', gap: 8, marginBottom: 4 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} />{a}</div>)}</div>}
-              {(report.secoes ?? []).map((sec, i) => (
-                <div key={i} style={card}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>{sec.titulo}</div>
-                  {sec.texto && <div style={{ fontSize: 14, color: BRAND.text, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{sec.texto}</div>}
-                  {(sec.pontos ?? []).length > 0 && <ul style={{ margin: '10px 0 0', paddingLeft: 20, listStyle: 'disc', color: BRAND.text, fontSize: 14, lineHeight: 1.6 }}>{(sec.pontos ?? []).map((p, j) => <li key={j} style={{ marginBottom: 4 }}>{p}</li>)}</ul>}
-                </div>
-              ))}
-            </>
-          )}
-        </>
+      {!loading && cycle && tab === 'relatorio' && institutionId && user && (
+        <RelatorioMensal institutionId={institutionId} cycleId={cycle.id} institutionName={user.institution_name ?? ''} userId={user.id} userEmail={user.email ?? ''}
+          from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} year={targetYear}
+          months={ed?.months ?? []} rates={ed?.rates ?? ((cycle.funnel_rates as FunnelRates | null) ?? DEFAULT_FUNNEL)} cur={hist?.current ?? null} years={years}
+          prog={{ done: prog.done, pre: prog.pre, pending: prog.pending }} noLead={noLead?.sem_lead ?? 0} openId={searchParams.get('relatorio')} />
       )}
     </div>
   )

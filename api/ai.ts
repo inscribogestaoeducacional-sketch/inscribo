@@ -1064,6 +1064,31 @@ ${JSON.stringify(study).slice(0, 60000)}`
       return res.json({ result: report })
     }
 
+    if (action === 'campaign_month_report') {
+      const { institutionName, month, snapshot } = payload as { institutionName?: string; month: string; snapshot: Record<string, unknown> }
+      const prompt = `Você é consultor especialista em campanhas de matrículas de escolas particulares brasileiras.
+Escreva o RELATÓRIO MENSAL de ${month} da Campanha de Matrículas de ${institutionName || 'a escola'} para o gestor, em português do Brasil, linguagem simples, direta e prática.
+
+REGRAS
+- Use SOMENTE os números dos dados abaixo. Nunca invente número, série, canal ou causa. Se um dado não existir, diga.
+- Compare sempre com a meta do plano e, quando houver, com a meta ajustada (compensação) e com os anos anteriores.
+- Diga onde o funil está travando (leads, agendamentos, visitas, matrículas) usando as conversões e os desvios recebidos.
+- Fale de investimento só se houver valor lançado: custo por lead, por visita e por matrícula (CPA).
+- Dê próximos passos concretos para o mês seguinte, em ordem de prioridade.
+- Não use markdown (sem #, **, tabelas). Cada seção tem título curto, texto corrido e, quando útil, pontos curtos.
+
+SAÍDA: somente um JSON válido, sem texto fora dele:
+{"resumo":"3 a 5 frases com a situação atual contra as metas","secoes":[{"titulo":"...","texto":"...","pontos":["..."]}],"alertas":["..."]}
+Seções, nesta ordem (omita só se não houver dado): "Placar do mês", "Compensação da meta", "Funil: onde está travando", "Investimento e custo por aluno", "Rematrículas", "Próximos passos".
+
+DADOS (JSON):
+${JSON.stringify(snapshot).slice(0, 40000)}`
+      const raw = await callClaude(prompt, 4500)
+      let report: unknown
+      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
+      return res.json({ result: report })
+    }
+
     return res.status(400).json({ error: `Action desconhecida: ${action}` })
 
   } catch (error) {
