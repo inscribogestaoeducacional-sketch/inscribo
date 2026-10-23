@@ -25,7 +25,6 @@ import AttendantDetailModal from '../../components/gestor/AttendantDetailModal'
 import SatisfactionFullModal from '../../components/gestor/SatisfactionFullModal'
 import MarketReportModal from '../../components/gestor/MarketReportModal'
 import type { FunnelMetrics } from '../../lib/supabase'
-import { createNotification } from '../../lib/notifications'
 import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
 import { useLeadInteractions } from '../../hooks/useLeadInteractions'
 import { aiFetch } from '../../lib/authHeaders'
@@ -725,19 +724,7 @@ export default function GestorHome() {
       }
 
       if (mountedRef.current) {
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-        const recentLeads = (leadsRes.data ?? []).filter((l: { created_at: string }) => l.created_at >= oneDayAgo)
-        if (recentLeads.length > 5) {
-          createNotification({
-            institution_id: institutionId,
-            type: 'milestone',
-            title: 'Alta captação de leads!',
-            message: `${recentLeads.length} novos leads cadastrados nas últimas 24h.`,
-            severity: 'success',
-            action_url: '/leads',
-          })
-        }
-
+        // Avisos de captação alta e de ritmo da meta removidos: a Campanha de Matrículas não gera mais notificações.
         // Mês atual por DATA (ver lib/funnelPeriod.ts) — antes era o último por
         // ordem alfabética, que caía em linhas lixo/futuras e gerava alerta falso.
         const latestF = pickCurrentFunnelRow((funnelRes.data ?? []) as FunnelMetrics[]) ?? undefined
@@ -750,27 +737,6 @@ export default function GestorHome() {
             { key: 'visits', val: latestF.visits, target: latestF.visits_target, label: 'Visitas' },
             { key: 'enrollments', val: latestF.enrollments, target: latestF.enrollments_target, label: 'Matrículas' },
           ].map(c => ({ ...c, expected: expectedSoFar(c.target ?? 0, latestF.period) }))
-          const underperforming = checks.find(c => c.expected > 0 && ((c.val ?? 0) / c.expected) * 100 < 60)
-          if (underperforming) {
-            const today = new Date(); today.setHours(0, 0, 0, 0)
-            const { data: existing } = await supabase
-              .from('system_notifications')
-              .select('id')
-              .eq('institution_id', institutionId)
-              .eq('type', 'goal_deviation')
-              .gte('created_at', today.toISOString())
-              .limit(1)
-            if (!existing || existing.length === 0) {
-              createNotification({
-                institution_id: institutionId,
-                type: 'goal_deviation',
-                title: `Ritmo de ${underperforming.label} abaixo de 60% da meta`,
-                message: `${underperforming.label}: ${underperforming.val ?? 0} até hoje, esperado ${underperforming.expected} pelo ritmo da meta do mês (${underperforming.target}) — ${Math.round(((underperforming.val ?? 0) / underperforming.expected) * 100)}% do esperado.`,
-                severity: 'warning',
-                action_url: '/reports',
-              })
-            }
-          }
         }
       }
     } finally {

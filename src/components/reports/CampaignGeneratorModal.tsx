@@ -513,7 +513,6 @@ const handleManualTargets = (newS: number, reen: number) => {
         schoolDataSnapshot: { ...schoolData, exits: schoolData.exits ?? {}, total_exits: totalExits },
         erpFiles, currentStudents: schoolData.current_students,
       })
-      await supabase.from('system_notifications').insert({institution_id:institutionId,type:'milestone',severity:'success',title:`Campanha ${executionYear} configurada!`,message:`Metas ativas: ${adjustedPlan.summary.total_new_students_target} novatos e ${adjustedPlan.summary.reenrollment_target} rematrículas.`})
       onApply(cycleData)
       if (isMounted.current){setDraftToast('✅ Campanha aplicada!');setTimeout(()=>{if(isMounted.current){setDraftToast(null);onClose()}},1500)} else onClose()
     } catch(e){if(isMounted.current)setError((e as Error).message)} finally{if(isMounted.current){setApplying(false);setShowConfirm(false)}}
