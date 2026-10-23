@@ -1113,33 +1113,13 @@ ${JSON.stringify(data).slice(0, 30000)}`
       return res.json({ result: report })
     }
 
-    if (action === 'whatsapp_period_report') {
-      const { institutionName, periodo, data } = payload as { institutionName?: string; periodo: string; data: Record<string, unknown> }
-      const prompt = `Você é consultor de atendimento e vendas de escolas particulares brasileiras.
-Leia os dados de atendimento por WhatsApp de ${institutionName || 'a escola'} no período ${periodo} e escreva um relatório para o GESTOR, em português do Brasil, linguagem simples.
-
-REGRAS
-- "por_atendente" tem números completos do período (conversas, mediana em minutos da primeira resposta humana, satisfação média e quantas avaliações). "amostra" é só uma AMOSTRA aleatória de conversas (primeiras mensagens); não a trate como o total e diga que é uma amostra.
-- Use SOMENTE o que aparece nos dados. Nunca invente número, nome ou situação. Se uma conclusão tiver pouco apoio, diga que é uma pista.
-- Não identifique clientes. Exemplos devem ser frases curtas e anônimas, sem nome, telefone ou dado pessoal.
-- Para cada atendente: pontos fortes e pontos a melhorar com base nos números e, se houver, na amostra. Seja justo e construtivo; uma mediana alta de resposta pode ser horário fora do expediente.
-- Dê ações práticas e ordenadas.
-- Não use markdown.
-
-SAÍDA: somente JSON válido: {"resumo":"3 a 5 frases","problemas":[{"titulo":"...","descricao":"...","exemplo":"frase curta anônima ou vazio"}],"solucoes":["..."],"duvidas_frequentes":["..."],"atendentes":[{"nome":"...","forte":"...","melhorar":"..."}],"alertas":["..."]}
-
-DADOS (JSON):
-${JSON.stringify(data).slice(0, 30000)}`
-      const raw = await callClaude(prompt, 4000)
-      let report: unknown
-      try { report = JSON.parse(extractJsonObject(raw)) } catch { return res.status(502).json({ error: 'A IA devolveu um relatório fora do formato. Tente de novo.' }) }
-      return res.json({ result: report })
-    }
-
     if (action === 'report_module_analysis') {
       const { module, moduleTitle, institutionName, periodo, data } = payload as { module: string; moduleTitle: string; institutionName?: string; periodo: string; data: Record<string, unknown> }
       const guia: Record<string, string> = {
         leads: 'Módulo LEADS: famílias que procuraram a escola. Etapas: new (novo), contact (contato), scheduled (agendou visita), visit (visitou), proposal (proposta), enrolled (matriculou), lost (perdido). Avalie volume, origem dos leads que mais matriculam, gargalos entre as etapas, desempenho por responsável, séries mais procuradas e motivos de perda.',
+        atendimento: 'Módulo ATENDIMENTO: desempenho de cada atendente no WhatsApp. Avalie carga de conversas, mediana e p90 (90% das conversas) do tempo da primeira resposta em minutos (inclui horas fora do expediente), tempo mediano até encerrar a conversa (horas), conversas sem resposta de pessoa, mensagens enviadas e satisfação (escala 1 Ruim, 2 Regular, 3 Ótimo). Compare os atendentes com justiça, sem rankear de forma cruel; aponte o que cada um faz bem e o que melhorar.',
+        satisfacao: 'Módulo SATISFAÇÃO DO ATENDIMENTO: notas dadas pelas famílias ao fim das conversas de WhatsApp na escala 1 Ruim, 2 Regular, 3 Ótimo. Avalie média, distribuição, taxa de resposta (avaliações / pesquisas enviadas), atendentes com mais notas baixas e comentários (se existirem). Muitas notas "Regular" podem indicar atendimento correto, mas sem encantamento; diga isso com cuidado. Sugira como aumentar notas 3 e a taxa de resposta.',
+        matriculas: 'Módulo MATRÍCULAS POR PESSOA: matrículas registradas no período e quem as registrou. Avalie volume, comparação com o período anterior, séries e origens que mais matriculam, e a contribuição de cada pessoa. O tempo do lead até a matrícula pode ser 0 quando o lead é cadastrado já na matrícula; trate com cautela. Algumas datas podem ser estimadas.',
         whatsapp: 'Módulo WHATSAPP: atendimento às famílias. Avalie volume, horários de pico, tempo da primeira resposta (mediana em minutos, pode incluir horas fora do expediente), satisfação, carga por atendente e, na amostra de conversas, dúvidas frequentes, problemas recorrentes e boas práticas.',
       }
       const prompt = `Você é consultor de gestão e atendimento de escolas particulares brasileiras, falando com o gestor de ${institutionName || 'a escola'}.

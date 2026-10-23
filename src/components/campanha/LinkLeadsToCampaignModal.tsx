@@ -1,4 +1,4 @@
-// src/components/reports/LinkLeadsToCampaignModal.tsx
+// src/components/campanha/LinkLeadsToCampaignModal.tsx
 //
 // Vincula leads já existentes (cadastrados fora do fluxo normal de captação,
 // ou de antes da campanha ter sido criada) ao ciclo de campanha atual.

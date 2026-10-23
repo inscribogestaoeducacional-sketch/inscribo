@@ -8,7 +8,7 @@
 import { supabase } from './supabase'
 
 // campaign_cycles.target_reenrollment_rate é sempre fração 0-1 (é o que
-// GestorReports.tsx:887 — `cycle.target_reenrollment_rate * 100` — e o
+// o antigo GestorReports (removido):887 — `cycle.target_reenrollment_rate * 100` — e o
 // prompt da IA em api/ai.ts:538 — `avgReenrollRate.toFixed(3)` — já esperam).
 // Bug real encontrado: InstitutionDetails.tsx e AdminSchools.tsx gravavam
 // 85 (escala 0-100) direto nos ciclos criados manualmente pelo admin, antes

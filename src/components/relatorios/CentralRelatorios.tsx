@@ -1,16 +1,20 @@
 // Central de Relatórios: menu horizontal de módulos; cada um com resumo, tabela, CSV e análise da IA.
 import { useState } from 'react'
-import { BarChart3, Flag, Users, MessageCircle } from 'lucide-react'
+import { BarChart3, Users, MessageCircle, Headset, SmilePlus, GraduationCap } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
-import GestorReports from '../reports/GestorReports'
 import LeadsReport from './LeadsReport'
 import WhatsappReport from './WhatsappReport'
+import AtendimentoReport from './AtendimentoReport'
+import SatisfacaoReport from './SatisfacaoReport'
+import MatriculasReport from './MatriculasReport'
 
-type Mod = 'leads' | 'whatsapp' | 'campanha'
+type Mod = 'leads' | 'whatsapp' | 'atendimento' | 'satisfacao' | 'matriculas'
 const MODS: { id: Mod; label: string; Icon: typeof Users }[] = [
   { id: 'leads', label: 'Leads', Icon: Users },
   { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle },
-  { id: 'campanha', label: 'Campanha', Icon: Flag },
+  { id: 'atendimento', label: 'Atendimento', Icon: Headset },
+  { id: 'satisfacao', label: 'Satisfação', Icon: SmilePlus },
+  { id: 'matriculas', label: 'Matrículas', Icon: GraduationCap },
 ]
 
 export default function CentralRelatorios({ institutionId, institutionName }: { institutionId: string; institutionName: string }) {
@@ -28,7 +32,9 @@ export default function CentralRelatorios({ institutionId, institutionName }: { 
       </div>
       {mod === 'leads' && <LeadsReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
       {mod === 'whatsapp' && <WhatsappReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
-      {mod === 'campanha' && <div style={{ margin: '-24px' }}><GestorReports institutionId={institutionId} institutionName={institutionName} /></div>}
+      {mod === 'atendimento' && <AtendimentoReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
+      {mod === 'satisfacao' && <SatisfacaoReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
+      {mod === 'matriculas' && <MatriculasReport key={institutionId} institutionId={institutionId} institutionName={institutionName} />}
     </div>
   )
 }

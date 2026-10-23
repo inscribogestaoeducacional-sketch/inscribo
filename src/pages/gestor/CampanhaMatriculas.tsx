@@ -12,10 +12,11 @@
 // curva padrão, marcada como "estimativa".
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet, LogOut } from 'lucide-react'
+import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet, LogOut, Link2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import PageHeader from '../../components/ui/PageHeader'
+import LinkLeadsToCampaignModal from '../../components/campanha/LinkLeadsToCampaignModal'
 import { BRAND, SHADOW } from '../../lib/brand'
 import { applyCampaignCycle } from '../../lib/campaignApply'
 import { aiFetch } from '../../lib/authHeaders'
@@ -96,6 +97,7 @@ export default function CampanhaMatriculas() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null)
   const [openClasses, setOpenClasses] = useState<string | null>(null)
+  const [showLink, setShowLink] = useState(false)
   const [step, setStep] = useState(1)
   const [reloadKey, setReloadKey] = useState(0)
   const [geralKind, setGeralKind] = useState<'novos' | 'rematriculas'>('novos')
@@ -351,6 +353,7 @@ export default function CampanhaMatriculas() {
         subtitle={cycle ? `${cycle.label ?? `Campanha ${targetYear}`}${cycle.start_date ? ` · ${cycle.start_date.split('-').reverse().join('/')} a ${(cycle.end_date ?? '').split('-').reverse().join('/')}` : ''}${dayInfo ? ` · dia ${dayInfo.day} de ${dayInfo.total}` : ''}` : ''}
         actions={<>
           {cycle && <Chip c={st.c} bg={st.bg}>{st.t}</Chip>}
+          {cycle && <button onClick={() => setShowLink(true)} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'rgba(255,255,255,.18)', cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Link2 size={15} /> Vincular leads</button>}
           {cycle && <button onClick={() => { setStep(1); setTab('metas') }} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'rgba(255,255,255,.18)', cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center' }}><SlidersHorizontal size={15} /> Configuração da campanha</button>}
           {cycles.length > 1 && (
             <select value={cycleId} onChange={e => { setCycleId(e.target.value); setEd(null) }}
@@ -694,6 +697,7 @@ export default function CampanhaMatriculas() {
           months={ed?.months ?? []} rates={ed?.rates ?? ((cycle.funnel_rates as FunnelRates | null) ?? DEFAULT_FUNNEL)} cur={hist?.current ?? null} years={years}
           prog={{ done: prog.done, pre: prog.pre, pending: prog.pending }} noLead={noLead?.sem_lead ?? 0} openId={searchParams.get('relatorio')} />
       )}
+      {showLink && cycle && <LinkLeadsToCampaignModal isOpen={showLink} onClose={() => setShowLink(false)} institutionId={institutionId ?? ''} cycleId={cycle.id} cycleLabel={cycle.label ?? `Campanha ${targetYear}`} />}
     </div>
   )
 }
