@@ -47,6 +47,13 @@ function rangeOf(k: PeriodKey, cycle: Cycle | null): { from: string; to: string;
 // ─── peças visuais ─────────────────────────────────────────────────────────────
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 18, padding: '16px 18px', boxShadow: '0 1px 2px rgba(26,43,74,.04)' }
 
+type TabId = 'resumo' | 'matriculas' | 'atendimento' | 'captacao' | 'financas'
+const TABS: [TabId, string][] = [['resumo', 'Resumo'], ['matriculas', 'Matrículas'], ['atendimento', 'Atendimento'], ['captacao', 'Captação'], ['financas', 'Finanças']]
+// No celular cada grupo vira uma aba (deslize para o lado); no computador aparece tudo junto.
+function T({ id, tab, mobile, children }: { id: TabId; tab: TabId; mobile: boolean; children: React.ReactNode }) {
+  return <div style={{ display: !mobile || tab === id ? 'contents' : 'none' }}>{children}</div>
+}
+
 function Head({ icon: Icon, title, sub, to, label }: { icon: any; title: string; sub?: string; to?: string; label?: string }) {
   const go = useNavigate()
   return (
@@ -56,7 +63,7 @@ function Head({ icon: Icon, title, sub, to, label }: { icon: any; title: string;
         <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, lineHeight: 1.2 }}>{title}</div>
         {sub && <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 1 }}>{sub}</div>}
       </div>
-      {to && <button type="button" onClick={() => go(to)} style={{ border: 'none', background: BRAND.softer, color: BRAND.primaryDark, fontWeight: 800, fontSize: 12, padding: '6px 10px', borderRadius: 99, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>{label || 'Abrir'}<ChevronRight size={13} /></button>}
+      {to && <button type="button" onClick={() => go(to)} style={{ border: 'none', background: BRAND.softer, color: BRAND.primaryDark, fontWeight: 800, fontSize: 12, padding: '6px 10px', borderRadius: 99, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'inherit', whiteSpace: 'nowrap' }}><span className="aion-head-label">{label || 'Abrir'}</span><ChevronRight size={13} /></button>}
     </div>
   )
 }
@@ -113,6 +120,10 @@ export default function GestorHomeNew() {
   const go = useNavigate()
   const inst = user?.institution_id || ''
   const [period, setPeriod] = useState<PeriodKey>('mes')
+  const [tab, setTab] = useState<TabId>('resumo')
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => { const h = () => setIsMobile(window.innerWidth < 768); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h) }, [])
+  const swipe = React.useRef<{ x: number; y: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [cycle, setCycle] = useState<Cycle | null>(null)
   const [d, setD] = useState<Json>({})
@@ -270,7 +281,7 @@ export default function GestorHomeNew() {
       <PageHeader icon={LayoutDashboard} title={`${greeting()}, ${firstName(user?.full_name)}`}
         subtitle={<>{user?.institution_name || 'Sua escola'} · visão geral de {range.label}</>}
         actions={<>
-          <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,.14)', border: '1px solid rgba(255,255,255,.28)', borderRadius: 14, padding: 4, flexWrap: 'wrap' }}>
+          <div className="aion-hscroll aion-periods" style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,.14)', border: '1px solid rgba(255,255,255,.28)', borderRadius: 14, padding: 4, flexWrap: 'wrap' }}>
             {PERIODS.map(([k, l]) => (
               <button key={k} type="button" onClick={() => setPeriod(k)} style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 800, padding: '6px 11px', borderRadius: 10, background: period === k ? '#fff' : 'transparent', color: period === k ? BRAND.primaryDark : '#fff', transition: 'background .15s' }}>{l}</button>
             ))}
@@ -283,14 +294,34 @@ export default function GestorHomeNew() {
           )}
         </>} />
 
-      {loading ? <PageSkeleton /> : <>
+      {isMobile && !loading && (
+        <div className="aion-hscroll" role="tablist" style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -12px', padding: '2px 12px', position: 'sticky', top: 0, zIndex: 20, background: 'linear-gradient(#F5FAF9 70%, rgba(245,250,249,0))' }}>
+          {TABS.map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={tab === k} type="button" className="aion-tap" onClick={() => setTab(k)}
+              style={{ flexShrink: 0, border: tab === k ? 'none' : '1px solid #E3E8F0', background: tab === k ? 'var(--aion-grad)' : '#fff', color: tab === k ? '#fff' : BRAND.muted, fontWeight: 800, fontSize: 13, padding: '8px 15px', borderRadius: 999, fontFamily: 'inherit', cursor: 'pointer', boxShadow: tab === k ? '0 8px 18px -10px rgba(0,122,110,.8)' : 'none' }}>{l}</button>
+          ))}
+        </div>
+      )}
+
+      {loading ? <PageSkeleton /> : <div style={{ display: 'contents' }}
+        onTouchStart={e => { swipe.current = (e.target as Element).closest('.aion-snap, .aion-hscroll') ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+        onTouchEnd={e => {
+          const s0 = swipe.current; swipe.current = null
+          if (!s0 || !isMobile) return
+          const dx = e.changedTouches[0].clientX - s0.x, dy = e.changedTouches[0].clientY - s0.y
+          if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6) return
+          const i = TABS.findIndex(t => t[0] === tab)
+          const n = TABS[Math.max(0, Math.min(TABS.length - 1, i + (dx < 0 ? 1 : -1)))][0]
+          if (n !== tab) { setTab(n); window.scrollTo?.({ top: 0 }) }
+        }}>
+        <T tab={tab} mobile={isMobile} id="resumo">
         {/* Precisa de você agora */}
         <section className="ld-in">
           <Head icon={Sparkles} title="Precisa de você agora" sub={hot.length ? 'Clique para resolver direto na tela certa' : 'Nada urgente por enquanto'} />
           {hot.length === 0 ? (
             <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, color: '#15803D', fontWeight: 700 }}><CheckCircle2 size={22} /> Tudo em dia: sem famílias esperando, fila vazia e nenhuma pendência.</div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 12 }}>
+            <div className="aion-snap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 12 }}>
               {hot.map((a, i) => <Kpi key={a.key} label={a.label} value={<CountUp value={a.n} />} sub={a.sub} color={a.color} icon={a.icon} to={a.to} delay={i * 60} />)}
             </div>
           )}
@@ -299,7 +330,7 @@ export default function GestorHomeNew() {
         {/* Resultados do período */}
         <section className="ld-in">
           <Head icon={GraduationCap} title="Resultados do período" sub={`${range.label} · comparado com o período anterior`} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+          <div className="aion-snap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
             <Kpi label="Matrículas" value={<CountUp value={n0(mat?.total)} />} color="#05907B" icon={GraduationCap} to="/reports?tab=matriculas" delay={0} sub={<Delta cur={n0(mat?.total)} prev={n0(mat?.anterior_total)} />} />
             <Kpi label="Leads novos" value={<CountUp value={n0(leads?.total)} />} color="#2DCBA4" icon={Users} to="/reports?tab=leads" delay={60} sub={<Delta cur={n0(leads?.total)} prev={n0(leads?.anterior?.total)} />} />
             <Kpi label="Conversão" value={pct(n0(mat?.total), n0(leads?.total)) != null ? `${pct(n0(mat?.total), n0(leads?.total))}%` : '—'} color="#00695F" icon={TrendingUp} to="/reports?tab=leads" delay={120} sub="matrículas ÷ leads do período" />
@@ -340,6 +371,7 @@ export default function GestorHomeNew() {
           </section>
         )}
 
+        </T><T tab={tab} mobile={isMobile} id="matriculas">
         {/* Evolução de matrículas + funil */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 16 }}>
           <section className="ld-in" style={{ ...card, animationDelay: '120ms' }}>
@@ -388,10 +420,11 @@ export default function GestorHomeNew() {
           </section>
         </div>
 
+        </T><T tab={tab} mobile={isMobile} id="atendimento">
         {/* Atendimento */}
         <section className="ld-in" style={{ animationDelay: '200ms' }}>
           <Head icon={Headset} title="Atendimento" sub={`WhatsApp e satisfação · ${range.label}`} to="/reports?tab=atendimento" label="Relatório de atendimento" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 12 }}>
+          <div className="aion-snap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 12 }}>
             <Kpi label="Conversas" value={<CountUp value={n0(wa?.total)} />} color="#05907B" icon={MessageCircle} to="/reports?tab=whatsapp" sub={<Delta cur={n0(wa?.total)} prev={n0(wa?.anterior?.total)} />} />
             <Kpi label="Com atendente" value={`${pct(n0(wa?.com_atendente), n0(wa?.total)) ?? 0}%`} color="#0EA5E9" icon={Users} to="/reports?tab=atendimento" sub={`${n0(wa?.com_atendente)} de ${n0(wa?.total)} · ${n0(att?.sem_atendente)} sem atendente`} />
             <Kpi label="1ª resposta (mediana)" value={minLabel(respAvg)} color={respAvg != null && respAvg > 30 ? '#B45309' : '#15803D'} icon={Clock} to="/reports?tab=atendimento" sub="tempo até a primeira resposta humana" />
@@ -440,6 +473,7 @@ export default function GestorHomeNew() {
           </div>
         </section>
 
+        </T><T tab={tab} mobile={isMobile} id="captacao">
         {/* Origem + Visitas */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 16 }}>
           <section className="ld-in" style={{ ...card, animationDelay: '280ms' }}>
@@ -464,7 +498,7 @@ export default function GestorHomeNew() {
 
           <section className="ld-in" style={{ ...card, animationDelay: '320ms' }}>
             <Head icon={CalendarCheck} title="Visitas" sub={`${n0(vis?.total)} no período`} to="/visits" label="Visitas" />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+            <div className="aion-snap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
               {([
                 ['Realizadas', n0(vis?.realizadas), '#15803D'], ['Faltaram', n0(vis?.faltaram), '#B91C1C'], ['Canceladas', n0(vis?.canceladas), '#64748B'],
                 ['Agendadas à frente', n0(vis?.agendadas_futuras), '#6366F1'], ['Matricularam após visita', n0(vis?.matriculados_apos_visita), '#05907B'],
@@ -479,6 +513,7 @@ export default function GestorHomeNew() {
           </section>
         </div>
 
+        </T><T tab={tab} mobile={isMobile} id="financas">
         {/* Investimento + Saídas + Mercado */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
           {cycle && (
@@ -516,7 +551,8 @@ export default function GestorHomeNew() {
             </section>
           )}
         </div>
-      </>}
+        </T>
+      </div>}
       {!loading && <div style={{ height: 8 }} />}
       <span style={{ display: 'none' }}><Skeleton /></span>
     </div>

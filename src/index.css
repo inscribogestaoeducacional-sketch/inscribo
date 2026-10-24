@@ -415,3 +415,16 @@ main table tbody tr:last-child td { border-bottom: none; }
   .wa-row:nth-child(5) { animation-delay: 160ms } .wa-row:nth-child(6) { animation-delay: 200ms } .wa-row:nth-child(n+7) { animation-delay: 240ms }
   .wa-chat-panel { animation: aionFromRight .3s cubic-bezier(.2,.9,.25,1) backwards }
 }
+
+/* Cartões de números em fileira que desliza (celular) */
+@media (max-width: 767px) {
+  .aion-snap { display: grid !important; grid-template-columns: none !important; grid-auto-flow: column; grid-auto-columns: minmax(148px, 44vw); overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px !important; margin: 0 -12px; padding: 2px 12px 8px; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain }
+  .aion-snap::-webkit-scrollbar { display: none }
+  .aion-snap > * { scroll-snap-align: start }
+}
+@media (max-width: 767px) {
+  .aion-head-label { display: none }
+  .aion-periods { flex-wrap: nowrap !important; overflow-x: auto; max-width: 100%; scrollbar-width: none }
+  .aion-periods::-webkit-scrollbar { display: none }
+  .aion-periods button { flex-shrink: 0; white-space: nowrap }
+}
