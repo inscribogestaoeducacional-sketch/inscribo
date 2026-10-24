@@ -80,7 +80,7 @@ export default function TopBar() {
 
 
   return (
-    <header style={{
+    <header className="aion-topbar" style={{
       height: 58, background: '#FFFFFF',
       borderBottom: '0.5px solid #D1FAE5',
       display: 'flex', alignItems: 'center',

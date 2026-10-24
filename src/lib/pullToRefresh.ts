@@ -58,6 +58,8 @@ export function installPullToRefresh() {
     el!.style.transform = `translate(-50%, ${d - 60}px)`
     el!.style.opacity = String(Math.min(1, d / 40))
     if (ring) ring.style.transform = `rotate(${d * 3.2}deg)`
+    const im = el!.querySelector('img') as HTMLElement | null
+    if (im && !el!.classList.contains('spin')) im.style.transform = `scale(${0.45 + 0.55 * Math.min(1, d / TRIGGER)}) rotate(${d * 4}deg)`
     el!.classList.toggle('ready', d >= TRIGGER)
   }
 
@@ -90,9 +92,9 @@ export function installPullToRefresh() {
     active = false
     if (pull >= TRIGGER) {
       busy = true; vibrate()
-      set(TRIGGER, true); el!.classList.add('spin')
+      set(TRIGGER, true); el!.classList.add('spin'); (el!.querySelector('img') as HTMLElement | null)?.style.removeProperty('transform')
       window.dispatchEvent(new CustomEvent('aion:refresh'))
-      setTimeout(() => { el!.classList.remove('spin'); set(0, true); busy = false }, 900)
+      setTimeout(() => { el!.classList.remove('spin'); set(0, true); busy = false }, 1100)
     } else if (pull > 0) set(0, true)
     pull = 0
   }

@@ -7,12 +7,19 @@ import LogoAnimation from './LogoAnimation'
 export function BrandLoader({ label = 'Carregando', size = 56, fullscreen }: { label?: string; size?: number; fullscreen?: boolean }) {
   if (fullscreen) {
     return (
-      <div role="status" aria-live="polite" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 26, background: 'radial-gradient(120% 90% at 50% 0%, #F0FDFB 0%, #FFFFFF 60%)' }}>
-        <LogoAnimation width={Math.min(360, typeof window !== 'undefined' ? window.innerWidth * 0.78 : 360)} />
-        <div style={{ width: 120, height: 4, borderRadius: 99, background: '#E3EFEC', overflow: 'hidden' }}>
-          <span className="aion-bar" style={{ display: 'block', height: '100%', width: '40%', borderRadius: 99, background: 'var(--aion-grad)' }} />
+      <div role="status" aria-live="polite" style={{ minHeight: '100dvh', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 22, background: 'radial-gradient(120% 90% at 50% 0%, #E6F7F5 0%, #FFFFFF 62%)' }}>
+        <span aria-hidden className="aion-bl-orb" style={{ width: 340, height: 340, top: -140, right: -120, background: 'radial-gradient(circle, rgba(45,203,164,.28), transparent 68%)' }} />
+        <span aria-hidden className="aion-bl-orb" style={{ width: 300, height: 300, bottom: -130, left: -110, background: 'radial-gradient(circle, rgba(5,144,123,.22), transparent 68%)', animationDelay: '-4s' }} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span aria-hidden className="aion-bl-halo" style={{ animationDelay: '.2s' }} />
+          <span aria-hidden className="aion-bl-halo" style={{ animationDelay: '1.1s' }} />
+          <LogoAnimation width={Math.min(340, typeof window !== 'undefined' ? window.innerWidth * 0.74 : 340)} />
         </div>
-        <span style={{ fontSize: 12.5, color: '#5B6B86', fontWeight: 600 }}>{label}…</span>
+        <span style={{ fontSize: 12.5, color: '#00695F', fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', animation: 'ldFadeUp .7s ease 2.6s both' }}>Inteligência em matrículas</span>
+        <div aria-hidden style={{ display: 'flex', gap: 7, animation: 'ldFadeUp .5s ease 1s both' }}>
+          {[0, 1, 2].map(i => <span key={i} className="aion-bl-dot" style={{ animationDelay: `${i * 0.16}s` }} />)}
+        </div>
+        <span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{label}</span>
       </div>
     )
   }

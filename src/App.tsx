@@ -2,6 +2,7 @@ import { BrandLoader } from './components/ui/BrandLoader'
 import { useStageLabelsVersion } from './lib/stageLabels'
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import PageTitle from './components/PageTitle'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider, usePermissions } from './contexts/PermissionsContext'
 import { supabase } from './lib/supabase'
@@ -410,6 +411,7 @@ function AppContent() {
 export default function App() {
   return (
     <Router>
+      <PageTitle />
       <AuthProvider>
         <PermissionsProvider>
           <GlobalToast />

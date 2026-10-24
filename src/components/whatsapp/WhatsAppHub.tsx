@@ -1,11 +1,12 @@
 ﻿import { resolveSlotTemplate } from '../../lib/templateSlots'
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import WaImproveButton from './WaImproveButton'
 import WaSummarySection from './WaSummarySection'
 import ContactPanel from './ContactPanel'
 import ConversationTimeline from './ConversationTimeline'
-import EmojiPicker from '@emoji-mart/react'
-import emojiData from '@emoji-mart/data'
+// Emojis: carregados só quando a pessoa abre o seletor (a lista inteira é pesada e travava o celular)
+const EmojiPicker = lazy(() => import('@emoji-mart/react'))
+const loadEmojiData = () => import('@emoji-mart/data').then(m => m.default)
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
@@ -2867,19 +2868,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Close emoji picker on outside click
   useEffect(() => {
     if (!showEmojiPicker) return
-    const handler = (e: MouseEvent) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+    const handler = (e: Event) => {
+      const t = e.target as HTMLElement
+      if (t.closest?.('[data-emoji-toggle]')) return
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(t)) {
         setShowEmojiPicker(false)
       }
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('pointerdown', handler)
+    return () => document.removeEventListener('pointerdown', handler)
   }, [showEmojiPicker])
 
   const handleEmojiSelect = useCallback((emoji: any) => {
     const native = emoji.native as string
     const el = inputRef.current
-    if (el) {
+    if (el && !isMobile) {
       const start = el.selectionStart ?? inputText.length
       const end   = el.selectionEnd   ?? inputText.length
       const next  = inputText.slice(0, start) + native + inputText.slice(end)
@@ -2892,10 +2895,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     } else {
       setInputText(t => t + native)
     }
-    setShowEmojiPicker(false)
-  }, [inputText])
+    if (!isMobile) setShowEmojiPicker(false)
+  }, [inputText, isMobile])
 
   const activeConv = conversations.find(c => c.id === activeId) ?? null
+
+  // Celular: conversa aberta ocupa a tela toda (some a barra de baixo e a de cima), como no WhatsApp
+  const chatOpenMobile = isMobile && mobilePanel === 'chat' && !!activeConv
+  useEffect(() => {
+    document.body.classList.toggle('aion-wa-chat', chatOpenMobile)
+    return () => document.body.classList.remove('aion-wa-chat')
+  }, [chatOpenMobile])
 
   const getDefaultVarValue = (index: number): string => {
     const defaults: Record<number, string> = {
@@ -5571,8 +5581,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             {/* Emoji picker */}
             {showEmojiPicker && (
               <div ref={emojiPickerRef} style={{ position: 'absolute', bottom: 72, left: isMobile ? 8 : 0, right: isMobile ? 8 : 'auto', zIndex: 40, borderRadius: 16, overflow: 'hidden', boxShadow: '0 14px 36px -12px rgba(26,43,74,.4)', border: '1px solid #E3E8F0' }}>
+                <Suspense fallback={<div style={{ width: 300, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', fontSize: 12, color: '#64748B' }}>Carregando emojis…</div>}>
                 <EmojiPicker
-                  data={emojiData}
+                  data={loadEmojiData}
                   onEmojiSelect={handleEmojiSelect}
                   locale="pt"
                   theme="light"
@@ -5583,6 +5594,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   dynamicWidth={isMobile}
                   maxFrequentRows={2}
                 />
+                </Suspense>
               </div>
             )}
 
@@ -5731,11 +5743,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 {[
                   { icon: Paperclip, active: showAttach, onClick: () => { setShowAttach(v => !v); setShowQuickReplies(false) }, title: 'Anexar arquivo' },
                   { icon: Zap,       active: showQuickReplies, onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false) }, title: 'Respostas rápidas' },
-                  { icon: Smile,     active: showEmojiPicker,  onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emojis' },
+                  { icon: Smile,     active: showEmojiPicker,  onClick: () => { if (isMobile) inputRef.current?.blur(); setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emojis' },
                 ].map(btn => {
                   const IconComp = btn.icon
                   return (
-                    <button key={btn.title} onClick={btn.onClick} title={btn.title}
+                    <button key={btn.title} onClick={btn.onClick} title={btn.title} data-emoji-toggle={btn.title === 'Emojis' ? '' : undefined}
                       style={{
                         padding: 8, borderRadius: 8, flexShrink: 0, background: btn.active ? '#E6F7F5' : 'none',
                         color: btn.active ? '#05907B' : '#64748B', border: 'none', cursor: 'pointer', transition: 'background 0.15s',
