@@ -1275,7 +1275,7 @@ export default function ContactsModule() {
           </div>
 
           {/* Origin filter chips */}
-          <div style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', gap: 6, scrollbarWidth: 'none' }}>
+          <div className="aion-hscroll" style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', flexWrap: 'nowrap', gap: 6, scrollbarWidth: 'none' }}>
             {/* Status filter chip row */}
             {Object.entries(statusConfig).map(([value, cfg]) => (
               <button key={value} onClick={() => setFilterStatus(filterStatus === value ? 'all' : value)}

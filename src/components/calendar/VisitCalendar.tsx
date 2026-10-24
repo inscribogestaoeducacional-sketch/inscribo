@@ -481,7 +481,7 @@ export default function VisitCalendar() {
           <button type="button" onClick={() => { setSelectedDate(new Date()); setShowModal(true) }} style={{ background: '#fff', color: BRAND.primaryDark, border: 'none', padding: '9px 16px', borderRadius: 11, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Nova visita</button>
         </>} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12 }}>
+      <div className="aion-snap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12 }}>
         {kpi('today', 'Hoje', todayVisits.length, `${todayVisits.filter(v => v.confirmed_at).length} já confirmou`, '#D97706', Calendar, { fill: todayVisits.length ? todayVisits.filter(v => v.confirmed_at).length / todayVisits.length * 100 : 0 })}
         {kpi('pending', 'Sem baixa', pending.length, 'já passaram, falta dizer', '#B91C1C', AlertCircle, { alert: pending.length > 0 })}
         {kpi('unconfirmed', 'Sem confirmação', unconfirmed.length, 'próximos 7 dias', '#6366F1', Clock)}
