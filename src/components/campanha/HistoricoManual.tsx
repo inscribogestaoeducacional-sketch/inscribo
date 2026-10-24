@@ -14,7 +14,7 @@ interface Row { f: F; mo: Mo }
 const EMPTY: F = { base: '', retained: '', new_students: '', total_students: '', graduates: '', left_during_year: '' }
 const FIELDS: [keyof F, string][] = [['base', 'Alunos que poderiam voltar'], ['retained', 'Rematricularam'], ['new_students', 'Alunos novos'], ['total_students', 'Total de alunos no ano'], ['graduates', 'Concluintes'], ['left_during_year', 'Saíram no ano']]
 const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 13.5, fontWeight: 700, boxSizing: 'border-box', color: BRAND.ink, background: '#fff', fontFamily: 'inherit' }
-const btn = (off: boolean, alt = false): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 11, border: alt ? '1px solid #E3E8F0' : 'none', cursor: off ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: alt ? BRAND.ink : '#fff', background: alt ? '#fff' : 'linear-gradient(135deg,#00695F,#05907B)', opacity: off ? 0.55 : 1, fontFamily: 'inherit' })
+const btn = (off: boolean, alt = false): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 11, border: alt ? '1px solid #E3E8F0' : 'none', cursor: off ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: alt ? BRAND.ink : '#fff', background: alt ? '#fff' : 'var(--aion-grad)', opacity: off ? 0.55 : 1, fontFamily: 'inherit' })
 const num = (s: string) => (s.trim() === '' ? 0 : Math.max(0, Math.round(Number(s) || 0)))
 const str = (v: unknown) => (v == null ? '' : String(v))
 

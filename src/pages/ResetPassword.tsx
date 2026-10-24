@@ -208,7 +208,7 @@ export default function ResetPassword() {
                   type="submit"
                   disabled={loading || !sessionReady}
                   className="w-full flex justify-center items-center py-4 px-4 rounded-xl text-base font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                  style={{ background: 'linear-gradient(135deg, #00523C, #05907B)' }}
+                  style={{ background: 'var(--aion-grad)' }}
                 >
                   {loading ? (
                     <>

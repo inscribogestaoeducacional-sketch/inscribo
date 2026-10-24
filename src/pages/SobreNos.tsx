@@ -194,7 +194,7 @@ export default function SobreNos() {
         </section>
 
         {/* CTA */}
-        <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C,#05907B)', position: 'relative', overflow: 'hidden' }}>
+        <section className="section-pad" style={{ background: 'var(--aion-grad)', position: 'relative', overflow: 'hidden' }}>
           <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
           <div ref={r4} style={{ maxWidth: 640, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
             <div className="tag-d" style={{ marginBottom: 20, display: 'inline-flex' }}>Vamos conversar?</div>

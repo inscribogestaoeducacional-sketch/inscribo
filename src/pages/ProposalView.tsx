@@ -135,7 +135,7 @@ export default function ProposalView() {
             )}
 
             <button onClick={handleDownloadPdf} disabled={generatingPdf}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'linear-gradient(135deg,#00523C,#05907B)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: generatingPdf ? 0.7 : 1 }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--aion-grad)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: generatingPdf ? 0.7 : 1 }}>
               {generatingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
               {generatingPdf ? 'Gerando…' : 'Baixar PDF'}
             </button>

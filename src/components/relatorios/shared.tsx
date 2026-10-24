@@ -102,7 +102,7 @@ export function ActionBar({ onCsv, csvLabel = 'Baixar CSV', csvDisabled, extra, 
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
       <button onClick={onCsv} disabled={csvDisabled} style={{ ...b, border: '1px solid #E2E8F0', background: '#fff', color: BRAND.ink, opacity: csvDisabled ? 0.5 : 1 }}><Download size={15} /> {csvLabel}</button>
       {extra}
-      <button onClick={onAi} disabled={aiBusy} style={{ ...b, border: 'none', background: 'linear-gradient(135deg,#00695F,#05907B)', color: '#fff', opacity: aiBusy ? 0.6 : 1 }}>{aiBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{aiBusy ? (aiLabel ?? 'Analisando…') : 'Análise da IA'}</button>
+      <button onClick={onAi} disabled={aiBusy} style={{ ...b, border: 'none', background: 'var(--aion-grad)', color: '#fff', opacity: aiBusy ? 0.6 : 1 }}>{aiBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{aiBusy ? (aiLabel ?? 'Analisando…') : 'Análise da IA'}</button>
     </div>
   )
 }
@@ -152,7 +152,7 @@ export function AnalisePanel({ rep, err, title, periodLabel, institutionId, inst
   return (
     <div id="rep-print" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <style>{`@page { size: A4; margin: 12mm } @media print { body * { visibility: hidden !important } #rep-print, #rep-print * { visibility: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact } #rep-print { position: absolute; left: 0; top: 0; width: 100% } #rep-print > div { break-inside: avoid } .no-print { display: none !important } }`}</style>
-      <div style={{ ...card, background: 'linear-gradient(135deg,#00695F,#05907B)', border: 'none', color: '#fff', display: 'flex', gap: 16, alignItems: 'center' }}>
+      <div style={{ ...card, background: 'var(--aion-grad)', border: 'none', color: '#fff', display: 'flex', gap: 16, alignItems: 'center' }}>
         {logo && <div style={{ width: 72, height: 72, borderRadius: 16, background: '#fff', padding: 8, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><img src={logo} alt="" crossOrigin="anonymous" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /></div>}
         <div style={{ flex: 1 }}><div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85 }}>ANÁLISE DA IA · {title.toUpperCase()}</div><div style={{ fontSize: 22, fontWeight: 800 }}>{institutionName}</div><div style={{ fontSize: 12.5, opacity: 0.85 }}>Período: {periodLabel}</div></div>
         <button className="no-print" onClick={() => window.print()} style={{ padding: '8px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,.2)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Printer size={14} /> PDF</button>

@@ -126,7 +126,7 @@ function mapMsgType(messageType: string): MsgType {
 }
 
 const AVATAR_BG_COLORS = [
-  'linear-gradient(135deg, #05907B, #2DCBA4)',
+  'var(--aion-grad)',
   'linear-gradient(135deg, #667eea, #764ba2)',
   'linear-gradient(135deg, #f093fb, #f5576c)',
   'linear-gradient(135deg, #4facfe, #00f2fe)',
@@ -773,7 +773,7 @@ function MessageBubble({
         maxWidth: '100%',
         padding: '9px 13px',
         background: isMe
-          ? 'linear-gradient(135deg, #0d9488 0%, #0ea5a0 100%)'
+          ? 'var(--aion-grad)'
           : '#FFFFFF',
         color: isMe ? '#fff' : '#1A2B4A',
         borderRadius: isMe ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
@@ -2557,7 +2557,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           <div style={{
             width: 44, height: 44, borderRadius: '50%',
             background: isActive
-              ? 'linear-gradient(135deg, #05907B, #2DCBA4)'
+              ? 'var(--aion-grad)'
               : getAvatarBgColor(conv.name),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 16, fontWeight: 700, color: 'white',
@@ -4945,7 +4945,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                 {activeConv.status !== 'closed' && (
                   <div style={{ padding: '10px 12px', borderBottom: '1px solid #e2f5f3', background: '#f0fdfb', display: 'flex', flexDirection: 'column', gap: 7 }}>
                     <button onClick={handleCloseConversation}
-                      style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #0d9488 0%, #2DCBA4 100%)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 3px 10px rgba(13,148,136,0.35)', transition: 'all 0.2s' }}
+                      style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'var(--aion-grad)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 3px 10px rgba(13,148,136,0.35)', transition: 'all 0.2s' }}
                       onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 5px 16px rgba(13,148,136,0.45)' }}
                       onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 3px 10px rgba(13,148,136,0.35)' }}>
                       ✅ Concluir Atendimento

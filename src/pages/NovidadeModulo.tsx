@@ -171,7 +171,7 @@ function PorQue({ c }: { c: NovidadeContent }) {
           {c.POR_QUE.map((p, i) => (
             <Reveal key={i} delay={`${(i % 2) + 1}`}>
               <div className="card-dark" style={{ padding: 32, height: '100%', display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-                <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#00523C,#05907B)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 24px rgba(0,168,150,.25)' }}>
+                <div style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--aion-grad)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 24px rgba(0,168,150,.25)' }}>
                   <p.Icon size={24} color="#fff" />
                 </div>
                 <div>
@@ -262,7 +262,7 @@ function CTA({ c }: { c: NovidadeContent }) {
   const r0 = useReveal()
   const { cliente, prospect } = c.COPY.cta
   return (
-    <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 50%,#05907B 100%)', position: 'relative', overflow: 'hidden' }}>
+    <section className="section-pad" style={{ background: 'var(--aion-grad)', position: 'relative', overflow: 'hidden' }}>
       <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div ref={r0} style={{ maxWidth: 980, margin: '0 auto', position: 'relative', zIndex: 1 }}>
         <div className="grid-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>

@@ -739,5 +739,5 @@ function Aviso({ t, d, go }: { t: string; d: string; go: () => void }) {
     </div>
   )
 }
-const primaryBtn = (disabled: boolean): CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 11, border: 'none', cursor: disabled ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'linear-gradient(135deg,#00695F,#05907B)', opacity: disabled ? 0.55 : 1, fontFamily: 'inherit' })
+const primaryBtn = (disabled: boolean): CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 11, border: 'none', cursor: disabled ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'var(--aion-grad)', opacity: disabled ? 0.55 : 1, fontFamily: 'inherit' })
 const secondaryBtn: CSSProperties = { padding: '10px 18px', borderRadius: 11, border: `1px solid ${BRAND.line}`, background: '#fff', color: BRAND.text, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit' }

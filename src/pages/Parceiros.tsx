@@ -113,7 +113,7 @@ export default function Parceiros() {
         </section>
 
         {/* Formulário */}
-        <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C,#05907B)', position: 'relative', overflow: 'hidden' }}>
+        <section className="section-pad" style={{ background: 'var(--aion-grad)', position: 'relative', overflow: 'hidden' }}>
           <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
           <div style={{ maxWidth: 640, margin: '0 auto', position: 'relative', zIndex: 1 }}>
             <div style={{ textAlign: 'center', marginBottom: 44 }}>

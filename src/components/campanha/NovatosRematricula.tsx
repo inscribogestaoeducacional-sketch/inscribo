@@ -11,7 +11,7 @@ interface Common {
 const card: React.CSSProperties = { background: '#fff', border: '1px solid #E3E8F0', borderRadius: 16, padding: '18px 20px' }
 const th: React.CSSProperties = { fontSize: 11.5, color: '#94A3B8', textTransform: 'uppercase', padding: '8px', textAlign: 'right', fontWeight: 700 }
 const td: React.CSSProperties = { padding: '8px', textAlign: 'right', fontSize: 13, borderTop: '1px solid #EEF2F1' }
-const btnS: React.CSSProperties = { marginTop: 10, padding: '8px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#00695F,#05907B)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }
+const btnS: React.CSSProperties = { marginTop: 10, padding: '8px 14px', borderRadius: 10, border: 'none', background: 'var(--aion-grad)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }
 const bar = (p: number, c: string) => <div style={{ height: 12, borderRadius: 99, background: '#EDF1F0', overflow: 'hidden', marginTop: 10 }}><div style={{ width: `${Math.min(100, p * 100)}%`, height: '100%', background: c, borderRadius: 99 }} /></div>
 const big = (n: number, of: number, c: string) => <div style={{ fontSize: 32, fontWeight: 800, color: c, lineHeight: 1 }}>{n} <span style={{ fontSize: 15, color: '#94A3B8', fontWeight: 600 }}>de {of}</span></div>
 const lab = (t: string) => <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>{t}</div>

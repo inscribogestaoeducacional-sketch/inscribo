@@ -80,7 +80,7 @@ const CSS = `
 
 .lf-btn {
   width: 100%; height: 50px;
-  background: linear-gradient(135deg, #00523C, #05907B);
+  background: var(--aion-grad);
   color: #fff; border: none; border-radius: 12px;
   font-size: 15px; font-weight: 800;
   font-family: 'Plus Jakarta Sans', sans-serif;

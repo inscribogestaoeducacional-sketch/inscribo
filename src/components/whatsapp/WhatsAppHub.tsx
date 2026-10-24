@@ -167,7 +167,7 @@ function mapMsgType(messageType: string): MsgType {
 }
 
 const AVATAR_BG_COLORS = [
-  'linear-gradient(135deg, #05907B, #2DCBA4)',
+  'var(--aion-grad)',
   'linear-gradient(135deg, #667eea, #764ba2)',
   'linear-gradient(135deg, #f093fb, #f5576c)',
   'linear-gradient(135deg, #4facfe, #00f2fe)',
@@ -813,7 +813,7 @@ function MessageBubble({
         maxWidth: '100%',
         padding: '9px 13px',
         background: isMe
-          ? 'linear-gradient(135deg, #0d9488 0%, #0ea5a0 100%)'
+          ? 'var(--aion-grad)'
           : '#FFFFFF',
         color: isMe ? '#fff' : '#1A2B4A',
         borderRadius: isMe ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
@@ -3158,7 +3158,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           <div style={{
             width: 44, height: 44, borderRadius: '50%',
             background: isActive
-              ? 'linear-gradient(135deg, #05907B, #2DCBA4)'
+              ? 'var(--aion-grad)'
               : getAvatarBgColor(conv.name),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 16, fontWeight: 700, color: 'white',

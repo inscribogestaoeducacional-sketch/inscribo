@@ -57,7 +57,7 @@ function ChatIlustracao() {
   return (
     <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB', boxShadow: '0 32px 72px rgba(0,48,31,.14)', overflow: 'hidden', maxWidth: 520, margin: '0 auto', width: '100%' }}>
       <div style={{ padding: '14px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,#00523C,#05907B)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14 }}>MC</div>
+        <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--aion-grad)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14 }}>MC</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Mariana Costa</p>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3, padding: '2px 9px', borderRadius: 999, background: '#FCE7F3', color: '#BE185D', fontSize: 11, fontWeight: 700 }}>
@@ -181,7 +181,7 @@ function PorQue() {
           {POR_QUE.map((p, i) => (
             <Reveal key={i} delay={`${(i % 2) + 1}`}>
               <div className="card-dark" style={{ padding: 32, height: '100%', display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-                <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#00523C,#05907B)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 24px rgba(0,168,150,.25)' }}>
+                <div style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--aion-grad)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 24px rgba(0,168,150,.25)' }}>
                   <p.Icon size={24} color="#fff" />
                 </div>
                 <div>
@@ -273,7 +273,7 @@ function Perguntas() {
 function CTA() {
   const r0 = useReveal()
   return (
-    <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 50%,#05907B 100%)', position: 'relative', overflow: 'hidden' }}>
+    <section className="section-pad" style={{ background: 'var(--aion-grad)', position: 'relative', overflow: 'hidden' }}>
       <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div ref={r0} style={{ maxWidth: 980, margin: '0 auto', position: 'relative', zIndex: 1 }}>
         <div className="grid-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>

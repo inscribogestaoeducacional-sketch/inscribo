@@ -20,7 +20,7 @@ interface Row { id: string; month: string; report: Report | null; snapshot: Snap
 
 const card: React.CSSProperties = { background: '#fff', border: '1px solid #E3E8F0', borderRadius: 16, padding: '18px 20px' }
 const sel: React.CSSProperties = { padding: '8px 12px', borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 13.5, background: '#fff', color: BRAND.ink, fontWeight: 600 }
-const btn = (off: boolean, alt = false): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 11, border: alt ? '1px solid #E3E8F0' : 'none', cursor: off ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: alt ? BRAND.ink : '#fff', background: alt ? '#fff' : 'linear-gradient(135deg,#00695F,#05907B)', opacity: off ? 0.55 : 1, fontFamily: 'inherit' })
+const btn = (off: boolean, alt = false): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 11, border: alt ? '1px solid #E3E8F0' : 'none', cursor: off ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: alt ? BRAND.ink : '#fff', background: alt ? '#fff' : 'var(--aion-grad)', opacity: off ? 0.55 : 1, fontFamily: 'inherit' })
 const brl = (n: number | null) => n == null ? '—' : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 const lastDay = (m: string) => { const [y, mo] = m.split('-').map(Number); return `${m}-${String(new Date(y, mo, 0).getDate()).padStart(2, '0')}` }
 const label = (m: string) => `${monthName(m + '-01')}/${m.slice(0, 4)}`
@@ -161,7 +161,7 @@ export default function RelatorioMensal(p: Props) {
             {open.emailed_at && !mailMsg && <span style={{ fontSize: 12.5, color: BRAND.muted }}>Enviado em {new Date(open.emailed_at).toLocaleDateString('pt-BR')} para {open.emailed_to}</span>}
           </div>
           <div id="rel-print" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ ...card, background: 'linear-gradient(135deg,#00695F,#05907B)', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: 18 }}>
+            <div style={{ ...card, background: 'var(--aion-grad)', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: 18 }}>
               {logo && <div style={{ width: 84, height: 84, borderRadius: 18, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8, flexShrink: 0, boxSizing: 'border-box' }}><img src={logo} alt={s.escola ?? ''} crossOrigin="anonymous" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /></div>}
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85, letterSpacing: 0.5 }}>RELATÓRIO MENSAL · CAMPANHA DE MATRÍCULAS {p.year}</div>

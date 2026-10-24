@@ -43,7 +43,7 @@ export default function InternalChatWidget() {
         title={open ? 'Fechar chat interno' : 'Chat interno com a equipe'}
         style={{
           position: 'relative', width: 56, height: 56, borderRadius: '50%', flexShrink: 0,
-          background: open ? '#1A2B4A' : 'linear-gradient(135deg, #05907B, #2DCBA4)',
+          background: open ? '#1A2B4A' : 'var(--aion-grad)',
           border: 'none', cursor: 'pointer', color: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 6px 20px rgba(0,168,150,0.4)', transition: 'background 0.15s, transform 0.15s',

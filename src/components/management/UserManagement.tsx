@@ -723,7 +723,7 @@ export default function UserManagement() {
           ) : filtered.map(u => (
             <div key={u.id} style={{ margin: '0 16px 10px', background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid #E2E8F0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#05907B,#2DCBA4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--aion-grad)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                   {u.full_name.charAt(0).toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -877,7 +877,7 @@ export default function UserManagement() {
                 <tr key={u.id} style={{ borderBottom: '1px solid #F8FAFC', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#05907B,#2DCBA4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--aion-grad)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                         {u.full_name.charAt(0).toUpperCase()}
                       </div>
                       <div>

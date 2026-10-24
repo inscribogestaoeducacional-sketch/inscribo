@@ -547,7 +547,7 @@ function ComoFunciona() {
             <RevealCard key={i} delay={`${i + 1}`}>
               <div className="card-dark" style={{ padding: 36, textAlign: 'center', position: 'relative', height: '100%' }}>
                 <div className="s-title" style={{ position: 'absolute', top: 10, right: 20, fontSize: 80, color: 'rgba(255,255,255,.04)', lineHeight: 1, pointerEvents: 'none' }}>{s.num}</div>
-                <div style={{ width: 68, height: 68, borderRadius: 20, background: 'linear-gradient(135deg,#00523C,#05907B)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 22px', boxShadow: '0 8px 28px rgba(0,168,150,.3)' }}>
+                <div style={{ width: 68, height: 68, borderRadius: 20, background: 'var(--aion-grad)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 22px', boxShadow: '0 8px 28px rgba(0,168,150,.3)' }}>
                   <s.Icon size={28} color="#fff" />
                 </div>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#2DCBA4', letterSpacing: '.12em', marginBottom: 11, textTransform: 'uppercase' }}>PASSO {s.num}</div>
@@ -761,7 +761,7 @@ function CTAFinal() {
   }
 
   return (
-    <section id="demo" className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 50%,#05907B 100%)', position: 'relative', overflow: 'hidden' }}>
+    <section id="demo" className="section-pad" style={{ background: 'var(--aion-grad)', position: 'relative', overflow: 'hidden' }}>
       <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div style={{ maxWidth: 840, margin: '0 auto', position: 'relative', zIndex: 1 }}>
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 52 }}>

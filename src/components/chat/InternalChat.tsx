@@ -281,7 +281,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
             <button key={c.id} onClick={() => openConversation(c.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-gray-50 transition-colors ${active ? 'bg-[#E6F7F5]' : 'hover:bg-gray-50'}`}>
               <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
-                style={{ background: 'linear-gradient(135deg, #05907B, #2DCBA4)' }}>
+                style={{ background: 'var(--aion-grad)' }}>
                 {initialsOf(c.full_name)}
               </div>
               <div className="flex-1 min-w-0">
@@ -325,7 +325,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
             </button>
           )}
           <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, #05907B, #2DCBA4)' }}>
+            style={{ background: 'var(--aion-grad)' }}>
             {initialsOf(activeColleague.full_name)}
           </div>
           <div className="flex-1 min-w-0">

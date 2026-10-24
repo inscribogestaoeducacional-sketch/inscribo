@@ -176,7 +176,7 @@ export default function Investimento({ institutionId, year, from, to }: { instit
           <select value={channel} onChange={e => setChannel(e.target.value)} style={inp}><option value="">Sem canal específico</option>{base.by_origin.map(o => <option key={o.source}>{o.source}</option>)}</select>
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, margin: '10px 0', cursor: 'pointer' }}><input type="checkbox" checked={paid} onChange={e => setPaid(e.target.checked)} /> Tráfego pago (anúncio)</label>
           {err && <div style={{ color: '#B91C1C', fontSize: 12.5, marginBottom: 6 }}>{err}</div>}
-          <button onClick={add} disabled={saving} style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#00695F,#05907B)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>Salvar investimento</button>
+          <button onClick={add} disabled={saving} style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: 'none', background: 'var(--aion-grad)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>Salvar investimento</button>
         </div>
       </div>
 
