@@ -2,6 +2,7 @@
 // CaptacaoInteligente.tsx / GestorTransfers (Modal, KpiCard, pílulas).
 import React from 'react'
 import { X, Loader2 } from 'lucide-react'
+import { GRAD } from '../../lib/brand'
 
 export const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 600, color: '#475569',
@@ -28,7 +29,7 @@ export function Btn({ onClick, children, variant = 'primary', disabled, loading,
   disabled?: boolean; loading?: boolean; type?: 'button' | 'submit'
 }) {
   const styles: Record<string, React.CSSProperties> = {
-    primary:   { background: '#00A896', color: '#fff', border: 'none' },
+    primary:   { background: GRAD, color: '#fff', border: 'none', boxShadow: '0 8px 18px -10px rgba(0,122,110,.8)' },
     secondary: { background: '#fff', color: '#1e2d6b', border: '1.5px solid #E2E8F0' },
     danger:    { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' },
     ghost:     { background: 'transparent', color: '#64748b', border: 'none' },
@@ -45,8 +46,8 @@ export function Btn({ onClick, children, variant = 'primary', disabled, loading,
 export function KpiCard({ label, value, icon, bg, hint }: { label: string; value: string; icon: React.ReactNode; bg: string; hint?: string }) {
   return (
     <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.3 }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+        <span style={{ minWidth: 0, fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.3 }}>{label}</span>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
       </div>
       <div style={{ fontSize: 26, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{value}</div>
@@ -55,18 +56,37 @@ export function KpiCard({ label, value, icon, bg, hint }: { label: string; value
   )
 }
 
-export function Modal({ children, onClose, title, wide, footer }: {
+export function Modal({ children, onClose, title, wide, footer, subtitle, tabs }: {
   children: React.ReactNode; onClose: () => void; title: string; wide?: boolean; footer?: React.ReactNode
+  /** Quando existe, o topo vira a faixa em degradê (padrão do sistema). */
+  subtitle?: React.ReactNode
+  tabs?: React.ReactNode
 }) {
+  const fancy = subtitle !== undefined || tabs !== undefined
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: wide ? 860 : 520, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
+      <div className="ld-in" style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: wide ? 860 : 520, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
+        {fancy ? (
+          <div style={{ position: 'relative', overflow: 'hidden', background: GRAD, color: '#fff', padding: '18px 22px 0', flexShrink: 0 }}>
+            <span aria-hidden style={{ position: 'absolute', width: 240, height: 240, right: -60, top: -130, borderRadius: 999, background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,.22), rgba(255,255,255,.04) 60%, transparent 70%)', pointerEvents: 'none' }} />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, letterSpacing: '-.01em', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</h2>
+                {subtitle && <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12.5, color: 'rgba(255,255,255,.88)' }}>{subtitle}</div>}
+              </div>
+              <button onClick={onClose} aria-label="Fechar" style={{ background: 'rgba(255,255,255,.16)', border: '1px solid rgba(255,255,255,.28)', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', padding: 7, borderRadius: 11, flexShrink: 0 }}><X size={17} /></button>
+            </div>
+            {tabs && <div style={{ position: 'relative', marginTop: 14, display: 'flex', gap: 4, overflowX: 'auto' }}>{tabs}</div>}
+            {!tabs && <div style={{ height: 16 }} />}
+          </div>
+        ) : (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>{title}</h2>
           <button onClick={onClose} aria-label="Fechar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}><X size={18} /></button>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>{children}</div>
+        )}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', minHeight: fancy ? 'min(520px, 62vh)' : undefined }}>{children}</div>
         {footer && <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>{footer}</div>}
       </div>
     </div>

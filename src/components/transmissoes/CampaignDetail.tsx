@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase'
 import {
   CAMPAIGN_STATUS, PAUSED_REASON, FAILURE_KIND, CATEGORY_LABEL, brl, broadcastAction, chargeCampaign, type Campaign,
 } from '../../lib/broadcasts'
-import { Badge, Btn, ErrorBox, KpiCard, Modal, labelStyle } from './ui'
+import { Btn, ErrorBox, KpiCard, Modal, labelStyle } from './ui'
 import SendPlanBuilder, { DEFAULT_PLAN_FORM, type PlanForm } from './SendPlanBuilder'
 import { weekdaysFromDb, weekdaysToDb, fmtDay, todayLocal, type Plan } from '../../lib/broadcastPlan'
 
@@ -41,6 +41,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
   const navigate = useNavigate()
   const [prog, setProg] = useState<{ pending: number; sent_today: number } | null>(null)
   const [replan, setReplan] = useState(false)
+  const [tab, setTab] = useState<'resumo' | 'destinatarios' | 'custo'>('resumo')
   const [planForm, setPlanForm] = useState<PlanForm>(DEFAULT_PLAN_FORM())
   const [plan, setPlan] = useState<Plan | null>(null)
   const [limits, setLimits] = useState<{ hourly: number; daily: number } | null>(null)
@@ -101,6 +102,16 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
 
   return (
     <Modal wide title={c.name} onClose={onClose}
+      subtitle={<>
+        <span style={{ background: '#fff', color: st.color, fontSize: 11.5, fontWeight: 800, padding: '3px 11px', borderRadius: 999 }}>{st.label}</span>
+        {c.status === 'paused' && c.paused_reason && <span>{PAUSED_REASON[c.paused_reason] || c.paused_reason}</span>}
+        {c.status === 'scheduled' && <span>Envio em {fmtDate(c.scheduled_at)}</span>}
+        <span style={{ opacity: .8 }}>Template {c.template_name} · criada em {fmtDate(c.created_at)}</span>
+      </>}
+      tabs={([['resumo', 'Resumo'], ['destinatarios', `Destinatários${c.total_recipients ? ` (${c.total_recipients.toLocaleString('pt-BR')})` : ''}`], ['custo', 'Custo e cobrança']] as const).map(([k, l]) => (
+        <button key={k} type="button" onClick={() => setTab(k)}
+          style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 800, padding: '9px 16px', borderRadius: '12px 12px 0 0', background: tab === k ? '#fff' : 'transparent', color: tab === k ? '#007A6E' : 'rgba(255,255,255,.9)', transition: 'background .15s' }}>{l}</button>
+      ))}
       footer={readOnly ? <Btn variant="ghost" onClick={() => run('refresh', async () => {})} loading={busy === 'refresh'}><RefreshCw size={14} /> Atualizar</Btn> : <>
         <Btn variant="ghost" onClick={() => run('refresh', async () => {})} loading={busy === 'refresh'}><RefreshCw size={14} /> Atualizar</Btn>
         {c.status === 'draft' && <Btn loading={busy === 'price'} onClick={() => run('price', () => broadcastAction('price', { campaign_id: c.id }))}><Calculator size={14} /> Calcular valor e liberar</Btn>}
@@ -115,15 +126,9 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
         }}><Ban size={14} /> Cancelar</Btn>}
       </>}>
       <div style={{ display: 'grid', gap: 18 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Badge label={st.label} color={st.color} bg={st.bg} />
-          {c.status === 'paused' && c.paused_reason && <span style={{ fontSize: 12, color: '#C2410C' }}>{PAUSED_REASON[c.paused_reason] || c.paused_reason}</span>}
-          {c.status === 'scheduled' && <span style={{ fontSize: 12, color: '#1D4ED8' }}>Envio em {fmtDate(c.scheduled_at)}</span>}
-          <span style={{ fontSize: 12, color: '#94a3b8' }}>Template {c.template_name} · criada em {fmtDate(c.created_at)}</span>
-        </div>
         <ErrorBox message={error} />
 
-        {(c.send_dates?.length || c.send_window_start || c.daily_cap) && (() => {
+        {tab === 'resumo' && (c.send_dates?.length || c.send_window_start || c.daily_cap) && (() => {
           const dates = c.send_dates || []
           const today = todayLocal()
           const done = dates.filter(d => d < today).length
@@ -154,17 +159,32 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
           )
         })()}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
+        {tab === 'resumo' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10 }}>
           <KpiCard label="Destinatários" value={c.total_recipients.toLocaleString('pt-BR')} icon={<Users size={16} color="#1e2d6b" />} bg="#E0E7FF" />
           <KpiCard label="Enviadas" value={c.sent_count.toLocaleString('pt-BR')} hint={pct(c.sent_count, c.total_recipients)} icon={<Send size={16} color="#047857" />} bg="#D1FAE5" />
           <KpiCard label="Entregues" value={c.delivered_count.toLocaleString('pt-BR')} hint={pct(c.delivered_count, c.sent_count)} icon={<CheckCheck size={16} color="#0284C7" />} bg="#E0F2FE" />
           <KpiCard label="Lidas" value={c.read_count.toLocaleString('pt-BR')} hint={pct(c.read_count, c.delivered_count)} icon={<Eye size={16} color="#7C3AED" />} bg="#EDE9FE" />
           <KpiCard label="Responderam" value={c.replied_count.toLocaleString('pt-BR')} hint={pct(c.replied_count, c.delivered_count)} icon={<MessageCircle size={16} color="#DB2777" />} bg="#FCE7F3" />
           <KpiCard label="Falhas" value={c.failed_count.toLocaleString('pt-BR')} icon={<XCircle size={16} color="#DC2626" />} bg="#FEE2E2" />
-        </div>
+        </div>}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-          <div style={{ border: '1.5px solid #E2E8F0', borderRadius: 12, padding: 14 }}>
+        {tab === 'resumo' && c.total_recipients > 0 && (
+          <div style={{ border: '1px solid #E3E8F0', borderRadius: 16, padding: '14px 16px', display: 'grid', gap: 9 }}>
+            <label style={{ ...labelStyle, margin: 0 }}>Funil da campanha</label>
+            {([['Enviadas', c.sent_count, '#00A896'], ['Entregues', c.delivered_count, '#0284C7'], ['Lidas', c.read_count, '#7C3AED'], ['Responderam', c.replied_count, '#DB2777']] as const).map(([l, n, col]) => (
+              <div key={l} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 88px', alignItems: 'center', gap: 10, fontSize: 12.5, color: '#475569' }}>
+                <span style={{ fontWeight: 700 }}>{l}</span>
+                <span style={{ height: 9, borderRadius: 99, background: '#EEF3F2', overflow: 'hidden' }}>
+                  <span style={{ display: 'block', height: '100%', width: `${Math.min(100, (n / c.total_recipients) * 100)}%`, background: col, borderRadius: 99, transition: 'width .7s cubic-bezier(.22,1,.36,1)' }} />
+                </span>
+                <span style={{ textAlign: 'right' }}><b style={{ color: '#1A2B4A' }}>{n.toLocaleString('pt-BR')}</b> · {pct(n, c.total_recipients)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(tab === 'custo' || tab === 'resumo') && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+          {tab === 'custo' && <div style={{ border: '1.5px solid #E2E8F0', borderRadius: 12, padding: 14 }}>
             <label style={labelStyle}>Custo</label>
             {c.priced_at ? (
               <div style={{ display: 'grid', gap: 4, fontSize: 13, color: '#475569' }}>
@@ -175,16 +195,16 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
                 {c.paid_at && <div style={{ fontSize: 12, color: '#047857' }}>Liberada em {fmtDate(c.paid_at)}</div>}
               </div>
             ) : <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>Ainda não calculado.</p>}
-          </div>
-          <div style={{ border: '1.5px solid #E2E8F0', borderRadius: 12, padding: 14 }}>
+          </div>}
+          {tab === 'resumo' && <div style={{ border: '1.5px solid #E2E8F0', borderRadius: 12, padding: 14 }}>
             <label style={labelStyle}>Cliques por botão</label>
             {buttons.length ? buttons.map(b => (
               <div key={b.index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#475569', padding: '3px 0' }}>
                 <span>{b.text}</span><strong style={{ color: '#1e2d6b' }}>{b.clicks}</strong>
               </div>
             )) : <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>Template sem botões de resposta rápida.</p>}
-          </div>
-          {failures.length > 0 && (
+          </div>}
+          {tab === 'resumo' && failures.length > 0 && (
             <div style={{ border: '1.5px solid #E2E8F0', borderRadius: 12, padding: 14 }}>
               <label style={labelStyle}>Não enviadas / falhas</label>
               {failures.map(f => (
@@ -195,9 +215,9 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
               <p style={{ margin: '6px 0 0', fontSize: 11, color: '#94a3b8' }}>Mensagens pagas que não saíram viram crédito pra próxima campanha.</p>
             </div>
           )}
-        </div>
+        </div>}
 
-        <div>
+        {tab === 'destinatarios' && <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
             <label style={{ ...labelStyle, margin: 0 }}>Destinatários</label>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 12 }}>
@@ -206,7 +226,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
               {Object.entries(RECIPIENT_STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
-          <div style={{ border: '1px solid #f1f5f9', borderRadius: 12, overflow: 'auto', maxHeight: 280 }}>
+          <div style={{ border: '1px solid #f1f5f9', borderRadius: 12, overflow: 'auto', maxHeight: 420 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead><tr style={{ background: '#f8fafc' }}>
                 {['Contato', 'Status', 'Enviada', 'Resposta', ''].map(h => <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: '#94a3b8', fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>)}
@@ -219,8 +239,8 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
                     <td style={{ padding: '7px 12px', color: '#64748b' }}>{fmtDate(r.sent_at)}</td>
                     <td style={{ padding: '7px 12px', color: '#64748b' }}>{r.first_reply_at ? `${fmtDate(r.first_reply_at)}${r.clicked_button_index !== null ? ` · ${buttons.find(b => b.index === r.clicked_button_index)?.text || 'botão'}` : ''}` : '—'}</td>
                     <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
-                      {!readOnly && r.first_reply_at && <button type="button" onClick={() => navigate(`/whatsapp?phone=${r.phone}`)} style={{ marginRight: 6, padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#007A6E', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}><MessageSquare size={11} style={{ verticalAlign: -1 }} /> Conversa</button>}
-                      {!readOnly && r.lead_id && <button type="button" onClick={() => navigate(`/leads?open=${r.lead_id}`)} style={{ padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#007A6E', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}><UserRound size={11} style={{ verticalAlign: -1 }} /> Ver lead</button>}
+                      {!readOnly && r.first_reply_at && <button type="button" onClick={() => navigate(`/whatsapp?phone=${r.phone}`)} style={{ marginRight: 6, padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#007A6E', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}><MessageSquare size={11} style={{ verticalAlign: -1 }} /> Conversa</button>}
+                      {!readOnly && r.lead_id && <button type="button" onClick={() => navigate(`/leads?open=${r.lead_id}`)} style={{ padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#007A6E', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}><UserRound size={11} style={{ verticalAlign: -1 }} /> Ver lead</button>}
                     </td>
                   </tr>
                 ))}
@@ -229,7 +249,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
             </table>
           </div>
           <p style={{ margin: '6px 0 0', fontSize: 11, color: '#94a3b8' }}>Mostrando até 200.</p>
-        </div>
+        </div>}
       </div>
       {replan && (
         <Modal wide title="Reagendar as mensagens que faltam" onClose={() => setReplan(false)}
