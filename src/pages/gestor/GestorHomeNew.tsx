@@ -146,14 +146,14 @@ export default function GestorHomeNew() {
     const qc = (x: any) => Promise.resolve(x).then((r: any) => (r?.error ? 0 : r?.count ?? 0)).catch(() => 0)
     const q = (x: any) => Promise.resolve(x).then((r: any) => (r?.error ? null : r?.data ?? null)).catch(() => null)
     ;(async () => {
-      const [leads, vis, wa, att, sat, usr, mat, wait, queue, overdue, past, incomplete, panel, info, hist, fun, trans, invBase, exps, trig, trigNames] = await Promise.all([
+      const [leads, vis, wa, att, sat, usr, mat, wait, queue, overdue, past, incomplete, panel, info, hist, fun, trans, invBase, exps, trig, trigNames, enr] = await Promise.all([
         q(supabase.rpc('report_leads', p)), q(supabase.rpc('report_visitas', p)), q(supabase.rpc('report_whatsapp', p)),
         q(supabase.rpc('report_atendimento', p)), q(supabase.rpc('report_satisfacao', p)), q(supabase.rpc('report_usuarios', p)), q(supabase.rpc('report_matriculas', p)),
         q(supabase.rpc('lead_waiting', { p_institution_id: inst })),
         qc(supabase.from('whatsapp_conversations').select('id', { count: 'exact', head: true }).eq('institution_id', inst).eq('status', 'waiting').not('remote_jid', 'ilike', '%@g.us')),
         q(supabase.from('payments').select('id,amount').eq('institution_id', inst).eq('status', 'overdue')),
         qc(supabase.from('visits').select('id', { count: 'exact', head: true }).eq('institution_id', inst).eq('status', 'scheduled').lt('scheduled_date', new Date().toISOString())),
-        qc(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('institution_id', inst).is('deleted_at', null).not('status', 'in', '(enrolled,lost)').or('grade_interest.is.null,source.is.null,assigned_to.is.null')),
+        qc(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('institution_id', inst).is('deleted_at', null).not('status', 'in', '(enrolled,lost)').is('assigned_to', null)),
         cycle ? q(supabase.rpc('base_reenrollment_panel', { p_institution_id: inst, p_target_year: targetYear })) : Promise.resolve(null),
         q(supabase.rpc('base_sync_info', { p_institution_id: inst })),
         cycle ? q(supabase.rpc('campaign_history', { p_institution_id: inst, p_target_year: targetYear, p_years: 2 })) : Promise.resolve(null),
@@ -163,10 +163,11 @@ export default function GestorHomeNew() {
         cycle ? q(supabase.from('campaign_expenses').select('amount').eq('institution_id', inst).eq('target_year', targetYear)) : Promise.resolve(null),
         q(supabase.rpc('capture_trigger_stats', { p_institution_id: inst, p_start: new Date(range.from + 'T00:00:00-03:00').toISOString(), p_end: new Date(Date.now() + 60000).toISOString() })),
         q(supabase.from('capture_triggers').select('id,name').eq('institution_id', inst)),
+        q(supabase.from('enrollments').select('enrollment_date').eq('institution_id', inst).is('cancelled_at', null).gte('enrollment_date', new Date(Date.now() - 240 * 864e5).toISOString()).limit(5000)),
       ])
       if (!alive) return
       void since14
-      setD(prev => ({ ...prev, leads, vis, wa, att, sat, usr, mat, wait, queue, overdue, past, incomplete, panel, info, hist, fun, trans, invBase, exps, trig, trigNames }))
+      setD(prev => ({ ...prev, leads, vis, wa, att, sat, usr, mat, wait, queue, overdue, past, incomplete, panel, info, hist, fun, trans, invBase, exps, trig, trigNames, enr }))
       setLoading(false)
     })()
     return () => { alive = false }
@@ -200,6 +201,15 @@ export default function GestorHomeNew() {
     const h = d.hist as { current: HistYear | null; years: HistYear[] } | null
     const cur = h?.current?.monthly ?? []
     const prevYear = h?.years?.length ? h.years[h.years.length - 1] : null
+    // Sem histórico aluno a aluno (escola que ainda não importou a base), usa as matrículas lançadas no CRM
+    if (!cur.length) {
+      const by = new Map<string, number>()
+      for (const e of (d.enr ?? []) as { enrollment_date: string }[]) {
+        const m = new Date(new Date(e.enrollment_date).getTime() - 3 * 3600e3).toISOString().slice(0, 7)
+        by.set(m, (by.get(m) ?? 0) + 1)
+      }
+      return [...by.keys()].sort().slice(-8).map(m => ({ m, novos: by.get(m) ?? 0, re: 0, prev: null as number | null }))
+    }
     const keys = [...new Set(cur.map(x => x.m))].sort().slice(-8)
     return keys.map(m => {
       const c = cur.find(x => x.m === m)
@@ -207,7 +217,7 @@ export default function GestorHomeNew() {
       const p = prevYear?.monthly.find(x => x.m === pm)
       return { m, novos: c?.novos ?? 0, re: c?.rematriculas ?? 0, prev: p ? p.novos + p.rematriculas : null }
     })
-  }, [d.hist])
+  }, [d.hist, d.enr])
   const evoMax = Math.max(5, ...evo.map(e => Math.max(e.novos + e.re, e.prev ?? 0)))
 
   // funil
@@ -250,9 +260,9 @@ export default function GestorHomeNew() {
   const alerts = [
     { key: 'us', n: waitingUs, label: 'Famílias esperando a escola', sub: 'sem resposta nossa', color: '#B91C1C', icon: AlertCircle, to: '/leads?filter=us' },
     { key: 'fila', n: n0(d.queue), label: 'Conversas na fila', sub: 'ninguém assumiu ainda', color: '#B45309', icon: MessageCircle, to: '/whatsapp' },
-    { key: 'visit', n: n0(d.past), label: 'Visitas sem baixa', sub: 'já passaram e não foram registradas', color: '#6366F1', icon: CalendarX, to: '/visits' },
     { key: 'pay', n: overdueList.length, label: 'Pagamentos em atraso', sub: overdueList.length ? brl(overdueList.reduce((s, p) => s + n0(p.amount), 0)) : '', color: '#DC2626', icon: Wallet, to: '/settings' },
-    { key: 'inc', n: n0(d.incomplete), label: 'Leads com dados incompletos', sub: 'sem série, origem ou atendente', color: '#5B6B86', icon: ClipboardList, to: '/leads?filter=incomplete' },
+    { key: 'rem', n: prog.pending, label: 'Rematrículas pendentes', sub: 'famílias da base ainda sem rematrícula', color: '#05907B', icon: GraduationCap, to: '/base-alunos' },
+    { key: 'sem', n: n0(d.incomplete), label: 'Leads sem responsável', sub: 'ninguém da equipe assumiu', color: '#5B6B86', icon: UserX, to: '/leads?owner=unassigned' },
   ]
   const hot = alerts.filter(a => a.n > 0)
 
@@ -287,6 +297,18 @@ export default function GestorHomeNew() {
               {hot.map((a, i) => <Kpi key={a.key} label={a.label} value={<CountUp value={a.n} />} sub={a.sub} color={a.color} icon={a.icon} to={a.to} delay={i * 60} />)}
             </div>
           )}
+        </section>
+
+        {/* Resultados do período */}
+        <section className="ld-in">
+          <Head icon={GraduationCap} title="Resultados do período" sub={`${range.label} · comparado com o período anterior`} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+            <Kpi label="Matrículas" value={<CountUp value={n0(mat?.total)} />} color="#05907B" icon={GraduationCap} to="/reports?tab=matriculas" delay={0} sub={<Delta cur={n0(mat?.total)} prev={n0(mat?.anterior_total)} />} />
+            <Kpi label="Leads novos" value={<CountUp value={n0(leads?.total)} />} color="#2DCBA4" icon={Users} to="/reports?tab=leads" delay={60} sub={<Delta cur={n0(leads?.total)} prev={n0(leads?.anterior?.total)} />} />
+            <Kpi label="Conversão" value={pct(n0(mat?.total), n0(leads?.total)) != null ? `${pct(n0(mat?.total), n0(leads?.total))}%` : '—'} color="#00695F" icon={TrendingUp} to="/reports?tab=leads" delay={120} sub="matrículas ÷ leads do período" />
+            <Kpi label="Tempo até matricular" value={mat?.dias_ate_matricular_mediana != null ? `${n0(mat.dias_ate_matricular_mediana)} dias` : '—'} color="#F59E0B" icon={Clock} to="/reports?tab=matriculas" delay={180} sub="mediana do primeiro contato à matrícula" />
+            <Kpi label="Valor em matrículas" value={brl(((mat?.linhas ?? []) as Json[]).reduce((t, l) => t + n0(l['Valor da matrícula']), 0))} color="#B45309" icon={Wallet} to="/reports?tab=matriculas" delay={240} sub={`${n0(mat?.total)} matrículas no período`} />
+          </div>
         </section>
 
         {/* Campanha */}
@@ -343,7 +365,7 @@ export default function GestorHomeNew() {
               </div>
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: BRAND.muted, marginTop: 10, alignItems: 'center' }}>
                 <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#2DCBA4', marginRight: 5 }} />Novatos <b style={{ color: BRAND.ink }}>{evo.reduce((s, e) => s + e.novos, 0)}</b></span>
-                <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'var(--aion-grad)', marginRight: 5 }} />Veteranos <b style={{ color: BRAND.ink }}>{evo.reduce((s, e) => s + e.re, 0)}</b></span>
+                {evo.some(e => e.re > 0) && <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'var(--aion-grad)', marginRight: 5 }} />Veteranos <b style={{ color: BRAND.ink }}>{evo.reduce((s, e) => s + e.re, 0)}</b></span>}
                 <button type="button" onClick={() => go('/reports?tab=rematriculas')} style={{ marginLeft: 'auto', border: 'none', background: 'none', color: BRAND.primaryDark, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>ver rematrículas →</button>
               </div>
             </>}
@@ -447,7 +469,7 @@ export default function GestorHomeNew() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
               {([
                 ['Realizadas', n0(vis?.realizadas), '#15803D'], ['Faltaram', n0(vis?.faltaram), '#B91C1C'], ['Canceladas', n0(vis?.canceladas), '#64748B'],
-                ['Agendadas à frente', n0(vis?.agendadas_futuras), '#6366F1'], ['Sem baixa', n0(vis?.sem_baixa ?? d.past), '#B45309'], ['Matricularam após visita', n0(vis?.matriculados_apos_visita), '#05907B'],
+                ['Agendadas à frente', n0(vis?.agendadas_futuras), '#6366F1'], ['Matricularam após visita', n0(vis?.matriculados_apos_visita), '#05907B'],
               ] as [string, number, string][]).map(([l, v, c]) => (
                 <div key={l} style={{ background: '#F8FBFA', border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: '9px 11px' }}>
                   <div style={{ fontSize: 22, fontWeight: 800, color: c, lineHeight: 1.1 }}><CountUp value={v} /></div>
