@@ -6,6 +6,7 @@ import NotificationBell from './NotificationBell'
 import ConversationNotifier from './ConversationNotifier'
 import UserMenu from './UserMenu'
 import InstallAppCard from './InstallAppCard'
+import { syncPushOwner, touchSeen } from '../../lib/push'
 
 // Seletor de instituição — troca a instituição ativa (ver
 // AuthContext.switchInstitution) sem precisar logout/login. Aparece pra
@@ -71,6 +72,15 @@ export default function TopBar() {
   const navigate = useNavigate()
   const goSearch = () => { const q = search.trim(); if (q) { navigate(`/contacts?search=${encodeURIComponent(q)}`); setSearch('') } }
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+
+  // Marca que a pessoa abriu a Áion (lembrete diário) e garante o aparelho dela nos avisos
+  useEffect(() => {
+    if (!user?.id) return
+    syncPushOwner(); touchSeen()
+    const vis = () => { if (document.visibilityState === 'visible') touchSeen() }
+    document.addEventListener('visibilitychange', vis)
+    return () => document.removeEventListener('visibilitychange', vis)
+  }, [user?.id])
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth < 768)

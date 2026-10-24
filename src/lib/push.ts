@@ -128,3 +128,11 @@ export async function unlinkPushOnLogout() {
     if (sub) await supabase.rpc('push_unregister', { p_endpoint: sub.endpoint })
   } catch { /* silencioso */ }
 }
+
+/** Marca que a pessoa abriu a Áion (alimenta o lembrete "dê uma olhadinha"). No máximo a cada 10 min. */
+let lastSeenSent = 0
+export function touchSeen() {
+  if (Date.now() - lastSeenSent < 600000) return
+  lastSeenSent = Date.now()
+  supabase.rpc('touch_seen').then(() => {}, () => {})
+}

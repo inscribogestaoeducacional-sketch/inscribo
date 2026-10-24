@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { User, Lock, Save, Eye, EyeOff } from 'lucide-react'
 import PageHeader from '../ui/PageHeader'
+import NotificationPrefs from '../layout/NotificationPrefs'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 
@@ -216,6 +217,7 @@ export default function UserProfile() {
           )}
         </div>
       </div>
+      <NotificationPrefs />
     </div>
   )
 }
