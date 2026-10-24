@@ -8,13 +8,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Wifi, RefreshCw, Loader2, Check, X, Plus, Trash2, Pencil, Bot, Zap, Clock, Coffee, Timer, Star,
-  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Smartphone, WifiOff, History, CalendarDays, BellRing, FileText, Bell,
+  Users, Tag, Ban, MessageSquareText, MessageCircle, Hourglass, Repeat, Smartphone, WifiOff, History, CalendarDays, BellRing, FileText, Bell,
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { platformAdmin } from '../../../lib/platformAdmin'
 import FlowEditor from '../../whatsapp/FlowEditor'
 import SpecialDatesSettings from './SpecialDatesSettings'
 import TemplatesSettings from './TemplatesSettings'
+import LeadSequenceSettings from './LeadSequenceSettings'
 import AlertsSettings, { ALERTS_DEFAULTS, type AlertsForm } from './AlertsSettings'
 import EmbeddedSignupButton from '../../whatsapp/EmbeddedSignupButton'
 import { canSeeSettingsItem, visibleWhatsAppSections } from '../../../lib/settingsAccess'
@@ -70,6 +71,7 @@ export const WA_SECTION_INFO: Record<string, { label: string; desc: string }> = 
   pesquisa:   { label: 'Avaliação do atendimento', desc: 'Pergunta ao cliente como foi o atendimento, ao encerrar.' },
   parada:     { label: 'Conversa parada', desc: 'Lembra o cliente que sumiu depois de ser atendido.' },
   alertas:    { label: 'Alertas', desc: 'Escolha quais avisos a escola recebe no sininho.' },
+  sequencia:  { label: 'Sequência para lead sem resposta', desc: 'Até 5 mensagens automáticas, uma por vez, para o lead que parou de responder.' },
   modelos:    { label: 'Modelos da Meta', desc: 'Os modelos de mensagem da escola e os padrões, com o status de cada um na Meta.' },
 }
 
@@ -471,6 +473,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         ...(allowed.includes('horario') ? [{ id: 'horario', Icon: Clock, title: 'Horário de atendimento', desc: 'Quando a escola atende e o que o robô responde fora do horário.', open: () => go('horario') }] : []),
         ...(allowed.includes('datas') ? [{ id: 'datas', Icon: CalendarDays, title: 'Feriados e datas especiais', desc: 'Avisos nos dias em que a escola não atende ou atende menos.', open: () => go('datas') }] : []),
         ...(allowed.includes('parada') ? [{ id: 'parada', Icon: Hourglass, title: 'Conversa parada', desc: 'Avisa o cliente que sumiu depois de ser atendido.', open: () => go('parada') }] : []),
+        ...(allowed.includes('sequencia') ? [{ id: 'sequencia', Icon: Repeat, title: 'Sequência para lead sem resposta', desc: 'Até 5 mensagens automáticas para o lead que parou de responder.', hl: true, open: () => go('sequencia') }] : []),
         ...(allowed.includes('modelos') ? [{ id: 'modelos', Icon: FileText, title: 'Modelos da Meta', desc: 'Modelos de mensagem aprovados pela Meta: os da escola e os padrões.', open: () => go('modelos') }] : []),
       ],
     },
@@ -1158,7 +1161,9 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const modelos = <TemplatesSettings institutionId={institutionId} />
   const alertas = <AlertsSettings value={alerts} onChange={setAlerts} saving={savingKey === 'alertas'} saved={savedKey === 'alertas'} onSave={() => saveFlow('alertas', { alerts_config: alerts })} />
 
-  const content: Record<string, React.ReactNode> = { conexao, automacoes, datas, horario, respostas, equipe, bloqueios, etiquetas, pesquisa, parada, modelos, alertas }
+  const sequencia = <LeadSequenceSettings institutionId={institutionId} />
+
+  const content: Record<string, React.ReactNode> = { sequencia, conexao, automacoes, datas, horario, respostas, equipe, bloqueios, etiquetas, pesquisa, parada, modelos, alertas }
 
   return (
     <>

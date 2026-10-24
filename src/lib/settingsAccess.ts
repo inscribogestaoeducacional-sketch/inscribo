@@ -53,6 +53,7 @@ export const SETTINGS_ITEMS = {
   'whatsapp.etiquetas':            { tab: 'whatsapp', section: 'etiquetas', label: 'Etiquetas',                roles: BOTH },
   'whatsapp.pesquisa':             { tab: 'whatsapp', section: 'pesquisa',  label: 'Avaliação do atendimento', roles: BOTH },
   'whatsapp.parada':               { tab: 'whatsapp', section: 'parada',    label: 'Conversa parada', roles: BOTH },
+  'whatsapp.sequencia':            { tab: 'whatsapp', section: 'sequencia', label: 'Sequência para lead sem resposta', roles: ADMIN },
   'whatsapp.modelos':              { tab: 'whatsapp', section: 'modelos',   label: 'Modelos da Meta', roles: ADMIN },
   'whatsapp.alertas':              { tab: 'whatsapp', section: 'alertas',   label: 'Alertas', roles: ADMIN },
   // Etapa B passo 4: relatório de alunos (planilha) — admin e gestor; o banco aceita os dois
