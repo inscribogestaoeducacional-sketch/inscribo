@@ -5,6 +5,8 @@ import { getInitials as initials } from '../../lib/initials'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { saveLead } from '../../lib/leadSave'
+import LeadTimeline from '../leads/LeadTimeline'
+import { LEADS_CSS } from '../leads/LeadsAttention'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import {
   X, ArrowRightLeft, FileText, Clock, User, Plus, Check, Loader2,
@@ -48,6 +50,7 @@ export interface UnifiedContact {
   linked_student_name?: string | null
   student_grade?: string | null
   relationship?: string | null
+  school_relation?: string | null
 }
 
 // ─── Styles ───────────────────────────────────────────────────
@@ -776,6 +779,12 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
             }}>
               {contact.origin_label || 'WhatsApp'}
             </span>
+            {contact.lead_id && (
+              <button onClick={() => navigate(`/leads?open=${contact.lead_id}`)}
+                style={{ padding: '5px 14px', fontSize: 12, fontWeight: 700, border: '1px solid #99F6E4', borderRadius: 9, background: '#F0FDFA', color: '#007A6E', cursor: 'pointer' }}>
+                Ver lead
+              </button>
+            )}
             {/* Phone + email */}
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
               {contact.phone && (
@@ -1033,7 +1042,13 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
           )}
 
           {/* ── HISTÓRICO ───────────────────────────── */}
-          {tab === 'historico' && (
+          {tab === 'historico' && contact.lead_id && (
+            <div>
+              <style>{LEADS_CSS}</style>
+              <LeadTimeline leadId={contact.lead_id} />
+            </div>
+          )}
+          {tab === 'historico' && !contact.lead_id && (
             <div>
               {history.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: '#94A3B8' }}>

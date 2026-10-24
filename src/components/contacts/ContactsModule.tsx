@@ -16,6 +16,9 @@ import { statusConfig } from '../leads/leadFormShared'
 import DuplicateContactsModal from './DuplicateContactsModal'
 import CustomFieldsAdminModal from './CustomFieldsAdminModal'
 import ContactImportDialog from './ContactImportDialog'
+import PageHeader from '../ui/PageHeader'
+import { LEADS_CSS } from '../leads/LeadsAttention'
+import { ContactsAttentionStrip, ContactsResolvePanel, useContactsAttention, type ContactAttentionKey } from './ContactsAttention'
 
 // ─── Constants ───────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
@@ -85,6 +88,25 @@ function typeCfg(type: string | null) {
   return                          { label: 'WhatsApp',   badgeStyle: { background: '#FEF3C7', color: '#D97706' } }
 }
 
+const hdrBtn = (primary = false): React.CSSProperties => ({
+  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 11, fontSize: 13, fontWeight: primary ? 800 : 600, cursor: 'pointer',
+  border: primary ? '1px solid #fff' : '1px solid rgba(255,255,255,.4)', background: primary ? '#fff' : 'rgba(255,255,255,.14)', color: primary ? '#007A6E' : '#fff',
+})
+
+const RELATION: Record<string, { label: string; bg: string; fg: string }> = {
+  aluno:           { label: 'Aluno',           bg: '#DCFCE7', fg: '#15803D' },
+  pre_matriculado: { label: 'Pré-matriculado', bg: '#DBEAFE', fg: '#1D4ED8' },
+  ex_aluno:        { label: 'Ex-aluno',        bg: '#F1F5F9', fg: '#475569' },
+  transferido:     { label: 'Transferido',     bg: '#FEE2E2', fg: '#B91C1C' },
+  lead:            { label: 'Lead',            bg: '#EDE9FE', fg: '#6D28D9' },
+}
+function relationOf(c: { school_relation?: string | null; lead_id: string | null }) {
+  if (c.school_relation && RELATION[c.school_relation]) return RELATION[c.school_relation]
+  if (c.school_relation) return { label: c.school_relation.replace(/_/g, ' '), bg: '#F1F5F9', fg: '#475569' }
+  if (c.lead_id) return RELATION.lead
+  return { label: 'Sem relação', bg: '#FEF3C7', fg: '#B45309' }
+}
+
 function mapContact(c: any): UnifiedContact {
   const lead     = c.leads as any || null
   const rawPhone = (c.phone || '').replace(/\D/g, '')
@@ -124,6 +146,7 @@ function mapContact(c: any): UnifiedContact {
     has_lead:            !!c.lead_id,
     has_whatsapp:        true,
     lead_id:             c.lead_id || null,
+    school_relation:     c.school_relation || null,
     remote_jid:          rawPhone ? `${rawPhone}@s.whatsapp.net` : null,
     contact_type:        c.type === 'unknown' ? null : (c.type || null),
     assigned_user_name:  null,
@@ -231,6 +254,9 @@ export default function ContactsModule() {
   // ── Filter / sort state ──────────────────────────────────
   const [search,       setSearch]       = useState('')
   const [filterOrigin, setFilterOrigin] = useState('all')
+  const [filterRelation, setFilterRelation] = useState('all')
+  const [attention, setAttention] = useState<ContactAttentionKey | null>(null)
+  const { counts: attCounts, refresh: refreshAttention } = useContactsAttention(institutionId)
   const [filterGrade,  setFilterGrade]  = useState('all')
   const [filterTag,    setFilterTag]    = useState('all')
   // Campanha de origem (Captação Inteligente) — primeiro toque permanente,
@@ -352,6 +378,7 @@ export default function ContactsModule() {
     reset?:  boolean
     search?: string
     origin?: string
+    relation?: string
     grade?:  string
     tag?:    string
     campaign?: string
@@ -364,6 +391,7 @@ export default function ContactsModule() {
       reset  = true,
       search: s = search,
       origin    = filterOrigin,
+      relation  = filterRelation,
       grade     = filterGrade,
       tag       = filterTag,
       campaign  = filterCampaign,
@@ -394,8 +422,8 @@ export default function ContactsModule() {
       const needsInnerJoin = useGrade || useStatus
 
       const selectStr = needsInnerJoin
-        ? 'id, phone, name, email, address, linked_student_name, student_grade, relationship, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id!inner(id, student_name, responsible_name, email, address, grade_interest, source, status)'
-        : 'id, phone, name, email, address, linked_student_name, student_grade, relationship, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, address, grade_interest, source, status)'
+        ? 'id, phone, name, email, address, linked_student_name, student_grade, relationship, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, school_relation, leads!lead_id!inner(id, student_name, responsible_name, email, address, grade_interest, source, status)'
+        : 'id, phone, name, email, address, linked_student_name, student_grade, relationship, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, school_relation, leads!lead_id(id, student_name, responsible_name, email, address, grade_interest, source, status)'
 
       let query = supabase
         .from('whatsapp_contacts')
@@ -414,6 +442,8 @@ export default function ContactsModule() {
       if (origin === 'lead')    query = query.eq('type', 'lead')
       if (origin === 'client')  query = query.eq('type', 'client')
       if (origin === 'unknown') query = query.or('type.eq.unknown,type.is.null')
+      if (relation === 'none')  query = query.or('school_relation.is.null,school_relation.eq.')
+      else if (relation !== 'all') query = query.eq('school_relation', relation)
       if (useGrade)             query = query.eq('leads.grade_interest', grade)
       if (useStatus)            query = query.eq('leads.status', status)
       if (useTag)               query = (query as any).filter('tags', 'cs', `{"${tag}"}`)
@@ -501,6 +531,8 @@ export default function ContactsModule() {
       if (filterOrigin === 'unknown')  query = query.or('type.eq.unknown,type.is.null')
       if (useGrade)                    query = query.eq('leads.grade_interest', filterGrade)
       if (useStatus)                   query = query.eq('leads.status', filterStatus)
+      if (filterRelation === 'none')   query = query.or('school_relation.is.null,school_relation.eq.')
+      else if (filterRelation !== 'all') query = query.eq('school_relation', filterRelation)
       if (useTag)                      query = (query as any).filter('tags', 'cs', `{"${filterTag}"}`)
       if (filterCampaign !== 'all')    query = query.eq('origin_capture_trigger_id', filterCampaign)
 
@@ -656,7 +688,7 @@ export default function ContactsModule() {
     if (skipFiltersRef.current) { skipFiltersRef.current = false; return }
     load({ reset: true, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, campaign: filterCampaign, status: filterStatus, sc: sortCol, sd: sortDir })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterOrigin, filterGrade, filterTag, filterCampaign, filterStatus, sortCol, sortDir])
+  }, [filterOrigin, filterRelation, filterGrade, filterTag, filterCampaign, filterStatus, sortCol, sortDir])
 
   // ── Search change → debounced reload ─────────────────────
   useEffect(() => {
@@ -714,7 +746,7 @@ export default function ContactsModule() {
   }
 
   function clearFilters() {
-    setSearch(''); setFilterOrigin('all'); setFilterGrade('all')
+    setSearch(''); setFilterOrigin('all'); setFilterRelation('all'); setFilterGrade('all')
     setFilterTag('all'); setFilterCampaign('all'); setFilterStatus('all')
   }
 
@@ -752,7 +784,7 @@ export default function ContactsModule() {
       // UnifiedContact via mapContact() se encontrar um contato existente.
       const { data: existing, error: existingErr } = await supabase
         .from('whatsapp_contacts')
-        .select('id, phone, name, email, address, linked_student_name, student_grade, relationship, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, address, grade_interest, source, status)')
+        .select('id, phone, name, email, address, linked_student_name, student_grade, relationship, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, school_relation, leads!lead_id(id, student_name, responsible_name, email, address, grade_interest, source, status)')
         .eq('institution_id', institutionId)
         .eq('phone', phone)
         .maybeSingle()
@@ -803,8 +835,8 @@ export default function ContactsModule() {
     const useStatus  = exportFilterStatus !== 'all'
     const needsInner = useGrade || useStatus
     const selectStr  = needsInner
-      ? 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
-      : 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
+      ? 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, school_relation, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
+      : 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, school_relation, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
 
     const allRows: any[] = []
     let from = 0
@@ -888,7 +920,7 @@ export default function ContactsModule() {
 
   // ── Derived ──────────────────────────────────────────────
   const grades     = [...new Set(contacts.map(c => c.grade).filter(Boolean))] as string[]
-  const hasFilters = !!(search || filterOrigin !== 'all' || filterGrade !== 'all' || filterTag !== 'all' || filterCampaign !== 'all' || filterStatus !== 'all')
+  const hasFilters = !!(search || filterOrigin !== 'all' || filterRelation !== 'all' || filterGrade !== 'all' || filterTag !== 'all' || filterCampaign !== 'all' || filterStatus !== 'all')
   const openImport = () => setShowImport(true)
   const openNewContact = () => {
     setNewContact({ name: '', phone: '', email: '', address: '', linked_student_name: '', student_grade: '', relationship: '' })
@@ -1185,17 +1217,21 @@ export default function ContactsModule() {
       <>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
 
-          {/* Header */}
-          <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <BookUser size={16} color="#3B82F6" />
-            </div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Contatos</h1>
-            <span style={{ background: '#EFF6FF', color: '#3B82F6', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{kpiCounts.total}</span>
-            <button onClick={openImport}
-              style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', padding: '6px 12px', borderRadius: 9, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-              <Upload size={13} /> Importar
-            </button>
+          <style>{LEADS_CSS}</style>
+          <div style={{ padding: '12px 12px 0', flexShrink: 0 }}>
+            <PageHeader compact icon={BookUser} title="Contatos" subtitle={`${kpiCounts.total.toLocaleString('pt-BR')} contatos`}
+              actions={<button onClick={openImport} style={hdrBtn()}><Upload size={13} /> Importar</button>} />
+          </div>
+          <div style={{ padding: '10px 12px 0', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <ContactsAttentionStrip counts={attCounts} active={attention} onPick={setAttention} />
+            {attention && (
+              <ContactsResolvePanel kind={attention} institutionId={institutionId} counts={attCounts}
+                onClose={() => setAttention(null)}
+                onChanged={() => { refreshAttention(); load(); refreshKpiCounts() }}
+                onOpenDuplicates={() => setShowDuplicates(true)}
+                onOpenLead={id => navigate(`/leads?open=${id}`)}
+                toast={(m, t) => showToast(m, t === 'success')} />
+            )}
           </div>
 
           {/* Search */}
@@ -1271,6 +1307,7 @@ export default function ContactsModule() {
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{c.name}</p>
                           <span style={{ ...cfg.badgeStyle, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 6 }}>{cfg.label}</span>
+                          {(() => { const rl = relationOf(c); return <span style={{ background: rl.bg, color: rl.fg, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 4 }}>{rl.label}</span> })()}
                         </div>
                         {(c.subtitle || c.grade) && (
                           <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1316,57 +1353,40 @@ export default function ContactsModule() {
     <>
       <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
 
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <BookUser size={18} color="#3B82F6" />
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Contatos</h1>
-                <span style={{ padding: '2px 9px', background: '#EFF6FF', color: '#3B82F6', fontSize: 11, fontWeight: 700, borderRadius: 999 }}>{kpiCounts.total}</span>
-              </div>
-              <p style={{ fontSize: 13, color: '#94a3b8', margin: '2px 0 0' }}>Leads e WhatsApp unificados</p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={openNewContact}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: '#00A896', color: '#fff', padding: '9px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <Plus size={14} /> Novo Contato
-            </button>
-            <button onClick={openImport}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
-              <Upload size={14} /> Importar planilha
-            </button>
-            <button onClick={openExport} disabled={loading}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: (loading || contacts.length === 0) ? 0.5 : 1 }}>
-              <Download size={14} /> Exportar ({contacts.length})
-            </button>
-            <button onClick={() => load()} disabled={loading}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
-            </button>
-            <button onClick={() => setShowDuplicates(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
-              <GitMerge size={14} /> Duplicados
-            </button>
-            <button onClick={() => setShowCustomFields(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
-              <Settings2 size={14} /> Campos Personalizados
-            </button>
-          </div>
-        </div>
+        <style>{LEADS_CSS}</style>
+        <PageHeader icon={BookUser} title="Contatos"
+          subtitle={`${kpiCounts.total.toLocaleString('pt-BR')} contatos · leads e WhatsApp unificados`}
+          actions={<>
+            <button onClick={openNewContact} style={hdrBtn(true)}><Plus size={14} /> Novo contato</button>
+            <button onClick={openImport} style={hdrBtn()}><Upload size={14} /> Importar planilha</button>
+            <button onClick={openExport} disabled={loading} style={{ ...hdrBtn(), opacity: (loading || contacts.length === 0) ? 0.55 : 1 }}><Download size={14} /> Exportar ({contacts.length})</button>
+            <button onClick={() => { load(); refreshAttention() }} disabled={loading} style={hdrBtn()}><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar</button>
+            <button onClick={() => setShowDuplicates(true)} style={hdrBtn()}><GitMerge size={14} /> Duplicados</button>
+            <button onClick={() => setShowCustomFields(true)} style={hdrBtn()}><Settings2 size={14} /> Campos personalizados</button>
+          </>} />
 
-        {/* KPI cards — clickable, highlight active */}
+        <ContactsAttentionStrip counts={attCounts} active={attention} onPick={setAttention} />
+        {attention && (
+          <ContactsResolvePanel kind={attention} institutionId={institutionId} counts={attCounts}
+            onClose={() => setAttention(null)}
+            onChanged={() => { refreshAttention(); load(); refreshKpiCounts() }}
+            onOpenDuplicates={() => setShowDuplicates(true)}
+            onOpenLead={id => navigate(`/leads?open=${id}`)}
+            toast={(m, t) => showToast(m, t === 'success')} />
+        )}
+
+        {/* KPI cards — clicáveis, destacam o ativo */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-          {kpiDefs.map(k => {
+          {kpiDefs.map((k, i) => {
             const active = filterOrigin === k.filterVal
             return (
-              <button key={k.label} onClick={() => setFilterOrigin(active ? 'all' : k.filterVal)}
-                style={{ background: active ? k.activeBg : '#fff', borderRadius: 14, border: `1.5px solid ${active ? k.activeColor : '#e2e8f0'}`, padding: '16px 18px', textAlign: 'left', cursor: 'pointer', transition: 'all 0.15s' }}>
-                <p style={{ fontSize: 28, fontWeight: 700, color: active ? k.activeColor : '#1e2d6b', margin: '0 0 4px' }}>{k.count}</p>
-                <p style={{ fontSize: 11, color: active ? k.activeColor : '#94a3b8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{k.label}</p>
+              <button key={k.label} className="ld-kpi ld-in" data-on={active ? '1' : '0'} onClick={() => setFilterOrigin(active ? 'all' : k.filterVal)}
+                style={{ animationDelay: `${i * 50}ms`, background: active ? k.activeBg : '#fff', borderRadius: 14, border: `${active ? 2 : 1}px solid ${active ? k.activeColor : '#E3E8F0'}`, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 24 }}>{k.icon}</span>
+                <span>
+                  <span style={{ display: 'block', fontSize: 26, fontWeight: 800, lineHeight: 1.1, color: active ? k.activeColor : '#1A2B4A' }}>{k.count}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: active ? k.activeColor : '#5B6B86', fontWeight: 600 }}>{k.label}</span>
+                </span>
               </button>
             )
           })}
@@ -1396,6 +1416,15 @@ export default function ContactsModule() {
             style={{ border: `1.5px solid ${filterStatus !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterStatus !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterStatus !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterStatus !== 'all' ? 600 : 400, flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <option value="all">Todos os status</option>
             {Object.entries(statusConfig).map(([value, cfg]) => <option key={value} value={value}>{cfg.label}</option>)}
+          </select>
+          <select value={filterRelation} onChange={e => setFilterRelation(e.target.value)}
+            style={{ border: `1.5px solid ${filterRelation !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterRelation !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A', flexShrink: 0, width: 150 }}>
+            <option value="all">Todas as relações</option>
+            <option value="aluno">Aluno</option>
+            <option value="pre_matriculado">Pré-matriculado</option>
+            <option value="ex_aluno">Ex-aluno</option>
+            <option value="transferido">Transferido</option>
+            <option value="none">Sem relação</option>
           </select>
           {grades.length > 0 && (
             <select value={filterGrade} onChange={e => setFilterGrade(e.target.value)}
@@ -1466,7 +1495,7 @@ export default function ContactsModule() {
             reaparecia. Largura fixa pra Ações garante que ela nunca é
             espremida, independente do tamanho do nome/subtítulo. */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'auto' }}>
-          <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <table style={{ width: '100%', minWidth: 1020, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead>
               <tr>
                 <th style={{ background: '#f8fafc', padding: '10px 12px', borderBottom: '1px solid #e2e8f0', width: 36 }}>
@@ -1478,10 +1507,11 @@ export default function ContactsModule() {
                 <SortTh col="name"         label="Contato" />
                 <SortTh col="phone"        label="Telefone"       width={130} />
                 <SortTh col="type"         label="Tipo"           width={100} />
+                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', width: 120 }}>Relação</th>
                 <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', width: 90 }}>Série</th>
                 <SortTh col="last_seen_at" label="Último contato" width={120} />
                 <SortTh col="created_at"   label="Adicionado em"  width={120} />
-                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', width: 150 }}>Ações</th>
+                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', width: 240 }}>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -1489,7 +1519,7 @@ export default function ContactsModule() {
                 <SkeletonRows />
               ) : contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <EmptyState />
                   </td>
                 </tr>
@@ -1530,6 +1560,9 @@ export default function ContactsModule() {
                           {cfg.label}
                         </span>
                       </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {(() => { const rl = relationOf(c); return <span style={{ background: rl.bg, color: rl.fg, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap' }}>{rl.label}</span> })()}
+                      </td>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: '#475569' }}>
                         {c.grade || <span style={{ color: '#CBD5E1' }}>—</span>}
                       </td>
@@ -1541,6 +1574,12 @@ export default function ContactsModule() {
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', gap: 6 }}>
+                          {c.lead_id && (
+                            <button onClick={e => { e.stopPropagation(); navigate(`/leads?open=${c.lead_id}`) }}
+                              style={{ padding: '5px 12px', fontSize: 12, fontWeight: 700, border: '1px solid #99F6E4', borderRadius: 8, background: '#F0FDFA', color: '#007A6E', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              Ver lead
+                            </button>
+                          )}
                           <button onClick={e => { e.stopPropagation(); setProfileContact(c) }}
                             style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', color: '#64748b', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                             Ver perfil

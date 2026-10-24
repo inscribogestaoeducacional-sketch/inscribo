@@ -1,0 +1,3 @@
+-- Aplicado no banco em 2026-10-24 (migration contatos_atencao_sugestoes).
+-- Cria: contact_suggestion_dismissed, _ph8, _contacts_ok, contacts_attention,
+-- contacts_suggest, contacts_apply, contacts_from_leads. Definições no banco (pg_get_functiondef).
