@@ -18,6 +18,7 @@
     "@fontsource/bricolage-grotesque": "^5.2.10",
     "@fontsource/plus-jakarta-sans": "^5.2.8",
     "@next/font": "^14.0.0",
+    "@phosphor-icons/react": "^2.1.10",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-tabs": "^1.1.13",

@@ -4,58 +4,44 @@ import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
+import { X } from 'lucide-react'
 import {
-  LayoutDashboard, Users, BookUser,
-  BarChart3, UsersRound, Settings, ArrowRightLeft, ClipboardCheck, CalendarCheck, X, Megaphone, Send, Store, GraduationCap, Flag
-} from 'lucide-react'
+  House, Funnel, AddressBook, WhatsappLogo, CalendarCheck, Megaphone, Storefront, PaperPlaneTilt, Flag,
+  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List,
+} from '@phosphor-icons/react'
+import type { Icon as PhIcon } from '@phosphor-icons/react'
 
-type NavItem = { path: string; label: string; iconBg: string; iconColor: string; Icon: typeof Users; roles: string[]; module: string; group?: string; solid?: boolean }
+const GRAD = 'var(--aion-grad)'
 
-// Logo do WhatsApp (o lucide não tem marcas)
-function WhatsAppIcon({ size = 16, color = '#fff' }: { size?: number; color?: string; strokeWidth?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
-      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2Zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 4.54 0 8.24 3.7 8.24 8.24 0 4.55-3.7 8.24-8.24 8.24Zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.16.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.42h-.48c-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.23-.17-.48-.29Z" />
-    </svg>
-  )
-}
+type NavItem = { path: string; label: string; iconBg: string; iconColor: string; Icon: PhIcon; roles: string[]; module: string; group?: string; solid?: boolean }
 
-// Quadradinho colorido do item (igual nas três versões do menu)
-function NavTile({ item }: { item: NavItem }) {
+// Ícone do item: duotone em verde; ativo = preenchido e branco (sobre a pílula em degradê)
+function NavTile({ item, active }: { item: NavItem; active?: boolean }) {
   const Icon = item.Icon
-  return (
-    <span style={{
-      width: 30, height: 30, borderRadius: 10, flexShrink: 0,
-      background: item.solid ? 'linear-gradient(135deg,#34D96B,#16A34A)' : `linear-gradient(135deg, ${item.iconBg}, ${item.iconBg}cc)`,
-      boxShadow: '0 1px 2px rgba(15,23,42,0.08)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <Icon size={16} color={item.solid ? '#FFFFFF' : item.iconColor} strokeWidth={2.1} />
-    </span>
-  )
+  return <Icon size={22} weight={active ? 'fill' : 'duotone'} color={active ? '#FFFFFF' : '#05907B'} style={{ flexShrink: 0 }} />
 }
 
 const NAV_CFG: NavItem[] = [
-  { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#05907B', Icon: LayoutDashboard, roles: ['admin','manager'],        module: 'inicio' },
-  { path: '/atendente',       label: 'Início',          iconBg: '#E6F7F5', iconColor: '#05907B', Icon: LayoutDashboard, roles: ['user'],                   module: 'inicio' },
+  { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#05907B', Icon: House, roles: ['admin','manager'],        module: 'inicio' },
+  { path: '/atendente',       label: 'Início',          iconBg: '#E6F7F5', iconColor: '#05907B', Icon: House, roles: ['user'],                   module: 'inicio' },
   // Comercial
-  { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#7C3AED', Icon: Users,           roles: ['admin','manager','user'], module: 'leads',        group: 'Comercial' },
+  { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#7C3AED', Icon: Funnel,           roles: ['admin','manager','user'], module: 'leads',        group: 'Comercial' },
   { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#D97706', Icon: CalendarCheck,   roles: ['admin','manager','user'], module: 'visitas',      group: 'Comercial' },
-  { path: '/contacts',        label: 'Contatos',        iconBg: '#DBEAFE', iconColor: '#2563EB', Icon: BookUser,        roles: ['admin','manager','user'], module: 'contatos',     group: 'Comercial' },
-  { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#16A34A', Icon: WhatsAppIcon as unknown as typeof Users, roles: ['admin','manager','user'], module: 'whatsapp', group: 'Comercial', solid: true },
+  { path: '/contacts',        label: 'Contatos',        iconBg: '#DBEAFE', iconColor: '#2563EB', Icon: AddressBook,        roles: ['admin','manager','user'], module: 'contatos',     group: 'Comercial' },
+  { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#16A34A', Icon: WhatsappLogo, roles: ['admin','manager','user'], module: 'whatsapp', group: 'Comercial' },
   { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager','user'], module: 'captacao',     group: 'Comercial' },
-  { path: '/vitrine',         label: 'Vitrine',         iconBg: '#CCFBF1', iconColor: '#0D9488', Icon: Store,           roles: ['admin','manager','user'], module: 'vitrine',      group: 'Comercial' },
-  { path: '/transmissoes',    label: 'Transmissões',    iconBg: '#E0F2FE', iconColor: '#0284C7', Icon: Send,            roles: ['admin','manager','user'], module: 'transmissoes', group: 'Comercial' },
+  { path: '/vitrine',         label: 'Vitrine',         iconBg: '#CCFBF1', iconColor: '#0D9488', Icon: Storefront,           roles: ['admin','manager','user'], module: 'vitrine',      group: 'Comercial' },
+  { path: '/transmissoes',    label: 'Transmissões',    iconBg: '#E0F2FE', iconColor: '#0284C7', Icon: PaperPlaneTilt,            roles: ['admin','manager','user'], module: 'transmissoes', group: 'Comercial' },
   // Matrículas
   { path: '/campanha',       label: 'Campanha de Matrículas', iconBg: '#FFEDD5', iconColor: '#EA580C', Icon: Flag,       roles: ['admin','manager'],        module: 'campanha',     group: 'Matrículas' },
   { path: '/base-alunos',     label: 'Base de alunos',  iconBg: '#D1FAE5', iconColor: '#059669', Icon: GraduationCap,   roles: ['admin','manager','user'], module: 'base_alunos',  group: 'Matrículas' },
-  { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias', group: 'Matrículas' },
+  { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowsLeftRight,  roles: ['admin','manager','user'], module: 'transferencias', group: 'Matrículas' },
   // Análise
-  { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'], module: 'relatorios', group: 'Análise' },
-  { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFEDD5', iconColor: '#F97316', Icon: ClipboardCheck,  roles: ['admin','manager'], module: 'pesquisas',  group: 'Análise' },
+  { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: ChartLineUp,       roles: ['admin','manager'], module: 'relatorios', group: 'Análise' },
+  { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFEDD5', iconColor: '#F97316', Icon: ClipboardText,  roles: ['admin','manager'], module: 'pesquisas',  group: 'Análise' },
   // Administração
-  { path: '/users',           label: 'Usuários',        iconBg: '#E0E7FF', iconColor: '#4F46E5', Icon: UsersRound,      roles: ['admin'], module: 'usuarios',      group: 'Administração' },
-  { path: '/settings',        label: 'Configurações',   iconBg: '#E2E8F0', iconColor: '#334155', Icon: Settings,        roles: ['admin','manager'], module: 'configuracoes', group: 'Administração' },
+  { path: '/users',           label: 'Usuários',        iconBg: '#E0E7FF', iconColor: '#4F46E5', Icon: UsersThree,      roles: ['admin'], module: 'usuarios',      group: 'Administração' },
+  { path: '/settings',        label: 'Configurações',   iconBg: '#E2E8F0', iconColor: '#334155', Icon: GearSix,        roles: ['admin','manager'], module: 'configuracoes', group: 'Administração' },
 ]
 
 function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
@@ -135,6 +121,9 @@ export default function Sidebar() {
     <div key={'grp-' + h} style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', padding: '10px 10px 2px', flexShrink: 0 }}>{h}</div>
   )
 
+  const TAB_PATHS = ['/home', '/atendente', '/leads', '/whatsapp', '/visits']
+  const tabItems = navItems.filter(i => TAB_PATHS.includes(i.path)).slice(0, 4)
+
   // ── Mobile drawer ───────────────────────────────────────────────────────────
   if (isMobile) {
     return (
@@ -178,12 +167,12 @@ export default function Sidebar() {
               <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: item.group ? '9px 10px 9px 20px' : '9px 10px', width: '100%', height: 44, borderRadius: 12,
-                background: active ? '#F0FDFB' : 'transparent',
-                border: active ? '1.5px solid #99E6DC' : '1.5px solid transparent',
+                background: active ? GRAD : 'transparent', boxShadow: active ? '0 10px 20px -12px #05907B' : 'none',
+                border: '1.5px solid transparent',
                 textDecoration: 'none', boxSizing: 'border-box', flexShrink: 0, position: 'relative',
               }}>
-                <NavTile item={item} />
-                <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#1A2B4A' : '#475569', whiteSpace: 'nowrap', overflow: 'hidden', flex: 1 }}>
+                <NavTile item={item} active={active} />
+                <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#FFFFFF' : '#475569', whiteSpace: 'nowrap', overflow: 'hidden', flex: 1 }}>
                   {item.label}
                 </span>
                 {showBadge && (
@@ -196,6 +185,36 @@ export default function Sidebar() {
           })}
 
         </aside>
+
+        {/* Barra de abas flutuante (celular) */}
+        <nav aria-label="Navegação principal" style={{
+          position: 'fixed', left: 10, right: 10, bottom: 'calc(10px + env(safe-area-inset-bottom))', zIndex: 30,
+          background: '#fff', border: '1px solid #E3E8F0', borderRadius: 24,
+          boxShadow: '0 16px 36px -16px rgba(5,144,123,.5)',
+          display: 'flex', justifyContent: 'space-around', padding: 6,
+        }}>
+          {tabItems.map(item => {
+            const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+            const Icon = item.Icon
+            return (
+              <Link key={item.path} to={item.path} aria-label={item.label} style={{
+                flex: 1, maxWidth: 76, height: 48, borderRadius: 16, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: 1, textDecoration: 'none',
+                background: active ? GRAD : 'transparent', transition: 'background .2s',
+              }}>
+                <Icon size={22} weight={active ? 'fill' : 'duotone'} color={active ? '#fff' : '#05907B'} />
+                <span style={{ fontSize: 9.5, fontWeight: 700, color: active ? '#fff' : '#5B6B86' }}>{item.label === 'Início' ? 'Início' : item.label.split(' ')[0]}</span>
+              </Link>
+            )
+          })}
+          <button onClick={() => setMobileOpen(true)} aria-label="Mais opções" style={{
+            flex: 1, maxWidth: 76, height: 48, borderRadius: 16, border: 'none', background: 'transparent', cursor: 'pointer',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+          }}>
+            <List size={22} weight="duotone" color="#05907B" />
+            <span style={{ fontSize: 9.5, fontWeight: 700, color: '#5B6B86' }}>Mais</span>
+          </button>
+        </nav>
       </>
     )
   }
@@ -268,9 +287,9 @@ export default function Sidebar() {
             <Tooltip key={item.path} text={item.group ? `${item.group} › ${item.label}` : item.label}>
               <Link to={item.path} style={{
                 width: 44, height: 44, borderRadius: 14,
-                background: active ? '#F0FDFB' : 'transparent',
+                background: active ? GRAD : 'transparent', boxShadow: active ? '0 10px 20px -12px #05907B' : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: active ? '1.5px solid #99E6DC' : '1.5px solid transparent',
+                border: '1.5px solid transparent',
                 textDecoration: 'none', position: 'relative',
                 transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
                 flexShrink: 0,
@@ -285,7 +304,7 @@ export default function Sidebar() {
                   (e.currentTarget as HTMLElement).style.background = 'transparent'
                 }
               }}>
-                <NavTile item={item} />
+                <NavTile item={item} active={active} />
                 {showBadge && (
                   <div style={{ position: 'absolute', top: 6, right: 6, minWidth: 14, height: 14, borderRadius: 999, background: '#F43F5E', border: '1.5px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: 'white', padding: '0 2px' }}>
                     {badgeCount > 9 ? '9+' : badgeCount}
@@ -308,8 +327,8 @@ export default function Sidebar() {
               width: '100%',
               height: 44,
               borderRadius: 12,
-              background: active ? '#F0FDFB' : 'transparent',
-              border: active ? '1.5px solid #99E6DC' : '1.5px solid transparent',
+              background: active ? GRAD : 'transparent', boxShadow: active ? '0 10px 20px -12px #05907B' : 'none',
+              border: '1.5px solid transparent',
               textDecoration: 'none',
               transition: 'all 0.15s',
               flexShrink: 0,
@@ -328,12 +347,12 @@ export default function Sidebar() {
               }
             }}
           >
-            <NavTile item={item} />
+            <NavTile item={item} active={active} />
 
             {/* Label */}
             <span style={{
               fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? '#1A2B4A' : '#475569',
+              color: active ? '#FFFFFF' : '#475569',
               whiteSpace: 'nowrap', overflow: 'hidden', flex: 1,
             }}>
               {item.label}
