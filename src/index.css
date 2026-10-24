@@ -394,3 +394,24 @@ main table tbody tr:last-child td { border-bottom: none; }
 @keyframes aionPtrLogo { 0% { transform: scale(.2) rotate(-200deg); border-radius: 50%; opacity: .2 } 55% { transform: scale(1.12) rotate(12deg); border-radius: 26%; opacity: 1 } 100% { transform: scale(1) rotate(0); border-radius: 8px; opacity: 1 } }
 .aion-ptr.spin .aion-ptr-ball img { animation: aionPtrLogo .95s cubic-bezier(.22,1,.36,1) infinite }
 .aion-ptr.spin .aion-ptr-ring { animation: none; opacity: 0 }
+
+/* WhatsApp no celular: avisos e cabeçalho da conversa mais enxutos */
+@media (max-width: 767px) {
+  .wa-banner { padding: 8px 12px !important; gap: 10px !important; border-radius: 12px !important; }
+  .wa-banner .wa-banner-desc { display: none }
+  .wa-banner p { font-size: 12.5px !important }
+  .wa-banner button { padding: 7px 12px !important; font-size: 12px !important; border-radius: 10px !important }
+  .wa-head-sub { flex-wrap: nowrap !important; overflow: hidden; gap: 6px !important }
+  .wa-head-sub > * { flex-shrink: 0; white-space: nowrap }
+}
+@media (max-width: 767px) {
+  .wa-filters > div:first-child { padding-top: 6px !important; padding-bottom: 6px !important }
+  .wa-filters > div:first-child span { display: none }
+  .wa-filters select { padding: 7px 10px !important; font-size: 13px !important; border-radius: 10px !important }
+}
+@media (max-width: 767px) {
+  .wa-row { animation: aion-row-in .38s cubic-bezier(.2,.9,.25,1) backwards }
+  .wa-row:nth-child(2) { animation-delay: 40ms } .wa-row:nth-child(3) { animation-delay: 80ms } .wa-row:nth-child(4) { animation-delay: 120ms }
+  .wa-row:nth-child(5) { animation-delay: 160ms } .wa-row:nth-child(6) { animation-delay: 200ms } .wa-row:nth-child(n+7) { animation-delay: 240ms }
+  .wa-chat-panel { animation: aionFromRight .3s cubic-bezier(.2,.9,.25,1) backwards }
+}

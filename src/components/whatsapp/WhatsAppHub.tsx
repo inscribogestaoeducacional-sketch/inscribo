@@ -3146,6 +3146,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     return (
       <div
         key={conv.id}
+        className="wa-row aion-tap"
         onClick={() => { setActiveId(conv.id); if (isMobile) setMobilePanel('chat') }}
         style={{
           position: 'relative',
@@ -4896,7 +4897,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           </div>
 
           {/* Filters — Botconversa style */}
-          <div style={{ borderBottom: '1px solid #D1FAE5' }}>
+          <div className="wa-filters" style={{ borderBottom: '1px solid #D1FAE5' }}>
             {/* Row 1: Status + Atendente dropdowns */}
             <div style={{ display: 'flex', padding: `8px ${GUTTER}px`, gap: 8 }}>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -4954,13 +4955,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 <button key={f.key} onClick={() => setReadFilter(f.key)} style={{
                   padding: '3px 10px', borderRadius: 9999, fontSize: 12, border: 'none',
                   cursor: 'pointer', fontWeight: readFilter === f.key ? 600 : 400,
-                  background: readFilter === f.key ? '#EDE9FE' : '#F0FDFB',
-                  color: readFilter === f.key ? '#7C3AED' : '#64748B',
+                  background: readFilter === f.key ? '#E6F7F5' : '#F0FDFB',
+                  color: readFilter === f.key ? '#00695F' : '#64748B',
                   display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s',
                 }}>
                   {f.label}
                   {f.count > 0 && (
-                    <span style={{ background: '#7C3AED', color: '#fff', borderRadius: 9999, padding: '0px 5px', fontSize: 10, fontWeight: 700 }}>{f.count}</span>
+                    <span style={{ background: '#05907B', color: '#fff', borderRadius: 9999, padding: '0px 5px', fontSize: 10, fontWeight: 700 }}>{f.count}</span>
                   )}
                 </button>
               ))}
@@ -5036,7 +5037,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         </div>
 
         {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0, display: isMobile && mobilePanel === 'list' ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', background: '#FAFFFE' }}>
+        <div className="wa-chat-panel" style={{ flex: 1, minWidth: 0, display: isMobile && mobilePanel === 'list' ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', background: '#FAFFFE' }}>
 
           {activeConv && (
             <div style={{ flexShrink: 0, position: 'relative', background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDFB 100%)', borderBottom: '1px solid #D1FAE5', minHeight: 64, boxShadow: '0 2px 8px rgba(0,168,150,0.06)' }}>
@@ -5065,8 +5066,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{activeConv.name}</p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeConv.name}</p>
+                  <div className="wa-head-sub" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>
                       {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
                       {activeConv.online && <span style={{ marginLeft: 6, color: '#05907B', fontWeight: 500 }}>• online</span>}
@@ -5624,10 +5625,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
             {/* 24h window expired overlay */}
             {windowExpired && recorderState === 'idle' ? (
-              <div style={{ background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className="wa-banner" style={{ background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: '#92400E', margin: 0 }}>⏱ Janela de 24h expirada</p>
-                  <p style={{ fontSize: 11, color: '#B45309', margin: '2px 0 0' }}>Use um template para reativar a conversa</p>
+                  <p className="wa-banner-desc" style={{ fontSize: 11, color: '#B45309', margin: '2px 0 0' }}>Use um template para reativar a conversa</p>
                 </div>
                 <button
                   onClick={() => setShowTemplateModal(true)}
@@ -5640,10 +5641,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
             {/* Conversa livre na fila — permite reservar antes de digitar */}
             {activeConv && !activeConv.assigned_user_id && activeConv.status === 'waiting' && (
-              <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <div className="wa-banner" style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: '#92400E', margin: 0 }}>⏳ Conversa aguardando atendimento</p>
-                  <p style={{ fontSize: 11, color: '#B45309', margin: '2px 0 0' }}>Assuma para reservar antes de responder, ou envie a mensagem que ela é atribuída a você automaticamente.</p>
+                  <p className="wa-banner-desc" style={{ fontSize: 11, color: '#B45309', margin: '2px 0 0' }}>Assuma para reservar antes de responder, ou envie a mensagem que ela é atribuída a você automaticamente.</p>
                 </div>
                 <button
                   onClick={handleClaimConversation}
@@ -5658,10 +5659,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 leitura. Também em concluída e parada: concluída ganha "Reabrir e
                 assumir"; parada mantém o "Resgatar" na faixa laranja abaixo. */}
             {activeConv && activeConv.assigned_user_id && activeConv.assigned_user_id !== user?.id && (
-              <div style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 12, padding: '12px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className="wa-banner" style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 12, padding: '12px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', margin: 0 }}>👤 Atendida por {activeConv.assigned_user_name || 'outro atendente'}</p>
-                  <p style={{ fontSize: 11, color: '#475569', margin: '2px 0 0' }}>
+                  <p className="wa-banner-desc" style={{ fontSize: 11, color: '#475569', margin: '2px 0 0' }}>
                     {activeConv.status === 'closed' ? 'Conversa concluída. ' : ''}Abrir esta conversa não muda o atendente responsável.
                   </p>
                 </div>
@@ -5682,10 +5683,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
             {/* Conversa parada de outro atendente — permite resgatar */}
             {activeConv && isConvStale(activeConv) && (
-              <div style={{ background: '#FFF7ED', border: '1px solid #FDBA74', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <div className="wa-banner" style={{ background: '#FFF7ED', border: '1px solid #FDBA74', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: '#9A3412', margin: 0 }}>⏰ Conversa parada</p>
-                  <p style={{ fontSize: 11, color: '#C2410C', margin: '2px 0 0' }}>
+                  <p className="wa-banner-desc" style={{ fontSize: 11, color: '#C2410C', margin: '2px 0 0' }}>
                     Era de {activeConv.assigned_user_name || 'outro atendente'}, sem resposta há {hoursSince(activeConv.lastTime)}h.
                   </p>
                 </div>
@@ -5785,7 +5786,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     }
                     if (!windowExpired && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
                   }}
-                  placeholder={windowExpired ? 'Janela de 24h expirada' : 'Digite uma mensagem...'}
+                  placeholder={windowExpired ? 'Janela expirada' : (isMobile ? 'Mensagem' : 'Digite uma mensagem...')}
                   rows={1}
                   style={{
                     flex: 1, padding: '10px 18px', fontSize: isMobile ? 16 : 14,
