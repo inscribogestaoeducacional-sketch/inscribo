@@ -43,6 +43,9 @@ export interface Campaign {
   send_dates?: string[] | null
   send_window_start?: string | null
   send_window_end?: string | null
+  daily_cap?: number | null
+  send_spread?: boolean
+  send_weekdays?: number[] | null
   priced_category: string | null
   priced_own_account: boolean | null
   priced_recipients: number | null
@@ -81,6 +84,7 @@ export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; color: str
 
 export const PAUSED_REASON: Record<string, string> = {
   manual:                    'Pausada pela escola',
+  schedule_ended:            'A agenda terminou e ainda restam mensagens — reagende para continuar',
   template_paused:           'Template pausado pela Meta',
   template_disabled:         'Template desativado pela Meta',
   template_error:            'Erro no template (parâmetros) — revise antes de retomar',

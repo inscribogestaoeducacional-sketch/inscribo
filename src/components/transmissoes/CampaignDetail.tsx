@@ -3,15 +3,18 @@
 // cancelar). Leitura direto pela RLS; ações via broadcast-campaigns /
 // asaas-create-charge.
 import React, { useEffect, useState } from 'react'
-import { Send, CheckCheck, Eye, MessageCircle, XCircle, Users, Pause, Play, Ban, CreditCard, ExternalLink, RefreshCw, Calculator } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Send, CheckCheck, Eye, MessageCircle, XCircle, Users, Pause, Play, Ban, CreditCard, ExternalLink, RefreshCw, Calculator, CalendarClock, MessageSquare, UserRound } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import {
   CAMPAIGN_STATUS, PAUSED_REASON, FAILURE_KIND, CATEGORY_LABEL, brl, broadcastAction, chargeCampaign, type Campaign,
 } from '../../lib/broadcasts'
 import { Badge, Btn, ErrorBox, KpiCard, Modal, labelStyle } from './ui'
+import SendPlanBuilder, { DEFAULT_PLAN_FORM, type PlanForm } from './SendPlanBuilder'
+import { weekdaysFromDb, weekdaysToDb, fmtDay, todayLocal, type Plan } from '../../lib/broadcastPlan'
 
 interface RecipientRow {
-  id: string; phone: string; status: string; failure_kind: string | null; error_message: string | null
+  id: string; phone: string; lead_id: string | null; status: string; failure_kind: string | null; error_message: string | null
   sent_at: string | null; first_reply_at: string | null; clicked_button_index: number | null
   whatsapp_contacts: { name: string | null } | null
 }
@@ -35,12 +38,24 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate()
+  const [prog, setProg] = useState<{ pending: number; sent_today: number } | null>(null)
+  const [replan, setReplan] = useState(false)
+  const [planForm, setPlanForm] = useState<PlanForm>(DEFAULT_PLAN_FORM())
+  const [plan, setPlan] = useState<Plan | null>(null)
+  const [limits, setLimits] = useState<{ hourly: number; daily: number } | null>(null)
 
   async function load() {
     const { data } = await supabase.from('broadcast_campaigns').select('*').eq('id', campaignId).maybeSingle()
     const camp = data as Campaign | null
     setC(camp)
     if (!camp) return
+    supabase.rpc('broadcast_campaign_progress', { p_institution_id: camp.institution_id }).then(({ data: pr }) => {
+      const row = ((pr || []) as any[]).find(x => x.campaign_id === camp.id)
+      setProg(row ? { pending: Number(row.pending), sent_today: Number(row.sent_today) } : { pending: 0, sent_today: 0 })
+    })
+    supabase.from('broadcast_settings').select('hourly_limit, daily_limit').eq('institution_id', camp.institution_id).maybeSingle()
+      .then(({ data: s }) => { if (s) setLimits({ hourly: (s as any).hourly_limit, daily: (s as any).daily_limit }) })
     const [payRes, defRes] = await Promise.all([
       camp.payment_id ? supabase.from('payments').select('status, asaas_charge_url, amount').eq('id', camp.payment_id).maybeSingle() : Promise.resolve({ data: null }),
       supabase.from('template_definitions').select('buttons').eq('id', camp.template_definition_id).maybeSingle(),
@@ -61,7 +76,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
 
   async function loadRecipients() {
     let q = supabase.from('broadcast_recipients')
-      .select('id, phone, status, failure_kind, error_message, sent_at, first_reply_at, clicked_button_index, whatsapp_contacts(name)')
+      .select('id, phone, lead_id, status, failure_kind, error_message, sent_at, first_reply_at, clicked_button_index, whatsapp_contacts(name)')
       .eq('campaign_id', campaignId).order('created_at').limit(200)
     if (statusFilter === 'replied') q = q.not('first_reply_at', 'is', null)
     else if (statusFilter) q = q.eq('status', statusFilter)
@@ -104,15 +119,40 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
           <Badge label={st.label} color={st.color} bg={st.bg} />
           {c.status === 'paused' && c.paused_reason && <span style={{ fontSize: 12, color: '#C2410C' }}>{PAUSED_REASON[c.paused_reason] || c.paused_reason}</span>}
           {c.status === 'scheduled' && <span style={{ fontSize: 12, color: '#1D4ED8' }}>Envio em {fmtDate(c.scheduled_at)}</span>}
-          {(c.send_dates?.length || c.send_window_start) && (
-            <span style={{ fontSize: 12, color: '#1D4ED8' }}>
-              Envia {c.send_dates?.length ? `em ${c.send_dates.map(d => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })).join(', ')}` : 'todos os dias'}
-              {c.send_window_start && c.send_window_end ? `, das ${c.send_window_start.slice(0, 5)} às ${c.send_window_end.slice(0, 5)}` : ''}
-            </span>
-          )}
           <span style={{ fontSize: 12, color: '#94a3b8' }}>Template {c.template_name} · criada em {fmtDate(c.created_at)}</span>
         </div>
         <ErrorBox message={error} />
+
+        {(c.send_dates?.length || c.send_window_start || c.daily_cap) && (() => {
+          const dates = c.send_dates || []
+          const today = todayLocal()
+          const done = dates.filter(d => d < today).length
+          const dayNo = dates.includes(today) ? done + 1 : Math.min(done + 1, dates.length)
+          const cap = c.daily_cap || 0
+          const left = prog?.pending ?? 0
+          const days = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].filter((_, i) => weekdaysFromDb(c.send_weekdays)[i])
+          return (
+            <div style={{ border: '1.5px solid #99E0D7', background: '#F0FDFA', borderRadius: 12, padding: 14, display: 'grid', gap: 6 }}>
+              <label style={{ ...labelStyle, margin: 0, color: '#007A6E' }}><CalendarClock size={12} style={{ verticalAlign: -2 }} /> Plano de envio</label>
+              <div style={{ fontSize: 13, color: '#065F52', lineHeight: 1.6 }}>
+                {cap > 0 && <><b>{cap} mensagens por dia</b>{c.send_spread ? ' espalhadas no horário' : ''} · </>}
+                {c.send_window_start && c.send_window_end && <>das <b>{c.send_window_start.slice(0, 5)}</b> às <b>{c.send_window_end.slice(0, 5)}</b> · </>}
+                {c.send_weekdays?.length ? days.join(', ') : ''}
+              </div>
+              {dates.length > 0 && (
+                <div style={{ fontSize: 12, color: '#475569' }}>
+                  {fmtDay(dates[0])} → {fmtDay(dates[dates.length - 1])}
+                  {c.status === 'sending' || c.status === 'scheduled' ? <> · dia <b>{dayNo}</b> de <b>{dates.length}</b></> : null}
+                  {c.status === 'sending' && cap > 0 && prog ? <> · hoje <b>{Math.min(prog.sent_today, cap)} de {cap}</b></> : null}
+                  {prog && left > 0 ? <> · faltam <b>{left.toLocaleString('pt-BR')}</b></> : null}
+                </div>
+              )}
+              {!readOnly && c.status === 'paused' && left > 0 && (
+                <div><Btn onClick={() => { setPlanForm(f => ({ ...DEFAULT_PLAN_FORM(), cap: c.daily_cap || f.cap, winStart: c.send_window_start?.slice(0, 5) || f.winStart, winEnd: c.send_window_end?.slice(0, 5) || f.winEnd, weekdays: weekdaysFromDb(c.send_weekdays), spread: c.send_spread !== false })); setReplan(true) }}><CalendarClock size={14} /> Reagendar restantes</Btn></div>
+              )}
+            </div>
+          )
+        })()}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
           <KpiCard label="Destinatários" value={c.total_recipients.toLocaleString('pt-BR')} icon={<Users size={16} color="#1e2d6b" />} bg="#E0E7FF" />
@@ -169,7 +209,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
           <div style={{ border: '1px solid #f1f5f9', borderRadius: 12, overflow: 'auto', maxHeight: 280 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead><tr style={{ background: '#f8fafc' }}>
-                {['Contato', 'Status', 'Enviada', 'Resposta'].map(h => <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: '#94a3b8', fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>)}
+                {['Contato', 'Status', 'Enviada', 'Resposta', ''].map(h => <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: '#94a3b8', fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {recipients.map(r => (
@@ -178,15 +218,37 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
                     <td style={{ padding: '7px 12px' }} title={r.error_message || ''}>{RECIPIENT_STATUS[r.status] || r.status}{r.failure_kind ? ` · ${FAILURE_KIND[r.failure_kind] || r.failure_kind}` : ''}</td>
                     <td style={{ padding: '7px 12px', color: '#64748b' }}>{fmtDate(r.sent_at)}</td>
                     <td style={{ padding: '7px 12px', color: '#64748b' }}>{r.first_reply_at ? `${fmtDate(r.first_reply_at)}${r.clicked_button_index !== null ? ` · ${buttons.find(b => b.index === r.clicked_button_index)?.text || 'botão'}` : ''}` : '—'}</td>
+                    <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
+                      {!readOnly && r.first_reply_at && <button type="button" onClick={() => navigate(`/whatsapp?phone=${r.phone}`)} style={{ marginRight: 6, padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#007A6E', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}><MessageSquare size={11} style={{ verticalAlign: -1 }} /> Conversa</button>}
+                      {!readOnly && r.lead_id && <button type="button" onClick={() => navigate(`/leads?open=${r.lead_id}`)} style={{ padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#007A6E', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}><UserRound size={11} style={{ verticalAlign: -1 }} /> Ver lead</button>}
+                    </td>
                   </tr>
                 ))}
-                {recipients.length === 0 && <tr><td colSpan={4} style={{ padding: 16, textAlign: 'center', color: '#94a3b8' }}>Nenhum destinatário neste filtro.</td></tr>}
+                {recipients.length === 0 && <tr><td colSpan={5} style={{ padding: 16, textAlign: 'center', color: '#94a3b8' }}>Nenhum destinatário neste filtro.</td></tr>}
               </tbody>
             </table>
           </div>
           <p style={{ margin: '6px 0 0', fontSize: 11, color: '#94a3b8' }}>Mostrando até 200.</p>
         </div>
       </div>
+      {replan && (
+        <Modal wide title="Reagendar as mensagens que faltam" onClose={() => setReplan(false)}
+          footer={<>
+            <Btn variant="ghost" onClick={() => setReplan(false)}>Voltar</Btn>
+            <Btn disabled={!plan?.valid} loading={busy === 'replan'} onClick={() => run('replan', async () => {
+              const { error: e } = await supabase.rpc('broadcast_set_plan', {
+                p_campaign_id: c.id, p_dates: plan!.days.map(d => d.date), p_start: planForm.winStart, p_end: planForm.winEnd,
+                p_daily_cap: plan!.capDay, p_spread: planForm.spread, p_weekdays: weekdaysToDb(planForm.weekdays),
+              })
+              if (e) throw new Error(e.message)
+              await broadcastAction('resume', { campaign_id: c.id })
+              setReplan(false)
+            })}><Play size={14} /> Salvar e retomar</Btn>
+          </>}>
+          <p style={{ margin: '0 0 12px', fontSize: 13, color: '#475569' }}>Faltam <b>{(prog?.pending ?? 0).toLocaleString('pt-BR')}</b> mensagens. Escolha os novos dias e o ritmo.</p>
+          <SendPlanBuilder form={planForm} onChange={setPlanForm} total={prog?.pending ?? 0} limits={limits} onPlan={setPlan} />
+        </Modal>
+      )}
     </Modal>
   )
 }

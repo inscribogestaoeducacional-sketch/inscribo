@@ -1,0 +1,3 @@
+-- Aplicada via MCP (transmissoes_plano_de_envio): colunas daily_cap, send_spread e send_weekdays em
+-- broadcast_campaigns; funções broadcast_set_plan, broadcast_campaign_progress e nova
+-- claim_broadcast_recipients (teto diário e ritmo por campanha, pausa 'schedule_ended').
