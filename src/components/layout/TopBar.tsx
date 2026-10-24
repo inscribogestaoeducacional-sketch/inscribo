@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { supabase } from '../../lib/supabase'
-import { LogOut, Settings, User, Menu, Network, ChevronDown } from 'lucide-react'
+import { Menu, Network, ChevronDown } from 'lucide-react'
 import NotificationBell from './NotificationBell'
 import ConversationNotifier from './ConversationNotifier'
+import UserMenu from './UserMenu'
 
 // Seletor de instituição — troca a instituição ativa (ver
 // AuthContext.switchInstitution) sem precisar logout/login. Aparece pra
@@ -64,79 +64,8 @@ function InstitutionSwitcher() {
   )
 }
 
-// Toggle Disponível/Ausente — só afeta a distribuição round-robin de grupo no
-// WhatsApp (nós 'transfer' pra grupo, fallback fora de horário e o cron de
-// timeout, todos em api/whatsapp/webhook.ts e timeout-check.ts). Não tem
-// efeito em conversas já atribuídas nem em escolas com atendente único.
-// Update direto no clique (sem estado de "salvando"), mesmo padrão do toggle
-// de robô em WhatsAppHub.tsx — otimista, reverte se o update falhar.
-function AvailabilityToggle({ userId, initialAvailable }: { userId: string; initialAvailable: boolean }) {
-  const [available, setAvailable] = useState(initialAvailable)
-  const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => { setAvailable(initialAvailable) }, [initialAvailable])
-
-  const set = async (next: boolean) => {
-    if (saving || next === available) return
-    setAvailable(next); setSaving(true); setFailed(false)
-    // Grava na escola (usada na distribuição da Captação e do robô) e no cadastro do usuário.
-    const { error } = await supabase.rpc('set_my_availability', { p_available: next })
-    setSaving(false)
-    if (error) { setAvailable(!next); setFailed(true) }
-  }
-  void userId
-
-  return (
-    <div style={{ position: 'relative', flexShrink: 0 }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        aria-haspopup="dialog" aria-expanded={open}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-          borderRadius: 9999, cursor: 'pointer', fontFamily: 'inherit',
-          border: `1px solid ${available ? '#A7F3D0' : '#FED7AA'}`,
-          background: available ? '#ECFDF5' : '#FFF7ED',
-          transition: 'background 0.15s, border-color 0.15s',
-        }}>
-        <span style={{ width: 7, height: 7, borderRadius: '50%', background: available ? '#16A34A' : '#F97316', flexShrink: 0 }} />
-        <span style={{ fontSize: 12, fontWeight: 700, color: available ? '#059669' : '#C2410C' }}>
-          {available ? 'Disponível' : 'Ausente'}
-        </span>
-      </button>
-      {open && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
-          <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 300, maxWidth: 'calc(100vw - 24px)', background: '#fff', borderRadius: 14, border: '1px solid #E3E8F0', boxShadow: '0 18px 40px -16px rgba(26,43,74,.35)', zIndex: 50, padding: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#1A2B4A', marginBottom: 4 }}>Sua disponibilidade</div>
-            <div style={{ fontSize: 12.5, color: '#5B6B86', lineHeight: 1.45, marginBottom: 12 }}>
-              Controla se você recebe <b>novas</b> conversas do WhatsApp quando elas são distribuídas entre a equipe (captação, grupos e robô). Quem está <b>Ausente</b> é pulado no revezamento.
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              {([[true, 'Disponível', '#16A34A', '#ECFDF5', '#A7F3D0'], [false, 'Ausente', '#C2410C', '#FFF7ED', '#FED7AA']] as const).map(([v, label, fg, bg, bd]) => (
-                <button key={label} onClick={() => set(v)} disabled={saving}
-                  style={{ flex: 1, padding: '9px 10px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: available === v ? fg : '#5B6B86', background: available === v ? bg : '#fff', border: `1.5px solid ${available === v ? bd : '#E3E8F0'}` }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 12, color: '#5B6B86', lineHeight: 1.5 }}>
-              <li>Conversas que já são suas continuam com você.</li>
-              <li>Escola com um só atendente: não muda nada.</li>
-              <li>Vale para a escola em que você está agora.</li>
-            </ul>
-            {failed && <div style={{ marginTop: 10, fontSize: 12, color: '#B91C1C', fontWeight: 600 }}>Não consegui salvar. Tente de novo.</div>}
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 export default function TopBar() {
-  const { user, signOut } = useAuth()
-  const [showMenu, setShowMenu] = useState(false)
+  const { user } = useAuth()
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
   const goSearch = () => { const q = search.trim(); if (q) { navigate(`/contacts?search=${encodeURIComponent(q)}`); setSearch('') } }
@@ -148,8 +77,6 @@ export default function TopBar() {
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  const initials = (user?.full_name || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('')
-  const roleLabel = user?.role === 'admin' ? 'Administrador' : user?.role === 'manager' ? 'Gestor' : 'Consultor'
 
   return (
     <header style={{
@@ -199,54 +126,8 @@ export default function TopBar() {
         {/* Avisos de conversa do WhatsApp por pessoa (transferência, assumida) */}
         <ConversationNotifier userId={user?.id || null} />
 
-        {/* Disponível / Ausente */}
-        {user?.id && <AvailabilityToggle userId={user.id} initialAvailable={user.is_available ?? true} />}
-
-        {/* User pill */}
-        <div style={{ position: 'relative' }}>
-          <div
-            onClick={() => setShowMenu(v => !v)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 6px', borderRadius: 12, background: '#F0FDFB', border: '0.5px solid #D1FAE5', cursor: 'pointer' }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#00A896,#0DD3BF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>
-              {initials}
-            </div>
-            <div style={{ lineHeight: 1.25 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{user?.full_name}</div>
-              <div style={{ fontSize: 10, color: '#94A3B8' }}>{roleLabel}</div>
-            </div>
-            <svg width="12" height="12" fill="none" stroke="#94A3B8" strokeWidth="2" viewBox="0 0 24 24" style={{ marginLeft: 2 }}><polyline points="6 9 12 15 18 9" /></svg>
-          </div>
-
-          {showMenu && (
-            <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setShowMenu(false)} />
-              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: '#fff', borderRadius: 14, border: '0.5px solid #D1FAE5', boxShadow: '0 8px 32px rgba(0,168,150,0.12)', zIndex: 50, minWidth: 200, overflow: 'hidden' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #E2E8F0', background: '#F0FDFB' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{user?.full_name}</div>
-                  <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>{user?.email}</div>
-                </div>
-                <div style={{ padding: '4px 0' }}>
-                  <Link to="/profile" onClick={() => setShowMenu(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', fontSize: 13, color: '#1A2B4A', textDecoration: 'none', transition: 'background 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F0FDFB'}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                    <User size={14} color="#64748B" /> Meu Perfil
-                  </Link>
-                  <Link to="/settings" onClick={() => setShowMenu(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', fontSize: 13, color: '#1A2B4A', textDecoration: 'none' }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F0FDFB'}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                    <Settings size={14} color="#64748B" /> Configurações
-                  </Link>
-                  <div style={{ borderTop: '0.5px solid #E2E8F0', margin: '4px 0' }} />
-                  <button onClick={async () => { try { await signOut() } catch {} }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', fontSize: 13, color: '#F43F5E', background: 'transparent', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#FFE4E6'}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                    <LogOut size={14} /> Sair da Conta
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+        {/* Menu do usuário: status Disponível / Ocupado / Ausente, perfil, configurações, sair */}
+        <UserMenu isMobile={isMobile} />
       </div>
     </header>
   )
