@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect, useRef } from 'react'
+﻿import { PillTabs } from '../mobile/PillTabs'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
@@ -523,10 +524,7 @@ export default function SystemSettings() {
 
       <div style={{ height: 18 }} />
       {isMobile ? (
-        <select aria-label="Seção das configurações" value={activeTab} onChange={e => setActiveTab(e.target.value)}
-          style={{ width: '100%', marginBottom: 16, border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: '11px 12px', fontSize: 15, fontWeight: 700, color: BRAND.ink, background: '#fff', fontFamily: 'inherit' }}>
-          {visibleTabs.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-        </select>
+        <div style={{ marginBottom: 16 }}><PillTabs tabs={visibleTabs.map(t => [t.id, t.label, t.icon] as [string, string, any])} value={activeTab} onChange={setActiveTab} /></div>
       ) : (
         <div role="tablist" style={{ display: 'inline-flex', gap: 2, background: '#EEF3F2', borderRadius: 14, padding: 4, marginBottom: 18, flexWrap: 'wrap' }}>
           {visibleTabs.map(tab => {

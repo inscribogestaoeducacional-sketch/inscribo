@@ -101,12 +101,12 @@ export default function UserProfile() {
 
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
         {/* Tabs */}
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 4 }}>
+        <div className="aion-hscroll" style={{ padding: '12px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 4, overflowX: 'auto' }}>
           <button onClick={() => setActiveTab('profile')} style={activeTab === 'profile' ? tabActive : tabInactive}>
-            <User size={14} /> Informações Pessoais
+            <User size={14} /> <span style={{ whiteSpace: 'nowrap' }}>Informações pessoais</span>
           </button>
           <button onClick={() => setActiveTab('password')} style={activeTab === 'password' ? tabActive : tabInactive}>
-            <Lock size={14} /> Alterar Senha
+            <Lock size={14} /> <span style={{ whiteSpace: 'nowrap' }}>Alterar senha</span>
           </button>
         </div>
 

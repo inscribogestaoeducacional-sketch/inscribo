@@ -770,7 +770,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
 
       {/* ── Barra fixa: áreas do editor + salvamento ─────────────────────── */}
       <div ref={headerRef} style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(248,249,251,0.92)', backdropFilter: 'saturate(180%) blur(8px)', WebkitBackdropFilter: 'saturate(180%) blur(8px)', borderBottom: '1px solid #E2E8F0', padding: wide ? '12px 24px' : '10px 12px', marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div role="tablist" aria-label="Áreas do editor" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 12, padding: 4, maxWidth: '100%', overflowX: 'auto' }}>
+        <div className="aion-hscroll" role="tablist" aria-label="Áreas do editor" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 12, padding: 4, maxWidth: '100%', overflowX: 'auto' }}>
           {NAV.map(t => {
             const sel = tab === t.key
             return (
