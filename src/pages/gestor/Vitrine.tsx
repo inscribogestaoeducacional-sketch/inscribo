@@ -19,8 +19,8 @@
 // =============================================================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Store, Plus, Check, ExternalLink, Loader2, Eye, EyeOff, X, AlertCircle, AlertTriangle, Smartphone, Copy, Play,
-  Monitor, LayoutList, Palette, SlidersHorizontal, Globe, Layers, MousePointerClick, Users, Share2, BarChart3, LayoutTemplate,
+  Store, Plus, Check, ExternalLink, Loader2, Eye, EyeOff, X, AlertCircle, Smartphone, Copy, Play,
+  Monitor, LayoutList, Home, QrCode, Palette, SlidersHorizontal, Share2, BarChart3, LayoutTemplate,
 } from 'lucide-react'
 import { arrayMove } from '@dnd-kit/sortable'
 import { useAuth } from '../../contexts/AuthContext'
@@ -36,14 +36,15 @@ import BlockList, { type EditorBlock, BLOCK_ICONS } from '../../components/vitri
 import BlockGallery from '../../components/vitrine/BlockGallery'
 import BlockEditor from '../../components/vitrine/BlockEditor'
 import TemplatePicker from '../../components/vitrine/TemplatePicker'
-import { KpiCard } from '../../components/transmissoes/ui'
+import PageHeader from '../../components/ui/PageHeader'
+import { VitrineStart, VitrinePerformance, VitrineQrModal, type StartItem, type StartProblem } from '../../components/vitrine/VitrinePanels'
 import AppearancePanel from '../../components/vitrine/AppearancePanel'
 import SettingsPanel from '../../components/vitrine/SettingsPanel'
 import SocialLinksEditor from '../../components/vitrine/SocialLinksEditor'
 import { DS } from '../../components/vitrine/ui'
 import ScheduleFields, { scheduleError } from '../../components/vitrine/ScheduleFields'
 
-type Tab = 'blocks' | 'social' | 'appearance' | 'settings' | 'stats'
+type Tab = 'start' | 'blocks' | 'social' | 'appearance' | 'settings' | 'stats'
 type PageSaveState = 'saved' | 'dirty' | 'saving' | 'error'
 
 interface InstitutionInfo { name: string; logo_url: string | null; primary_color: string | null; address: string | null }
@@ -97,7 +98,11 @@ export default function Vitrine() {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [device, setDevice] = useState<'mobile' | 'desktop'>('mobile')
   // Indicadores dos últimos 7 dias (vitrine_stats; o painel completo é a Fase 4).
-  const [stats7, setStats7] = useState<{ views: number; visitors: number; clicks: number } | null>(null)
+  const [, setStats7] = useState<{ views: number; visitors: number; clicks: number } | null>(null)
+  const [blockClicks, setBlockClicks] = useState<Record<string, number> | undefined>(undefined)
+  const [qrOpen, setQrOpen] = useState(false)
+  const [flags, setFlags] = useState<{ qr: boolean; bio: boolean }>({ qr: false, bio: false })
+  const startTabSet = useRef(false)
 
   // Espelhos pra código assíncrono (timers/filas) ler o estado mais novo.
   const pageRef = useRef<VitrinePageRow | null>(null)
@@ -170,6 +175,9 @@ export default function Vitrine() {
         if (error) { setStats7(null); return }
         const rows = (data || []) as { block_id: string | null; event_type: string; events: number; visitors: number }[]
         const views = rows.filter(r => r.event_type === 'view')
+        const bc: Record<string, number> = {}
+        rows.filter(r => r.event_type === 'click' && r.block_id).forEach(r => { bc[r.block_id!] = (bc[r.block_id!] || 0) + Number(r.events) })
+        setBlockClicks(bc)
         setStats7({
           views: views.reduce((s, r) => s + Number(r.events), 0),
           visitors: views.reduce((s, r) => s + Number(r.visitors), 0),
@@ -177,6 +185,20 @@ export default function Vitrine() {
         })
       })
   }, [institutionId, loading])
+
+  useEffect(() => {
+    if (!institutionId) return
+    try {
+      setFlags({ qr: localStorage.getItem(`vitrine:${institutionId}:qr`) === '1', bio: localStorage.getItem(`vitrine:${institutionId}:bio`) === '1' })
+    } catch { /* sem armazenamento */ }
+  }, [institutionId])
+
+  // Escola nova (sem blocos ou ainda em rascunho) abre direto no Início.
+  useEffect(() => {
+    if (loading || !page || startTabSet.current) return
+    startTabSet.current = true
+    if (!page.is_published || blocks.length === 0) setTab('start')
+  }, [loading, page, blocks.length])
 
   // Aviso ao sair com alteração pendente.
   const pending = pageState === 'dirty' || pageState === 'saving' || blocks.some(b => b.state === 'dirty' || b.state === 'saving')
@@ -607,12 +629,46 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
   )
 
   const NAV: { key: Tab; label: string; Icon: React.ElementType; count?: number; soon?: boolean }[] = [
+    { key: 'start', label: 'Início', Icon: Home },
     { key: 'blocks', label: 'Blocos', Icon: LayoutList, count: blocks.length },
     { key: 'social', label: 'Redes sociais', Icon: Share2, count: (page.social_links || []).length || undefined },
     { key: 'appearance', label: 'Aparência', Icon: Palette },
     { key: 'settings', label: 'Configurações', Icon: SlidersHorizontal },
     { key: 'stats', label: 'Desempenho', Icon: BarChart3 },
   ]
+  const hdrBtn = (primary?: boolean): React.CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 11, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+    border: primary ? 'none' : '1px solid rgba(255,255,255,.4)', background: primary ? '#fff' : 'rgba(255,255,255,.16)', color: primary ? '#007A6E' : '#fff',
+  })
+  const flagKey = (k: string) => `vitrine:${institutionId}:${k}`
+  function setFlag(k: 'qr' | 'bio') {
+    try { localStorage.setItem(flagKey(k), '1') } catch { /* sem armazenamento */ }
+    setFlags(f => ({ ...f, [k]: true }))
+  }
+  function copyPageLink() {
+    navigator.clipboard.writeText(publicUrl(page!.slug)).then(() => showToast('Link copiado.'), () => showToast('Não foi possível copiar.', true))
+  }
+  function openQr() { setQrOpen(true); setFlag('qr') }
+  async function sharePage() {
+    const url = publicUrl(page!.slug)
+    if (typeof navigator.share === 'function') {
+      try { await navigator.share({ title: institution.name || 'Vitrine', url }); return } catch { return }
+    }
+    copyPageLink()
+  }
+  const startItems: StartItem[] = [
+    { key: 'look', label: 'Escolher modelo e cores', hint: 'Dê a cara da escola à página.', done: Object.keys(page.theme || {}).length > 0, action: { label: 'Escolher', onClick: () => goTab('appearance') } },
+    { key: 'wa', label: 'Número de WhatsApp conectado', hint: 'Sem ele, os botões de WhatsApp não funcionam.', done: !!schoolPhone },
+    { key: 'enroll', label: 'Botão de matrícula na página', hint: 'O destaque que leva a família a falar com a escola.', done: blocks.some(b => b.id && b.type === 'enroll'), action: { label: 'Adicionar', onClick: () => { goTab('blocks'); addBlock('enroll') } } },
+    { key: 'pub', label: 'Página publicada', hint: 'Só quem tem o link vê, depois de publicada.', done: page.is_published && pageSched !== 'future' && pageSched !== 'expired', action: { label: 'Publicar', onClick: () => { if (!publishing) togglePublish() } } },
+    { key: 'qr', label: 'Divulgar com QR code (cartaz, panfleto)', hint: 'Baixe a imagem e coloque no material da escola.', done: flags.qr, action: { label: 'Abrir QR code', onClick: openQr } },
+    { key: 'bio', label: 'Colocar o link na bio do Instagram', hint: 'Copie o link e cole no perfil da escola.', done: flags.bio, action: { label: 'Copiar link', onClick: () => { copyPageLink(); setFlag('bio') } } },
+  ]
+  const startProblems: StartProblem[] = []
+  if (incomplete > 0) startProblems.push({ text: incomplete === 1 ? '1 bloco incompleto ainda não aparece na página.' : `${incomplete} blocos incompletos ainda não aparecem na página.`, action: { label: 'Corrigir', onClick: () => { const f = blocks.find(b => b.state === 'error') || blocks.find(b => b.state === 'invalid'); setTab('blocks'); if (f) setOpenKey(f.key) } } })
+  if (!schoolPhone && blocks.some(b => b.type === 'whatsapp' || b.type === 'enroll')) startProblems.push({ text: 'Há botões de WhatsApp, mas a escola não tem número conectado.' })
+  if (page.is_published && blocks.length > 0 && !blocks.some(b => b.is_visible)) startProblems.push({ text: 'A página está publicada, mas todos os blocos estão ocultos.', action: { label: 'Ver blocos', onClick: () => goTab('blocks') } })
+  if (Array.from(dupMessages.values()).some(n => n > 1)) startProblems.push({ text: 'Dois botões usam a mesma mensagem de WhatsApp — a Captação não consegue separar de qual veio a conversa.', action: { label: 'Ver blocos', onClick: () => goTab('blocks') } })
   const btn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, boxShadow: DS.shadowSm, color: '#1e293b', cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }
   const viewKey = tab === 'blocks' ? (editing ? `edit:${editing.key}` : 'list') : tab
   const viewAnim = tab === 'blocks' ? (editing ? 'vitInRight' : 'vitInLeft') : 'vitRise'
@@ -679,74 +735,48 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
         </div>
       )}
 
-      {/* ── Cabeçalho fixo: identidade · salvamento · ação principal; e a
-          navegação entre as áreas (abas em pílula, padrão do painel) ────── */}
-      <div ref={headerRef} style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(248,249,251,0.92)', backdropFilter: 'saturate(180%) blur(8px)', WebkitBackdropFilter: 'saturate(180%) blur(8px)', borderBottom: '1px solid #E2E8F0', padding: '18px 24px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 0, flex: '1 1 320px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Store size={18} color="#00A896" />
-              </div>
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Vitrine</h1>
-              <span title={pageStatus.hint} style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: pageStatus.bg, color: pageStatus.color, transition: 'all .25s ease' }}>{pageStatus.label}</span>
-            </div>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748b', paddingLeft: 46, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-              <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer" style={{ color: '#00A896', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {/* ── Cabeçalho em faixa AION ───────────────────────────────────────── */}
+      <div style={{ padding: wide ? '20px 24px 0' : '12px 12px 0' }}>
+        <PageHeader
+          icon={Store}
+          compact={!wide}
+          title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            Vitrine
+            <span title={pageStatus.hint} style={{ fontSize: 12, fontWeight: 700, padding: '3px 11px', borderRadius: 999, background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.35)', color: '#fff' }}>{pageStatus.label}</span>
+          </span>}
+          subtitle={
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
+              <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer" style={{ color: '#fff', textDecoration: 'underline', textUnderlineOffset: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {publicUrl(page.slug).replace(/^https:\/\//, '')}
               </a>
-              <button type="button" title="Copiar link" aria-label="Copiar link" className="vit-ghost"
-                onClick={() => navigator.clipboard.writeText(publicUrl(page.slug)).then(() => showToast('Link copiado.'), () => {})}
-                style={{ background: 'none', border: 'none', padding: 4, borderRadius: 6, cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <button type="button" title="Copiar link" aria-label="Copiar link" onClick={copyPageLink}
+                style={{ background: 'rgba(255,255,255,.16)', border: 'none', borderRadius: 7, padding: 4, cursor: 'pointer', color: '#fff', display: 'flex' }}>
                 <Copy size={13} />
               </button>
-            </p>
-          </div>
-
-          <button type="button" className="vit-save" data-tone={save.tone} aria-live="polite" disabled={!save.click}
-            onClick={() => { if (firstProblem) { setTab('blocks'); setOpenKey(firstProblem.key) } }}
-            title={save.click ? 'Abrir o bloco' : undefined}
-            style={{ ...SAVE_TONE[save.tone], display: 'flex', alignItems: 'center', gap: 8, height: 34, padding: '0 14px', borderRadius: 999, border: 'none', fontSize: 13, fontWeight: 600, cursor: save.click ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
-            {save.tone === 'saved' || save.tone === 'idle' ? <Check size={14} /> : save.tone === 'error' ? <AlertCircle size={14} /> : <span className="vit-dot" />}
-            {save.text}
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginLeft: 'auto' }}>
-            {stats7 && (
-              <button type="button" onClick={() => goTab('stats')} className="vit-ghost" title="Últimos 7 dias"
-                style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '6px 10px', borderRadius: 10, border: 'none', background: 'transparent', fontSize: 12, color: '#64748b', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                <span><strong style={{ color: '#1e293b', fontVariantNumeric: 'tabular-nums' }}>{stats7.views.toLocaleString('pt-BR')}</strong> visitas</span>
-                <span><strong style={{ color: '#1e293b', fontVariantNumeric: 'tabular-nums' }}>{stats7.clicks.toLocaleString('pt-BR')}</strong> cliques</span>
-                <span style={{ color: '#94a3b8' }}>7 dias</span>
-              </button>
-            )}
-            {!wide && (
-              <button type="button" onClick={() => setPreviewOpen(true)} className="vit-btn" style={btn}>
-                <Smartphone size={15} /> Prévia
-              </button>
-            )}
-            {page.is_published && (
-              <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer" className="vit-btn" style={btn}>
-                <ExternalLink size={15} /> Ver página
-              </a>
-            )}
-            <button type="button" onClick={togglePublish} disabled={publishing} className="vit-btn"
-              style={page.is_published
-                ? { ...btn, color: '#64748b', cursor: publishing ? 'wait' : 'pointer' }
-                : { ...btn, border: '1px solid #00A896', background: '#00A896', color: '#fff', boxShadow: '0 4px 14px rgba(0,168,150,0.25)', padding: '9px 20px', cursor: publishing ? 'wait' : 'pointer' }}>
+            </span>
+          }
+          actions={<>
+            <button type="button" onClick={openQr} style={hdrBtn()}><QrCode size={15} /> QR code</button>
+            <button type="button" onClick={sharePage} style={hdrBtn()}><Share2 size={15} /> Compartilhar</button>
+            {!wide && <button type="button" onClick={() => setPreviewOpen(true)} style={hdrBtn()}><Smartphone size={15} /> Prévia</button>}
+            {page.is_published && <a href={publicUrl(page.slug)} target="_blank" rel="noopener noreferrer" style={{ ...hdrBtn(), textDecoration: 'none' }}><ExternalLink size={15} /> Ver página</a>}
+            <button type="button" onClick={togglePublish} disabled={publishing} style={{ ...hdrBtn(!page.is_published), cursor: publishing ? 'wait' : 'pointer' }}>
               {publishing ? <Loader2 size={15} className="animate-spin" /> : page.is_published ? <EyeOff size={15} /> : <Eye size={15} />}
               {page.is_published ? 'Despublicar' : 'Publicar página'}
             </button>
-          </div>
-        </div>
+          </>}
+        />
+      </div>
 
-        <div role="tablist" aria-label="Áreas do editor" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 12, padding: 4, width: 'fit-content', maxWidth: '100%', overflowX: 'auto' }}>
+      {/* ── Barra fixa: áreas do editor + salvamento ─────────────────────── */}
+      <div ref={headerRef} style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(248,249,251,0.92)', backdropFilter: 'saturate(180%) blur(8px)', WebkitBackdropFilter: 'saturate(180%) blur(8px)', borderBottom: '1px solid #E2E8F0', padding: wide ? '12px 24px' : '10px 12px', marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div role="tablist" aria-label="Áreas do editor" style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 12, padding: 4, maxWidth: '100%', overflowX: 'auto' }}>
           {NAV.map(t => {
             const sel = tab === t.key
             return (
               <button key={t.key} role="tab" aria-selected={sel} onClick={() => goTab(t.key)} className="vit-nav" style={{
                 display: 'flex', alignItems: 'center', gap: 7, flex: 'none',
-                padding: '8px 16px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                padding: '8px 14px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                 background: sel ? '#fff' : 'transparent', color: sel ? '#1e2d6b' : '#64748b',
                 boxShadow: sel ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
               }}>
@@ -758,6 +788,13 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
             )
           })}
         </div>
+        <button type="button" className="vit-save" data-tone={save.tone} aria-live="polite" disabled={!save.click}
+          onClick={() => { if (firstProblem) { setTab('blocks'); setOpenKey(firstProblem.key) } }}
+          title={save.click ? 'Abrir o bloco' : undefined}
+          style={{ ...SAVE_TONE[save.tone], display: 'flex', alignItems: 'center', gap: 8, height: 34, padding: '0 14px', borderRadius: 999, border: 'none', fontSize: 13, fontWeight: 600, marginLeft: 'auto', cursor: save.click ? 'pointer' : 'default' }}>
+          {save.tone === 'saved' || save.tone === 'idle' ? <Check size={14} /> : save.tone === 'error' ? <AlertCircle size={14} /> : <span className="vit-dot" />}
+          {save.text}
+        </button>
       </div>
 
       <div style={{ padding: '24px 24px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -770,6 +807,8 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
         <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
           {/* ── Área de trabalho: lista ↔ edição, ou a área escolhida ─────── */}
           <div key={viewKey} role="tabpanel" className="vit-view" style={{ ['--vit-anim' as any]: viewAnim, flex: 1, minWidth: 0, maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {tab === 'start' && <VitrineStart items={startItems} problems={startProblems} />}
+
             {tab === 'blocks' && editing && (
               <BlockEditor block={editing}
                 ctx={{
@@ -834,7 +873,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                 ) : (
                   <BlockList blocks={blocks} flashKey={flashKey} enterKey={null}
                     onSelect={openBlock} onReorder={reorder} onToggleVisible={toggleVisible}
-                    onInsertAt={i => setPickerAt(i)} />
+                    onInsertAt={i => setPickerAt(i)} clicks={blockClicks} />
                 )}
               </>
             )}
@@ -864,27 +903,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                 }} />
             )}
 
-            {tab === 'stats' && (
-              <>
-                <div>
-                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.01em' }}>Desempenho</h2>
-                  <p style={{ margin: '2px 0 0', fontSize: 13, color: '#64748b' }}>Resumo dos últimos 7 dias. O painel completo (por bloco, por origem e funil do Captação) chega na próxima fase.</p>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-                  <KpiCard label="Página" value={pageStatus.label} hint={pageStatus.hint}
-                    icon={<Globe size={16} color={pageStatus.color} />} bg={pageStatus.bg} />
-                  <KpiCard label="Blocos na página" value={String(blocks.filter(b => b.id && b.is_visible).length)}
-                    hint={blocks.some(b => !b.is_visible) ? `${blocks.filter(b => !b.is_visible).length} oculto(s)` : 'Todos visíveis'}
-                    icon={<Layers size={16} color="#00A896" />} bg="#E6F7F5" />
-                  <KpiCard label="Visitas · 7 dias" value={stats7 ? stats7.views.toLocaleString('pt-BR') : '—'}
-                    hint={stats7 ? `${stats7.visitors.toLocaleString('pt-BR')} pessoa(s)` : undefined}
-                    icon={<Users size={16} color="#0284C7" />} bg="#E0F2FE" />
-                  <KpiCard label="Cliques · 7 dias" value={stats7 ? stats7.clicks.toLocaleString('pt-BR') : '—'}
-                    hint={stats7 && stats7.views ? `${Math.round((stats7.clicks / stats7.views) * 100)}% das visitas` : 'Botões, links e redes'}
-                    icon={<MousePointerClick size={16} color="#7C3AED" />} bg="#EDE9FE" />
-                </div>
-              </>
-            )}
+            {tab === 'stats' && <VitrinePerformance institutionId={institutionId} blocks={blocks} />}
           </div>
 
           {/* ── Prévia ligada à edição ────────────────────────────────────── */}
@@ -916,6 +935,8 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
           )}
         </div>
       </div>
+
+      {qrOpen && <VitrineQrModal url={publicUrl(page.slug)} name={page.slug} onClose={() => setQrOpen(false)} onCopy={copyPageLink} />}
 
       {/* ── Escolha do tipo de bloco ─────────────────────────────────────── */}
       {showPicker && (

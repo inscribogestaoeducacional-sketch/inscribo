@@ -77,6 +77,7 @@ interface ListProps {
   onReorder: (fromKey: string, toKey: string) => void
   onToggleVisible: (key: string) => void
   onInsertAt: (index: number) => void
+  clicks?: Record<string, number>     // cliques dos últimos 7 dias, por id do bloco
 }
 
 export default function BlockList(props: ListProps) {
@@ -135,8 +136,8 @@ const cardShell = (b: EditorBlock): React.CSSProperties => ({
 })
 
 // Conteúdo da linha (também usado no bloco "levantado" do arraste).
-function Row({ b, ghost, dragHandle, onToggleVisible }: {
-  b: EditorBlock; ghost?: boolean; dragHandle?: React.ReactNode; onToggleVisible?: () => void
+function Row({ b, ghost, dragHandle, onToggleVisible, clicks }: {
+  b: EditorBlock; ghost?: boolean; dragHandle?: React.ReactNode; onToggleVisible?: () => void; clicks?: number
 }) {
   const meta = BLOCK_TYPES[b.type]
   const Icon = BLOCK_ICONS[b.type]
@@ -156,6 +157,11 @@ function Row({ b, ghost, dragHandle, onToggleVisible }: {
           {meta.label} · {blockDetail(b.type, b.config)}
         </span>
       </span>
+      {clicks !== undefined && b.id && (
+        <span className="vit-tags" title="Cliques nos últimos 7 dias" style={{ textAlign: 'right', fontSize: 11, color: '#64748B', lineHeight: 1.25, flex: 'none' }}>
+          <b style={{ display: 'block', fontSize: 15, color: '#1e2d6b', fontVariantNumeric: 'tabular-nums' }}>{clicks}</b>cliques · 7d
+        </span>
+      )}
       {tags.length > 0 && <span className="vit-tags" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '46%' }}>{tags}</span>}
       <button type="button" className="vit-icon" onClick={e => { e.stopPropagation(); onToggleVisible?.() }} tabIndex={ghost ? -1 : undefined}
         title={b.is_visible ? 'Ocultar da página' : 'Mostrar na página'} aria-label={b.is_visible ? 'Ocultar bloco' : 'Mostrar bloco'}
@@ -166,7 +172,7 @@ function Row({ b, ghost, dragHandle, onToggleVisible }: {
   )
 }
 
-function BlockItem({ block: b, flashKey, enterKey, onSelect, onToggleVisible }: ListProps & { block: EditorBlock }) {
+function BlockItem({ block: b, flashKey, enterKey, onSelect, onToggleVisible, clicks }: ListProps & { block: EditorBlock }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: b.key })
   const cls = ['vit-card', flashKey === b.key ? 'vit-flash' : '', enterKey === b.key ? 'vit-enter' : ''].filter(Boolean).join(' ')
   return (
@@ -180,7 +186,7 @@ function BlockItem({ block: b, flashKey, enterKey, onSelect, onToggleVisible }: 
       <div role="button" tabIndex={0} aria-label={`Editar ${BLOCK_TYPES[b.type].label}: ${blockSummary(b.type, b.config)}`}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(b.key) } }}
         style={{ outline: 'none', borderRadius: DS.r.lg }} className="vit-card-focus">
-        <Row b={b} onToggleVisible={() => onToggleVisible(b.key)}
+        <Row b={b} clicks={b.id ? clicks?.[b.id] ?? (clicks ? 0 : undefined) : undefined} onToggleVisible={() => onToggleVisible(b.key)}
           dragHandle={
             <button ref={setActivatorNodeRef} {...attributes} {...listeners} type="button" aria-label="Arrastar para reordenar" className="vit-grip"
               onClick={e => e.stopPropagation()}

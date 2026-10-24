@@ -1,0 +1,1 @@
+-- Aplicada via MCP (vitrine_summary): totais, série diária, origem e aparelho da Vitrine.
