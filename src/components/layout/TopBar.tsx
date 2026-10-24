@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { LogOut, Settings, User, Menu, Network, ChevronDown } from 'lucide-react'
@@ -72,32 +72,65 @@ function InstitutionSwitcher() {
 // de robô em WhatsAppHub.tsx — otimista, reverte se o update falhar.
 function AvailabilityToggle({ userId, initialAvailable }: { userId: string; initialAvailable: boolean }) {
   const [available, setAvailable] = useState(initialAvailable)
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => { setAvailable(initialAvailable) }, [initialAvailable])
 
-  const toggle = async () => {
-    const next = !available
-    setAvailable(next)
-    const { error } = await supabase.from('users').update({ is_available: next }).eq('id', userId)
-    if (error) setAvailable(!next)
+  const set = async (next: boolean) => {
+    if (saving || next === available) return
+    setAvailable(next); setSaving(true); setFailed(false)
+    // Grava na escola (usada na distribuição da Captação e do robô) e no cadastro do usuário.
+    const { error } = await supabase.rpc('set_my_availability', { p_available: next })
+    setSaving(false)
+    if (error) { setAvailable(!next); setFailed(true) }
   }
+  void userId
 
   return (
-    <button
-      onClick={toggle}
-      title={available ? 'Disponível — pode receber novas conversas de grupos' : 'Ausente — não recebe novas conversas de grupos'}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-        borderRadius: 9999, cursor: 'pointer', flexShrink: 0,
-        border: `1px solid ${available ? '#A7F3D0' : '#FED7AA'}`,
-        background: available ? '#ECFDF5' : '#FFF7ED',
-        transition: 'background 0.15s, border-color 0.15s',
-      }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: available ? '#16A34A' : '#F97316', flexShrink: 0 }} />
-      <span style={{ fontSize: 12, fontWeight: 700, color: available ? '#059669' : '#C2410C' }}>
-        {available ? 'Disponível' : 'Ausente'}
-      </span>
-    </button>
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="dialog" aria-expanded={open}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+          borderRadius: 9999, cursor: 'pointer', fontFamily: 'inherit',
+          border: `1px solid ${available ? '#A7F3D0' : '#FED7AA'}`,
+          background: available ? '#ECFDF5' : '#FFF7ED',
+          transition: 'background 0.15s, border-color 0.15s',
+        }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: available ? '#16A34A' : '#F97316', flexShrink: 0 }} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: available ? '#059669' : '#C2410C' }}>
+          {available ? 'Disponível' : 'Ausente'}
+        </span>
+      </button>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
+          <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 300, maxWidth: 'calc(100vw - 24px)', background: '#fff', borderRadius: 14, border: '1px solid #E3E8F0', boxShadow: '0 18px 40px -16px rgba(26,43,74,.35)', zIndex: 50, padding: 14 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#1A2B4A', marginBottom: 4 }}>Sua disponibilidade</div>
+            <div style={{ fontSize: 12.5, color: '#5B6B86', lineHeight: 1.45, marginBottom: 12 }}>
+              Controla se você recebe <b>novas</b> conversas do WhatsApp quando elas são distribuídas entre a equipe (captação, grupos e robô). Quem está <b>Ausente</b> é pulado no revezamento.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {([[true, 'Disponível', '#16A34A', '#ECFDF5', '#A7F3D0'], [false, 'Ausente', '#C2410C', '#FFF7ED', '#FED7AA']] as const).map(([v, label, fg, bg, bd]) => (
+                <button key={label} onClick={() => set(v)} disabled={saving}
+                  style={{ flex: 1, padding: '9px 10px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: available === v ? fg : '#5B6B86', background: available === v ? bg : '#fff', border: `1.5px solid ${available === v ? bd : '#E3E8F0'}` }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 12, color: '#5B6B86', lineHeight: 1.5 }}>
+              <li>Conversas que já são suas continuam com você.</li>
+              <li>Escola com um só atendente: não muda nada.</li>
+              <li>Vale para a escola em que você está agora.</li>
+            </ul>
+            {failed && <div style={{ marginTop: 10, fontSize: 12, color: '#B91C1C', fontWeight: 600 }}>Não consegui salvar. Tente de novo.</div>}
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -105,6 +138,8 @@ export default function TopBar() {
   const { user, signOut } = useAuth()
   const [showMenu, setShowMenu] = useState(false)
   const [search, setSearch] = useState('')
+  const navigate = useNavigate()
+  const goSearch = () => { const q = search.trim(); if (q) { navigate(`/contacts?search=${encodeURIComponent(q)}`); setSearch('') } }
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
   useEffect(() => {
@@ -138,7 +173,8 @@ export default function TopBar() {
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar leads, visitas, matrículas..."
+          onKeyDown={e => { if (e.key === 'Enter') goSearch() }}
+          placeholder="Buscar contato por nome ou telefone..."
           style={{
             width: '100%', height: 38, paddingLeft: 38, paddingRight: 14,
             background: '#F0FDFB', border: '1.5px solid #D1FAE5',
