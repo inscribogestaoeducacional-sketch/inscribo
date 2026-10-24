@@ -204,6 +204,13 @@ function purgeLegacyCache() {
 function AppContent() {
   const { user, initializing } = useAuth()
   const [ready, setReady] = useState(false)
+  // Abertura com a animação da logo: uma vez por sessão do navegador (~3,6 s).
+  const [introDone, setIntroDone] = useState(() => { try { return sessionStorage.getItem('aion_intro') === '1' } catch { return false } })
+  useEffect(() => {
+    if (introDone) return
+    const t = setTimeout(() => { try { sessionStorage.setItem('aion_intro', '1') } catch { /* sem storage */ } setIntroDone(true) }, 3600)
+    return () => clearTimeout(t)
+  }, [introDone])
   const [schoolStatus, setSchoolStatus] = useState<string | null>(null)
   const [checkingStatus, setCheckingStatus] = useState(false)
 
@@ -254,7 +261,7 @@ function AppContent() {
     return <Routes><Route path="/novidades/transmissoes" element={<NovidadeModulo content={NOVIDADE_TRANSMISSOES} />} /></Routes>
   }
 
-  if (initializing || !ready) {
+  if (initializing || !ready || !introDone) {
     return (
       <BrandLoader fullscreen label="Carregando" />
     )

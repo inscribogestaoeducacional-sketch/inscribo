@@ -241,3 +241,17 @@ main table tbody tr:last-child td { border-bottom: none; }
 .aion-bar { animation: aion-bar 1.2s ease-in-out infinite; }
 .aion-skel { background: linear-gradient(100deg, #EAF1F0 30%, #F6FAF9 50%, #EAF1F0 70%); background-size: 220% 100%; animation: aion-skel 1.3s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .aion-ring, .aion-logo-pop, .aion-bar, .aion-skel { animation: none; } }
+
+/* ── Animação da logo (LogoAnimation.tsx) ── */
+.aion-la { --la-total: 3.4s; }
+@keyframes la-sq { 0% { transform: scale(.04) rotate(-200deg); border-radius: 50%; opacity: 0; } 8% { opacity: 1; } 40% { transform: scale(1.06) rotate(20deg); border-radius: 26%; } 50% { transform: scale(1) rotate(0); border-radius: 17%; } 100% { transform: scale(1) rotate(0); border-radius: 17%; } }
+@keyframes la-a { 0%, 38% { opacity: 0; transform: translateY(46%) scale(.92); } 52%, 100% { opacity: 1; transform: none; } }
+@keyframes la-bar { 0%, 50% { clip-path: inset(0 100% 0 0); } 62%, 100% { clip-path: inset(0 0 0 0); } }
+@keyframes la-edu { 0%, 70% { opacity: 0; transform: translateY(30%) scale(.85); } 82%, 100% { opacity: 1; transform: none; } }
+.aion-la-sq { animation: la-sq var(--la-total) cubic-bezier(.22,1,.36,1) var(--la-it) both; }
+.aion-la-a { animation: la-a var(--la-total) cubic-bezier(.22,1,.36,1) var(--la-it) both; }
+.aion-la-bar { animation: la-bar var(--la-total) ease-in-out var(--la-it) both; }
+.aion-la-edu { animation: la-edu var(--la-total) ease-out var(--la-it) both; }
+.aion-la-w { animation: la-wm var(--la-total) cubic-bezier(.22,1,.36,1) var(--la-it) both; animation-delay: 0s; }
+@keyframes la-wm { 0%, 46% { opacity: 0; transform: translateX(var(--la-shift, -60%)) scale(.7); } 60% { opacity: 1; } 76%, 100% { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .aion-la * { animation: none !important; opacity: 1 !important; transform: none !important; clip-path: none !important; } }

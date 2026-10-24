@@ -1,22 +1,27 @@
-// Carregamento da marca: ícone da logo com anel pulsante e barra de brilho.
-// Também exporta Skeleton (blocos que "respiram" no lugar do conteúdo).
+// Carregamento da marca: a logo animada (ponto → quadrado girando → A cortado pela barra →
+// ÁION saindo do quadrado → EDU). Em tela cheia toca uma vez e fica na logo pronta;
+// nos carregamentos pequenos repete só o quadrado. Também exporta Skeleton e PageSkeleton.
 import type { CSSProperties } from 'react'
+import LogoAnimation from './LogoAnimation'
 
 export function BrandLoader({ label = 'Carregando', size = 56, fullscreen }: { label?: string; size?: number; fullscreen?: boolean }) {
-  const box = (
-    <div role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-      <div style={{ position: 'relative', width: size, height: size }}>
-        <span aria-hidden className="aion-ring" style={{ position: 'absolute', inset: -8, borderRadius: size * 0.34, border: '2px solid #2DCBA4' }} />
-        <img src="/aion-logo-icon.png" alt="" className="aion-logo-pop" style={{ width: size, height: size, objectFit: 'contain', display: 'block' }} />
+  if (fullscreen) {
+    return (
+      <div role="status" aria-live="polite" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 26, background: 'radial-gradient(120% 90% at 50% 0%, #F0FDFB 0%, #FFFFFF 60%)' }}>
+        <LogoAnimation width={Math.min(360, typeof window !== 'undefined' ? window.innerWidth * 0.78 : 360)} />
+        <div style={{ width: 120, height: 4, borderRadius: 99, background: '#E3EFEC', overflow: 'hidden' }}>
+          <span className="aion-bar" style={{ display: 'block', height: '100%', width: '40%', borderRadius: 99, background: 'var(--aion-grad)' }} />
+        </div>
+        <span style={{ fontSize: 12.5, color: '#5B6B86', fontWeight: 600 }}>{label}…</span>
       </div>
-      <div style={{ width: 96, height: 4, borderRadius: 99, background: '#E3EFEC', overflow: 'hidden' }}>
-        <span className="aion-bar" style={{ display: 'block', height: '100%', width: '40%', borderRadius: 99, background: 'var(--aion-grad)' }} />
-      </div>
+    )
+  }
+  return (
+    <div role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '36px 0' }}>
+      <LogoAnimation variant="mark" width={size} />
       <span style={{ fontSize: 12.5, color: '#5B6B86', fontWeight: 600 }}>{label}…</span>
     </div>
   )
-  if (!fullscreen) return <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>{box}</div>
-  return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F5FAF9' }}>{box}</div>
 }
 
 export function Skeleton({ w = '100%', h = 16, r = 10, style }: { w?: number | string; h?: number | string; r?: number; style?: CSSProperties }) {
@@ -28,7 +33,7 @@ export function PageSkeleton() {
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
       <Skeleton h={92} r={22} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14 }}>
         {[0, 1, 2, 3].map(i => <Skeleton key={i} h={104} r={18} />)}
       </div>
       <Skeleton h={280} r={18} />

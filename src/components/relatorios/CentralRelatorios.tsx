@@ -1,6 +1,7 @@
 // Central de Relatórios: menu horizontal de módulos; cada um com resumo, tabela, CSV e análise da IA.
 import PageHeader from '../ui/PageHeader'
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { BarChart3, Users, MessageCircle, Headset, SmilePlus, GraduationCap, UserCog, Contact, RefreshCw } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
 import LeadsReport from './LeadsReport'
@@ -25,7 +26,10 @@ const MODS: { id: Mod; label: string; Icon: typeof Users }[] = [
 ]
 
 export default function CentralRelatorios({ institutionId, institutionName }: { institutionId: string; institutionName: string }) {
-  const [mod, setMod] = useState<Mod>('leads')
+  const [sp] = useSearchParams()
+  const MOD_IDS: Mod[] = ['leads', 'whatsapp', 'atendimento', 'satisfacao', 'matriculas', 'usuarios', 'contatos', 'rematriculas']
+  const tabQ = sp.get('tab') as Mod | null
+  const [mod, setMod] = useState<Mod>(tabQ && MOD_IDS.includes(tabQ) ? tabQ : 'leads')
   return (
     <div style={{ padding: 24, maxWidth: 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="no-print"><PageHeader icon={BarChart3} title="Relatórios" subtitle="Tudo que o sistema registra, por período, com exportação em CSV e análise da IA" /></div>
