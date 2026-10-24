@@ -206,11 +206,11 @@ function purgeLegacyCache() {
 function AppContent() {
   const { user, initializing } = useAuth()
   const [ready, setReady] = useState(false)
-  // Abertura com a animação da logo: uma vez por sessão do navegador (~3,6 s).
-  const [introDone, setIntroDone] = useState(() => { try { return sessionStorage.getItem('aion_intro') === '1' } catch { return false } })
+  // Abertura com a animação da logo: toca inteira a cada abertura do app (~3,6 s), mesmo que a página carregue antes.
+  const [introDone, setIntroDone] = useState(false)
   useEffect(() => {
     if (introDone) return
-    const t = setTimeout(() => { try { sessionStorage.setItem('aion_intro', '1') } catch { /* sem storage */ } setIntroDone(true) }, 3600)
+    const t = setTimeout(() => setIntroDone(true), 3600)
     return () => clearTimeout(t)
   }, [introDone])
   const [schoolStatus, setSchoolStatus] = useState<string | null>(null)

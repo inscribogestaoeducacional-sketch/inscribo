@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Network, ChevronDown } from 'lucide-react'
+import { Network, ChevronDown, MessageSquare } from 'lucide-react'
 import NotificationBell from './NotificationBell'
 import ConversationNotifier from './ConversationNotifier'
 import UserMenu from './UserMenu'
@@ -73,6 +73,13 @@ export default function TopBar() {
   const goSearch = () => { const q = search.trim(); if (q) { navigate(`/contacts?search=${encodeURIComponent(q)}`); setSearch('') } }
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
+  const [teamUnread, setTeamUnread] = useState(0)
+  useEffect(() => {
+    const h = (e: Event) => setTeamUnread((e as CustomEvent<number>).detail || 0)
+    window.addEventListener('aion:team-unread', h)
+    return () => window.removeEventListener('aion:team-unread', h)
+  }, [])
+
   // Marca que a pessoa abriu a Áion (lembrete diário) e garante o aparelho dela nos avisos
   useEffect(() => {
     if (!user?.id) return
@@ -102,7 +109,7 @@ export default function TopBar() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') goSearch() }}
-          placeholder="Buscar contato por nome ou telefone..."
+          placeholder={isMobile ? 'Buscar contato' : 'Buscar contato por nome ou telefone...'}
           style={{
             width: '100%', height: 38, paddingLeft: 38, paddingRight: 14,
             background: '#F0FDFB', border: '1.5px solid #D1FAE5',
@@ -121,6 +128,15 @@ export default function TopBar() {
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Seletor de unidade — só aparece pro gestor de rede */}
         {!isMobile && <InstitutionSwitcher />}
+
+        {/* Celular: chat da equipe (no computador é a bolinha do canto) */}
+        {isMobile && user?.institution_id && (
+          <button type="button" aria-label="Chat da equipe" className="aion-tap" onClick={() => window.dispatchEvent(new Event('aion:open-team-chat'))}
+            style={{ position: 'relative', width: 38, height: 38, borderRadius: 12, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <MessageSquare size={18} />
+            {teamUnread > 0 && <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, padding: '0 4px', borderRadius: 99, background: '#F43F5E', color: '#fff', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>{teamUnread > 9 ? '9+' : teamUnread}</span>}
+          </button>
+        )}
 
         {/* Bell */}
         <NotificationBell institutionId={user?.institution_id || null} isSuperAdmin={user?.user_type === 'admin_geral'} />

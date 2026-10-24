@@ -1,6 +1,7 @@
 ﻿import { resolveSlotTemplate } from '../../lib/templateSlots'
 import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import WaImproveButton from './WaImproveButton'
+import WaComposerSheet from './WaComposerSheet'
 import WaSummarySection from './WaSummarySection'
 import ContactPanel from './ContactPanel'
 import ConversationTimeline from './ConversationTimeline'
@@ -1337,6 +1338,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showPlusSheet, setShowPlusSheet] = useState(false)
 
   const [windowExpired, setWindowExpired] = useState(false)
 
@@ -1607,7 +1609,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     setRecorderState('idle')
   }
 
+  // Trava contra toques repetidos: o áudio só sai uma vez, mesmo que o botão seja apertado várias vezes
+  const audioSendingRef = useRef(false)
+  const [audioSending, setAudioSending] = useState(false)
   const sendAudio = async () => {
+    if (audioSendingRef.current) return
+    audioSendingRef.current = true; setAudioSending(true)
+    try { await sendAudioInner() } finally { audioSendingRef.current = false; setAudioSending(false) }
+  }
+  const sendAudioInner = async () => {
     if (!audioBlob || (!effectiveInstitutionId && !isAionInbox) || !activeId) return
     const blob = audioBlob
     const mimeType = recordingMimeTypeRef.current || blob.type
@@ -5579,6 +5589,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               </div>
             )}
 
+            {isMobile && <WaComposerSheet open={showPlusSheet} onClose={() => setShowPlusSheet(false)} text={inputText} institutionId={effectiveInstitutionId}
+              onApply={t => setInputText(t)} onError={m => { setHubToast(m); setTimeout(() => setHubToast(null), 4000) }}
+              onAttach={() => { setShowAttach(true); setShowQuickReplies(false); setShowEmojiPicker(false) }}
+              onQuick={() => { setShowQuickReplies(true); setShowAttach(false); setShowEmojiPicker(false) }}
+              onEmoji={() => { setShowEmojiPicker(true); setShowAttach(false); setShowQuickReplies(false) }} />}
+
             {/* Emoji picker */}
             {showEmojiPicker && (
               <div ref={emojiPickerRef} style={{ position: 'absolute', bottom: 72, left: isMobile ? 8 : 0, right: isMobile ? 8 : 'auto', zIndex: 40, borderRadius: 16, overflow: 'hidden', boxShadow: '0 14px 36px -12px rgba(26,43,74,.4)', border: '1px solid #E3E8F0' }}>
@@ -5734,14 +5750,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 {/* Audio player */}
                 <audio src={audioPreviewUrl} controls style={{ flex: 1, height: 36, minWidth: 0 }} />
                 {/* Send */}
-                <button onClick={sendAudio} title="Enviar áudio"
+                <button onClick={sendAudio} disabled={audioSending} title="Enviar áudio"
                   style={{ width: 44, height: 44, borderRadius: '50%', background: '#05907B', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
                   <Send size={18} />
                 </button>
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {[
+                {isMobile && (
+                  <button type="button" onClick={() => { inputRef.current?.blur(); setShowPlusSheet(true) }} aria-label="Mais opções" className="aion-tap" disabled={windowExpired}
+                    style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0, border: '1.5px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: windowExpired ? .5 : 1 }}>
+                    <Plus size={22} />
+                  </button>
+                )}
+                {!isMobile && [
                   { icon: Paperclip, active: showAttach, onClick: () => { setShowAttach(v => !v); setShowQuickReplies(false) }, title: 'Anexar arquivo' },
                   { icon: Zap,       active: showQuickReplies, onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false) }, title: 'Respostas rápidas' },
                   { icon: Smile,     active: showEmojiPicker,  onClick: () => { if (isMobile) inputRef.current?.blur(); setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emojis' },
@@ -5802,7 +5824,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   onFocus={e => { e.currentTarget.style.borderColor = '#05907B'; e.currentTarget.style.background = '#FFFFFF' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
                 />
-                {!windowExpired && inputText.trim().length >= 3 && (
+                {!isMobile && !windowExpired && inputText.trim().length >= 3 && (
                   <WaImproveButton text={inputText} institutionId={effectiveInstitutionId}
                     onApply={t => { setInputText(t); inputRef.current?.focus() }}
                     onError={m => { setHubToast(m); setTimeout(() => setHubToast(null), 4000) }} />
