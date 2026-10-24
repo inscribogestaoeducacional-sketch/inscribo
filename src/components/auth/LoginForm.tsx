@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Eye, EyeOff, ArrowRight, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 type View = 'login' | 'forgot' | 'forgot-sent'
 
@@ -115,6 +115,8 @@ export default function LoginForm() {
   const [fLoading, setFLoading] = useState(false)
   const [fError, setFError]     = useState('')
   const { signIn } = useAuth()
+  const navigate = useNavigate()
+  const isPhone = typeof window !== 'undefined' && window.innerWidth < 768
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault(); setError(''); setLoading(true)
@@ -159,6 +161,12 @@ export default function LoginForm() {
         <div className="lf-blob1" />
         <div className="lf-blob2" />
 
+        {isPhone && (
+          <button type="button" onClick={() => navigate('/entrar')} aria-label="Voltar"
+            style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top))', left: 14, zIndex: 2, display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #D1FAE5', background: '#fff', color: '#05907B', borderRadius: 14, padding: '9px 14px', fontSize: 13.5, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>
+            <ArrowLeft size={16} /> Voltar
+          </button>
+        )}
         <div className="lf-card">
 
           {/* ── Logo ── */}

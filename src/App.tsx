@@ -8,6 +8,7 @@ import { supabase } from './lib/supabase'
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 import LoginForm    from './components/auth/LoginForm'
+import AppWelcome   from './pages/AppWelcome'
 import InitialSetup from './components/auth/InitialSetup'
 
 // ── Public pages ──────────────────────────────────────────────────────────
@@ -278,6 +279,7 @@ function AppContent() {
         <Route path="/parceria-meta"  element={<ParceriaMeta />} />
         <Route path="/blog"           element={<Blog />} />
         <Route path="/blog/:slug"     element={<BlogPost />} />
+        <Route path="/entrar"         element={<AppWelcome />} />
         <Route path="/login"          element={<LoginForm />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/unauthorized"   element={<UnauthorizedPage />} />
