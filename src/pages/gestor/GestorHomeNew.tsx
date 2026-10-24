@@ -296,7 +296,7 @@ export default function GestorHomeNew() {
             <div style={{ display: 'flex', gap: 22, alignItems: 'center', flexWrap: 'wrap' }}>
               <Ring value={prog.done} max={goalTotal} label={`${pct(prog.done, goalTotal) ?? 0}%`} sub={`${prog.done} de ${goalTotal}`} />
               <div style={{ flex: 1, minWidth: 240, display: 'grid', gap: 11 }}>
-                {([['Novos alunos', prog.novos, goalNovos, '#7C3AED'], ['Rematrículas', prog.reMat, goalRe, '#05907B'], ['Pré-matriculados', prog.pre, Math.max(0, goalTotal - prog.done), '#F59E0B']] as const).map(([l, v, m, c]) => (
+                {([['Novos alunos', prog.novos, goalNovos, '#2DCBA4'], ['Rematrículas', prog.reMat, goalRe, '#05907B'], ['Pré-matriculados', prog.pre, Math.max(0, goalTotal - prog.done), '#F59E0B']] as const).map(([l, v, m, c]) => (
                   <div key={l}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: BRAND.muted }}><span style={{ fontWeight: 700, color: BRAND.ink }}>{l}</span><span><b style={{ color: BRAND.ink }}>{v}</b>{l === 'Pré-matriculados' ? ` · faltam ${m} p/ meta` : ` de ${m}`}</span></div>
                     <div style={{ marginTop: 5 }}><Bar v={v} max={m} c={c} /></div>
@@ -333,7 +333,7 @@ export default function GestorHomeNew() {
                     <div key={e.m} title={`${MES[Number(e.m.slice(5, 7)) - 1]}/${e.m.slice(2, 4)}: ${e.novos} novatos + ${e.re} veteranos${e.prev != null ? ` · ano anterior ${e.prev}` : ''}`} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%', gap: 4 }}>
                       <span style={{ fontSize: 11.5, fontWeight: 800, color: BRAND.ink }}>{tot}</span>
                       <div style={{ width: '100%', maxWidth: 38, height: `${(tot / evoMax) * 118}px`, minHeight: tot ? 4 : 0, display: 'flex', flexDirection: 'column', borderRadius: 8, overflow: 'hidden', position: 'relative', transition: 'height .9s cubic-bezier(.22,1,.36,1)' }}>
-                        <span style={{ flex: e.novos, background: '#7C3AED' }} /><span style={{ flex: e.re, background: 'var(--aion-grad)' }} />
+                        <span style={{ flex: e.novos, background: '#2DCBA4' }} /><span style={{ flex: e.re, background: 'var(--aion-grad)' }} />
                       </div>
                       {e.prev != null && <span aria-hidden style={{ width: '100%', maxWidth: 38, height: 3, borderRadius: 3, background: '#CBD5E1', marginTop: -1, opacity: .9, transform: `translateY(${(tot - e.prev) / evoMax * -118 + 0}px)`, display: 'none' }} />}
                       <span style={{ fontSize: 11, color: BRAND.muted, fontWeight: 700 }}>{MES[Number(e.m.slice(5, 7)) - 1]}</span>
@@ -342,7 +342,7 @@ export default function GestorHomeNew() {
                 })}
               </div>
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: BRAND.muted, marginTop: 10, alignItems: 'center' }}>
-                <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#7C3AED', marginRight: 5 }} />Novatos <b style={{ color: BRAND.ink }}>{evo.reduce((s, e) => s + e.novos, 0)}</b></span>
+                <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#2DCBA4', marginRight: 5 }} />Novatos <b style={{ color: BRAND.ink }}>{evo.reduce((s, e) => s + e.novos, 0)}</b></span>
                 <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'var(--aion-grad)', marginRight: 5 }} />Veteranos <b style={{ color: BRAND.ink }}>{evo.reduce((s, e) => s + e.re, 0)}</b></span>
                 <button type="button" onClick={() => go('/reports?tab=rematriculas')} style={{ marginLeft: 'auto', border: 'none', background: 'none', color: BRAND.primaryDark, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>ver rematrículas →</button>
               </div>
@@ -376,7 +376,7 @@ export default function GestorHomeNew() {
             <Kpi label="Com atendente" value={`${pct(n0(wa?.com_atendente), n0(wa?.total)) ?? 0}%`} color="#0EA5E9" icon={Users} to="/reports?tab=atendimento" sub={`${n0(wa?.com_atendente)} de ${n0(wa?.total)} · ${n0(att?.sem_atendente)} sem atendente`} />
             <Kpi label="1ª resposta (mediana)" value={minLabel(respAvg)} color={respAvg != null && respAvg > 30 ? '#B45309' : '#15803D'} icon={Clock} to="/reports?tab=atendimento" sub="tempo até a primeira resposta humana" />
             <Kpi label="Satisfação" value={satPct(sat?.media) != null ? `${satPct(sat?.media)}%` : '—'} color="#F59E0B" icon={Smile} to="/reports?tab=satisfacao" sub={<>{n0(sat?.avaliacoes)} avaliações <Delta cur={sat?.media ?? null} prev={sat?.anterior?.media ?? null} /></>} />
-            <Kpi label="Mensagens enviadas" value={<CountUp value={n0(wa?.msgs_enviadas_humano)} />} color="#7C3AED" icon={TrendingUp} to="/reports?tab=whatsapp" sub={`${n0(wa?.msgs_enviadas_robo)} do robô · ${n0(wa?.msgs_recebidas)} recebidas`} />
+            <Kpi label="Mensagens enviadas" value={<CountUp value={n0(wa?.msgs_enviadas_humano)} />} color="#2DCBA4" icon={TrendingUp} to="/reports?tab=whatsapp" sub={`${n0(wa?.msgs_enviadas_robo)} do robô · ${n0(wa?.msgs_recebidas)} recebidas`} />
           </div>
         </section>
 

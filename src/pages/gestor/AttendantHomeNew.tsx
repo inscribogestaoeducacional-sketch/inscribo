@@ -457,13 +457,13 @@ export default function AttendantHomeNew() {
       {/* ── Meu mês ── */}
       {sectionTitle('Meu mês', 'comparado com o mês anterior')}
       <div style={kpiGrid}>
-        <Kpi label="Matrículas no mês" value={enrollMonth} sub={enrollVar === null ? 'sem base no mês anterior' : `${enrollVar >= 0 ? '+' : ''}${enrollVar}% vs. mês anterior (${enrollPrev})`} color="#7C3AED" icon={<GraduationCap size={16} />} onClick={go('/leads?owner=mine&filter=enrolled')} delay={0} />
+        <Kpi label="Matrículas no mês" value={enrollMonth} sub={enrollVar === null ? 'sem base no mês anterior' : `${enrollVar >= 0 ? '+' : ''}${enrollVar}% vs. mês anterior (${enrollPrev})`} color="#2DCBA4" icon={<GraduationCap size={16} />} onClick={go('/leads?owner=mine&filter=enrolled')} delay={0} />
         <Kpi label="Matrículas na campanha" value={enrollCampaign ?? 0} sub={campaign ? campaign.label : 'sem campanha ativa'} color="#05907B" icon={<Trophy size={16} />} onClick={go('/campanha')} delay={50} />
         <Kpi label="Meus leads no mês" value={leadsMonthCount} sub={leadsVar === null ? `${leadsTodayCount} hoje` : `${leadsVar >= 0 ? '+' : ''}${leadsVar}% vs. mês anterior · ${leadsTodayCount} hoje`} color="#3b82f6" icon={<Users size={16} />} onClick={go('/leads?owner=mine')} delay={100} />
         <Kpi label="Taxa de conversão" value={conversion} suffix="%" sub={`${convertedMonth} de ${leadsMonthCount} leads do mês`} color="#F59E0B" icon={<Target size={16} />} onClick={go('/leads?owner=mine&filter=enrolled')} delay={150} />
       </div>
 
-      <Panel title="Meta do mês" icon={<Target size={15} />} color="#7C3AED" delay={80} pad>
+      <Panel title="Meta do mês" icon={<Target size={15} />} color="#2DCBA4" delay={80} pad>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
           <span style={{ fontSize: 13, color: BRAND.muted }}>Superar as <b style={{ color: BRAND.ink }}>{enrollPrev}</b> matrículas do mês passado</span>
           <Delta v={enrollVar} />
@@ -639,7 +639,7 @@ export default function AttendantHomeNew() {
         <div style={{ fontSize: 12, fontWeight: 800, color: BRAND.muted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.06em' }}>Ações rápidas</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {([
-            { label: 'Novo lead', path: '/leads', color: '#7C3AED', bg: '#f5f3ff', Icon: Plus },
+            { label: 'Novo lead', path: '/leads', color: '#2DCBA4', bg: '#f5f3ff', Icon: Plus },
             { label: 'Agendar visita', path: '/visits', color: '#0F6E56', bg: '#f0fdf4', Icon: Calendar },
             { label: 'Registrar transferência', path: '/transferencias', color: '#dc2626', bg: '#fef2f2', Icon: ArrowRightLeft },
             { label: 'Abrir WhatsApp', path: '/whatsapp', color: '#10B981', bg: '#d1fae5', Icon: MessageCircle },

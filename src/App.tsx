@@ -30,8 +30,8 @@ import Blog, { BlogPost } from './pages/Blog'
 
 // ── School user ───────────────────────────────────────────────────────────
 import Dashboard         from './components/dashboard/Dashboard'
-import GestorHome        from './pages/gestor/GestorHome'
-import AttendantHome     from './pages/gestor/AttendantHome'
+import GestorHome        from './pages/gestor/GestorHomeNew'
+import AttendantHome     from './pages/gestor/AttendantHomeNew'
 import GestorTransfers   from './pages/gestor/GestorTransfers'
 import GestorUpdates     from './pages/gestor/GestorUpdates'
 import GestorSurveys     from './pages/gestor/GestorSurveys'
