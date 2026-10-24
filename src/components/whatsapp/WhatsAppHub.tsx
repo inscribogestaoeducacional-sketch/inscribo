@@ -4847,34 +4847,42 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         {/* ── Col 1: Conversation List ──────────────────────────────────────────── */}
         <div style={{ width: isMobile ? '100%' : 320, flexShrink: 0, display: isMobile && mobilePanel === 'chat' ? 'none' : 'flex', flexDirection: 'column', background: '#FFFFFF', borderRight: '1px solid #D1FAE5', overflow: 'hidden' }}>
 
-          {/* Header */}
-          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `12px ${GUTTER}px`, background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <MessageCircle style={{ width: 18, height: 18, color: '#00A896' }} />
+          {/* Header: faixa em degradê com os 4 contadores clicáveis (levam direto à seção) */}
+          <div style={{ flexShrink: 0, position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg, #065F52 0%, #00897B 52%, #14B8A6 100%)', color: '#fff', padding: `12px ${GUTTER}px 12px` }}>
+            <span aria-hidden style={{ position: 'absolute', width: 170, height: 170, right: -50, top: -95, borderRadius: 999, background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,.22), rgba(255,255,255,.04) 60%, transparent 70%)', pointerEvents: 'none' }} />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 11, background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.28)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <MessageCircle style={{ width: 17, height: 17, color: '#fff' }} />
+                </div>
+                <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>WhatsApp</span>
               </div>
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>WhatsApp</span>
-              {totalUnread > 0 && (
-                <span style={{ background: '#00A896', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center' }}>
-                  {totalUnread}
-                </span>
-              )}
-              {waitingQueueConvs.length > 0 && (
-                <span title="Conversas aguardando atendimento" style={{ background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 3 }}>
-                  ⏳ {waitingQueueConvs.length}
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <button
-                style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', border: 'none', cursor: 'pointer', color: '#fff', transition: 'background 0.15s' }}
+                style={{ width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: 'none', cursor: 'pointer', color: '#007A6E', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)', transition: 'transform .15s' }}
                 title="Nova conversa"
                 onClick={() => setShowNewConvModal(true)}
-                onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
-                onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.07)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'none')}
               >
                 <Plus style={{ width: 16, height: 16 }} />
               </button>
+            </div>
+            <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 10 }}>
+              {([
+                { label: 'Na fila', n: filteredWaitingConvs.length, hot: filteredWaitingConvs.length > 0, go: () => document.getElementById('wa-sec-fila')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+                { label: 'Minhas', n: filteredMyConvs.length, hot: false, go: () => document.getElementById('wa-sec-minhas')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+                { label: 'Não lidas', n: naoLidas, hot: naoLidas > 0, go: () => setReadFilter(readFilter === 'unread' ? 'all' : 'unread') },
+                { label: 'Paradas', n: filteredStaleConvs.length, hot: false, go: () => document.getElementById('wa-sec-paradas')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+              ]).map(c => (
+                <button key={c.label} type="button" onClick={c.go}
+                  style={{ border: '1px solid rgba(255,255,255,.26)', background: c.label === 'Não lidas' && readFilter === 'unread' ? '#fff' : 'rgba(255,255,255,.14)', color: c.label === 'Não lidas' && readFilter === 'unread' ? '#007A6E' : '#fff', borderRadius: 12, padding: '6px 4px 7px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', transition: 'background .15s, transform .15s' }}
+                  onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-1px)')} onMouseLeave={e => (e.currentTarget.style.transform = 'none')}>
+                  <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                    {c.n}{c.hot && <span style={{ width: 7, height: 7, borderRadius: 99, background: '#FCA5A5', boxShadow: '0 0 0 3px rgba(252,165,165,.35)' }} />}
+                  </div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, opacity: .92, marginTop: 1 }}>{c.label}</div>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -4976,7 +4984,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               <>
                 {filteredWaitingConvs.length > 0 && (
                   <>
-                    <div style={{ padding: `8px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div id="wa-sec-fila" style={{ padding: `8px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
                       ⏳ Fila de espera · sem atendente
                       <span style={{ background: '#EF4444', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredWaitingConvs.length}</span>
                       <span
@@ -4998,7 +5006,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 )}
                 {filteredMyConvs.length > 0 && (
                   <>
-                    <div style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div id="wa-sec-minhas" style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Minhas conversas
                     </div>
                     {filteredMyConvs.map(conv => renderConvItem(conv))}
@@ -5006,7 +5014,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 )}
                 {filteredStaleConvs.length > 0 && (
                   <>
-                    <div style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div id="wa-sec-paradas" style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
                       ⏰ Conversas paradas
                       <span style={{ background: '#F97316', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredStaleConvs.length}</span>
                     </div>
