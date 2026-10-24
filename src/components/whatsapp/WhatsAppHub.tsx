@@ -1,5 +1,7 @@
 ﻿import { resolveSlotTemplate } from '../../lib/templateSlots'
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import WaImproveButton from './WaImproveButton'
+import WaSummarySection from './WaSummarySection'
 import EmojiPicker from '@emoji-mart/react'
 import emojiData from '@emoji-mart/data'
 import {
@@ -217,7 +219,6 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       name = cleanName(convData?.contact_name)
         || cleanName(jidMsgs.find(m => !m.from_me && cleanName(m.contact_name))?.contact_name)
         || formatPhone(normJid)
-      console.log('[BUILD CONV] nome:', convData?.contact_name, '| jid:', normJid)
     }
 
     return [{
@@ -248,7 +249,6 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       messages: sorted
         .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
         .map(m => {
-          console.log('[BUILD] msg type:', m.message_type, '| media_url:', m.media_url?.slice(0, 50))
           return {
             id: m.id,
             type: mapMsgType(m.message_type),
@@ -560,6 +560,8 @@ async function handleDownload(url: string, filename: string) {
 }
 
 // ─── RenderMessageContent ─────────────────────────────────────────────────────
+const CAN_HIGHLIGHT = typeof CSS !== 'undefined' && 'highlights' in (CSS as any) && typeof (window as any).Highlight !== 'undefined'
+
 function RenderMessageContent({ message, fromMe, onImageClick }: { message: any; fromMe: boolean; onImageClick?: (url: string) => void }) {
   const msgType = (
     message.type ||
@@ -605,8 +607,6 @@ function RenderMessageContent({ message, fromMe, onImageClick }: { message: any;
   const caption  = message.caption || message.message?.imageMessage?.caption || ''
   const body     = message.body || message.content || message.conversation ||
                    message.message?.conversation || ''
-
-  console.log('[MEDIA]', message.message_type || message.messageType || msgType, '| media_url:', message.media_url, '| mediaUrl resolved:', mediaUrl, '| content:', (message.content || '').slice(0, 60))
 
   if (msgType === 'image' && mediaUrl) {
     return (
@@ -1305,6 +1305,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const templatesForScheduled       = useMemo(() => filterTemplatesForContext(templates, templateMeta, 'scheduled_message', hiddenTemplateNames), [templates, templateMeta, hiddenTemplateNames])
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
+  // Visitas de hoje (lead_id -> horário) para a etiqueta "Visita hoje" na lista de conversas
+  const [visitsToday, setVisitsToday] = useState<Map<string, string>>(new Map())
 
   // Mensagens agendadas (template) da conversa ativa — painel lateral,
   // seção "Mensagens Agendadas" (ver whatsapp_scheduled_messages).
@@ -1326,6 +1328,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // New feature states
   const [showMsgSearch, setShowMsgSearch] = useState(false)
   const [msgSearchText, setMsgSearchText] = useState('')
+  const [searchIdx, setSearchIdx] = useState(0)
+  const [searchTotal, setSearchTotal] = useState(0)
+  const searchRangesRef = useRef<Range[]>([])
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -1603,7 +1608,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!audioBlob || (!effectiveInstitutionId && !isAionInbox) || !activeId) return
     const blob = audioBlob
     const mimeType = recordingMimeTypeRef.current || blob.type
-    console.log('[AUDIO] sendAudio blob.size:', blob.size, 'mimeType:', mimeType)
     // Rede de segurança: a Meta recusa webm (131053). Nunca subir/enviar.
     if (!isMetaAcceptedAudio(mimeType)) {
       setSendError('Este áudio foi gravado num formato que o WhatsApp não aceita e não foi enviado. Atualize a página e grave de novo.')
@@ -1640,13 +1644,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         .from('whatsapp-media')
         .uploadToSignedUrl(storagePath, uploadToken, blob, { contentType: mimeType })
       if (uploadErr) throw new Error(uploadErr.message || 'Erro ao subir áudio para o Storage.')
-      console.log('[AUDIO] upload ok, mediaUrl:', mediaUrl)
       discardAudio()
       const to = activeId
         .replace(/@s\.whatsapp\.net$/, '')
         .replace(/@.*/, '')
         .replace(/\D/g, '')
-      console.log('[AUDIO] enviando para /api/whatsapp/send, to:', to)
       const sendRes = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: await getAuthHeaders(),
@@ -1696,7 +1698,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       .eq('id', leadId)
       .single()
     if (lead) {
-      console.log('[LEAD PANEL] linked & loaded:', lead.responsible_name)
       setLeadData(lead)
     }
     setLinkingLead(false)
@@ -2030,7 +2031,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const convMap = new Map(convs.map((c: any) => [c.remote_jid, c]))
     const built = buildConversations(msgs, convMap)
     const timestamps = msgs.map(m => new Date(m.timestamp).getTime()).filter(Boolean)
-    console.log(`[loadMessages] total=${msgs.length} oldest=${timestamps.length ? new Date(Math.min(...timestamps)).toISOString() : 'n/a'} newest=${timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : 'n/a'}`)
     setConversations(built)
     return built
   }
@@ -2233,9 +2233,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       }, (payload) => {
         const msg    = payload.new as WhatsappMessage
         const msgJid = msg.remote_jid || ''
-        console.log('[REALTIME MSG] INSERT', msgJid, '| CLOSING_IDS tem?', CLOSING_IDS.has(msgJid), CLOSING_IDS.has(normalizeJid(msgJid)))
         if (CLOSING_IDS.has(msgJid) || CLOSING_IDS.has(normalizeJid(msgJid))) {
-          console.log('[REALTIME MSG] ignorado — está em CLOSING_IDS')
           return
         }
         addMessageToConversations(msg)
@@ -2303,7 +2301,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
-        console.log('[RT] UPDATE conversa recebido:', payload.new?.remote_jid, payload.new?.contact_name)
         const normJid = normalizeJid(payload.new?.remote_jid || '')
 
         if (skipNextNameUpdateRef.current === normJid) {
@@ -2910,7 +2907,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Load lead data when active conversation or its lead_id changes
   useEffect(() => {
     const leadId = activeConv?.lead_id
-    console.log('[LEAD PANEL] activeId:', activeId, '| lead_id:', leadId)
     if (!leadId) { setLeadData(null); return }
     supabase
       .from('leads')
@@ -2919,7 +2915,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       .single()
       .then(({ data }) => {
         if (data) {
-          console.log('[LEAD PANEL] loaded:', data.responsible_name)
           setLeadData(data)
         }
       })
@@ -3103,6 +3098,27 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     .filter(u => (u as any).active !== false)
     .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'pt-BR'))
 
+  useEffect(() => {
+    if (!effectiveInstitutionId) return
+    let alive = true
+    const load = async () => {
+      const a = new Date(); a.setHours(0, 0, 0, 0)
+      const b = new Date(a); b.setDate(b.getDate() + 1)
+      const { data, error } = await supabase.from('visits').select('lead_id, scheduled_date')
+        .eq('institution_id', effectiveInstitutionId).eq('status', 'scheduled')
+        .gte('scheduled_date', a.toISOString()).lt('scheduled_date', b.toISOString())
+      if (!alive || error) return
+      const m = new Map<string, string>()
+      for (const v of (data ?? []) as { lead_id: string | null; scheduled_date: string }[]) {
+        if (v.lead_id) m.set(v.lead_id, new Date(v.scheduled_date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+      }
+      setVisitsToday(m)
+    }
+    load()
+    const t = setInterval(load, 300000)
+    return () => { alive = false; clearInterval(t) }
+  }, [effectiveInstitutionId])
+
   const renderConvItem = (conv: Conversation) => {
     const isActive = conv.id === activeId
     const preview = getLastMsgPreview(conv.lastMessage)
@@ -3237,6 +3253,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 </span>
               )
             })()}
+
+            {/* Visita marcada para hoje */}
+            {conv.lead_id && visitsToday.has(conv.lead_id) && (
+              <span title="Visita marcada para hoje" style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: '#EDE9FE', color: '#6D28D9', display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                📅 Visita hoje {visitsToday.get(conv.lead_id)}
+              </span>
+            )}
 
             {/* Unidade do lead vinculado (campo opcional por escola) */}
             {unitCfg.enabled && unitCfg.unitName(convUnitId(conv)) && (
@@ -3563,9 +3586,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     setTemplateError(null)
     setSendingTemplate(true)
     const preview = buildTemplatePreview(tmpl, templateVars)
-    console.log('[TEMPLATE PREVIEW]', { tmpl: tmpl?.name, components: tmpl?.components, vars: templateVars, preview })
     try {
-      console.log('[SEND-TEMPLATE] to:', to, 'template:', tmpl.name, 'components:', JSON.stringify(components))
       const res = await fetch('/api/whatsapp/send-template', {
         method: 'POST',
         headers: await getAuthHeaders(),
@@ -3611,7 +3632,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setTimeout(() => setHubToast(null), 3000)
       const jidSnapshot = activeId
       setTimeout(async () => {
-        console.log('[RELOAD] recarregando para jid:', jidSnapshot)
         if (jidSnapshot) await reloadConversationMessages(jidSnapshot)
         setTimeout(() => scrollMessagesToBottom(true), 500)
       }, 2500)
@@ -3791,7 +3811,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           : new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 8, 0, 0, 0)
 
         if (reminderDate.getTime() <= Date.now()) {
-          console.log('[handleScheduleVisitFromLead] lembrete calculado no passado, pulando (só confirmação imediata):', reminderDate.toISOString())
         } else {
           const { error: schedErr } = await supabase.from('whatsapp_scheduled_messages').insert({
             institution_id:     effectiveInstitutionId,
@@ -3899,22 +3918,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!targetUser) return
     const fromName = activeConv?.assigned_user_name || user.full_name || user.email
     const rJid = rawJid(activeId)
-    console.log('[TRANSFER] activeId completo:', activeId)
-    console.log('[TRANSFER] rawJid resultado:', rJid)
-    console.log('[TRANSFER] transferindo para:', targetUser.full_name, targetUser.id)
     const { data: convData } = await supabase
       .from('whatsapp_conversations')
       .select('id, remote_jid, assigned_user_id, assigned_user_name')
       .eq('institution_id', effectiveInstitutionId)
       .eq('remote_jid', rJid)
-    console.log('[TRANSFER] conversa encontrada:', convData)
     if (!convData || convData.length === 0) {
       const { data: convData2 } = await supabase
         .from('whatsapp_conversations')
         .select('id, remote_jid, assigned_user_id')
         .eq('institution_id', effectiveInstitutionId)
         .ilike('remote_jid', `%${rJid}%`)
-      console.log('[TRANSFER] busca ampla:', convData2)
     }
     const fromUserId = activeConv?.assigned_user_id
     try {
@@ -3944,7 +3958,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   }
 
   const handleContactType = async (type: string) => {
-    console.log('[CONTACT TYPE] chamada com:', type, '| activeId:', activeId, '| institution:', effectiveInstitutionId)
     if (!activeId || !effectiveInstitutionId) return
     if (type === 'lead') {
       setLeadModalTarget(null)
@@ -3964,21 +3977,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
     // Sync whatsapp_contacts.type — normalize to canonical 13-digit format
     const normContactPhone = normalizeBrazilianInput(rJid.replace(/@.*/, ''))
-    console.log('[SYNC] normPhone:', normContactPhone)
-    console.log('[SYNC] institutionId:', effectiveInstitutionId)
     const { data: contactRow, error: contactErr } = await supabase
       .from('whatsapp_contacts')
       .select('id, phone, type')
       .eq('institution_id', effectiveInstitutionId)
       .eq('phone', normContactPhone)
       .maybeSingle()
-    console.log('[SYNC] contact found:', contactRow, 'error:', contactErr)
     if (contactRow) {
       const { error: updateErr } = await supabase
         .from('whatsapp_contacts')
         .update({ type, updated_at: new Date().toISOString() })
         .eq('id', contactRow.id)
-      console.log('[SYNC] update error:', updateErr)
     }
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: type } : c))
     await DatabaseService.logConversationEvent({
@@ -4316,16 +4325,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const rJid   = rawJid(convId)
     const previousStatus = conversationsRef.current.find(c => c.id === convId)?.status
 
-    console.log('[CLOSE 1] iniciando fechamento', rJid, '| convId:', convId)
-
     // 1. Guard all Realtime events for this JID before any async operation
-    console.log('[CLOSE 2] adicionando ao CLOSING_IDS', rJid, convId)
     CLOSING_IDS.add(rJid)
     CLOSING_IDS.add(convId)
-    console.log('[CLOSE 2] CLOSING_IDS agora:', [...CLOSING_IDS])
-
     // 2. Mark as closed locally (filter hides it for 'abertos', keeps it for 'ambos')
-    console.log('[CLOSE 3] marcando como closed no estado local')
     // Mantém assigned_user_id local igual ao que closeConversation() agora
     // grava no banco — zerá-lo aqui faria a conversa cair fora de
     // filteredMyConvs/RLS e "sumir" da aba Concluídas.
@@ -4334,13 +4337,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         ? { ...c, status: 'closed' as ConvStatus, bot_active: false }
         : c
     ))
-    console.log('[CLOSE 4] setActiveId null')
     setActiveId(null)
 
     // 3. Persist to DB (triggers Realtime — guarded above)
-    console.log('[CLOSE 5] salvando no banco | institutionId:', effectiveInstitutionId, '| rJid:', rJid)
     const closeResult = await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
-    console.log('[CLOSE 5] resultado banco:', JSON.stringify(closeResult))
     if (closeResult.error || closeResult.count === 0) {
       console.warn('[CLOSE 5] AVISO: 0 linhas atualizadas — possível problema de RLS ou formato do JID')
       // Desfaz o "fechado" otimista — sem isso o atendente vê a conversa como
@@ -4361,11 +4361,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       user_id: user!.id,
       user_name: user!.full_name || user!.email,
     }).catch(() => {})
-    console.log('[CLOSE 6] concluído — aguardando Realtime (guard 5s)')
-
     // 4. Release guard after 10s (long enough for all Realtime events to arrive)
     setTimeout(() => {
-      console.log('[CLOSE 7] limpando CLOSING_IDS para', rJid)
       CLOSING_IDS.delete(rJid)
       CLOSING_IDS.delete(convId)
     }, 10000)
@@ -4550,18 +4547,57 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }
 
+  // Busca na conversa: destaca o termo no próprio histórico (CSS Custom Highlight),
+  // conta os resultados e deixa pular entre eles.
+  const jumpToMatch = useCallback((idx: number) => {
+    const rs = searchRangesRef.current
+    if (!rs.length) return
+    const cur = ((idx % rs.length) + rs.length) % rs.length
+    setSearchIdx(cur)
+    try {
+      ;(CSS as any).highlights.set('wa-search-cur', new (window as any).Highlight(rs[cur]))
+      rs[cur].startContainer.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    } catch { /* navegador sem suporte: a busca cai no filtro antigo */ }
+  }, [])
+  useEffect(() => {
+    if (!CAN_HIGHLIGHT) return
+    const hl = (CSS as any).highlights
+    hl.delete('wa-search'); hl.delete('wa-search-cur')
+    const term = msgSearchText.trim().toLowerCase()
+    const root = messagesScrollRef.current
+    if (!showMsgSearch || term.length < 2 || !root) { searchRangesRef.current = []; setSearchTotal(0); setSearchIdx(0); return }
+    const ranges: Range[] = []
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let n: Node | null
+    while ((n = walker.nextNode())) {
+      const text = (n.textContent || '').toLowerCase()
+      let at = text.indexOf(term)
+      while (at !== -1 && ranges.length < 500) {
+        const r = document.createRange(); r.setStart(n, at); r.setEnd(n, at + term.length); ranges.push(r)
+        at = text.indexOf(term, at + term.length)
+      }
+    }
+    searchRangesRef.current = ranges
+    setSearchTotal(ranges.length)
+    if (ranges.length) {
+      hl.set('wa-search', new (window as any).Highlight(...ranges))
+      jumpToMatch(ranges.length - 1)
+    } else setSearchIdx(0)
+    return () => { hl.delete('wa-search'); hl.delete('wa-search-cur') }
+  }, [msgSearchText, showMsgSearch, activeConv?.messages.length, activeId, jumpToMatch])
+
   const filteredMessages = activeConv
     ? (msgSearchText.trim()
-        ? activeConv.messages.filter(m => m.content.toLowerCase().includes(msgSearchText.toLowerCase()))
+        ? (CAN_HIGHLIGHT ? activeConv.messages : activeConv.messages.filter(m => m.content.toLowerCase().includes(msgSearchText.toLowerCase())))
         : activeConv.messages)
     : []
   // Linhas de sistema: fora da busca de mensagens; eventos anteriores à
   // primeira mensagem carregada só entram quando o histórico todo já veio
   // (senão apareceriam fora de ordem antes de "carregar anteriores").
-  const timelineEvents = !activeConv || msgSearchText.trim() ? [] : chatEvents.filter(e =>
+  const timelineEvents = !activeConv || (msgSearchText.trim() && !CAN_HIGHLIGHT) ? [] : chatEvents.filter(e =>
     !activeConv.messages[0] || exhaustedOlder.has(activeConv.id) || e.ts >= activeConv.messages[0].ts
   )
-  const msgGroups = filteredMessages.length > 0 || (activeConv && !msgSearchText.trim())
+  const msgGroups = filteredMessages.length > 0 || (activeConv && (!msgSearchText.trim() || CAN_HIGHLIGHT))
     ? (activeConv ? groupTimelineByDate(filteredMessages, timelineEvents) : [])
     : []
 
@@ -5060,17 +5096,26 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 </div>
               )}
 
-              {/* Message search bar */}
+              {/* Busca na conversa */}
               {showMsgSearch && (
-                <div style={{ flexShrink: 0, padding: `8px ${GUTTER}px`, background: '#FFFFFF', borderTop: '1px solid #D1FAE5', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Search style={{ width: 14, height: 14, color: '#94A3B8', flexShrink: 0 }} />
+                <div style={{ flexShrink: 0, padding: `8px ${GUTTER}px`, background: '#FFFBEB', borderTop: '1px solid #FDE68A', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <style>{`::highlight(wa-search){background:#FDE047;color:#1A2B4A}::highlight(wa-search-cur){background:#F59E0B;color:#1A2B4A}`}</style>
+                  <Search style={{ width: 14, height: 14, color: '#B45309', flexShrink: 0 }} />
                   <input autoFocus value={msgSearchText} onChange={e => setMsgSearchText(e.target.value)}
-                    placeholder="Buscar nas mensagens..."
-                    style={{ flex: 1, fontSize: 13, background: 'transparent', outline: 'none', border: 'none', color: '#1A2B4A' }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); jumpToMatch(searchIdx + (e.shiftKey ? -1 : 1)) } if (e.key === 'Escape') { setShowMsgSearch(false); setMsgSearchText('') } }}
+                    placeholder="Buscar nesta conversa"
+                    style={{ flex: 1, minWidth: 0, fontSize: 16, background: 'transparent', outline: 'none', border: 'none', color: '#1A2B4A' }}
                   />
-                  <button onClick={() => { setShowMsgSearch(false); setMsgSearchText('') }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
-                    <X style={{ width: 14, height: 14 }} />
+                  {msgSearchText.trim().length >= 2 && (
+                    <span style={{ fontSize: 12, color: '#92400E', whiteSpace: 'nowrap' }}>{searchTotal ? `${searchIdx + 1} de ${searchTotal}` : 'sem resultados'}</span>
+                  )}
+                  <button onClick={() => jumpToMatch(searchIdx - 1)} disabled={!searchTotal} aria-label="Resultado anterior"
+                    style={{ background: 'none', border: 'none', cursor: searchTotal ? 'pointer' : 'default', color: searchTotal ? '#92400E' : '#D6D3D1', padding: 6 }}><ChevronDown style={{ width: 16, height: 16, transform: 'rotate(180deg)' }} /></button>
+                  <button onClick={() => jumpToMatch(searchIdx + 1)} disabled={!searchTotal} aria-label="Próximo resultado"
+                    style={{ background: 'none', border: 'none', cursor: searchTotal ? 'pointer' : 'default', color: searchTotal ? '#92400E' : '#D6D3D1', padding: 6 }}><ChevronDown style={{ width: 16, height: 16 }} /></button>
+                  <button onClick={() => { setShowMsgSearch(false); setMsgSearchText('') }} aria-label="Fechar busca"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 6 }}>
+                    <X style={{ width: 16, height: 16 }} />
                   </button>
                 </div>
               )}
@@ -5078,15 +5123,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               {/* More menu dropdown */}
               {showMoreMenu && (
                 <div ref={moreMenuRef} style={{ position: 'absolute', right: 16, top: 56, zIndex: 30, background: '#FFFFFF', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #D1FAE5', paddingTop: 4, paddingBottom: 4, minWidth: 160 }}>
+                  {isPrivilegedRole && (
                   <button onClick={async () => {
-                    if (!window.confirm('Isso apagará todas as mensagens permanentemente. Continuar?')) return
-                    setConversations(prev => prev.map(c => c.id === activeId ? {...c, messages: []} : c))
+                    if (!window.confirm('Isso apaga TODAS as mensagens desta conversa do banco, para toda a equipe, e não dá para desfazer. Continuar?')) return
                     setShowMoreMenu(false)
                     if (activeId && effectiveInstitutionId) {
-                      await supabase.from('whatsapp_messages')
+                      const { error: delErr } = await supabase.from('whatsapp_messages')
                         .delete()
                         .eq('institution_id', effectiveInstitutionId)
                         .eq('remote_jid', activeId)
+                      if (delErr) {
+                        setHubToast('Não consegui apagar as mensagens: ' + delErr.message)
+                        setTimeout(() => setHubToast(null), 4000)
+                        return
+                      }
+                      setConversations(prev => prev.map(c => c.id === activeId ? {...c, messages: []} : c))
                     }
                   }}
                     style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
@@ -5094,6 +5145,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Limpar conversa
                   </button>
+                  )}
                   {/* Fase 6 (RLS): bloquear é de admin/gestor, igual a Configurações → Bloqueios */}
                   {isPrivilegedRole && (
                   <button onClick={async () => {
@@ -5125,11 +5177,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   </button>
                   )}
                   {activeConv?.lead_id && (
-                    <button onClick={() => { navigate(`/leads?highlight=${activeConv.lead_id}`); setShowMoreMenu(false) }}
+                    <button onClick={() => { navigate(`/leads?open=${activeConv.lead_id}`); setShowMoreMenu(false) }}
                       style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                      Ver perfil no CRM
+                      Ver lead
                     </button>
                   )}
                 </div>
@@ -5477,7 +5529,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
             {/* Emoji picker */}
             {showEmojiPicker && (
-              <div ref={emojiPickerRef} style={{ position: 'absolute', bottom: 72, left: 0, zIndex: 40 }}>
+              <div ref={emojiPickerRef} style={{ position: 'absolute', bottom: 72, left: isMobile ? 8 : 0, right: isMobile ? 8 : 'auto', zIndex: 40, borderRadius: 16, overflow: 'hidden', boxShadow: '0 14px 36px -12px rgba(26,43,74,.4)', border: '1px solid #E3E8F0' }}>
                 <EmojiPicker
                   data={emojiData}
                   onEmojiSelect={handleEmojiSelect}
@@ -5485,6 +5537,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   theme="light"
                   previewPosition="none"
                   skinTonePosition="none"
+                  navPosition="bottom"
+                  perLine={isMobile ? 8 : 9}
+                  dynamicWidth={isMobile}
+                  maxFrequentRows={2}
                 />
               </div>
             )}
@@ -5679,7 +5735,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   placeholder={windowExpired ? 'Janela de 24h expirada' : 'Digite uma mensagem...'}
                   rows={1}
                   style={{
-                    flex: 1, padding: '10px 18px', fontSize: 14,
+                    flex: 1, padding: '10px 18px', fontSize: isMobile ? 16 : 14,
                     background: windowExpired ? '#F9FAFB' : '#F0FDFB',
                     border: `1.5px solid ${windowExpired ? '#E5E7EB' : '#D1FAE5'}`,
                     borderRadius: 28,
@@ -5692,6 +5748,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#FFFFFF' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
                 />
+                {!windowExpired && inputText.trim().length >= 3 && (
+                  <WaImproveButton text={inputText} institutionId={effectiveInstitutionId}
+                    onApply={t => { setInputText(t); inputRef.current?.focus() }}
+                    onError={m => { setHubToast(m); setTimeout(() => setHubToast(null), 4000) }} />
+                )}
                 {inputText.trim() ? (
                   <button onClick={handleSend}
                     style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s, transform 0.15s' }}
@@ -5858,7 +5919,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                       .update({ name: editForm.name })
                                       .eq('institution_id', effectiveInstitutionId)
                                       .eq('phone', normPhone)
-                                    console.log('[SYNC NAME] atualizado em whatsapp_contacts:', normPhone)
                                   }
                                   if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
                                     await DatabaseService.setConversationContactType(effectiveInstitutionId, rawJid(activeId), editForm.contact_type)
@@ -6211,17 +6271,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                               </div>
 
                               {/* Actions row */}
-                              <button onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
+                              <button onClick={() => navigate(`/leads?open=${activeConv.lead_id}`)}
                                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', background: 'transparent', border: '1px solid #d1fae5', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#0d9488', fontWeight: 600, transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
                                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
                                 <User style={{ width: 12, height: 12 }} />
-                                Ver no CRM
+                                Ver lead
                               </button>
                               <button onClick={() => setShowScheduleVisitModal(true)}
-                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', background: '#2563EB', border: '1px solid #2563EB', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#fff', fontWeight: 600, transition: 'all 0.15s' }}
-                                onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
-                                onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}>
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', background: '#00A896', border: '1px solid #00A896', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#fff', fontWeight: 600, transition: 'all 0.15s' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
+                                onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}>
                                 <Calendar style={{ width: 12, height: 12 }} />
                                 Agendar Visita
                               </button>
@@ -6287,6 +6347,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                       </div>
                     )}
                   </div>
+                )}
+
+                {activeConv.id && !activeConv.isGroup && (
+                  <WaSummarySection conversationId={activeConv.id} institutionId={effectiveInstitutionId}
+                    onError={m => { setHubToast(m); setTimeout(() => setHubToast(null), 4000) }} />
                 )}
 
                 {/* ── SEÇÃO: NOTAS INTERNAS ───────────────────────────────────── */}

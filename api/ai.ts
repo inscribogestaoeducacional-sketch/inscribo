@@ -104,6 +104,27 @@ function parseJsonLoose(raw: string): unknown {
   return JSON.parse(out.slice(0, good) + goodStack.reverse().join(''))
 }
 
+
+// ── IA de escrita do WhatsApp (barata): modelo pequeno, só o texto necessário ──
+const WA_FAST_MODEL = 'claude-haiku-4-5-20251001'
+const WA_DAILY_LIMIT: Record<string, number> = { improve: 80, summary: 40 }
+async function callClaudeFast(system: string, user: string, maxTokens: number): Promise<{ text: string; inTok: number; outTok: number }> {
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: WA_FAST_MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
+  })
+  if (!response.ok) throw new Error(`Anthropic ${response.status}`)
+  const data = await response.json() as { content?: Array<{ type: string; text?: string }>; usage?: { input_tokens?: number; output_tokens?: number } }
+  return { text: extractClaudeText(data).trim(), inTok: data.usage?.input_tokens ?? 0, outTok: data.usage?.output_tokens ?? 0 }
+}
+const WA_MODES: Record<string, string> = {
+  fix: 'Corrija ortografia, acentos e pontuação, sem mudar o jeito de falar nem o tamanho.',
+  warm: 'Reescreva de forma mais cordial, acolhedora e educada, mantendo o mesmo conteúdo.',
+  short: 'Reescreva de forma mais curta e direta, mantendo as informações essenciais.',
+  persuade: 'Reescreva de forma mais envolvente, mostrando valor e convidando para o próximo passo (por exemplo, uma visita), sem pressionar e sem exagero.',
+}
+
 async function callClaude(prompt: string, maxTokens = 1024): Promise<string> {
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -446,7 +467,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const caller = auth.caller
 
   try {
-    if (caller.institutionId) {
+    if (caller.institutionId && !action.startsWith('wa_')) {
       const quota = await consumeQuota(caller.institutionId)
       if (!quota.allowed) {
         const [y, m] = quota.monthYear.split('-').map(Number)
@@ -458,6 +479,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           quota: { used: quota.calls, limit: quota.limit, month: quota.monthYear },
         })
       }
+    }
+
+    // ── WHATSAPP: melhorar texto / resumir conversa (modelo pequeno, limite diário por pessoa) ──
+    if (action === 'wa_improve' || action === 'wa_summary') {
+      if (!caller.institutionId || !caller.userId) return res.status(401).json({ error: 'Login obrigatório.' })
+      const kind = action === 'wa_improve' ? 'improve' : 'summary'
+      const supa = getSupabaseAdmin()
+      const { data: okRow } = await supa.rpc('wa_ai_consume', { p_inst: caller.institutionId, p_user: caller.userId, p_kind: kind, p_limit: WA_DAILY_LIMIT[kind] })
+      if (!okRow) return res.status(429).json({ error: `Você usou o limite diário de ${WA_DAILY_LIMIT[kind]} usos da IA. Ele renova amanhã.` })
+
+      if (action === 'wa_improve') {
+        const { text, mode, instruction } = payload as { text?: string; mode?: string; instruction?: string }
+        const clean = String(text ?? '').trim()
+        if (clean.length < 3) return res.status(400).json({ error: 'Escreva a mensagem primeiro.' })
+        if (clean.length > 1500) return res.status(400).json({ error: 'A mensagem está longa demais para melhorar (máximo 1.500 caracteres).' })
+        const rule = mode === 'custom'
+          ? `Reescreva seguindo este pedido do atendente: "${String(instruction ?? '').slice(0, 200)}".`
+          : (WA_MODES[String(mode)] || WA_MODES.fix)
+        const system = 'Você ajuda atendentes de escolas particulares brasileiras a escrever mensagens de WhatsApp para famílias. Responda SOMENTE com o texto final da mensagem, em português do Brasil, sem aspas, sem explicações. Mantenha nomes, números, datas, horários, links e emojis do original; nunca invente preços, datas, vagas ou promessas.'
+        const out = await callClaudeFast(system, `${rule}\n\nMensagem:\n${clean}`, Math.min(700, Math.ceil(clean.length / 2) + 160))
+        await supa.rpc('wa_ai_add_tokens', { p_inst: caller.institutionId, p_user: caller.userId, p_kind: kind, p_in: out.inTok, p_out: out.outTok })
+        return res.json({ result: out.text.replace(/^["“]|["”]$/g, '') })
+      }
+
+      const { conversationId } = payload as { conversationId?: string }
+      if (!conversationId) return res.status(400).json({ error: 'conversationId é obrigatório' })
+      const { data: conv } = await supa.from('whatsapp_conversations')
+        .select('id, institution_id, last_message_at, ai_summary, ai_summary_at')
+        .eq('id', conversationId).maybeSingle()
+      if (!conv || conv.institution_id !== caller.institutionId) return res.status(403).json({ error: 'Conversa não encontrada.' })
+      if (conv.ai_summary && conv.ai_summary_at && (!conv.last_message_at || new Date(conv.ai_summary_at) >= new Date(conv.last_message_at))) {
+        return res.json({ result: conv.ai_summary, cached: true })
+      }
+      const { data: msgs } = await supa.from('whatsapp_messages')
+        .select('content, from_me, message_type, created_at')
+        .eq('conversation_id', conversationId).eq('institution_id', caller.institutionId)
+        .order('created_at', { ascending: false }).limit(30)
+      const lines = (msgs ?? []).reverse()
+        .filter(m => m.content && !['reaction'].includes(String(m.message_type)))
+        .map(m => `${m.from_me ? 'Escola' : 'Família'}: ${String(m.content).replace(/\s+/g, ' ').slice(0, 280)}`)
+      if (lines.length < 2) return res.json({ result: 'Ainda não há conversa suficiente para resumir.' })
+      const system = 'Você resume conversas de WhatsApp entre uma escola particular e uma família. Em português do Brasil, em até 4 frases curtas e sem markdown: o que a família quer (série, turno, valores, visita), o que já foi respondido e qual é o próximo passo. Não invente nada que não esteja na conversa.'
+      const out = await callClaudeFast(system, lines.join('\n').slice(0, 7000), 260)
+      await supa.rpc('wa_ai_add_tokens', { p_inst: caller.institutionId, p_user: caller.userId, p_kind: kind, p_in: out.inTok, p_out: out.outTok })
+      await supa.from('whatsapp_conversations').update({ ai_summary: out.text, ai_summary_at: new Date().toISOString() }).eq('id', conversationId)
+      return res.json({ result: out.text })
     }
 
     // ── INSIGHT SEMANAL ───────────────────────────────────────────────────────
