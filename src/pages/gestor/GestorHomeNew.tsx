@@ -363,6 +363,7 @@ export default function GestorHomeNew() {
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: BRAND.muted, marginTop: 10, alignItems: 'center' }}>
                 <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#2DCBA4', marginRight: 5 }} />Novatos <b style={{ color: BRAND.ink }}>{evo.reduce((s, e) => s + e.novos, 0)}</b></span>
                 {evo.some(e => e.re > 0) && <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: 'var(--aion-grad)', marginRight: 5 }} />Veteranos <b style={{ color: BRAND.ink }}>{evo.reduce((s, e) => s + e.re, 0)}</b></span>}
+                {!evo.some(e => e.re > 0) && <button type="button" onClick={() => go('/base-alunos')} style={{ border: 'none', background: '#F1F5F9', color: BRAND.muted, fontWeight: 700, fontSize: 11.5, cursor: 'pointer', fontFamily: 'inherit', borderRadius: 999, padding: '4px 10px' }}>Veteranos aparecem quando a base de alunos for importada →</button>}
                 <button type="button" onClick={() => go('/reports?tab=rematriculas')} style={{ marginLeft: 'auto', border: 'none', background: 'none', color: BRAND.primaryDark, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>ver rematrículas →</button>
               </div>
             </>}
