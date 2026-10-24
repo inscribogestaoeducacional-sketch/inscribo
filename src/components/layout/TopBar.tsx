@@ -73,6 +73,7 @@ export default function TopBar() {
   const goSearch = () => { const q = search.trim(); if (q) { navigate(`/contacts?search=${encodeURIComponent(q)}`); setSearch('') } }
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
+  const [searchOpen, setSearchOpen] = useState(false)
   const [teamUnread, setTeamUnread] = useState(0)
   useEffect(() => {
     const h = (e: Event) => setTeamUnread((e as CustomEvent<number>).detail || 0)
@@ -101,10 +102,31 @@ export default function TopBar() {
       height: 58, background: '#FFFFFF',
       borderBottom: '0.5px solid #D1FAE5',
       display: 'flex', alignItems: 'center',
-      padding: '0 16px', gap: 12, flexShrink: 0,
+      padding: '0 16px', gap: 12, flexShrink: 0, position: 'relative',
     }}>
+      {/* Celular: logo da Áion à esquerda e busca só como lupa (abre ao tocar) */}
+      {isMobile && (
+        <>
+          <img src="/aion-logo-icon.png" alt="Áion" style={{ width: 34, height: 34, borderRadius: 10, objectFit: 'contain', flexShrink: 0 }} />
+          <span style={{ fontSize: 16, fontWeight: 800, color: '#1A2B4A', letterSpacing: -0.3 }}>Áion <span style={{ color: '#05907B' }}>Edu</span></span>
+          <button type="button" aria-label="Buscar contato" className="aion-tap" onClick={() => setSearchOpen(true)}
+            style={{ marginLeft: 'auto', width: 38, height: 38, borderRadius: 12, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5" /><path d="m21 21-4.35-4.35" /></svg>
+          </button>
+          {searchOpen && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 5, background: '#fff', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', animation: 'aionSearchIn .22s ease-out' }}>
+              <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { goSearch(); setSearchOpen(false) } }}
+                placeholder="Buscar contato por nome ou telefone"
+                style={{ flex: 1, minWidth: 0, height: 40, padding: '0 16px', background: '#F0FDFB', border: '1.5px solid #05907B', borderRadius: 9999, fontSize: 14, color: '#1A2B4A', outline: 'none' }} />
+              <button type="button" onClick={() => { setSearchOpen(false); setSearch('') }} style={{ border: 'none', background: 'none', color: '#05907B', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+            </div>
+          )}
+        </>
+      )}
+
       {/* Search */}
-      <div style={{ flex: 1, maxWidth: isMobile ? 'none' : 440, position: 'relative' }}>
+      {!isMobile && <div style={{ flex: 1, maxWidth: isMobile ? 'none' : 440, position: 'relative' }}>
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -123,9 +145,9 @@ export default function TopBar() {
           fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
           <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
         </svg>
-      </div>
+      </div>}
 
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ marginLeft: isMobile ? 0 : 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Seletor de unidade — só aparece pro gestor de rede */}
         {!isMobile && <InstitutionSwitcher />}
 

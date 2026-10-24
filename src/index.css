@@ -318,10 +318,12 @@ main table tbody tr:last-child td { border-bottom: none; }
   html.aion-touch tr[class*="cursor-pointer"]:active { transform: scale(.985); filter: brightness(.97); transition: transform .1s ease, filter .1s ease }
 }
 .aion-ptr { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 8px); z-index: 1300; opacity: 0; transform: translate(-50%, -60px); pointer-events: none }
-.aion-ptr-ball { position: relative; width: 44px; height: 44px; border-radius: 50%; background: #fff; box-shadow: 0 8px 22px rgba(26,43,74,.22); display: flex; align-items: center; justify-content: center }
-.aion-ptr-ball img { width: 26px; height: 26px; border-radius: 8px; transition: transform .2s }
+.aion-ptr-ball { position: relative; width: 8px; height: 8px; border-radius: 50%; background: #05907B; box-shadow: 0 8px 22px rgba(26,43,74,.22); display: flex; align-items: center; justify-content: center }
+.aion-ptr-ball img { width: 28px; height: 28px; border-radius: 8px; opacity: 0 }
+.aion-ptr.spin .aion-ptr-ball { width: 44px; height: 44px; border-radius: 14px; background: #fff }
+.aion-ptr.spin .aion-ptr-ball img { opacity: 1 }
 .aion-ptr-ring { position: absolute; inset: 3px; border-radius: 50%; border: 2.5px solid #E2E8F0; border-top-color: #05907B; border-right-color: #2DCBA4 }
-.aion-ptr.ready .aion-ptr-ball img { transform: scale(1.12) }
+.aion-ptr.ready .aion-ptr-ball { box-shadow: 0 10px 26px rgba(5,144,123,.35) }
 .aion-ptr.spin .aion-ptr-ring { animation: aionPtrSpin .7s linear infinite }
 @keyframes aionPtrSpin { to { transform: rotate(360deg) } }
 @media (max-width: 767px) {
@@ -428,3 +430,12 @@ main table tbody tr:last-child td { border-bottom: none; }
   .aion-periods::-webkit-scrollbar { display: none }
   .aion-periods button { flex-shrink: 0; white-space: nowrap }
 }
+
+/* Celular deitado: some o cabeçalho e compacta o dock para sobrar tela */
+@media (max-width: 950px) and (max-height: 520px) and (pointer: coarse) {
+  .aion-topbar { display: none !important; }
+  .aion-dock { transform: scale(.82); transform-origin: bottom center; }
+  main { padding-bottom: 64px !important; }
+}
+
+@keyframes aionSearchIn { from { opacity: 0; transform: translateX(24px) } to { opacity: 1; transform: none } }

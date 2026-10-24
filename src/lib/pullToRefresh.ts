@@ -11,16 +11,14 @@ const TRIGGER = 72   // a partir daqui, soltar atualiza
 const PUBLIC = /^\/(login|reset-password|privacidade|termos|sobre|parceiros|parceria-meta|blog|novidades|satisfaction|proposta|raio-x|\w+-pesquisa)(\/|$)/
 
 let el: HTMLDivElement | null = null
-let ring: HTMLDivElement | null = null
 
 function ensureEl() {
   if (el) return
   el = document.createElement('div')
   el.className = 'aion-ptr'
   el.setAttribute('aria-hidden', 'true')
-  el.innerHTML = '<div class="aion-ptr-ball"><div class="aion-ptr-ring"></div><img src="/aion-logo-icon.png" alt="" /></div>'
+  el.innerHTML = '<div class="aion-ptr-ball"><img src="/aion-logo-icon.png" alt="" /></div>'
   document.body.appendChild(el)
-  ring = el.querySelector('.aion-ptr-ring')
 }
 
 function scrollParent(node: Element | null): HTMLElement | null {
@@ -52,14 +50,28 @@ export function installPullToRefresh() {
   let startY = 0, startX = 0, pull = 0, active = false, decided = false, busy = false
   let scroller: HTMLElement | null = null
 
+  // Começa um pontinho verde, vai abrindo até virar um quadradinho e, ao
+  // chegar no ponto de soltar, o quadradinho vira a logo da Áion.
   const set = (d: number, anim = false) => {
     ensureEl()
+    const p = Math.max(0, Math.min(1, d / TRIGGER))
     el!.style.transition = anim ? 'transform .3s cubic-bezier(.2,.9,.25,1), opacity .3s' : 'none'
-    el!.style.transform = `translate(-50%, ${d - 60}px)`
-    el!.style.opacity = String(Math.min(1, d / 40))
-    if (ring) ring.style.transform = `rotate(${d * 3.2}deg)`
+    el!.style.transform = `translate(-50%, ${d - 50}px)`
+    el!.style.opacity = d > 4 ? '1' : '0'
+    const ball = el!.querySelector('.aion-ptr-ball') as HTMLElement
     const im = el!.querySelector('img') as HTMLElement | null
-    if (im && !el!.classList.contains('spin')) im.style.transform = `scale(${0.45 + 0.55 * Math.min(1, d / TRIGGER)}) rotate(${d * 4}deg)`
+    if (!el!.classList.contains('spin')) {
+      const size = 8 + 36 * Math.min(1, p * 1.15)           // ponto → quadrado
+      const r = 50 - 36 * Math.min(1, p * 1.4)              // % do raio: círculo → cantos suaves
+      const mix = Math.pow(p, 2.2)                          // verde → branco
+      const c = (a: number, b: number) => Math.round(a + (b - a) * mix)
+      ball.style.transition = anim ? 'all .25s' : 'none'
+      ball.style.width = ball.style.height = size + 'px'
+      ball.style.borderRadius = r + '%'
+      ball.style.background = `rgb(${c(5, 255)},${c(144, 255)},${c(123, 255)})`
+      ball.style.transform = `rotate(${(1 - p) * -90}deg)`
+      if (im) { im.style.opacity = String(Math.max(0, (p - 0.55) / 0.45)); im.style.transform = `scale(${0.4 + 0.6 * p}) rotate(${(1 - p) * 90}deg)` }
+    }
     el!.classList.toggle('ready', d >= TRIGGER)
   }
 
@@ -92,9 +104,9 @@ export function installPullToRefresh() {
     active = false
     if (pull >= TRIGGER) {
       busy = true; vibrate()
-      set(TRIGGER, true); el!.classList.add('spin'); (el!.querySelector('img') as HTMLElement | null)?.style.removeProperty('transform')
+      set(TRIGGER, true); el!.classList.add('spin'); { const bl = el!.querySelector('.aion-ptr-ball') as HTMLElement; bl.style.cssText = ''; const im = el!.querySelector('img') as HTMLElement; im.style.cssText = '' }
       window.dispatchEvent(new CustomEvent('aion:refresh'))
-      setTimeout(() => { el!.classList.remove('spin'); set(0, true); busy = false }, 1100)
+      setTimeout(() => { el!.classList.remove('spin'); el!.style.opacity = '0'; set(0, true); busy = false }, 1100)
     } else if (pull > 0) set(0, true)
     pull = 0
   }

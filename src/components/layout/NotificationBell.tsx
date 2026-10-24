@@ -4,6 +4,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { supabase } from '../../lib/supabase'
 import SchoolUpdateModal, { SchoolUpdateContent } from '../updates/SchoolUpdateModal'
 import { useAlertNotifications, type AlertNotification } from '../../hooks/useAlertNotifications'
+import { BottomSheet } from '../mobile/MobileShell'
 import AlertNotificationList from './AlertNotificationList'
 
 // Atualizações (school_updates) chegam no sino como system_notifications
@@ -47,25 +48,16 @@ function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, na
   onOpenUpdate: (updateId: string) => void
 }) {
   const isMobile = window.innerWidth < 768
+  const wrapStyle: React.CSSProperties = isMobile ? { background: '#fff' } : {
+    position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 360, maxHeight: 480, borderRadius: 16,
+    overflowY: 'auto', background: '#fff', border: '1px solid #E2E8F0', boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 999,
+  }
   return (
-    <div style={{
-      position: isMobile ? 'fixed' : 'absolute',
-      top: isMobile ? 56 : 'calc(100% + 8px)',
-      left: isMobile ? 0 : 'auto',
-      right: isMobile ? 0 : 0,
-      width: isMobile ? '100%' : 360,
-      maxHeight: isMobile ? 'calc(100vh - 56px)' : 480,
-      borderRadius: isMobile ? '0 0 20px 20px' : 16,
-      overflowY: 'auto',
-      background: '#fff',
-      border: '1px solid #E2E8F0',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-      zIndex: 999,
-    }}>
+    <div style={wrapStyle}>
       {/* Header */}
-      <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F0FDFB' }}>
+      <div style={{ padding: isMobile ? '4px 18px 12px' : '12px 16px', borderBottom: '0.5px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isMobile ? '#fff' : '#F0FDFB' }}>
         <div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Notificações</span>
+          <span style={{ fontSize: isMobile ? 18 : 14, fontWeight: 800, color: '#1A2B4A' }}>Notificações</span>
           {unreadCount > 0 && (
             <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 999, background: '#F43F5E', color: 'white', fontSize: 10, fontWeight: 700 }}>
               {unreadCount} nova{unreadCount !== 1 ? 's' : ''}
@@ -86,8 +78,11 @@ function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, na
       <div>
         {notifications.length === 0 && alerts.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center' }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div>
-            <p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhuma notificação ainda</p>
+            <div style={{ width: 56, height: 56, borderRadius: 18, margin: '0 auto 12px', background: 'linear-gradient(135deg,#E6F7F5,#CFF5EA)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="26" height="26" fill="none" stroke="#05907B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+            </div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 2px' }}>Tudo em dia</p>
+            <p style={{ fontSize: 12.5, color: '#94A3B8', margin: 0 }}>Nenhuma notificação por enquanto</p>
           </div>
         ) : notifications.map(n => {
           const cfg = severityConfig[n.severity] || severityConfig.info
@@ -106,8 +101,9 @@ function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, na
                 }
               }}
               style={{
-                padding: '12px 16px', borderBottom: '0.5px solid #F1F5F9',
-                background: isUnread ? '#FAFFFE' : '#fff',
+                padding: '12px 16px', borderBottom: isMobile ? 'none' : '0.5px solid #F1F5F9',
+                ...(isMobile ? { margin: '0 14px 10px', borderRadius: 16, border: isUnread ? '1px solid #BFEDE4' : '1px solid #EEF2F7', boxShadow: '0 2px 10px rgba(26,43,74,.05)' } : {}),
+                background: isUnread ? '#F4FFFC' : '#fff',
                 cursor: n.action_url ? 'pointer' : 'default',
                 display: 'flex', gap: 10, alignItems: 'flex-start',
                 transition: 'background 0.15s',
@@ -115,12 +111,12 @@ function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, na
               onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
               onMouseLeave={e => (e.currentTarget.style.background = isUnread ? '#FAFFFE' : '#fff')}
             >
-              <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, background: cfg.bg, color: cfg.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, marginTop: 1 }}>
+              <div style={{ width: isMobile ? 38 : 30, height: isMobile ? 38 : 30, borderRadius: isMobile ? 12 : '50%', flexShrink: 0, background: cfg.bg, color: cfg.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, marginTop: 1 }}>
                 {cfg.icon}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                  <span style={{ fontSize: 13, fontWeight: isUnread ? 700 : 500, color: '#1A2B4A', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 13.5, fontWeight: isUnread ? 700 : 600, color: '#1A2B4A', flex: 1, minWidth: 0, ...(isMobile ? {} : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }) }}>
                     {n.title}
                   </span>
                   {isUnread && (
@@ -155,6 +151,7 @@ export default function NotificationBell({ institutionId, isSuperAdmin = false }
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
+      if (window.innerWidth < 768) return
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
@@ -184,7 +181,7 @@ export default function NotificationBell({ institutionId, isSuperAdmin = false }
         )}
       </button>
 
-      {open && (
+      {open && !(window.innerWidth < 768) && (
         <NotifDropdown
           notifications={notifications}
           unreadCount={unreadCount}
@@ -196,6 +193,22 @@ export default function NotificationBell({ institutionId, isSuperAdmin = false }
           alerts={alerts}
           onAlertRead={markAlertsRead}
         />
+      )}
+
+      {window.innerWidth < 768 && (
+        <BottomSheet open={open} onClose={() => setOpen(false)} label="Notificações" height="82dvh">
+          <NotifDropdown
+            notifications={notifications}
+            unreadCount={unreadCount}
+            markAsRead={markAsRead}
+            markAllRead={markAllRead}
+            navigate={navigate}
+            onClose={() => setOpen(false)}
+            onOpenUpdate={openUpdate}
+            alerts={alerts}
+            onAlertRead={markAlertsRead}
+          />
+        </BottomSheet>
       )}
 
       {viewUpdate && (
