@@ -1,0 +1,2 @@
+-- Aplicada via MCP (captacao_series_visitas_leads): funções capture_trigger_series,
+-- capture_trigger_visits e capture_trigger_leads usadas pela tela Captação.
