@@ -5,6 +5,7 @@ import { Network, ChevronDown } from 'lucide-react'
 import NotificationBell from './NotificationBell'
 import ConversationNotifier from './ConversationNotifier'
 import UserMenu from './UserMenu'
+import InstallAppCard from './InstallAppCard'
 
 // Seletor de instituição — troca a instituição ativa (ver
 // AuthContext.switchInstitution) sem precisar logout/login. Aparece pra
@@ -118,6 +119,7 @@ export default function TopBar() {
 
         {/* Menu do usuário: status Disponível / Ocupado / Ausente, perfil, configurações, sair */}
         <UserMenu isMobile={isMobile} />
+        {user && <InstallAppCard />}
       </div>
     </header>
   )

@@ -1,0 +1,23 @@
+{
+  "id": "/",
+  "name": "Áion Edu",
+  "short_name": "Áion Edu",
+  "description": "Matrículas, WhatsApp e atendimento da sua escola",
+  "lang": "pt-BR",
+  "start_url": "/entrar",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#05907B",
+  "theme_color": "#05907B",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "WhatsApp", "url": "/whatsapp", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Leads", "url": "/leads", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Visitas", "url": "/visits", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
