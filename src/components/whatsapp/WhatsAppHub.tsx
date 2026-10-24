@@ -1600,7 +1600,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     voiceRecRef.current = null
     audioCtxRef.current?.close().catch(() => {})
     audioCtxRef.current = null
-    audioStreamRef.current?.getTracks().forEach(t => t.stop())
+    // mantém o microfone liberado na sessão (evita pedir permissão de novo); fecha ao sair da tela
     if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null }
     if (waveformAnimRef.current) { cancelAnimationFrame(waveformAnimRef.current); waveformAnimRef.current = null }
     analyserRef.current = null
@@ -2621,7 +2621,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!el || !activeId) return
     const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     atBottomRef.current = fromBottom < 150
-    setShowScrollDown(fromBottom > 300)
+    setShowScrollDown(fromBottom > (isMobile ? 160 : 300))
     if (fromBottom < 150) setUnseenCount(0)
     if (el.scrollTop < 120) loadOlderMessages(activeId)
   }
@@ -5363,7 +5363,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               onClick={() => { setUnseenCount(0); scrollMessagesToBottom(true) }}
               title="Descer para a última mensagem"
               aria-label="Descer para a última mensagem"
-              style={{ position: 'absolute', right: GUTTER + 4, bottom: 14, width: 40, height: 40, borderRadius: '50%', background: '#FFFFFF', border: '1px solid #B2E8E2', boxShadow: '0 2px 10px rgba(0,0,0,0.12)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d9488', zIndex: 20 }}
+              className="aion-tap" style={{ position: 'absolute', right: GUTTER + 4, bottom: 14, width: isMobile ? 44 : 40, height: isMobile ? 44 : 40, borderRadius: '50%', background: '#FFFFFF', border: '1px solid #B2E8E2', boxShadow: '0 4px 16px rgba(5,144,123,0.28)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d9488', zIndex: 20 }}
             >
               <ChevronDown style={{ width: 20, height: 20 }} />
               {unseenCount > 0 && (

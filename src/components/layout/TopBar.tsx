@@ -107,8 +107,7 @@ export default function TopBar() {
       {/* Celular: logo da Áion à esquerda e busca só como lupa (abre ao tocar) */}
       {isMobile && (
         <>
-          <img src="/aion-logo-icon.png" alt="Áion" style={{ width: 34, height: 34, borderRadius: 10, objectFit: 'contain', flexShrink: 0 }} />
-          <span style={{ fontSize: 16, fontWeight: 800, color: '#1A2B4A', letterSpacing: -0.3 }}>Áion <span style={{ color: '#05907B' }}>Edu</span></span>
+          <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 34, width: 'auto', maxWidth: 150, objectFit: 'contain', flexShrink: 1, minWidth: 0 }} />
           <button type="button" aria-label="Buscar contato" className="aion-tap" onClick={() => setSearchOpen(true)}
             style={{ marginLeft: 'auto', width: 38, height: 38, borderRadius: 12, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5" /><path d="m21 21-4.35-4.35" /></svg>
