@@ -362,7 +362,7 @@ export default function CampanhaMatriculas() {
   )
 
   return (
-    <div style={{ padding: 24, maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}
+    <div style={{ padding: isMobile ? '12px 12px 24px' : 24, maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}
       onTouchStart={e => { swipeRef.current = (e.target as Element).closest('.aion-snap, .aion-hscroll, table, input, select, textarea') ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
       onTouchEnd={e => {
         const s0 = swipeRef.current; swipeRef.current = null

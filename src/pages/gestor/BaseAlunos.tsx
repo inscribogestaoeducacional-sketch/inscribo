@@ -11,6 +11,7 @@
 //   situação = matriculado | pré-matriculado (a escola escolhe se a pré conta)
 //   período  = pela data da matrícula (a que o sistema da escola informa; sem ela, a data em que o aluno
 //              apareceu pela primeira vez; pré-matrícula sem data fica fora de qualquer período)
+import { PillTabs, useTabSwipe } from '../../components/mobile/PillTabs'
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { GraduationCap, Loader2, Search, CheckCircle2, Undo2, Download, MessageCircle, ClipboardCheck, LayoutGrid, Users, Layers, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -245,13 +246,16 @@ export default function BaseAlunos() {
     URL.revokeObjectURL(a.href)
   }
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  const BA_TABS: [string, string, any][] = [['geral', 'Visão geral', LayoutGrid], ['alunos', 'Alunos', Users], ['serie', 'Por série', Layers], ['conferencia', 'Conferência', ClipboardCheck]]
+  const swipeProps = useTabSwipe(BA_TABS.map(t => t[0]), tab, id => setTab(id as Tab), isMobile)
   if (moduleOn === false) return <Navigate to="/" replace />
   const hasData = rows.length > 0
   const sourceText = (info?.sources ?? []).map(o => o === 'activesoft' ? 'Activesoft' : 'planilha enviada pela escola').join(' e ')
   const upd = info?.last_seen ? new Date(info.last_seen).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }) : ''
 
   return (
-    <div style={{ padding: '24px 28px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div {...swipeProps} style={{ padding: isMobile ? '12px 12px 24px' : '24px 28px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader icon={GraduationCap} title="Base de alunos"
         subtitle={<>Rematrícula {year}: alunos de {year - 1} cruzados com {year}{sourceText ? <> · dados da {sourceText}{upd ? `, atualizados em ${upd}` : ''}</> : null}</>}
         actions={
@@ -262,7 +266,8 @@ export default function BaseAlunos() {
           </label>
         } />
 
-      <div role="tablist" style={{ display: 'inline-flex', gap: 2, background: '#EEF3F2', borderRadius: 14, padding: 4, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
+      {isMobile && <PillTabs tabs={BA_TABS} value={tab} onChange={id => setTab(id as Tab)} />}
+      {!isMobile && <div role="tablist" style={{ display: 'inline-flex', gap: 2, background: '#EEF3F2', borderRadius: 14, padding: 4, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
         {([['geral', 'Visão geral', LayoutGrid], ['alunos', 'Alunos', Users], ['serie', 'Por série', Layers], ['conferencia', 'Conferência', ClipboardCheck]] as const).map(([id, label, Icon]) => {
           const active = tab === id
           return (
@@ -274,7 +279,7 @@ export default function BaseAlunos() {
             </button>
           )
         })}
-      </div>
+      </div>}
 
       {error && <div style={{ ...card, color: '#B91C1C', background: BRAND.dangerSoft, borderColor: '#FECACA', fontSize: 13 }}>{error}</div>}
 
