@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 const IS_SUPPORT_TAB = false
 // Avisos push: liga quando as tabelas e a função de envio estiverem no banco.
-export const PUSH_ENABLED = false
+export const PUSH_ENABLED = true
 export const PUSH_CHANGED_EVENT = 'aion:push-changed'
 
 // Avisos no celular/computador (Web Push). A chave pública VAPID pode ficar no
