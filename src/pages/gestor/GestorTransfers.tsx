@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   ArrowRightLeft, Plus, Copy, ExternalLink, Sparkles, Eye,
   AlertTriangle, CheckCircle, Clock, Users, X, ChevronRight,
-  Loader2, Check, MoreHorizontal, Pencil, Trash2, History, RotateCcw
+  Loader2, Check, MoreHorizontal, Pencil, Trash2, History, RotateCcw, Send
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -11,7 +11,8 @@ import { logAudit } from '../../hooks/useAudit'
 import AuditModal from '../../components/common/AuditModal'
 import { createNotification } from '../../lib/notifications'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
-import { aiFetch } from '../../lib/authHeaders'
+import { aiFetch, getAuthHeaders } from '../../lib/authHeaders'
+import { resolveSlotTemplate } from '../../lib/templateSlots'
 import SaidasReport from '../../components/campanha/SaidasReport'
 import SaidasActivesoft from '../../components/transfers/SaidasActivesoft'
 
@@ -345,6 +346,70 @@ export default function GestorTransfers() {
     setTransfers(prev => prev.map(x => x.id === t.id ? { ...x, survey_token: token } : x))
   }
 
+
+  // ── envio da pesquisa pelo WhatsApp ────────────────────────────────────
+  // Conversa com janela de 24h aberta: manda o link como mensagem normal.
+  // Janela fechada: manda o modelo aprovado da Meta, com o botão "Responder pesquisa".
+  const [sendFor, setSendFor] = useState<Transfer | null>(null)
+  const [sendPhone, setSendPhone] = useState('')
+  const [sending, setSending] = useState(false)
+  async function openSend(t: Transfer) {
+    setSendFor(t); setSendPhone('')
+    if (t.lead_id) {
+      const { data } = await supabase.from('leads').select('phone').eq('id', t.lead_id).maybeSingle()
+      if ((data as any)?.phone) setSendPhone(String((data as any).phone))
+    }
+  }
+  async function handleSendSurvey() {
+    const t = sendFor
+    if (!t) return
+    let digits = sendPhone.replace(/\D/g, '')
+    if (digits.length === 10 || digits.length === 11) digits = '55' + digits
+    if (digits.length < 12) { showToast('Digite o WhatsApp com DDD.'); return }
+    setSending(true)
+    try {
+      let token = t.survey_token
+      if (!token) {
+        token = crypto.randomUUID()
+        const { error } = await supabase.from('student_transfers').update({ survey_token: token }).eq('id', t.id)
+        if (error) throw new Error('Não foi possível gerar o link.')
+        setTransfers(prev => prev.map(x => x.id === t.id ? { ...x, survey_token: token } : x))
+      }
+      const url = `${window.location.origin}/survey/${token}`
+      const { data: conv } = await supabase.from('whatsapp_conversations').select('last_customer_message_at')
+        .eq('institution_id', institutionId).in('remote_jid', [`${digits}@s.whatsapp.net`, digits]).order('last_customer_message_at', { ascending: false }).limit(1).maybeSingle()
+      const last = (conv as any)?.last_customer_message_at
+      const open = !!last && Date.now() - new Date(last).getTime() < 24 * 3600000
+      const headers = await getAuthHeaders()
+      if (open) {
+        const r = await fetch('/api/whatsapp/send', { method: 'POST', headers, body: JSON.stringify({
+          institution_id: institutionId, to: digits, type: 'text',
+          message: `Olá! Gostaríamos muito de ouvir sua opinião sobre a saída de ${t.student_name} da nossa escola. Leva só 2 minutos: ${url}`,
+        }) })
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Falha ao enviar.')
+        showToast('Pesquisa enviada pelo WhatsApp.')
+      } else {
+        const name = await resolveSlotTemplate(institutionId, 'pesquisa_saida')
+        const { data: def } = await supabase.from('template_definitions').select('id').eq('name', name).or(`institution_id.eq.${institutionId},institution_id.is.null`).limit(1).maybeSingle()
+        const { data: st } = def ? await supabase.from('template_institution_status').select('status').eq('template_definition_id', (def as any).id).eq('institution_id', institutionId).maybeSingle() : { data: null }
+        if ((st as any)?.status !== 'approved') throw new Error('O modelo da pesquisa ainda não foi aprovado pela Meta para esta escola. Fale com a Áion.')
+        const r = await fetch('/api/whatsapp/send-template', { method: 'POST', headers, body: JSON.stringify({
+          institution_id: institutionId, to: digits, template_name: name, language: 'pt_BR',
+          components: [
+            { type: 'body', parameters: [{ type: 'text', text: user?.institution_name || 'nossa escola' }, { type: 'text', text: t.student_name }] },
+            { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: token }] },
+          ],
+        }) })
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Falha ao enviar o modelo.')
+        showToast('Janela fechada: enviamos o modelo da pesquisa.')
+      }
+      setSendFor(null)
+    } catch (e: any) {
+      showToast(e?.message || 'Não foi possível enviar.')
+    }
+    setSending(false)
+  }
+
   async function handleCopyLink(t: Transfer) {
     if (!t.survey_token) return
     const url = `${window.location.origin}/survey/${t.survey_token}`
@@ -454,6 +519,12 @@ export default function GestorTransfers() {
                       Copiar link
                     </button>
                   )}
+                  {!t.survey_responses && t.status !== 'cancelled' && (
+                    <button onClick={() => openSend(t)}
+                      style={{ flex: 1, padding: '8px', borderRadius: 8, background: '#D1FAE5', color: '#047857', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                      Enviar pelo WhatsApp
+                    </button>
+                  )}
                   {t.ai_diagnosis && (
                     <button onClick={() => setDiagnosisTransfer(t)}
                       style={{ flex: 1, padding: '8px', borderRadius: 8, background: '#D1FAE5', color: '#065F46', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
@@ -506,7 +577,25 @@ export default function GestorTransfers() {
             </div>
           </Modal>
         )}
-        {diagnosisTransfer && (
+  
+      {sendFor && (
+        <div onClick={() => !sending && setSendFor(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 18, padding: 20, width: '100%', maxWidth: 400 }}>
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#1A2B4A' }}>Enviar pesquisa de saída</p>
+            <p style={{ margin: '4px 0 14px', fontSize: 13, color: '#64748B' }}>Aluno: {sendFor.student_name}. Se a conversa estiver aberta, vai o link. Se estiver fechada, vai o modelo da Meta com o botão.</p>
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>WhatsApp da família</label>
+            <input value={sendPhone} onChange={e => setSendPhone(e.target.value)} inputMode="tel" placeholder="(83) 99999-9999"
+              style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, padding: '11px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 15 }} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button onClick={() => setSendFor(null)} disabled={sending} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff', fontWeight: 700, color: '#475569' }}>Cancelar</button>
+              <button onClick={handleSendSurvey} disabled={sending} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#047857', color: '#fff', fontWeight: 800, display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
+                {sending ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={15} />} Enviar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {diagnosisTransfer && (
           <Modal onClose={() => setDiagnosisTransfer(null)} title="Diagnóstico IA" wide>
             <DiagnosisView transfer={diagnosisTransfer} onUpdateStatus={handleUpdateStatus} onGenerateDiagnosis={handleGenerateDiagnosis} isGenerating={generatingId === diagnosisTransfer.id} isAdmin={isAdmin} />
           </Modal>
@@ -677,6 +766,9 @@ export default function GestorTransfers() {
                                   <ExternalLink size={12} /> Ver link
                                 </a>
                               </>
+                            )}
+                            {!t.survey_responses && (
+                              <ActionBtn onClick={() => openSend(t)} color="#047857" bg="#D1FAE5" icon={<Send size={12} />} label="Enviar WhatsApp" />
                             )}
                             {t.survey_responses && !t.ai_diagnosis && isAdmin && (
                               <button onClick={() => handleGenerateDiagnosis(t)} disabled={isGenerating}

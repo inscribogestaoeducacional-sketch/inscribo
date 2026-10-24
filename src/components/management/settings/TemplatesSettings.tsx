@@ -151,7 +151,7 @@ export default function TemplatesSettings({ institutionId }: { institutionId: st
       ) : (
         <>
           <Card>
-            <Title Icon={CalendarCheck} title="Mensagens de visita" help="O sistema envia sozinho quando a visita é agendada pela conversa do WhatsApp. Visitas marcadas pelo Kanban de leads não enviam estas mensagens. Você pode trocar o padrão pelo modelo da escola." />
+            <Title Icon={CalendarCheck} title="Mensagens automáticas" help="O sistema envia sozinho: as da visita (quando agendada pela conversa do WhatsApp; visitas marcadas pelo Kanban de leads não enviam) e a pesquisa de saída (botão em Transferências). Você pode trocar o padrão pelo modelo da escola." />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{TEMPLATE_SLOT_KEYS.map(slotCard)}</div>
             {slotMsg && <div style={{ marginTop: 10 }}>{slotMsg.ok ? <NowNote>{slotMsg.text}</NowNote> : <WarnNote>{slotMsg.text}</WarnNote>}</div>}
           </Card>

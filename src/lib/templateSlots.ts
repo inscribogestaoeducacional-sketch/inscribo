@@ -3,11 +3,12 @@
 // e com as mesmas variáveis. Sem escolha, valem os modelos padrão de sempre.
 import { supabase } from './supabase'
 
-export type TemplateSlot = 'confirmacao_visita' | 'lembrete_visita'
+export type TemplateSlot = 'confirmacao_visita' | 'lembrete_visita' | 'pesquisa_saida'
 
 export const TEMPLATE_SLOTS: Record<TemplateSlot, { label: string; desc: string; vars: number; varsHelp: string }> = {
   confirmacao_visita: { label: 'Confirmação de visita', desc: 'Enviada na hora em que a visita é agendada.', vars: 3, varsHelp: '{{1}} nome da escola, {{2}} data e {{3}} horário' },
   lembrete_visita:    { label: 'Lembrete de visita',    desc: 'Enviada de manhã, no dia da visita.',         vars: 2, varsHelp: '{{1}} nome da escola e {{2}} horário' },
+  pesquisa_saida:     { label: 'Pesquisa de saída',     desc: 'Enviada em Transferências quando a conversa está fechada. Leva o botão com o link da pesquisa.', vars: 2, varsHelp: '{{1}} nome da escola e {{2}} nome do aluno' },
 }
 export const TEMPLATE_SLOT_KEYS = Object.keys(TEMPLATE_SLOTS) as TemplateSlot[]
 
