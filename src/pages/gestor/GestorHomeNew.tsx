@@ -201,21 +201,18 @@ export default function GestorHomeNew() {
     const h = d.hist as { current: HistYear | null; years: HistYear[] } | null
     const cur = h?.current?.monthly ?? []
     const prevYear = h?.years?.length ? h.years[h.years.length - 1] : null
-    // Sem histórico aluno a aluno (escola que ainda não importou a base), usa as matrículas lançadas no CRM
-    if (!cur.length) {
-      const by = new Map<string, number>()
-      for (const e of (d.enr ?? []) as { enrollment_date: string }[]) {
-        const m = new Date(new Date(e.enrollment_date).getTime() - 3 * 3600e3).toISOString().slice(0, 7)
-        by.set(m, (by.get(m) ?? 0) + 1)
-      }
-      return [...by.keys()].sort().slice(-8).map(m => ({ m, novos: by.get(m) ?? 0, re: 0, prev: null as number | null }))
+    // Matrículas lançadas no CRM por mês (todas as escolas têm); o histórico aluno a aluno, quando existe, tem prioridade no mês
+    const by = new Map<string, number>()
+    for (const e of (d.enr ?? []) as { enrollment_date: string }[]) {
+      const m = new Date(new Date(e.enrollment_date).getTime() - 3 * 3600e3).toISOString().slice(0, 7)
+      by.set(m, (by.get(m) ?? 0) + 1)
     }
-    const keys = [...new Set(cur.map(x => x.m))].sort().slice(-8)
+    const keys = [...new Set([...cur.map(x => x.m), ...by.keys()])].sort().slice(-8)
     return keys.map(m => {
       const c = cur.find(x => x.m === m)
       const pm = `${Number(m.slice(0, 4)) - 1}-${m.slice(5, 7)}`
       const p = prevYear?.monthly.find(x => x.m === pm)
-      return { m, novos: c?.novos ?? 0, re: c?.rematriculas ?? 0, prev: p ? p.novos + p.rematriculas : null }
+      return { m, novos: c ? c.novos : (by.get(m) ?? 0), re: c?.rematriculas ?? 0, prev: p ? p.novos + p.rematriculas : null }
     })
   }, [d.hist, d.enr])
   const evoMax = Math.max(5, ...evo.map(e => Math.max(e.novos + e.re, e.prev ?? 0)))
