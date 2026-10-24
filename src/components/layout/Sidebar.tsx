@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
-import { X, SlidersHorizontal, LayoutGrid } from 'lucide-react'
+import { X, SlidersHorizontal, LayoutGrid, MessageSquare } from 'lucide-react'
 import {
   House, Funnel, AddressBook, WhatsappLogo, CalendarCheck, Megaphone, Storefront, PaperPlaneTilt, Flag,
   GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle,
@@ -94,6 +94,12 @@ export default function Sidebar() {
     supabase.from('users').select('dock_shortcuts').eq('id', user.id).maybeSingle().then(({ data }) => setMyDock(((data as any)?.dock_shortcuts as string[] | null) ?? null))
   }, [user?.id])
   const unreadChats = useUnreadChats(user?.institution_id, user?.id, isMobile && isModuleEnabled("whatsapp"), location.pathname)
+  const [teamUnread, setTeamUnread] = useState(0)
+  useEffect(() => {
+    const h = (e: Event) => setTeamUnread((e as CustomEvent<number>).detail || 0)
+    window.addEventListener('aion:team-unread', h)
+    return () => window.removeEventListener('aion:team-unread', h)
+  }, [])
 
   useEffect(() => {
     const handler = () => {
@@ -177,6 +183,7 @@ export default function Sidebar() {
             <SlidersHorizontal size={14} /> Editar barra</button>}
           footer={<div style={{ background: '#fff', borderRadius: 20, border: '1px solid #E3E8F0', overflow: 'hidden', marginTop: 4 }}>
             <SheetRow Icon={SlidersHorizontal} label="Personalizar a barra" hint="Escolha os atalhos da barra de baixo" onPress={() => { setMobileOpen(false); setDockEdit(true) }} />
+            {user?.institution_id && <SheetRow Icon={MessageSquare} label="Chat da equipe" hint="Converse com os colegas da escola" right={teamUnread > 0 ? <span style={{ minWidth: 22, height: 22, padding: '0 6px', borderRadius: 99, background: '#F43F5E', color: '#fff', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{teamUnread}</span> : undefined} onPress={() => { setMobileOpen(false); window.dispatchEvent(new Event('aion:open-team-chat')) }} />}
             <SheetRow Icon={UserCircle} label="Meu perfil" hint="Dados, senha e status" onPress={() => go('/profile')} />
           </div>} />
         <DockEditor open={dockEdit} onClose={() => setDockEdit(false)} value={picked.map(e => e.path)}

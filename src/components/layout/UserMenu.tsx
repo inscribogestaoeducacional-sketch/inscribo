@@ -8,6 +8,7 @@ import { Building2, LogOut, Settings, UserCog, Check, ChevronDown, Loader2 } fro
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
+import { BottomSheet } from '../mobile/MobileShell'
 
 export type Presence = 'disponivel' | 'ocupado' | 'ausente'
 export const PRESENCE: Record<Presence, { label: string; color: string; desc: string }> = {
@@ -83,7 +84,7 @@ export default function UserMenu({ isMobile }: { isMobile?: boolean }) {
         {!isMobile && <ChevronDown size={13} color="#94A3B8" style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none' }} />}
       </button>
 
-      {open && <>
+      {open && !isMobile && <>
         <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
         <div role="menu" className="ld-in" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 310, maxWidth: 'calc(100vw - 24px)', background: '#fff', borderRadius: 18, border: `1px solid ${BRAND.line}`, boxShadow: '0 18px 44px -16px rgba(26,43,74,.38)', zIndex: 50, overflow: 'hidden' }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '16px', background: GRAD, color: '#fff' }}>
@@ -134,6 +135,58 @@ export default function UserMenu({ isMobile }: { isMobile?: boolean }) {
           </div>
         </div>
       </>}
+      {isMobile && (
+        <BottomSheet open={open} onClose={() => setOpen(false)} label="Menu do usuário">
+          <div role="menu" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', background: '#fff', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '16px', background: GRAD, color: '#fff' }}>
+            <Avatar name={user.full_name || ''} size={46} color={cur.color} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.full_name}</div>
+              <div style={{ fontSize: 12, opacity: .88, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
+              <div style={{ fontSize: 11.5, opacity: .88 }}>{roleLabel}{user.institution_name ? ` · ${user.institution_name}` : ''}</div>
+            </div>
+          </div>
+
+          <div style={{ padding: '8px 8px 4px' }}>
+            <div style={title}>Meu status {saving && <Loader2 size={11} className="animate-spin" style={{ verticalAlign: -1, marginLeft: 4 }} />}</div>
+            {(Object.keys(PRESENCE) as Presence[]).map(p => (
+              <button key={p} role="menuitemradio" aria-checked={presence === p} onClick={() => change(p)}
+                style={{ ...rowCss, alignItems: 'flex-start', background: presence === p ? BRAND.softer : 'transparent', transition: 'background .15s' }}
+                onMouseEnter={e => { if (presence !== p) e.currentTarget.style.background = '#F8FAFC' }}
+                onMouseLeave={e => { if (presence !== p) e.currentTarget.style.background = 'transparent' }}>
+                <span style={{ width: 11, height: 11, borderRadius: '50%', background: PRESENCE[p].color, flexShrink: 0, marginTop: 4, boxShadow: presence === p ? `0 0 0 4px ${PRESENCE[p].color}26` : 'none', transition: 'box-shadow .2s' }} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, color: BRAND.ink }}>{PRESENCE[p].label}</span>
+                  <span style={{ display: 'block', fontSize: 11.5, color: BRAND.muted, lineHeight: 1.35, fontWeight: 500 }}>{PRESENCE[p].desc}</span>
+                </span>
+                {presence === p && <Check size={15} color={BRAND.primaryDark} style={{ marginTop: 3 }} />}
+              </button>
+            ))}
+            <div style={{ fontSize: 11.5, color: BRAND.muted, padding: '2px 8px 8px', lineHeight: 1.4 }}>Conversas que já são suas continuam com você. Vale para a escola em que você está agora.</div>
+            {failed && <div style={{ margin: '0 8px 8px', fontSize: 12, color: '#B91C1C', fontWeight: 700 }}>Não consegui salvar. Tente de novo.</div>}
+          </div>
+
+          {showInst && (
+            <div style={{ padding: '6px 8px 6px', borderTop: `1px solid ${BRAND.line}`, maxHeight: 200, overflowY: 'auto' }}>
+              <div style={title}>Minhas instituições {switching && <Loader2 size={11} className="animate-spin" style={{ verticalAlign: -1, marginLeft: 4 }} />}</div>
+              {institutions!.map(inst => (
+                <button key={inst.id} onClick={() => pickInst(inst.id)} style={{ ...rowCss, background: inst.id === user.institution_id ? BRAND.softer : 'transparent', color: inst.id === user.institution_id ? BRAND.primaryDark : BRAND.ink, fontWeight: inst.id === user.institution_id ? 800 : 600 }}>
+                  <Building2 size={16} color={inst.id === user.institution_id ? BRAND.primaryDark : BRAND.muted} />
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inst.name}</span>
+                  {inst.id === user.institution_id && <Check size={15} color={BRAND.primaryDark} />}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ padding: '4px 8px 8px', borderTop: `1px solid ${BRAND.line}` }}>
+            <Link to="/profile" onClick={() => setOpen(false)} style={rowCss}><UserCog size={16} color={BRAND.muted} />Editar meu perfil</Link>
+            {canSettings && <Link to="/settings" onClick={() => setOpen(false)} style={rowCss}><Settings size={16} color={BRAND.muted} />Configurações</Link>}
+            <button onClick={async () => { try { await signOut() } catch { /* */ } }} style={{ ...rowCss, color: '#E11D48' }}><LogOut size={16} />Sair</button>
+          </div>
+          </div>
+        </BottomSheet>
+      )}
     </div>
   )
 }

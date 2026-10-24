@@ -6,7 +6,8 @@
 // área da escola (App.tsx), igual GestorUpdatePopup — fica visível em
 // qualquer tela da escola, não só dentro do WhatsAppHub (que antes tinha um
 // drawer próprio, removido em favor deste widget único).
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { BottomSheet } from '../mobile/MobileShell'
 import { useAuth } from '../../contexts/AuthContext'
 import { useInternalChatUnread } from '../../hooks/useInternalChatUnread'
 import InternalChat from './InternalChat'
@@ -21,7 +22,26 @@ export default function InternalChatWidget() {
   const [open, setOpen] = useState(false)
   const unreadCount = useInternalChatUnread(institutionId, user?.id || null)
 
+  useEffect(() => { window.dispatchEvent(new CustomEvent('aion:team-unread', { detail: unreadCount })) }, [unreadCount])
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    const o = () => setOpen(true)
+    window.addEventListener('resize', h); window.addEventListener('aion:open-team-chat', o)
+    return () => { window.removeEventListener('resize', h); window.removeEventListener('aion:open-team-chat', o) }
+  }, [])
+
   if (!institutionId) return null
+
+  // Celular: sem bolinha flutuante (cobria o WhatsApp e o menu). O chat da equipe abre
+  // em tela cheia pelo item "Chat da equipe" do menu.
+  if (isMobile) {
+    return (
+      <BottomSheet open={open} onClose={() => setOpen(false)} label="Chat da equipe" height="calc(100dvh - 24px)">
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}><InternalChat compact onClose={() => setOpen(false)} /></div>
+      </BottomSheet>
+    )
+  }
 
   return (
     <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 9998, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
