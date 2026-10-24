@@ -3060,23 +3060,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   // Abertas sem movimento há 3 dias+ (o atendimento acabou, só ninguém marcou como concluído)
   const staleOpenConvs = conversations.filter(c => !c.isGroup && c.status === 'open' && Date.now() - c.lastTime.getTime() > 72 * 3600000)
-  const [concludingStale, setConcludingStale] = useState(false)
-  const concludeStale = async () => {
-    if (!effectiveInstitutionId || !staleOpenConvs.length) return
-    if (!window.confirm(`Concluir ${staleOpenConvs.length} conversas sem movimento há mais de 3 dias? Se o cliente escrever de novo, ela reabre sozinha.`)) return
-    setConcludingStale(true)
-    const ids = staleOpenConvs.map(c => c.id)
-    const rjids = staleOpenConvs.map(c => rawJid(c.id))
-    const payload = { status: 'closed', bot_active: false, unread_count: 0, closed_at: new Date().toISOString() }
-    const [a, b] = await Promise.all([
-      supabase.from('whatsapp_conversations').update(payload).eq('institution_id', effectiveInstitutionId).in('remote_jid', rjids).eq('status', 'open').select('id'),
-      supabase.from('whatsapp_conversations').update(payload).eq('institution_id', effectiveInstitutionId).in('remote_jid', rjids.map(j => `${j}@s.whatsapp.net`)).eq('status', 'open').select('id'),
-    ])
-    const done = (a.data?.length ?? 0) + (b.data?.length ?? 0)
-    setConversations(prev => prev.map(c => ids.includes(c.id) ? { ...c, status: 'closed' as ConvStatus, unreadCount: 0, bot_active: false } : c))
-    setConcludingStale(false)
-    if (done === 0) setSendError('Não foi possível concluir — só quem vê todas as conversas pode fazer isso.')
-  }
+  // Modo "revisar": a lista mostra só as abertas paradas, para o gestor abrir e concluir uma por uma
+  const [reviewStale, setReviewStale] = useState(false)
+  useEffect(() => { if (reviewStale && staleOpenConvs.length === 0) setReviewStale(false) }, [reviewStale, staleOpenConvs.length])
 
   // Fila de "aguardando": sem atendente e status waiting — visível a todos os
   // atendentes da instituição (RLS já garante isso; aqui é só organização visual).
@@ -3134,7 +3120,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const filteredOtherConvs: Conversation[] = []
   const filteredUnclassifiedConvs: Conversation[] = []
   let hiddenByFilterCount = 0
+  const staleIds = new Set(staleOpenConvs.map(x => x.id))
   for (const c of conversations) {
+    if (reviewStale) {
+      if (!staleIds.has(c.id)) continue
+      ;(c.assigned_user_id === user?.id ? filteredMyConvs : filteredOtherConvs).push(c)
+      continue
+    }
     if (!matchesSearchAndRead(c)) continue
     if (isUnclassified(c)) { filteredUnclassifiedConvs.push(c); continue }
     if (isQueued(c)) { filteredWaitingConvs.push(c); continue }
@@ -5017,13 +5009,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Conversation list */}
           <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
-            {canSeeAll && staleOpenConvs.length > 0 && statusFilter !== 'concluido' && (
-              <div style={{ margin: `8px ${GUTTER}px`, padding: '10px 12px', borderRadius: 12, background: '#FFFBEB', border: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: 10 }}>
+            {canSeeAll && staleOpenConvs.length > 0 && (reviewStale || statusFilter !== 'concluido') && (
+              <div style={{ margin: `8px ${GUTTER}px`, padding: '10px 12px', borderRadius: 12, background: reviewStale ? '#ECFDF5' : '#FFFBEB', border: `1px solid ${reviewStale ? '#A7F3D0' : '#FCD34D'}`, display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: '#92400E' }}>{staleOpenConvs.length} conversas abertas sem movimento há 3 dias+</p>
-                  <p style={{ margin: '1px 0 0', fontSize: 11, color: '#B45309' }}>Provavelmente já acabaram e ninguém marcou como concluída.</p>
+                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: reviewStale ? '#065F46' : '#92400E' }}>
+                    {reviewStale ? `Revisando ${staleOpenConvs.length} conversa${staleOpenConvs.length > 1 ? 's' : ''} parada${staleOpenConvs.length > 1 ? 's' : ''}` : `${staleOpenConvs.length} conversas abertas sem movimento há 3 dias+`}
+                  </p>
+                  <p style={{ margin: '1px 0 0', fontSize: 11, color: reviewStale ? '#047857' : '#B45309' }}>
+                    {reviewStale ? 'Abra cada uma e toque em Concluir se o atendimento já acabou.' : 'Veja uma por uma e conclua as que já acabaram.'}
+                  </p>
                 </div>
-                <button onClick={concludeStale} disabled={concludingStale} className="aion-tap" style={{ flexShrink: 0, border: 'none', borderRadius: 9, background: '#F59E0B', color: '#fff', fontWeight: 800, fontSize: 12, padding: '8px 12px', cursor: 'pointer', opacity: concludingStale ? .6 : 1 }}>{concludingStale ? 'Concluindo…' : 'Concluir todas'}</button>
+                <button onClick={() => setReviewStale(v => !v)} className="aion-tap" style={{ flexShrink: 0, border: 'none', borderRadius: 9, background: reviewStale ? '#fff' : '#F59E0B', color: reviewStale ? '#047857' : '#fff', fontWeight: 800, fontSize: 12, padding: '8px 12px', cursor: 'pointer', boxShadow: reviewStale ? 'inset 0 0 0 1px #A7F3D0' : 'none' }}>{reviewStale ? 'Sair' : 'Revisar'}</button>
               </div>
             )}
             {listIsEmpty ? (
