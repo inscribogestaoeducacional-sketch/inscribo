@@ -104,10 +104,10 @@ export default function AdminUpdates() {
     <SuperAdminLayout>
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 24px' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+        <div className="aion-band" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Central de Atualizações</h1>
-            <p style={{ fontSize: 13, color: '#64748B', marginTop: 4 }}>Publique atualizações visíveis para todas as escolas ativas.</p>
+            <h1 className="aion-band-title">Central de Atualizações</h1>
+            <p className="aion-band-sub">Publique atualizações visíveis para todas as escolas ativas.</p>
           </div>
           <button
             onClick={() => { setForm(EMPTY_FORM); setError(''); setModal(true) }}

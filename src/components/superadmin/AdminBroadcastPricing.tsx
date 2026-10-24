@@ -43,12 +43,12 @@ export default function AdminBroadcastPricing() {
   return (
     <SuperAdminLayout>
     <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="aion-band flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center"><Send className="w-5 h-5 text-sky-600" /></div>
+          <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(255,255,255,.16)', border: '1px solid rgba(255,255,255,.28)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Send className="w-5 h-5" style={{ color: '#fff' }} /></div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Tabela de preço — Transmissões</h1>
-            <p className="text-sm text-gray-500">Preço por mensagem das campanhas das escolas e o resultado do módulo</p>
+            <h1 className="aion-band-title">Tabela de preço — Transmissões</h1>
+            <p className="aion-band-sub">Preço por mensagem das campanhas das escolas e o resultado do módulo</p>
           </div>
         </div>
       </div>

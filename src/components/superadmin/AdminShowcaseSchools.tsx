@@ -168,10 +168,10 @@ export default function AdminShowcaseSchools() {
       <div className="p-8 space-y-6">
         {toast && <ToastBar toast={toast} onClose={() => setToast(null)} />}
 
-        <div className="flex items-center justify-between">
+        <div className="aion-band flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Escolas em Destaque</h1>
-            <p className="text-sm text-gray-500 mt-1">Logos e mapa de presença exibidos como prova social na landing page pública</p>
+            <h1 className="aion-band-title">Escolas em Destaque</h1>
+            <p className="aion-band-sub">Logos e mapa de presença exibidos como prova social na landing page pública</p>
           </div>
           <button onClick={openNew}
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm hover:from-cyan-600 hover:to-blue-700">

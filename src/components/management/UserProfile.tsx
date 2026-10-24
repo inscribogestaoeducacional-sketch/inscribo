@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { User, Lock, Save, Eye, EyeOff } from 'lucide-react'
+import PageHeader from '../ui/PageHeader'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 
@@ -94,16 +95,8 @@ export default function UserProfile() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 12, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <User size={18} color="#64748B" />
-        </div>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Meu Perfil</h1>
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: '2px 0 0' }}>Gerencie suas informações pessoais e configurações</p>
-        </div>
-      </div>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#F5FAF9' }}>
+      <PageHeader icon={User} title="Meu Perfil" subtitle="Gerencie suas informações pessoais e configurações" />
 
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
         {/* Tabs */}

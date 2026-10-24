@@ -249,12 +249,12 @@ export default function CaptacaoInteligente() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#F5FAF9' }}>
 
       {toast && (
         <div style={{
           position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-          background: '#1e2d6b', color: 'white', fontSize: 13, fontWeight: 500,
+          background: '#1A2B4A', color: 'white', fontSize: 13, fontWeight: 500,
           padding: '12px 18px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
@@ -486,7 +486,7 @@ function Modal({ children, onClose, title, wide }: { children: React.ReactNode; 
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: wide ? 680 : 500, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>{title}</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>{title}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}><X size={18} /></button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>{children}</div>

@@ -18,9 +18,9 @@ interface Props {
   onError: (msg: string) => void
 }
 
-const PRIMARY_SWATCHES = ['#05907B', '#3B82F6', '#1e2d6b', '#7C3AED', '#DB2777', '#DC2626', '#F59E0B', '#059669']
+const PRIMARY_SWATCHES = ['#05907B', '#3B82F6', '#1A2B4A', '#7C3AED', '#DB2777', '#DC2626', '#F59E0B', '#059669']
 const BG_SWATCHES = ['#FFFFFF', '#F8FAFC', '#FFF7ED', '#F0FDFB', '#EFF6FF', '#F8F5EE', '#0F172A', '#111827']
-const TEXT_SWATCHES = ['#111827', '#1E293B', '#1e2d6b', '#FFFFFF', '#F8FAFC']
+const TEXT_SWATCHES = ['#111827', '#1E293B', '#1A2B4A', '#FFFFFF', '#F8FAFC']
 // Ícones do mesmo desenho (os caracteres ↘ ↗ saíam menores que ↓ → ↑).
 const ANGLES: { value: 0 | 45 | 90 | 135 | 180; label: React.ReactNode; aria: string }[] = [
   { value: 180, label: <ArrowDown size={16} />, aria: 'De cima para baixo' },
@@ -92,7 +92,7 @@ function ColorField({ label, value, swatches, onChange, hint }: { label: string;
             <button key={s} type="button" onClick={() => onChange(s)} title={s} aria-label={`Usar ${s}`}
               style={{
                 width: 26, height: 26, borderRadius: 7, background: s, cursor: 'pointer', padding: 0,
-                border: s.toUpperCase() === value.toUpperCase() ? '2px solid #1e2d6b' : '1px solid #CBD5E1',
+                border: s.toUpperCase() === value.toUpperCase() ? '2px solid #1A2B4A' : '1px solid #CBD5E1',
                 boxShadow: s.toUpperCase() === value.toUpperCase() ? '0 0 0 2px #fff inset' : 'none',
               }} />
           ))}

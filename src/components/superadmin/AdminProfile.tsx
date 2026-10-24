@@ -99,15 +99,15 @@ export default function AdminProfile() {
         )}
 
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Meu Perfil</h1>
-          <p className="text-sm text-gray-500 mt-1">Gerencie suas informações de conta</p>
+        <div className="aion-band">
+          <h1 className="aion-band-title">Meu Perfil</h1>
+          <p className="aion-band-sub">Gerencie suas informações de conta</p>
         </div>
 
         {/* Avatar + Stats */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-center gap-5">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 shadow-sm">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 shadow-sm">
               {initials}
             </div>
             <div className="flex-1 min-w-0">

@@ -105,10 +105,10 @@ export default function AdminWhatsApp() {
     <SuperAdminLayout>
       <div className="p-8 space-y-6">
 
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="aion-band flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">WhatsApp</h1>
-            <p className="text-sm text-gray-500 mt-1">Uso por escola — mês atual</p>
+            <h1 className="aion-band-title">WhatsApp</h1>
+            <p className="aion-band-sub">Uso por escola — mês atual</p>
           </div>
           <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
             <RefreshCw className="w-4 h-4" />

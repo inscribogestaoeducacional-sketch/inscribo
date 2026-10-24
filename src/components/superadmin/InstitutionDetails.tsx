@@ -1606,14 +1606,14 @@ export default function InstitutionDetails() {
         )}
 
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="aion-band flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
             <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-xl border border-gray-200">
               <ArrowLeft className="w-4 h-4 text-gray-500" />
             </button>
             <div>
               <div className="flex items-center gap-3 mb-1 flex-wrap">
-                <h1 className="text-2xl font-bold text-gray-900">{institution.name}</h1>
+                <h1 className="aion-band-title">{institution.name}</h1>
                 <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: st.c, background: st.bg }}>{st.l}</span>
               </div>
               <p className="text-sm text-gray-400 flex items-center gap-2 flex-wrap">

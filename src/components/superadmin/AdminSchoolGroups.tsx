@@ -83,10 +83,10 @@ function SchoolGroupList() {
     <SuperAdminLayout>
       <div className="p-8 space-y-6">
         {toast && <ToastBar toast={toast} onClose={() => setToast(null)} />}
-        <div className="flex items-center justify-between">
+        <div className="aion-band flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Grupos Escolares</h1>
-            <p className="text-sm text-gray-500 mt-1">Redes de unidades com WhatsApp compartilhado opcional</p>
+            <h1 className="aion-band-title">Grupos Escolares</h1>
+            <p className="aion-band-sub">Redes de unidades com WhatsApp compartilhado opcional</p>
           </div>
           <button onClick={() => setShowNew(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm hover:from-cyan-600 hover:to-blue-700">
@@ -290,13 +290,13 @@ function SchoolGroupDetail({ id }: { id: string }) {
       <div className="p-8 space-y-6">
         {toast && <ToastBar toast={toast} onClose={() => setToast(null)} />}
 
-        <div className="flex items-center gap-3">
+        <div className="aion-band flex items-center gap-3">
           <button onClick={() => navigate('/super-admin/school-groups')} className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50">
             <ArrowLeft className="w-4 h-4 text-gray-500" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">{memberInstitutions.length} unidade{memberInstitutions.length !== 1 ? 's' : ''} vinculada{memberInstitutions.length !== 1 ? 's' : ''}</p>
+            <h1 className="aion-band-title">{group.name}</h1>
+            <p className="aion-band-sub">{memberInstitutions.length} unidade{memberInstitutions.length !== 1 ? 's' : ''} vinculada{memberInstitutions.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
 

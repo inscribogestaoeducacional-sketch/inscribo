@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react'
+import { Bell } from 'lucide-react'
+import PageHeader from '../../components/ui/PageHeader'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 
@@ -70,23 +72,9 @@ export default function GestorUpdates() {
   const unread = updates.filter(u => !u.read).length
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Central de Atualizações</h1>
-            {unread > 0 && (
-              <span style={{ padding: '3px 10px', background: '#F43F5E', color: '#fff', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
-                {unread} nova{unread !== 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>
-            Novidades e comunicados da Áion Edu para sua escola.
-          </p>
-        </div>
-      </div>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#F5FAF9' }}>
+      <PageHeader icon={Bell} title="Central de Atualizações" subtitle="Novidades e comunicados da Áion Edu para sua escola."
+        actions={unread > 0 ? <span style={{ padding: '4px 12px', background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.35)', color: '#fff', borderRadius: 999, fontSize: 12, fontWeight: 800 }}>{unread} nova{unread !== 1 ? 's' : ''}</span> : undefined} />
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8' }}>Carregando...</div>

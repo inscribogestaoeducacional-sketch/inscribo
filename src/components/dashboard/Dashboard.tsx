@@ -348,7 +348,7 @@ export default function Dashboard() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#1e2d6b]">
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#1A2B4A]">
             Olá, {user?.full_name?.split(' ')[0] || 'Usuário'}!
           </h1>
           <p className="text-gray-500 mt-1">Vamos matricular hoje!</p>
@@ -370,7 +370,7 @@ export default function Dashboard() {
       {stageRows.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-5 sm:mb-6">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h3 className="text-base font-bold text-[#1e2d6b]">Leads por etapa</h3>
+            <h3 className="text-base font-bold text-[#1A2B4A]">Leads por etapa</h3>
             <span className="text-xs text-gray-400">{stageRows.reduce((a, r) => a + r.count, 0)} leads</span>
           </div>
           <div className="px-6 py-4 space-y-2.5">
@@ -384,7 +384,7 @@ export default function Dashboard() {
                   <div className="flex-1 bg-gray-100 rounded-full h-2">
                     <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${r.count ? Math.max(3, (r.count / max) * 100) : 0}%`, background: r.extra ? '#5CCBBF' : '#05907B' }} />
                   </div>
-                  <span className="w-10 text-right text-sm font-bold text-[#1e2d6b]">{r.count}</span>
+                  <span className="w-10 text-right text-sm font-bold text-[#1A2B4A]">{r.count}</span>
                 </div>
               ))
             })()}
@@ -398,7 +398,7 @@ export default function Dashboard() {
         {/* Funil de Conversão */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           {/* Card header */}
-          <div className="flex items-center justify-between px-6 py-4 bg-[#1e2d6b]">
+          <div className="flex items-center justify-between px-6 py-4 bg-[#1A2B4A]">
             <div className="flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-[#2DCBA4]" />
               <h3 className="text-base font-bold text-white">Funil de Conversão</h3>
@@ -418,7 +418,7 @@ export default function Dashboard() {
                       <span className="text-sm font-medium text-gray-700">{row.etapa}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-[#1e2d6b]">{row.valor}</span>
+                      <span className="text-sm font-bold text-[#1A2B4A]">{row.valor}</span>
                       <span className="text-xs font-semibold bg-[#2DCBA4]/10 text-[#0d9488] px-2 py-0.5 rounded-full">
                         {pct}%
                       </span>
@@ -439,7 +439,7 @@ export default function Dashboard() {
         {/* Ações Rápidas */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
-            <h3 className="text-base font-bold text-[#1e2d6b]">Ações Rápidas</h3>
+            <h3 className="text-base font-bold text-[#1A2B4A]">Ações Rápidas</h3>
           </div>
 
           <div className="p-4 grid grid-cols-2 gap-3">

@@ -6,7 +6,7 @@ import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase'
 import { type BlockType, BLOCK_TYPES, blockSummary } from '../../lib/vitrine'
 
-const TEAL = '#05907B', TEAL_D = '#00695F', NAVY = '#1e2d6b', LINE = '#E3E8F0'
+const TEAL = '#05907B', TEAL_D = '#00695F', NAVY = '#1A2B4A', LINE = '#E3E8F0'
 const fmt = (n: number) => n.toLocaleString('pt-BR')
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: 16 }
 const ghostBtn: React.CSSProperties = {

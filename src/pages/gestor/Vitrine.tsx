@@ -540,17 +540,17 @@ export default function Vitrine() {
   // ── Render ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, background: '#f8f9fb', minHeight: '100%' }}>
+      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, background: '#F5FAF9', minHeight: '100%' }}>
         {[...Array(4)].map((_, i) => <div key={i} style={{ height: i ? 64 : 48, borderRadius: 12, background: '#eef2f6' }} className="animate-pulse" />)}
       </div>
     )
   }
   if (loadError || !page) {
     return (
-      <div style={{ padding: 24, background: '#f8f9fb', minHeight: '100%' }}>
+      <div style={{ padding: 24, background: '#F5FAF9', minHeight: '100%' }}>
         <div style={{ maxWidth: 520, margin: '48px auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, textAlign: 'center', boxShadow: DS.shadowSm }}>
           <AlertCircle size={28} color="#dc2626" />
-          <p style={{ margin: '10px 0 4px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Não foi possível abrir a Vitrine</p>
+          <p style={{ margin: '10px 0 4px', fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>Não foi possível abrir a Vitrine</p>
           <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>{loadError}</p>
         </div>
       </div>
@@ -674,7 +674,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
   const viewAnim = tab === 'blocks' ? (editing ? 'vitInRight' : 'vitInLeft') : 'vitRise'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#f8f9fb' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9' }}>
       {/* Movimento do editor: mesma transição do app (index.css --transition),
           sombras com tom teal (--shadow-sm/md/lg). Menos movimento = parado. */}
       <style>{`
@@ -713,7 +713,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
         .vit-save .vit-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
         .vit-save[data-tone="saving"] .vit-dot{animation:vitBlink .8s ease infinite}
         .vit-save[data-tone="saved"] svg{animation:vitPop .35s cubic-bezier(.34,1.56,.64,1)}
-        .vit-footbar{background:linear-gradient(to top,#f8f9fb 72%,rgba(248,249,251,0))}
+        .vit-footbar{background:linear-gradient(to top,#F5FAF9 72%,rgba(248,249,251,0))}
         .vit-device{transition:width .3s cubic-bezier(0.4,0,0.2,1)}
         .vit-upload:focus-visible,.vit-pick:focus-visible{outline:3px solid #D1FAE5;outline-offset:2px}
         @media (max-width:760px){.vit-tags{display:none!important}}
@@ -722,7 +722,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
       {toast && (
         <div role="status" style={{
           position: 'fixed', bottom: 24, right: 24, zIndex: 9999, maxWidth: 420,
-          background: toast.error ? '#991B1B' : '#1e2d6b', color: 'white', fontSize: 13, fontWeight: 500,
+          background: toast.error ? '#991B1B' : '#1A2B4A', color: 'white', fontSize: 13, fontWeight: 500,
           padding: '14px 18px', borderRadius: 12, boxShadow: '0 12px 32px rgba(15,23,42,0.22), 0 4px 8px rgba(0,0,0,0.06)', display: 'flex', gap: 8, alignItems: 'flex-start', animation: 'slideInRight 0.2s ease',
         }}>
           {toast.error ? <AlertCircle size={15} style={{ flex: 'none', marginTop: 1 }} /> : <Check size={15} style={{ flex: 'none', marginTop: 1 }} />} <span style={{ flex: 1 }}>{toast.msg}</span>
@@ -777,7 +777,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
               <button key={t.key} role="tab" aria-selected={sel} onClick={() => goTab(t.key)} className="vit-nav" style={{
                 display: 'flex', alignItems: 'center', gap: 7, flex: 'none',
                 padding: '8px 14px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                background: sel ? '#fff' : 'transparent', color: sel ? '#1e2d6b' : '#64748b',
+                background: sel ? '#fff' : 'transparent', color: sel ? '#1A2B4A' : '#64748b',
                 boxShadow: sel ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
               }}>
                 <t.Icon size={15} color={sel ? '#05907B' : '#94a3b8'} /> {t.label}
@@ -828,7 +828,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: 200 }}>
-                    <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.01em' }}>Blocos da página</h2>
+                    <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1A2B4A', letterSpacing: '-0.01em' }}>Blocos da página</h2>
                     <p style={{ margin: '2px 0 0', fontSize: 13, color: '#64748b' }}>
                       {blocks.length ? 'Clique num bloco para editar. Arraste pela alça para mudar a ordem.' : 'Botões e informações que aparecem na página, na ordem da lista.'}
                     </p>
@@ -845,7 +845,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                     <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                       <Store size={24} color="#05907B" />
                     </div>
-                    <p style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.01em' }}>Monte a página da escola</p>
+                    <p style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1A2B4A', letterSpacing: '-0.01em' }}>Monte a página da escola</p>
                     <p style={{ margin: '0 0 20px', fontSize: 13, color: '#64748b', maxWidth: 440, marginInline: 'auto', lineHeight: 1.6 }}>
                       Adicione os botões e informações que as famílias precisam: WhatsApp, matrícula, redes sociais, endereço e horário.
                     </p>
@@ -917,7 +917,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                   {([{ v: 'mobile' as const, label: 'Celular', Icon: Smartphone }, { v: 'desktop' as const, label: 'Computador', Icon: Monitor }]).map(({ v, label, Icon }) => (
                     <button key={v} type="button" role="radio" aria-checked={device === v} onClick={() => setDevice(v)} className="vit-nav"
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        background: device === v ? '#fff' : 'transparent', color: device === v ? '#1e2d6b' : '#64748b', boxShadow: device === v ? '0 1px 3px rgba(0,0,0,.10)' : 'none' }}>
+                        background: device === v ? '#fff' : 'transparent', color: device === v ? '#1A2B4A' : '#64748b', boxShadow: device === v ? '0 1px 3px rgba(0,0,0,.10)' : 'none' }}>
                       <Icon size={13} /> {label}
                     </button>
                   ))}

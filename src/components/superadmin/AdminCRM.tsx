@@ -686,10 +686,10 @@ export default function AdminCRM() {
           </div>
         )}
 
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="aion-band flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">CRM Comercial</h1>
-            <p className="text-sm text-gray-500 mt-1">Pipeline de prospecção e fechamento</p>
+            <h1 className="aion-band-title">CRM Comercial</h1>
+            <p className="aion-band-sub">Pipeline de prospecção e fechamento</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             {overdueCount > 0 && (

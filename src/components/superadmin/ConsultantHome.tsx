@@ -69,11 +69,11 @@ export default function ConsultantHome() {
       <div className="p-8 space-y-6">
 
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+        <div className="aion-band">
+          <h1 className="aion-band-title">
             Olá, {user?.full_name?.split(' ')[0]} 👋
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="aion-band-sub">
             {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
         </div>

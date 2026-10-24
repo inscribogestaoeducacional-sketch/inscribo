@@ -282,7 +282,7 @@ export default function TemplatesPanel({ institutionId, onChanged, hideLists, re
       {!hideLists && <div style={cardStyle}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Templates da escola</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Templates da escola</h3>
             <p style={{ ...hintStyle, marginTop: 4 }}>Toda campanha usa um template aprovado pela Meta. A aprovação costuma levar de minutos a 24 horas.</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -313,7 +313,7 @@ export default function TemplatesPanel({ institutionId, onChanged, hideLists, re
       {!hideLists && aion.length > 0 && (
         <div style={cardStyle}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Templates padrão da Áion</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Templates padrão da Áion</h3>
             <p style={{ ...hintStyle, marginTop: 4 }}>Já aprovados pra sua escola e liberados pra Transmissões.</p>
           </div>
           <TemplateTable rows={aion} readOnly />
@@ -395,7 +395,7 @@ export default function TemplatesPanel({ institutionId, onChanged, hideLists, re
                         : <video src={editor.media.public_url} controls style={{ maxWidth: 320, maxHeight: 220, borderRadius: 10, border: '1px solid #E2E8F0' }} />
                     )}
                     {!locked && (
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1.5px dashed #CBD5E1', cursor: uploading ? 'wait' : 'pointer', fontSize: 13, color: '#1e2d6b', width: 'fit-content' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1.5px dashed #CBD5E1', cursor: uploading ? 'wait' : 'pointer', fontSize: 13, color: '#1A2B4A', width: 'fit-content' }}>
                         {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                         {uploading ? 'Enviando…' : editor.media ? `Trocar arquivo (${editor.media.file_name || 'atual'})` : `Escolher ${editor.headerType === 'IMAGE' ? 'imagem' : 'vídeo'}`}
                         <input type="file" accept={MEDIA_LIMITS[editor.headerType].accept} style={{ display: 'none' }} disabled={uploading}
@@ -421,7 +421,7 @@ export default function TemplatesPanel({ institutionId, onChanged, hideLists, re
                   <label style={labelStyle}>Variáveis</label>
                   {bodyVars.map(n => (
                     <div key={n} style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1fr', gap: 8, alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>{`{{${n}}}`}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{`{{${n}}}`}</span>
                       <input style={inputStyle} placeholder="O que é (ex.: nome do responsável)" value={editor.labels[n] || ''}
                         onChange={e => setEditor(s => s && ({ ...s, labels: { ...s.labels, [n]: e.target.value } }))} />
                       <input style={inputStyle} placeholder="Exemplo pra Meta (ex.: Maria)" value={editor.examples[n] || ''}

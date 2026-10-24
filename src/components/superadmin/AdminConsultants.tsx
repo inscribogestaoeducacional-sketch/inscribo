@@ -175,10 +175,10 @@ export default function AdminConsultants() {
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="aion-band flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Consultores</h1>
-            <p className="text-sm text-gray-500 mt-1">{consultants.length} consultor{consultants.length !== 1 ? 'es' : ''} cadastrado{consultants.length !== 1 ? 's' : ''}</p>
+            <h1 className="aion-band-title">Consultores</h1>
+            <p className="aion-band-sub">{consultants.length} consultor{consultants.length !== 1 ? 'es' : ''} cadastrado{consultants.length !== 1 ? 's' : ''}</p>
           </div>
           <div className="flex gap-3">
             <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
@@ -221,7 +221,7 @@ export default function AdminConsultants() {
                 <div key={c.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md hover:border-gray-300 transition-all">
                   <div className="flex items-start justify-between gap-2 mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white font-bold flex-shrink-0">
                         {(c.full_name || 'C').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
                       </div>
                       <div>

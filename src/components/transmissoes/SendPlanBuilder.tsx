@@ -93,7 +93,7 @@ export default function SendPlanBuilder({ form, onChange, total, limits, onPlan 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: 6 }}>
             {plan.days.slice(0, 31).map((d, i) => (
               <div key={d.date} style={{ border: `1px solid ${i === plan.days.length - 1 ? '#FDE68A' : '#E3E8F0'}`, background: i === plan.days.length - 1 ? '#FEF3C7' : '#fff', borderRadius: 10, padding: '6px 8px', textAlign: 'center', fontSize: 11, color: '#64748b' }}>
-                {fmtDay(d.date)}<b style={{ display: 'block', fontSize: 15, color: '#1e2d6b' }}>{d.count}</b>{i === plan.days.length - 1 ? 'último dia' : 'mensagens'}
+                {fmtDay(d.date)}<b style={{ display: 'block', fontSize: 15, color: '#1A2B4A' }}>{d.count}</b>{i === plan.days.length - 1 ? 'último dia' : 'mensagens'}
               </div>
             ))}
             {plan.days.length > 31 && <div style={{ padding: 8, fontSize: 11, color: '#94a3b8', alignSelf: 'center' }}>+{plan.days.length - 31} dias</div>}

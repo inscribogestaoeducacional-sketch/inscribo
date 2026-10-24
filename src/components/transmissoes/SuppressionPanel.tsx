@@ -61,7 +61,7 @@ export default function SuppressionPanel({ institutionId, userId }: { institutio
     <div style={cardStyle}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Não recebem campanhas</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Não recebem campanhas</h3>
           <p style={{ ...hintStyle, marginTop: 4 }}>Quem pediu pra sair, números que a Meta recusou e bloqueios manuais. Ficam fora de toda campanha automaticamente.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

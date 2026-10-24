@@ -400,11 +400,11 @@ export default function GestorTransfers() {
   // ── Mobile early return ───────────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#F5FAF9' }}>
 
         {/* Toast */}
         {toast && (
-          <div style={{ position: 'fixed', bottom: 90, right: 20, zIndex: 9999, background: '#1e2d6b', color: 'white', fontSize: 13, fontWeight: 500, padding: '12px 18px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ position: 'fixed', bottom: 90, right: 20, zIndex: 9999, background: '#1A2B4A', color: 'white', fontSize: 13, fontWeight: 500, padding: '12px 18px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Check size={14} /> {toast}
           </div>
         )}
@@ -526,13 +526,13 @@ export default function GestorTransfers() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#F5FAF9' }}>
 
       {/* Toast */}
       {toast && (
         <div style={{
           position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-          background: '#1e2d6b', color: 'white', fontSize: 13, fontWeight: 500,
+          background: '#1A2B4A', color: 'white', fontSize: 13, fontWeight: 500,
           padding: '12px 18px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
@@ -559,7 +559,7 @@ export default function GestorTransfers() {
             padding: '6px 18px', borderRadius: 7, border: 'none', fontSize: 13, fontWeight: 600,
             cursor: 'pointer', transition: 'all 0.15s',
             background: activeTab === tab ? '#fff' : 'transparent',
-            color: activeTab === tab ? '#1e2d6b' : '#64748b',
+            color: activeTab === tab ? '#1A2B4A' : '#64748b',
             boxShadow: activeTab === tab ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
           }}>
             {tab === 'active' ? `Ativos (${transfers.length})` : tab === 'deleted' ? `Excluídos (${deletedTransfers.length})` : 'Relatório'}
@@ -588,7 +588,7 @@ export default function GestorTransfers() {
       {/* ── Tabela Ativos ──────────────────────────────────────────────────── */}
       {activeTab === 'active' && <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Registros de transferência</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Registros de transferência</h3>
         </div>
 
         {loading ? (
@@ -600,7 +600,7 @@ export default function GestorTransfers() {
             <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
               <ArrowRightLeft size={24} color="#05907B" />
             </div>
-            <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Nenhuma transferência registrada</p>
+            <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>Nenhuma transferência registrada</p>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: '#64748b', maxWidth: 440, marginInline: 'auto', lineHeight: 1.6 }}>
               Quando uma família solicitar transferência, registre aqui para acompanhar e entender os motivos reais com auxílio da IA.
             </p>
@@ -721,7 +721,7 @@ export default function GestorTransfers() {
       {activeTab === 'deleted' && (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Transferências excluídas</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Transferências excluídas</h3>
             {deletedTransfers.length > 0 && isAdmin && (
               <button
                 onClick={handlePermanentDeleteAll}
@@ -796,7 +796,7 @@ export default function GestorTransfers() {
                   <button key={mode} onClick={() => { setPickMode(mode); setSelectedLead(null); setLeadSearch(''); setLeadResults([]) }}
                     style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
                       background: pickMode === mode ? '#fff' : 'transparent',
-                      color: pickMode === mode ? '#1e2d6b' : '#64748b',
+                      color: pickMode === mode ? '#1A2B4A' : '#64748b',
                       boxShadow: pickMode === mode ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
                     }}>
                     {mode === 'new' ? 'Novo aluno' : 'Escolher contato existente'}
@@ -927,7 +927,7 @@ function KpiCard({ label, value, icon, bg }: { label: string; value: string; ico
         <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.3 }}>{label}</span>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
       </div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 28, fontWeight: 700, color: '#1A2B4A', lineHeight: 1.1 }}>{value}</div>
     </div>
   )
 }
@@ -982,7 +982,7 @@ function Modal({ children, onClose, title, wide }: { children: React.ReactNode; 
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: wide ? 680 : 500, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>{title}</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>{title}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}><X size={18} /></button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>{children}</div>
@@ -1027,7 +1027,7 @@ function DiagnosisView({ transfer, onUpdateStatus, onGenerateDiagnosis, isGenera
         ) : (
           <>
             <div>
-              <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Diagnóstico não gerado ainda</p>
+              <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>Diagnóstico não gerado ainda</p>
               <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>{transfer.survey_responses ? 'Pesquisa respondida — clique para gerar o diagnóstico.' : 'Aguardando a família responder a pesquisa.'}</p>
             </div>
             {transfer.survey_responses && isAdmin && (
@@ -1075,7 +1075,7 @@ function DiagnosisView({ transfer, onUpdateStatus, onGenerateDiagnosis, isGenera
           <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Confiança</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#1e2d6b' }}>{confidencePct}%</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{confidencePct}%</span>
             </div>
             <div style={{ height: 8, background: '#e2e8f0', borderRadius: 99, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${confidencePct}%`, background: confidencePct >= 70 ? 'linear-gradient(90deg,#05907B,#2DCBA4)' : 'linear-gradient(90deg,#F59E0B,#FCD34D)', borderRadius: 99 }} />

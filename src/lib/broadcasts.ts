@@ -78,7 +78,7 @@ export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; color: str
   scheduled:        { label: 'Agendada',              color: '#1D4ED8', bg: '#DBEAFE' },
   sending:          { label: 'Enviando',              color: '#047857', bg: '#D1FAE5' },
   paused:           { label: 'Pausada',               color: '#C2410C', bg: '#FFEDD5' },
-  completed:        { label: 'Concluída',             color: '#1e2d6b', bg: '#E0E7FF' },
+  completed:        { label: 'Concluída',             color: '#1A2B4A', bg: '#E0E7FF' },
   cancelled:        { label: 'Cancelada',             color: '#991B1B', bg: '#FEE2E2' },
 }
 

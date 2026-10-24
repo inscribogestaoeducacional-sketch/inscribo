@@ -25,7 +25,7 @@ import CampaignDetail from '../../components/transmissoes/CampaignDetail'
 
 type Tab = 'campaigns' | 'templates' | 'suppressions'
 
-const TEAL = '#05907B', TEAL_D = '#00695F', NAVY = '#1e2d6b', LINE = '#E3E8F0'
+const TEAL = '#05907B', TEAL_D = '#00695F', NAVY = '#1A2B4A', LINE = '#E3E8F0'
 const fmt = (n: number) => n.toLocaleString('pt-BR')
 const rate = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : null)
 const FILTERS = [
@@ -127,7 +127,7 @@ export default function Transmissoes() {
   const segWrap: React.CSSProperties = { display: 'flex', gap: 3, background: '#fff', border: `1px solid ${LINE}`, borderRadius: 12, padding: 3, width: 'fit-content', maxWidth: '100%', overflowX: 'auto' }
 
   return (
-    <div style={{ padding: mobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: '#f8f9fb' }}>
+    <div style={{ padding: mobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: '#F5FAF9' }}>
       <style>{LEADS_CSS}</style>
       <PageHeader
         icon={Send}

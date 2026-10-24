@@ -131,10 +131,10 @@ export default function ConsultantContracts() {
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="aion-band flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Meus contratos</h1>
-            <p className="text-gray-500 mt-1">Contratos das suas escolas</p>
+            <h1 className="aion-band-title">Meus contratos</h1>
+            <p className="aion-band-sub">Contratos das suas escolas</p>
           </div>
           <button
             onClick={() => setShowNew(true)}

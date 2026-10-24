@@ -1246,7 +1246,7 @@ export default function ContactsModule() {
   if (isMobile) {
     return (
       <>
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#F5FAF9' }}>
 
           <style>{LEADS_CSS}</style>
           <div style={{ padding: '12px 12px 0', flexShrink: 0 }}>
@@ -1357,7 +1357,7 @@ export default function ContactsModule() {
   // ─── DESKTOP LAYOUT ───────────────────────────────────────
   return (
     <>
-      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
+      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#F5FAF9' }}>
 
         <style>{LEADS_CSS}</style>
         <PageHeader icon={BookUser} title="Contatos"
@@ -1489,7 +1489,7 @@ export default function ContactsModule() {
                             onClick={c.profile_picture_url ? () => setZoomedPhoto(c.profile_picture_url!) : undefined}
                           />
                           <div style={{ minWidth: 0 }}>
-                            <p style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
                             {c.subtitle && (
                               <p style={{ fontSize: 12, color: '#64748b', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.subtitle}</p>
                             )}

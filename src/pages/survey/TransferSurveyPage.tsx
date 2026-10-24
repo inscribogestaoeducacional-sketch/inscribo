@@ -275,7 +275,7 @@ export default function TransferSurveyPage() {
           <div style={{ width: 64, height: 64, background: '#fef2f2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
           </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e2d6b', margin: '0 0 8px' }}>Link inválido ou expirado</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A2B4A', margin: '0 0 8px' }}>Link inválido ou expirado</h2>
           <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>Este link de pesquisa não existe ou foi expirado. Entre em contato com a escola para mais informações.</p>
         </div>
       </div>
@@ -289,7 +289,7 @@ export default function TransferSurveyPage() {
           <div style={{ width: 64, height: 64, background: '#f0fdf4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
           </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e2d6b', margin: '0 0 8px' }}>Pesquisa já respondida</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A2B4A', margin: '0 0 8px' }}>Pesquisa já respondida</h2>
           <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>Esta pesquisa já foi respondida anteriormente. Obrigado pela sua participação!</p>
         </div>
       </div>
@@ -306,7 +306,7 @@ export default function TransferSurveyPage() {
           <div style={{ width: 72, height: 72, background: '#f0fdf4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', border: '3px solid #bbf7d0' }}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
           </div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1e2d6b', margin: '0 0 12px' }}>Muito obrigado!</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', margin: '0 0 12px' }}>Muito obrigado!</h2>
           <p style={{ fontSize: 15, color: '#374151', margin: '0 0 8px', lineHeight: 1.6 }}>
             Sua resposta é muito importante para nós.
           </p>
@@ -340,11 +340,11 @@ export default function TransferSurveyPage() {
             <div style={{ background: 'white', borderRadius: 12, padding: '12px 16px', marginBottom: 24, border: '1px solid #e2e8f0', display: 'flex', gap: 16 }}>
               <div>
                 <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 2px' }}>Aluno</p>
-                <p style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{transfer.student_name}</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{transfer.student_name}</p>
               </div>
               <div>
                 <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 2px' }}>Série</p>
-                <p style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{transfer.course_grade}</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{transfer.course_grade}</p>
               </div>
             </div>
           )}
@@ -359,7 +359,7 @@ export default function TransferSurveyPage() {
             <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 12px' }}>
               Pergunta {currentIndex + 1} de {activeQuestions.length}
             </p>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e2d6b', margin: '0 0 24px', lineHeight: 1.4 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A2B4A', margin: '0 0 24px', lineHeight: 1.4 }}>
               {current?.text}
             </h2>
 

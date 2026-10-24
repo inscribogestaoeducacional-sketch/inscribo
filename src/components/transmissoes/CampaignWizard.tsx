@@ -370,7 +370,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {STEPS.map((s, i) => (
             <span key={s} style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-              background: i === step ? '#1e2d6b' : i < step ? '#E0E7FF' : '#F1F5F9', color: i === step ? '#fff' : i < step ? '#1e2d6b' : '#94a3b8' }}>
+              background: i === step ? '#1A2B4A' : i < step ? '#E0E7FF' : '#F1F5F9', color: i === step ? '#fff' : i < step ? '#1A2B4A' : '#94a3b8' }}>
               {i + 1}. {s}
             </span>
           ))}
@@ -435,7 +435,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
             <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
               <label style={labelStyle}>Ou importe uma lista (planilha)</label>
               <button type="button" onClick={() => setShowImport(true)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1.5px dashed #CBD5E1', background: '#fff', cursor: 'pointer', fontSize: 13, color: '#1e2d6b' }}>
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1.5px dashed #CBD5E1', background: '#fff', cursor: 'pointer', fontSize: 13, color: '#1A2B4A' }}>
                 <Upload size={14} /> {importName ? `${importName} — trocar` : 'Escolher planilha (CSV ou Excel)'}
               </button>
               <p style={hintStyle}>Colunas: telefone (obrigatória), nome e outras que quiser usar na mensagem (ex.: turma).</p>
@@ -482,7 +482,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
                   const fixedOnly = k.startsWith('button_')
                   return (
                     <div key={k} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1e2d6b' }}>{title}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{title}</span>
                       <select style={inputStyle} value={m.source} disabled={fixedOnly}
                         onChange={e => setMapping(s => ({ ...s, [k]: { source: e.target.value as any, fallback: m.fallback || (e.target.value === 'fixed' ? undefined : 'família'), value: m.value, key: importCols[0] } }))}>
                         <option value="contact.first_name">Primeiro nome do contato</option>
@@ -641,7 +641,7 @@ function AudienceList({ aud, loading, error, hasAudience, lk, q, onQ, page, onPa
       {/* contador + custo, ao vivo */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: '#1e293b' }}>
-          <Users size={15} color="#1e2d6b" />
+          <Users size={15} color="#1A2B4A" />
           {aud ? <>
             <strong style={{ fontSize: 15 }}>{aud.counts.eligible.toLocaleString('pt-BR')}</strong> destinatário(s)
             {(aud.counts.deselected > 0 || blocked.length > 0) && (
@@ -656,7 +656,7 @@ function AudienceList({ aud, loading, error, hasAudience, lk, q, onQ, page, onPa
           {loading && <Loader2 size={13} className="animate-spin" color="#94a3b8" />}
         </div>
         {est && (est.available
-          ? <span style={{ fontSize: 13, color: '#1e2d6b' }}>Custo estimado: <strong>{brl(est.total_brl)}</strong>{est.credit_applied_brl > 0 && <span style={{ color: '#94a3b8' }}> (crédito usado {brl(est.credit_applied_brl)})</span>}</span>
+          ? <span style={{ fontSize: 13, color: '#1A2B4A' }}>Custo estimado: <strong>{brl(est.total_brl)}</strong>{est.credit_applied_brl > 0 && <span style={{ color: '#94a3b8' }}> (crédito usado {brl(est.credit_applied_brl)})</span>}</span>
           : <span style={{ fontSize: 12, color: '#B45309' }}>{est.reason}</span>)}
       </div>
       {aud?.over_limit && <div style={{ color: '#DC2626', fontSize: 12 }}>Acima do limite de {aud.max.toLocaleString('pt-BR')} por campanha — refine a seleção.</div>}
@@ -728,7 +728,7 @@ function AudienceList({ aud, loading, error, hasAudience, lk, q, onQ, page, onPa
 function CostBox({ est }: { est: any }) {
   if (!est.available) return <ErrorBox message={est.reason} />
   const line = (l: string, v: string, strong?: boolean) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: strong ? '#1e2d6b' : '#475569', fontWeight: strong ? 700 : 400 }}><span>{l}</span><span>{v}</span></div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: strong ? '#1A2B4A' : '#475569', fontWeight: strong ? 700 : 400 }}><span>{l}</span><span>{v}</span></div>
   )
   return (
     <div style={{ border: '1.5px solid #E2E8F0', borderRadius: 12, padding: 14, display: 'grid', gap: 6, maxWidth: 420 }}>

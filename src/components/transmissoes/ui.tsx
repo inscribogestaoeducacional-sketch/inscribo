@@ -30,7 +30,7 @@ export function Btn({ onClick, children, variant = 'primary', disabled, loading,
 }) {
   const styles: Record<string, React.CSSProperties> = {
     primary:   { background: GRAD, color: '#fff', border: 'none', boxShadow: '0 8px 18px -10px rgba(0,122,110,.8)' },
-    secondary: { background: '#fff', color: '#1e2d6b', border: '1.5px solid #E2E8F0' },
+    secondary: { background: '#fff', color: '#1A2B4A', border: '1.5px solid #E2E8F0' },
     danger:    { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' },
     ghost:     { background: 'transparent', color: '#64748b', border: 'none' },
   }
@@ -50,7 +50,7 @@ export function KpiCard({ label, value, icon, bg, hint }: { label: string; value
         <span style={{ minWidth: 0, fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.3 }}>{label}</span>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: '#1A2B4A', lineHeight: 1.1 }}>{value}</div>
       {hint && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{hint}</div>}
     </div>
   )
@@ -82,7 +82,7 @@ export function Modal({ children, onClose, title, wide, footer, subtitle, tabs }
           </div>
         ) : (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>{title}</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>{title}</h2>
           <button onClick={onClose} aria-label="Fechar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}><X size={18} /></button>
         </div>
         )}
@@ -107,7 +107,7 @@ export function Empty({ icon, title, text, action }: { icon: React.ReactNode; ti
   return (
     <div style={{ padding: '48px 24px', textAlign: 'center' }}>
       <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>{icon}</div>
-      <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>{title}</p>
+      <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>{title}</p>
       <p style={{ margin: '0 auto 20px', fontSize: 13, color: '#64748b', maxWidth: 480, lineHeight: 1.6 }}>{text}</p>
       {action}
     </div>

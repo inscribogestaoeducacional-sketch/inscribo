@@ -12,6 +12,17 @@ import {
   AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3, Network,
   MapPinned, MessageSquare, Send,
 } from 'lucide-react'
+import {
+  House, TrendUp, Tray, Buildings, TreeStructure, MapPinLine, GearSix, UsersThree, ChartLineUp, BookOpenText, WhatsappLogo, ChatCircleText,
+  CurrencyCircleDollar, PaperPlaneTilt, FileText as PhFileText,
+} from '@phosphor-icons/react'
+
+// Ícones duotone do Modelo C no lugar dos de traço
+const PH_ICON: Record<string, any> = {
+  Home: House, TrendingUp: TrendUp, Inbox: Tray, Building2: Buildings, Network: TreeStructure, MapPinned: MapPinLine, Settings: GearSix,
+  Users: UsersThree, BarChart3: ChartLineUp, BookOpen: BookOpenText, MessageCircle: WhatsappLogo, MessageSquare: ChatCircleText,
+  DollarSign: CurrencyCircleDollar, Send: PaperPlaneTilt, FileText: PhFileText,
+}
 
 // ─── tipos ────────────────────────────────────────────────────────────────
 interface Notification {
@@ -230,7 +241,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
           ${active
             ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm'
             : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
-        <Icon className="w-4 h-4 flex-shrink-0" />
+        {(() => { const Ph = PH_ICON[Icon.displayName || '']; return Ph ? <Ph size={21} weight={active ? 'fill' : 'duotone'} className="flex-shrink-0" /> : <Icon className="w-4 h-4 flex-shrink-0" /> })()}
         {sidebarOpen && (
           <span className="text-sm font-semibold truncate flex-1">{item.label}</span>
         )}
@@ -252,7 +263,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-page)" }}>
 
       {/* ── SIDEBAR ──────────────────────────────────── */}
       <aside className={`${sidebarOpen ? 'w-64' : 'w-[68px]'} flex flex-col bg-white border-r border-gray-200 shadow-sm transition-all duration-200 flex-shrink-0 z-10`}>
@@ -306,7 +317,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         <div className="px-2 pb-3 border-t border-gray-100 pt-2 flex-shrink-0">
           <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-gray-100 cursor-pointer transition-colors group relative"
             onClick={() => navigate('/super-admin/profile')}>
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
               {initials}
             </div>
             {sidebarOpen && (
@@ -421,7 +432,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
             <div className="relative" ref={profileRef}>
               <button onClick={() => { setProfileOpen(v => !v); setNotifOpen(false) }}
                 className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 rounded-xl transition-colors">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white text-xs font-bold">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white text-xs font-bold">
                   {initials}
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
@@ -432,7 +443,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                   {/* Info */}
                   <div className="px-4 py-4 border-b border-gray-100 bg-gradient-to-br from-gray-50 to-white">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white font-bold flex-shrink-0">
                         {initials}
                       </div>
                       <div className="min-w-0">

@@ -164,18 +164,18 @@ export default function ConsultantDetails() {
       <div className="p-8 space-y-6">
 
         {/* Header */}
-        <div className="flex items-start gap-4">
+        <div className="aion-band flex items-start gap-4">
           <button onClick={() => navigate('/super-admin/consultants')}
             className="p-2 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500 mt-1 flex-shrink-0">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div className="flex-1">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl flex-shrink-0" style={{ background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.32)' }}>
                 {consultant.full_name?.charAt(0).toUpperCase()}
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{consultant.full_name}</h1>
+                <h1 className="aion-band-title">{consultant.full_name}</h1>
                 <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
                   <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{consultant.email}</span>
                   {consultant.phone && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{consultant.phone}</span>}

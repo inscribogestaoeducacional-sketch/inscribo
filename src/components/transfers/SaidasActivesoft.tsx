@@ -20,7 +20,7 @@ export default function SaidasActivesoft({ institutionId, onRegister }: { instit
     <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '14px 20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 240 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Saídas na Activesoft em {year}: {rows.length}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Saídas na Activesoft em {year}: {rows.length}</div>
           <div style={{ fontSize: 12.5, color: '#64748b' }}>{missing.length > 0 ? `${missing.length} ainda sem registro aqui. Registre para a escola entender o motivo.` : 'Todas já têm registro aqui.'}</div>
         </div>
         <select value={year} onChange={e => setYear(Number(e.target.value))} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13 }}>
@@ -35,7 +35,7 @@ export default function SaidasActivesoft({ institutionId, onRegister }: { instit
               <div style={{ flex: 1 }}><b>{r.name}</b>{r.registration ? ` · ${r.registration}` : ''}<div style={{ color: '#94a3b8', fontSize: 12 }}>{r.grade ?? 'sem série'} · {r.status === 'cancelado' ? 'cancelado' : 'transferido'}{r.changed_at ? ` em ${new Date(r.changed_at).toLocaleDateString('pt-BR')}` : ''}</div></div>
               {r.registered
                 ? <span style={{ padding: '3px 10px', borderRadius: 99, background: '#DCFCE7', color: '#15803D', fontSize: 11.5, fontWeight: 700 }}>Já registrado</span>
-                : <button onClick={() => onRegister(r.name, r.grade ?? '')} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: '#1e2d6b', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Registrar</button>}
+                : <button onClick={() => onRegister(r.name, r.grade ?? '')} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: '#1A2B4A', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Registrar</button>}
             </div>
           ))}
         </div>

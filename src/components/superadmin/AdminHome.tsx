@@ -202,10 +202,10 @@ export default function AdminHome() {
         )}
 
         {/* Header */}
-        <div className="flex items-start justify-between flex-wrap gap-3">
+        <div className="aion-band flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <h1 className="aion-band-title">Dashboard</h1>
+            <p className="aion-band-sub">
               {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>

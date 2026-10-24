@@ -1318,7 +1318,7 @@ export default function GestorSurveys() {
     const nps = isDefault ? npsFromScores(responses.map(respondentOverallScore10)) : 0
 
     return (
-      <div style={{ padding: 'clamp(12px, 3vw, 24px)', background: '#f8f9fb', minHeight: '100%' }}>
+      <div style={{ padding: 'clamp(12px, 3vw, 24px)', background: '#F5FAF9', minHeight: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
           <button onClick={() => setViewingSurvey(null)} style={{ ...btn('#F1F5F9', '#374151'), padding: '8px 14px' }}>
             ← Voltar
@@ -1586,7 +1586,7 @@ export default function GestorSurveys() {
   // ─── MOBILE ───────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#f8f9fb', paddingBottom: 96 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9', paddingBottom: 96 }}>
         {toast && (
           <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: '#1A2B4A', color: 'white', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Check size={14} /> {toast}
@@ -1743,7 +1743,7 @@ export default function GestorSurveys() {
 
   // ─── LISTA ────────────────────────────────────────────────
   return (
-    <div style={{ padding: 24, background: '#f8f9fb', minHeight: '100%' }}>
+    <div style={{ padding: 24, background: '#F5FAF9', minHeight: '100%' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
       {toast && (

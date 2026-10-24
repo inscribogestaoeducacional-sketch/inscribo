@@ -16,7 +16,7 @@ import {
   type CaptureTrigger, CAPTURE_CHANNELS, buildWaMeLink, findOverlappingTriggers, formatDuration,
 } from '../../lib/captureTriggers'
 
-const TEAL = '#05907B', TEAL_D = '#00695F', NAVY = '#1e2d6b', LINE = '#E3E8F0'
+const TEAL = '#05907B', TEAL_D = '#00695F', NAVY = '#1A2B4A', LINE = '#E3E8F0'
 
 export interface Assignee { trigger_id: string; user_id: string | null; group_id: string | null }
 interface Group { id: string; name: string; emoji: string | null }

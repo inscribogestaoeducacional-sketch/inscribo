@@ -225,10 +225,10 @@ export default function ConsultantSchools() {
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="aion-band flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Minhas Escolas</h1>
-            <p className="text-gray-500 mt-1 text-sm">{implementations.length} escola{implementations.length !== 1 ? 's' : ''} em acompanhamento</p>
+            <h1 className="aion-band-title">Minhas Escolas</h1>
+            <p className="aion-band-sub">{implementations.length} escola{implementations.length !== 1 ? 's' : ''} em acompanhamento</p>
           </div>
           {activeTab === 'trainings' && (
             <button

@@ -73,7 +73,7 @@ export default function TemplatePicker({ page, blocks, schoolPhone, institutionN
                 )}
               </button>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>{t.name}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>{t.name}</div>
                 <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.45, marginTop: 2 }}>{t.description}</div>
               </div>
             </div>
@@ -92,7 +92,7 @@ export default function TemplatePicker({ page, blocks, schoolPhone, institutionN
                   style={{ width: W, height: H, border: 0, transform: 'scale(0.5)', transformOrigin: 'top left', pointerEvents: 'none', display: 'block' }} />
               </div>
               <div style={{ flex: '1 1 220px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.01em' }}>Usar o modelo {pick.name}?</h2>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1A2B4A', letterSpacing: '-0.01em' }}>Usar o modelo {pick.name}?</h2>
                 <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.55 }}>{pick.description}</p>
                 <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.55 }}>
                   <strong style={{ color: '#1e293b' }}>Muda:</strong> cores, fundo, fontes, botões e acabamento.<br />

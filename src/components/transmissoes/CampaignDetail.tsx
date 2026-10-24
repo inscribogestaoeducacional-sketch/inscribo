@@ -160,7 +160,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
         })()}
 
         {tab === 'resumo' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10 }}>
-          <KpiCard label="Destinatários" value={c.total_recipients.toLocaleString('pt-BR')} icon={<Users size={16} color="#1e2d6b" />} bg="#E0E7FF" />
+          <KpiCard label="Destinatários" value={c.total_recipients.toLocaleString('pt-BR')} icon={<Users size={16} color="#1A2B4A" />} bg="#E0E7FF" />
           <KpiCard label="Enviadas" value={c.sent_count.toLocaleString('pt-BR')} hint={pct(c.sent_count, c.total_recipients)} icon={<Send size={16} color="#047857" />} bg="#D1FAE5" />
           <KpiCard label="Entregues" value={c.delivered_count.toLocaleString('pt-BR')} hint={pct(c.delivered_count, c.sent_count)} icon={<CheckCheck size={16} color="#0284C7" />} bg="#E0F2FE" />
           <KpiCard label="Lidas" value={c.read_count.toLocaleString('pt-BR')} hint={pct(c.read_count, c.delivered_count)} icon={<Eye size={16} color="#7C3AED" />} bg="#EDE9FE" />
@@ -190,7 +190,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
               <div style={{ display: 'grid', gap: 4, fontSize: 13, color: '#475569' }}>
                 <div>{c.priced_recipients} mensagens · {CATEGORY_LABEL[c.priced_category || ''] || c.priced_category} · {brl(Number(c.unit_fee_brl) + (c.priced_own_account ? 0 : Number(c.unit_meta_cost_brl || 0)))}/msg{c.priced_own_account ? ' (conta própria na Meta: só a taxa)' : ''}</div>
                 <div>Subtotal {brl(c.subtotal_brl)}{Number(c.credit_applied_brl) > 0 ? ` · crédito usado ${brl(c.credit_applied_brl)}` : ''}</div>
-                <div style={{ fontWeight: 700, color: '#1e2d6b' }}>{Number(c.total_charged_brl) > 0 ? `Cobrado: ${brl(c.total_charged_brl)}` : 'Coberta pelo crédito'}</div>
+                <div style={{ fontWeight: 700, color: '#1A2B4A' }}>{Number(c.total_charged_brl) > 0 ? `Cobrado: ${brl(c.total_charged_brl)}` : 'Coberta pelo crédito'}</div>
                 {payment && <div style={{ fontSize: 12 }}>Cobrança: {({ pending: 'aguardando pagamento', overdue: 'vencida', paid: 'paga', cancelled: 'cancelada', refunded: 'estornada' } as Record<string, string>)[payment.status] || payment.status}</div>}
                 {c.paid_at && <div style={{ fontSize: 12, color: '#047857' }}>Liberada em {fmtDate(c.paid_at)}</div>}
               </div>
@@ -200,7 +200,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
             <label style={labelStyle}>Cliques por botão</label>
             {buttons.length ? buttons.map(b => (
               <div key={b.index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#475569', padding: '3px 0' }}>
-                <span>{b.text}</span><strong style={{ color: '#1e2d6b' }}>{b.clicks}</strong>
+                <span>{b.text}</span><strong style={{ color: '#1A2B4A' }}>{b.clicks}</strong>
               </div>
             )) : <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>Template sem botões de resposta rápida.</p>}
           </div>}
@@ -209,7 +209,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
               <label style={labelStyle}>Não enviadas / falhas</label>
               {failures.map(f => (
                 <div key={f.kind} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#475569', padding: '3px 0' }}>
-                  <span>{FAILURE_KIND[f.kind]}</span><strong style={{ color: '#1e2d6b' }}>{f.count}</strong>
+                  <span>{FAILURE_KIND[f.kind]}</span><strong style={{ color: '#1A2B4A' }}>{f.count}</strong>
                 </div>
               ))}
               <p style={{ margin: '6px 0 0', fontSize: 11, color: '#94a3b8' }}>Mensagens pagas que não saíram viram crédito pra próxima campanha.</p>

@@ -149,7 +149,7 @@ function Row({ b, ghost, dragHandle, onToggleVisible, clicks }: {
         <Icon size={18} color={meta.color} />
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 600, color: '#1e2d6b', letterSpacing: '-0.01em', lineHeight: 1.35 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 600, color: '#1A2B4A', letterSpacing: '-0.01em', lineHeight: 1.35 }}>
           <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{blockSummary(b.type, b.config)}</span>
           {b.state === 'saving' && <Loader2 size={13} color="#94A3B8" className="animate-spin" aria-label="Salvando" />}
         </span>
@@ -159,7 +159,7 @@ function Row({ b, ghost, dragHandle, onToggleVisible, clicks }: {
       </span>
       {clicks !== undefined && b.id && (
         <span className="vit-tags" title="Cliques nos últimos 7 dias" style={{ textAlign: 'right', fontSize: 11, color: '#64748B', lineHeight: 1.25, flex: 'none' }}>
-          <b style={{ display: 'block', fontSize: 15, color: '#1e2d6b', fontVariantNumeric: 'tabular-nums' }}>{clicks}</b>cliques · 7d
+          <b style={{ display: 'block', fontSize: 15, color: '#1A2B4A', fontVariantNumeric: 'tabular-nums' }}>{clicks}</b>cliques · 7d
         </span>
       )}
       {tags.length > 0 && <span className="vit-tags" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '46%' }}>{tags}</span>}

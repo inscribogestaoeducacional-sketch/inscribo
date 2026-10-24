@@ -94,7 +94,7 @@ export default function FinanceTab({ institutionId }: { institutionId: string })
         {PERIODS.map(p => (
           <button key={p.key} onClick={() => setPeriod(p.key)} style={{
             padding: '6px 14px', borderRadius: 7, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            background: period === p.key ? '#fff' : 'transparent', color: period === p.key ? '#1e2d6b' : '#64748b',
+            background: period === p.key ? '#fff' : 'transparent', color: period === p.key ? '#1A2B4A' : '#64748b',
             boxShadow: period === p.key ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
           }}>{p.label}</button>
         ))}
@@ -103,14 +103,14 @@ export default function FinanceTab({ institutionId }: { institutionId: string })
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
         <KpiCard label="Saldo de crédito" value={brl(s.credit_balance_brl)} hint="Mensagens pagas que não saíram" icon={<Wallet size={16} color="#047857" />} bg="#D1FAE5" />
         <KpiCard label="Pago no período" value={brl(s.charged_brl)} hint={Number(s.credit_used_brl) > 0 ? `+ ${brl(s.credit_used_brl)} usado de crédito` : undefined} icon={<Receipt size={16} color="#0284C7" />} bg="#E0F2FE" />
-        <KpiCard label="Campanhas liberadas" value={String(Number(s.campaigns_released || 0))} hint={Number(s.campaigns_active) > 0 ? `${Number(s.campaigns_active)} em andamento` : undefined} icon={<Send size={16} color="#1e2d6b" />} bg="#E0E7FF" />
+        <KpiCard label="Campanhas liberadas" value={String(Number(s.campaigns_released || 0))} hint={Number(s.campaigns_active) > 0 ? `${Number(s.campaigns_active)} em andamento` : undefined} icon={<Send size={16} color="#1A2B4A" />} bg="#E0E7FF" />
         <KpiCard label="Mensagens enviadas" value={Number(s.messages_sent || 0).toLocaleString('pt-BR')} hint={`${Number(s.replies || 0).toLocaleString('pt-BR')} respostas`} icon={<Send size={16} color="#7C3AED" />} bg="#EDE9FE" />
       </div>
 
       {/* ── Cobranças de campanha ── */}
       <div style={cardStyle}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Cobranças de campanha</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Cobranças de campanha</h3>
           <p style={{ ...hintStyle, marginTop: 4 }}>A campanha sai sozinha assim que o pagamento é confirmado. Campanha coberta pelo crédito não gera cobrança.</p>
         </div>
         {payments.length === 0 ? (
@@ -155,7 +155,7 @@ export default function FinanceTab({ institutionId }: { institutionId: string })
       <div style={cardStyle}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
           <History size={16} color="#64748b" />
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Extrato do crédito</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Extrato do crédito</h3>
         </div>
         {statement.length === 0 ? (
           <p style={{ padding: '24px 20px', margin: 0, fontSize: 13, color: '#94a3b8' }}>Nenhum lançamento ainda. Quando uma mensagem paga não for entregue, o valor dela volta pra cá como crédito.</p>

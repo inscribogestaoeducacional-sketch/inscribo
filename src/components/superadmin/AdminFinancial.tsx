@@ -1594,10 +1594,10 @@ export default function AdminFinancial() {
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="aion-band flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
-            <p className="text-sm text-gray-500 mt-1">Receita, custos, comissões e inadimplência</p>
+            <h1 className="aion-band-title">Financeiro</h1>
+            <p className="aion-band-sub">Receita, custos, comissões e inadimplência</p>
           </div>
           <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
             <RefreshCw className="w-4 h-4" />

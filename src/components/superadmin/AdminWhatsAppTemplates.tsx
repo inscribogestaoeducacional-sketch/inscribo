@@ -628,10 +628,10 @@ export default function AdminWhatsAppTemplates() {
     <SuperAdminLayout>
       <div className="p-8 space-y-6">
 
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="aion-band flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Templates Automáticos</h1>
-            <p className="text-sm text-gray-500 mt-1">Cadastre um template uma vez e submeta pra todas as escolas via API da Meta</p>
+            <h1 className="aion-band-title">Templates Automáticos</h1>
+            <p className="aion-band-sub">Cadastre um template uma vez e submeta pra todas as escolas via API da Meta</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={handleRefreshStatus} disabled={refreshingStatus}

@@ -23,7 +23,7 @@ interface Props {
 function Group({ title, icon: Icon, children, i }: { title: string; icon: React.ElementType; children: React.ReactNode; i: number }) {
   return (
     <section className="vit-group" style={{ animationDelay: `${i * 45}ms`, background: '#fff', border: '1px solid #E2E8F0', borderRadius: DS.r.xl, boxShadow: DS.shadowSm, padding: '20px 22px' }}>
-      <h3 style={{ margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.005em' }}>
+      <h3 style={{ margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#1A2B4A', letterSpacing: '-0.005em' }}>
         <Icon size={16} color="#05907B" /> {title}
       </h3>
       {children}
@@ -53,7 +53,7 @@ export default function BlockEditor({ block: b, ctx, onChange, onBack, onToggleV
           <Icon size={22} color={meta.color} />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.02em', lineHeight: 1.25, overflowWrap: 'anywhere' }}>{blockSummary(b.type, b.config)}</h2>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1A2B4A', letterSpacing: '-0.02em', lineHeight: 1.25, overflowWrap: 'anywhere' }}>{blockSummary(b.type, b.config)}</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
             <span style={{ fontSize: 13, color: '#64748B', minWidth: 0, overflowWrap: 'anywhere' }}>{meta.label} · {blockDetail(b.type, b.config)}</span>
             {blockTags(b)}

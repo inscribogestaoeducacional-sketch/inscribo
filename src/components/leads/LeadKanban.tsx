@@ -268,7 +268,7 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
             {lead.phone ? <span style={{ fontSize: 12, color: '#5B6B86', display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={11} />{lead.phone}</span> : <span />}
             {assignedUser && (
-              <span title={`Responsável: ${assignedUser.full_name}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, color: '#1e2d6b', background: '#EEF2FF', padding: '2px 8px', borderRadius: 999, flexShrink: 0 }}>
+              <span title={`Responsável: ${assignedUser.full_name}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, color: '#1A2B4A', background: '#EEF2FF', padding: '2px 8px', borderRadius: 999, flexShrink: 0 }}>
                 <UserCog size={10} />{assignedInitials}
               </span>
             )}
@@ -1477,7 +1477,7 @@ export default function LeadKanban() {
       return matchesLeadFilters(l, { start: pStart, end: pEnd })
     })
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#F5FAF9' }}>
 
         <div style={{ padding: '12px 12px 0', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <PageHeader compact icon={Users} title="Leads" subtitle={`${mobileLeads.length} no funil`} />

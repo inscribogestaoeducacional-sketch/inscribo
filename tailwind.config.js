@@ -8,6 +8,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        cyan: { 50:'#F0FDFB',100:'#E0F7F3',200:'#BDEBE4',300:'#8FDCCF',400:'#2DCBA4',500:'#05907B',600:'#00806D',700:'#00695F',800:'#00544C',900:'#003F39' },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {

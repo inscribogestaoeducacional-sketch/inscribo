@@ -3,6 +3,18 @@
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { GRAD } from '../../lib/brand'
+import {
+  Funnel, AddressBook, CalendarCheck, GearSix, UsersThree, ChartLineUp, ClipboardText, ArrowsLeftRight, Flag, GraduationCap,
+  House, Megaphone, Storefront, PaperPlaneTilt, WhatsappLogo, SquaresFour, Target, Question, UserCircle, Bell, Buildings, Gauge,
+} from '@phosphor-icons/react'
+
+// Troca o ícone de traço (lucide) pelo equivalente duotone do Modelo C, sem mexer em cada tela.
+const PH: Record<string, any> = {
+  Users: Funnel, BookUser: AddressBook, Contact: AddressBook, CalendarCheck: CalendarCheck, Calendar: CalendarCheck, Settings: GearSix,
+  UsersRound: UsersThree, BarChart3: ChartLineUp, ClipboardList: ClipboardText, ClipboardCheck: ClipboardText, ArrowRightLeft: ArrowsLeftRight,
+  Flag, GraduationCap, Home: House, LayoutDashboard: SquaresFour, Megaphone, Store: Storefront, Send: PaperPlaneTilt, MessageCircle: WhatsappLogo,
+  Target, HelpCircle: Question, User: UserCircle, Bell, Building2: Buildings, Gauge,
+}
 
 export default function PageHeader({ icon: Icon, title, subtitle, actions, compact }: {
   icon?: LucideIcon
@@ -27,7 +39,10 @@ export default function PageHeader({ icon: Icon, title, subtitle, actions, compa
           background: 'rgba(255,255,255,.16)', border: '1px solid rgba(255,255,255,.28)',
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,.25), 0 8px 18px -8px rgba(0,0,0,.35)',
         }}>
-          <Icon size={compact ? 18 : 22} color="#fff" strokeWidth={2.1} />
+          {(() => {
+            const Ph = PH[(Icon as any).displayName || ''] || null
+            return Ph ? <Ph size={compact ? 22 : 26} weight="duotone" color="#fff" /> : <Icon size={compact ? 18 : 22} color="#fff" strokeWidth={2.1} />
+          })()}
         </div>
       )}
       <div style={{ flex: 1, minWidth: 180, position: 'relative' }}>

@@ -653,7 +653,7 @@ export default function UserManagement() {
   // ─── MOBILE ───────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#f8f9fb', paddingBottom: 96 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9', paddingBottom: 96 }}>
         <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
 
         {toast && (
@@ -790,7 +790,7 @@ export default function UserManagement() {
   }
 
   return (
-    <div style={{ padding: 24, minHeight: '100%', background: '#f8f9fb', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ padding: 24, minHeight: '100%', background: '#F5FAF9', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
 
       {/* Toast */}

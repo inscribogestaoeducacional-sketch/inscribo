@@ -31,7 +31,7 @@ const timeSlots = [
 ]
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#2DCBA4] focus:border-[#2DCBA4] outline-none transition-all'
-const btnPrimary = 'px-4 py-2 bg-gradient-to-r from-[#2DCBA4] to-[#1e2d6b] text-white rounded-lg hover:from-[#0d9488] hover:to-[#151b4e] transition-all font-semibold text-sm flex items-center gap-2'
+const btnPrimary = 'px-4 py-2 bg-gradient-to-r from-[#2DCBA4] to-[#1A2B4A] text-white rounded-lg hover:from-[#0d9488] hover:to-[#151b4e] transition-all font-semibold text-sm flex items-center gap-2'
 
 function toLocalDateStr(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`

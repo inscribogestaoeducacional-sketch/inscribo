@@ -195,7 +195,7 @@ export default function AuditModal({ recordId, moduleName, isOpen, onClose }: Pr
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '18px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0,
         }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>
             Histórico de alterações
           </h2>
           <button onClick={onClose} style={{
@@ -461,7 +461,7 @@ export default function AuditModal({ recordId, moduleName, isOpen, onClose }: Pr
                 onClick={handleAddNote}
                 disabled={!newNote.trim() || saving}
                 style={{
-                  background: newNote.trim() ? '#1e2d6b' : '#e2e8f0',
+                  background: newNote.trim() ? '#1A2B4A' : '#e2e8f0',
                   color: newNote.trim() ? '#fff' : '#94a3b8',
                   border: 'none', borderRadius: 10, padding: '8px 16px',
                   fontSize: 13, fontWeight: 600, cursor: newNote.trim() ? 'pointer' : 'default',

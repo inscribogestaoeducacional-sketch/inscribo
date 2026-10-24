@@ -89,7 +89,7 @@ export default function MarketReportModal({
         <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <MapPin size={16} color="#05907B" />
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Relatório de Mercado Completo</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Relatório de Mercado Completo</h3>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 6, borderRadius: 8 }}>
             <X size={18} />
@@ -107,14 +107,14 @@ export default function MarketReportModal({
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginBottom: 18 }}>
                 <div style={{ width: 16, height: 16, border: '2.5px solid #05907B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
-                <h2 style={{ margin: 0, fontSize: 16, color: '#1e2d6b', fontWeight: 700 }}>Gerando seu relatório...</h2>
+                <h2 style={{ margin: 0, fontSize: 16, color: '#1A2B4A', fontWeight: 700 }}>Gerando seu relatório...</h2>
               </div>
 
               <div style={{ background: '#F0FDFA', border: '1px solid #A7F3D0', borderRadius: 16, padding: '26px 24px', minHeight: 176, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, boxShadow: '0 4px 14px rgba(0,82,60,0.14)', flexShrink: 0 }}>
                   <StepIcon name={REPORT_STEPS[stepIndex].icon} size={24} color="#00523C" />
                 </div>
-                <p style={{ margin: 0, fontSize: 15, color: '#1e2d6b', fontWeight: 700, textAlign: 'center' }}>{REPORT_STEPS[stepIndex].title}</p>
+                <p style={{ margin: 0, fontSize: 15, color: '#1A2B4A', fontWeight: 700, textAlign: 'center' }}>{REPORT_STEPS[stepIndex].title}</p>
                 <p style={{ margin: '8px 0 0', fontSize: 12.5, color: '#64748b', textAlign: 'center', lineHeight: 1.6, maxWidth: 340 }}>{REPORT_STEPS[stepIndex].desc}</p>
               </div>
 
@@ -139,7 +139,7 @@ export default function MarketReportModal({
                   <span style={{ fontSize: 9, color: scoreColor(metrics.marketScore), fontWeight: 700 }}>SCORE</span>
                 </div>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1e2d6b' }}>{metrics.schoolName}</h2>
+                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1A2B4A' }}>{metrics.schoolName}</h2>
                   <p style={{ margin: '2px 0 0', fontSize: 13, color: '#64748b' }}>{metrics.city}/{metrics.state} · Censo Escolar {metrics.anoCenso}</p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
                     <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: scoreBg(metrics.marketScore), color: scoreColor(metrics.marketScore) }}>
@@ -186,7 +186,7 @@ export default function MarketReportModal({
 
               {/* Principais concorrentes */}
               <div>
-                <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Award size={14} color="#6366f1" /> Principais concorrentes
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -207,14 +207,14 @@ export default function MarketReportModal({
 
               {/* Por etapa de ensino */}
               <div>
-                <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: '0 0 10px' }}>Por etapa de ensino</h4>
+                <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: '0 0 10px' }}>Por etapa de ensino</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
                   {metrics.segments.map(seg => (
                     <div key={seg.key} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px' }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 6 }}>{seg.label}</div>
                       {seg.active ? (
                         <>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: '#1e2d6b' }}>{fmt(seg.schoolValue)} <span style={{ fontSize: 11, fontWeight: 500, color: '#94a3b8' }}>alunos</span></div>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: '#1A2B4A' }}>{fmt(seg.schoolValue)} <span style={{ fontSize: 11, fontWeight: 500, color: '#94a3b8' }}>alunos</span></div>
                           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{seg.ranking}º de {seg.totalActive} · {seg.marketSharePct?.toFixed(1)}% de share</div>
                           {seg.topCompetitors.length > 0 && (
                             <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
@@ -249,7 +249,7 @@ export default function MarketReportModal({
                 const depColor: Record<string, string> = { Privada: '#05907B', Federal: '#6366F1', Estadual: '#F59E0B', Municipal: '#94A3B8' }
                 return (
                   <div>
-                    <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Building2 size={14} color="#6366f1" /> Distribuição por rede de ensino
                     </h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

@@ -280,16 +280,9 @@ export default function AdminMarketIntelligence() {
       <div style={{ padding: 32, maxWidth: 1100, margin: '0 auto' }}>
 
         {/* ── Header ───────────────────────────────────────────── */}
-        <div style={{ marginBottom: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #1e2d6b, #2d4494)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <i className="ti ti-building-bank" style={{ fontSize: 20, color: '#fff' }} />
-            </div>
-            <div>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#111827', margin: 0 }}>Inteligência de Mercado</h1>
-              <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>Gerencie os dados do Censo Escolar INEP e IBGE</p>
-            </div>
-          </div>
+        <div className="aion-band" style={{ marginBottom: 28 }}>
+          <h1 className="aion-band-title">Inteligência de Mercado</h1>
+          <p className="aion-band-sub">Gerencie os dados do Censo Escolar INEP e IBGE</p>
         </div>
 
         {/* ── Seção 1 — Status ─────────────────────────────────── */}
@@ -299,7 +292,7 @@ export default function AdminMarketIntelligence() {
               icon: 'ti-school',
               label: 'Escolas importadas',
               value: loadingStats ? '—' : stats.total_escolas.toLocaleString('pt-BR'),
-              color: '#1e2d6b',
+              color: '#1A2B4A',
               bg: '#eef2ff',
             },
             {
@@ -332,7 +325,7 @@ export default function AdminMarketIntelligence() {
         {/* ── Seção 2 — Importar INEP ──────────────────────────── */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 24, marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-            <i className="ti ti-upload" style={{ fontSize: 18, color: '#1e2d6b' }} />
+            <i className="ti ti-upload" style={{ fontSize: 18, color: '#1A2B4A' }} />
             <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#111827' }}>Importar dados INEP — Censo Escolar</h2>
           </div>
 
@@ -342,7 +335,7 @@ export default function AdminMarketIntelligence() {
               href="https://dados.gov.br/dados/conjuntos-dados/microdados-do-censo-escolar-da-educacao-basica"
               target="_blank"
               rel="noreferrer"
-              style={{ color: '#1e2d6b', fontWeight: 600 }}
+              style={{ color: '#1A2B4A', fontWeight: 600 }}
             >
               dados.gov.br/dados/conjuntos-dados/microdados-do-censo-escolar-da-educacao-basica
             </a>
@@ -396,7 +389,7 @@ export default function AdminMarketIntelligence() {
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 7,
                 padding: '10px 20px', borderRadius: 9, border: 'none', cursor: importing || !csvFile || !importYear ? 'not-allowed' : 'pointer',
-                background: importing || !csvFile || !importYear ? '#e5e7eb' : 'linear-gradient(135deg, #1e2d6b, #2d4494)',
+                background: importing || !csvFile || !importYear ? '#e5e7eb' : 'linear-gradient(135deg, #1A2B4A, #2d4494)',
                 color: importing || !csvFile || !importYear ? '#9ca3af' : '#fff',
                 fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
               }}
@@ -410,7 +403,7 @@ export default function AdminMarketIntelligence() {
           {importing && (
             <div style={{ marginBottom: 12 }}>
               <div style={{ height: 6, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden', marginBottom: 6 }}>
-                <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #1e2d6b, #2d4494)', borderRadius: 999, transition: 'width 0.3s ease' }} />
+                <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #1A2B4A, #2d4494)', borderRadius: 999, transition: 'width 0.3s ease' }} />
               </div>
               <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{progressMsg} — {progress}%</p>
             </div>
@@ -435,7 +428,7 @@ export default function AdminMarketIntelligence() {
         {/* ── Seção 3 — Histórico de importações ───────────────── */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', overflow: 'hidden', marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 24px', borderBottom: '1px solid #f3f4f6' }}>
-            <i className="ti ti-history" style={{ fontSize: 16, color: '#1e2d6b' }} />
+            <i className="ti ti-history" style={{ fontSize: 16, color: '#1A2B4A' }} />
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111827' }}>Histórico de importações</h2>
           </div>
 
@@ -487,7 +480,7 @@ export default function AdminMarketIntelligence() {
         {/* ── Seção 4 — IBGE placeholder ───────────────────────── */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-            <i className="ti ti-map-2" style={{ fontSize: 18, color: '#1e2d6b' }} />
+            <i className="ti ti-map-2" style={{ fontSize: 18, color: '#1A2B4A' }} />
             <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#111827' }}>Importar dados IBGE</h2>
             <span style={{ marginLeft: 8, padding: '2px 10px', borderRadius: 999, background: '#f3f4f6', color: '#6b7280', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Em desenvolvimento

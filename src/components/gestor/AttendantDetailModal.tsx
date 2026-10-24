@@ -70,7 +70,7 @@ export default function AttendantDetailModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#4f46e5', flexShrink: 0 }}>{initials}</div>
             <div>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{attendant.full_name}</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{attendant.full_name}</h3>
               <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>Detalhe no período selecionado</p>
             </div>
           </div>
@@ -95,7 +95,7 @@ export default function AttendantDetailModal({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
               <Frown size={15} color="#EF4444" />
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>Conversas avaliadas como Ruim</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>Conversas avaliadas como Ruim</span>
               {badConvs.length > 0 && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#EF4444', background: '#FEF2F2', padding: '2px 8px', borderRadius: 999 }}>{badConvs.length}</span>
               )}
@@ -109,7 +109,7 @@ export default function AttendantDetailModal({
                 {badConvs.map(c => (
                   <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e2d6b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.contact_name || c.remote_jid}
                       </p>
                       <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

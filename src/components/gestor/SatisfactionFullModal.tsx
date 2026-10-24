@@ -66,7 +66,7 @@ export default function SatisfactionFullModal({
         {/* Header */}
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Satisfação dos Atendimentos</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Satisfação dos Atendimentos</h3>
             <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>{filtered.length} de {rated.length} avaliação(ões) no período</p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 6, borderRadius: 8 }}>
@@ -105,7 +105,7 @@ export default function SatisfactionFullModal({
                       {sc.label}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e2d6b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.contact_name || c.remote_jid}
                         {c.assigned_user_name && <span style={{ fontWeight: 400, color: '#94a3b8' }}> · {c.assigned_user_name}</span>}
                       </p>

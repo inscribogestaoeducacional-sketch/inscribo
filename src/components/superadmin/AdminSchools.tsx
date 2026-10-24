@@ -1529,10 +1529,10 @@ export default function AdminSchools() {
         {toast && <ToastBar toast={toast} onClose={() => setToast(null)} />}
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="aion-band flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Escolas</h1>
-            <p className="text-sm text-gray-500 mt-1">{institutions.length} instituição{institutions.length !== 1 ? 'ões' : ''} cadastrada{institutions.length !== 1 ? 's' : ''}</p>
+            <h1 className="aion-band-title">Escolas</h1>
+            <p className="aion-band-sub">{institutions.length} instituição{institutions.length !== 1 ? 'ões' : ''} cadastrada{institutions.length !== 1 ? 's' : ''}</p>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">

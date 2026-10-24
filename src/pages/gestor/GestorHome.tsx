@@ -239,7 +239,7 @@ function KpiCard({ label, value, icon, iconBg, variation, sub, onClick }: {
         <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: '#1A2B4A', lineHeight: 1.1 }}>{value}</div>
       {variation !== null && variation !== undefined && (
         <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: variation >= 0 ? '#f0fdf4' : '#fef2f2', color: variation >= 0 ? '#16a34a' : '#dc2626' }}>
           {variation >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />} {Math.abs(variation)}% vs. ano anterior
@@ -262,7 +262,7 @@ function SectionCard({ title, subtitle, icon, iconBg, iconColor, action, actionL
             {React.cloneElement(icon as React.ReactElement, { size: 16, color: iconColor })}
           </div>
           <div>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{title}</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{title}</h3>
             {subtitle && <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{subtitle}</p>}
           </div>
         </div>
@@ -1151,7 +1151,7 @@ export default function GestorHome() {
     const alertColors = { warning: { bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' }, info: { bg: '#DBEAFE', color: '#1D4ED8', border: '#BFDBFE' }, success: { bg: '#D1FAE5', color: '#065F46', border: '#6EE7B7' } }
 
     return (
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: '#f8f9fb', paddingBottom: 96 }}>
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: '#F5FAF9', paddingBottom: 96 }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1300,9 +1300,9 @@ export default function GestorHome() {
                 <Lock size={14} /> Bloqueado
               </button>
               {btnTooltip && (
-                <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 999, background: '#1e2d6b', color: 'white', fontSize: 12, lineHeight: 1.4, padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', maxWidth: 260, boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+                <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 999, background: '#1A2B4A', color: 'white', fontSize: 12, lineHeight: 1.4, padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', maxWidth: 260, boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
                   Aguardando liberação pelo administrador.
-                  <div style={{ position: 'absolute', right: 18, bottom: '100%', borderWidth: '5px', borderStyle: 'solid', borderColor: 'transparent transparent #1e2d6b transparent' }} />
+                  <div style={{ position: 'absolute', right: 18, bottom: '100%', borderWidth: '5px', borderStyle: 'solid', borderColor: 'transparent transparent #1A2B4A transparent' }} />
                 </div>
               )}
             </div>
@@ -1314,9 +1314,9 @@ export default function GestorHome() {
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#166534' }}>{activeConvsNow} conversas abertas</span>
               </div>
               {badgeTooltip && (
-                <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 999, background: '#1e2d6b', color: 'white', fontSize: 12, lineHeight: 1.4, padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+                <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 999, background: '#1A2B4A', color: 'white', fontSize: 12, lineHeight: 1.4, padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
                   Conversas WhatsApp com status aberto ou pendente agora
-                  <div style={{ position: 'absolute', right: 18, bottom: '100%', borderWidth: '5px', borderStyle: 'solid', borderColor: 'transparent transparent #1e2d6b transparent' }} />
+                  <div style={{ position: 'absolute', right: 18, bottom: '100%', borderWidth: '5px', borderStyle: 'solid', borderColor: 'transparent transparent #1A2B4A transparent' }} />
                 </div>
               )}
             </div>
@@ -1393,7 +1393,7 @@ export default function GestorHome() {
             <Upload size={26} color="#8B5CF6" />
           </div>
           <div>
-            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>Bem-vindo ao Áion Edu</h3>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>Bem-vindo ao Áion Edu</h3>
             <p style={{ margin: 0, fontSize: 13, color: '#64748b', maxWidth: 440, lineHeight: 1.6 }}>
               Para começar, importe os relatórios de matrículas dos últimos anos. Leva menos de 2 minutos e permite que a IA analise o histórico da sua escola.
             </p>
@@ -1418,13 +1418,13 @@ export default function GestorHome() {
                 <text x="70" y="82" textAnchor="middle" fontSize="10" fill="#6b7280">score</text>
               </svg>
               <div style={{ minWidth: 160 }}>
-                <p style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 800, color: '#1e2d6b', lineHeight: 1.2 }}>{user?.institution_name || 'Sua escola'}</p>
+                <p style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 800, color: '#1A2B4A', lineHeight: 1.2 }}>{user?.institution_name || 'Sua escola'}</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                   <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: scoreBg, color: scoreColor }}>{scoreLabel}</span>
                   <div style={{ position: 'relative', cursor: 'default' }} onMouseEnter={() => setScoreTooltip(true)} onMouseLeave={() => setScoreTooltip(false)}>
                     <Info size={13} color="#94a3b8" />
                     {scoreTooltip && (
-                      <div style={{ position: 'absolute', left: 0, top: '120%', zIndex: 999, background: '#1e2d6b', color: '#fff', fontSize: 11, lineHeight: 1.6, padding: '10px 14px', borderRadius: 10, width: 280, boxShadow: '0 4px 20px rgba(0,0,0,0.18)' }}>
+                      <div style={{ position: 'absolute', left: 0, top: '120%', zIndex: 999, background: '#1A2B4A', color: '#fff', fontSize: 11, lineHeight: 1.6, padding: '10px 14px', borderRadius: 10, width: 280, boxShadow: '0 4px 20px rgba(0,0,0,0.18)' }}>
                         Score baseado em crescimento de novatos, taxa de rematrícula, market share e conversão de leads.
                       </div>
                     )}
@@ -1480,7 +1480,7 @@ export default function GestorHome() {
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 16, alignItems: 'stretch' }}>
             {/* Col 1: Leads por dia */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><BarChart3 size={16} color="#7C3AED" style={{marginRight:6}} />Leads por dia</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><BarChart3 size={16} color="#7C3AED" style={{marginRight:6}} />Leads por dia</h3>
               <div style={{ flex: 1, minHeight: 160 }}><ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={days} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <defs>
@@ -1499,7 +1499,7 @@ export default function GestorHome() {
             </div>
             {/* Col 2: Leads por origem */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><LucidePieChart size={16} color="#F59E0B" style={{marginRight:6}} />Leads por origem</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><LucidePieChart size={16} color="#F59E0B" style={{marginRight:6}} />Leads por origem</h3>
               {sourceSorted.length > 0 ? (
                 <div style={{ flex: 1, minHeight: 160 }}><ResponsiveContainer width="100%" height="100%">
                   <BarChart data={sourceSorted} margin={{ top: 0, right: 20, left: -10, bottom: 0 }}>
@@ -1526,7 +1526,7 @@ export default function GestorHome() {
                     <Filter size={16} color="#05907B" />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Funil de Leads</h3>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Funil de Leads</h3>
                     <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Conversão atual</p>
                   </div>
                 </div>
@@ -1584,7 +1584,7 @@ export default function GestorHome() {
               <Trophy size={16} color="#F59E0B" />
             </div>
             <div>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Ranking da Equipe</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Ranking da Equipe</h3>
               <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Score: matrículas + resposta + satisfação · clique num atendente pra ver o detalhe</p>
             </div>
           </div>
@@ -1697,7 +1697,7 @@ export default function GestorHome() {
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#4f46e5', flexShrink: 0 }}>{initials}</div>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1e2d6b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</span>
                         </div>
                         {leaderScore > 0 && (
                           <div style={{ height: 3, background: '#f1f5f9', borderRadius: 9999, marginTop: 4, marginLeft: 28 }}>
@@ -1706,7 +1706,7 @@ export default function GestorHome() {
                         )}
                       </div>
                       <div style={{ fontSize: 13, fontWeight: 800, color: '#F59E0B', textAlign: 'center' }}>{u.score}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1e2d6b', textAlign: 'center' }} title="Leads atribuídos">{u.assigned_count}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', textAlign: 'center' }} title="Leads atribuídos">{u.assigned_count}</div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: '#0d9488', textAlign: 'center' }} title="Leads avançados no funil (30 dias)">{u.advanced_count}</div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#7C3AED', textAlign: 'center' }}>{u.enrollments_count}</div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: '#25D366', textAlign: 'center' }}>{u.wa_count}</div>
@@ -1745,7 +1745,7 @@ export default function GestorHome() {
                   <Bell size={16} color="#D97706" />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Lembretes da equipe</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Lembretes da equipe</h3>
                   <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Follow-ups atrasados, de hoje e leads sem contato</p>
                 </div>
               </div>
@@ -1761,7 +1761,7 @@ export default function GestorHome() {
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', background: colors.bg, border: `1px solid ${colors.border}` }}>
                     <Bell size={13} color={colors.color} style={{ flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1e2d6b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.responsible_name} <span style={{ fontWeight: 400, color: '#94a3b8' }}>· {lead.student_name}</span></p>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.responsible_name} <span style={{ fontWeight: 400, color: '#94a3b8' }}>· {lead.student_name}</span></p>
                       <p style={{ margin: 0, fontSize: 11, color: colors.color, fontWeight: 600 }}>{reminder.label}</p>
                     </div>
                     <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', flexShrink: 0 }}>{lead.assigned_to ? (usersMap.get(lead.assigned_to) || '—') : 'Sem responsável'}</span>
@@ -1783,7 +1783,7 @@ export default function GestorHome() {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
         {waConvStats?.daily && (
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><MessageCircle size={16} color="#25D366" style={{marginRight:6}} />WhatsApp por dia (conversas)</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><MessageCircle size={16} color="#25D366" style={{marginRight:6}} />WhatsApp por dia (conversas)</h3>
             <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
               <BarChart data={waConvStats.daily} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
@@ -1824,7 +1824,7 @@ export default function GestorHome() {
                 return (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
                     {([
-                      { label: 'Total', value: total, color: '#1e2d6b', bg: '#f8fafc' },
+                      { label: 'Total', value: total, color: '#1A2B4A', bg: '#f8fafc' },
                       { label: 'Bot respondeu', value: botResp, color: '#8B5CF6', bg: '#F5F3FF' },
                       { label: 'Equipe resp.', value: teamResp, color: '#3B82F6', bg: '#EFF6FF' },
                       { label: 'Sem resposta', value: noResp, color: '#EF4444', bg: '#FEF2F2' },
@@ -1887,7 +1887,7 @@ export default function GestorHome() {
           }
           return (
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><Clock size={16} color="#05907B" style={{marginRight:6}} />Horários de maior movimento</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><Clock size={16} color="#05907B" style={{marginRight:6}} />Horários de maior movimento</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(7,1fr)', gap: 4 }}>
                 <div />
                 {DAYS.map(d => (
@@ -1979,7 +1979,7 @@ export default function GestorHome() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <TrendingUp size={16} color="#05907B" />
             <div>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Evolução de matrículas</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Evolução de matrículas</span>
               <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 1 }}>Histórico importado vs. matrículas do CRM</span>
             </div>
           </div>
@@ -2003,7 +2003,7 @@ export default function GestorHome() {
               Configure os dados históricos no primeiro acesso ou em Configurações
             </p>
             <button onClick={() => navigate('/settings')}
-              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1A2B4A', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
               <Settings size={14} /> Ir para configurações
             </button>
           </div>
@@ -2088,7 +2088,7 @@ export default function GestorHome() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Building2 size={16} color="#6366f1" />
             <div>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Inteligência de Mercado</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Inteligência de Mercado</span>
               <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
                 {inepHasData ? `Censo INEP ${inepMaxYear} — ${marketCity}/${marketState}` : 'Dados do Censo Escolar INEP'}
               </span>
@@ -2118,7 +2118,7 @@ export default function GestorHome() {
               Importe os microdados em <strong>Super Admin → Intel. Mercado</strong>.
             </p>
             <button onClick={() => navigate('/settings')}
-              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1A2B4A', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
               <Settings size={14} /> Configurar escola
             </button>
           </div>
@@ -2131,7 +2131,7 @@ export default function GestorHome() {
               Cadastre o código INEP nas configurações da escola para ver o market share real.
             </p>
             <button onClick={() => navigate('/settings')}
-              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1A2B4A', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
               <Settings size={14} /> Configurar código INEP
             </button>
           </div>
@@ -2144,7 +2144,7 @@ export default function GestorHome() {
               O código INEP <strong>{inepMyCode}</strong> não foi localizado entre as escolas privadas de {marketCity || 'sua cidade'}. Verifique o código nas configurações.
             </p>
             <button onClick={() => navigate('/settings')}
-              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1A2B4A', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
               <Settings size={14} /> Verificar código INEP
             </button>
           </div>
@@ -2165,7 +2165,7 @@ export default function GestorHome() {
                     {item.icon}
                   </div>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{item.value}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', lineHeight: 1.1 }}>{item.value}</div>
                     <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{item.label}</div>
                   </div>
                 </div>
@@ -2177,7 +2177,7 @@ export default function GestorHome() {
               <div style={{ background: '#fafafa', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Trophy size={18} color="#d97706" />
                 <div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>
                     {inepMyRank}º lugar
                   </span>
                   <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>entre {inepTotalSchools} escolas privadas</span>
@@ -2227,7 +2227,7 @@ export default function GestorHome() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <MapPin size={16} color="#05907B" />
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Mapa de Oportunidades</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Mapa de Oportunidades</span>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             {inepHasData && (
@@ -2280,7 +2280,7 @@ export default function GestorHome() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ClipboardCheck size={16} color="#05907B" />
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Pesquisa de satisfação</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Pesquisa de satisfação</span>
             </div>
             <button onClick={() => navigate('/pesquisas')} style={{ fontSize: 11, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
               Ver pesquisas <ChevronRight size={12} />
@@ -2311,7 +2311,7 @@ export default function GestorHome() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{npsData.title} · {new Date(npsData.created_at).toLocaleDateString('pt-BR')}</p>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 12px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: '#1e2d6b', lineHeight: 1 }}>{total}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{total}</div>
                     <div style={{ fontSize: 11, color: '#94a3b8' }}>{total === 1 ? 'resposta' : 'respostas'}</div>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 8, padding: '10px 12px', background: '#f5f3ff', borderRadius: 10, textAlign: 'left' }}>
                       <Info size={14} color="#6366f1" style={{ flexShrink: 0, marginTop: 1 }} />
@@ -2352,7 +2352,7 @@ export default function GestorHome() {
                       </PieChart>
                     </ResponsiveContainer>
                     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                      <span style={{ fontSize: 17, fontWeight: 800, color: '#1e2d6b', lineHeight: 1 }}>{total}</span>
+                      <span style={{ fontSize: 17, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{total}</span>
                       <span style={{ fontSize: 9, color: '#94a3b8' }}>respostas</span>
                     </div>
                   </div>
@@ -2377,7 +2377,7 @@ export default function GestorHome() {
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <ArrowLeftRight size={16} color="#EF4444" />
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Transferências por motivo</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Transferências por motivo</span>
           </div>
           {transfers.length === 0 ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '20px 0', color: '#94a3b8' }}>

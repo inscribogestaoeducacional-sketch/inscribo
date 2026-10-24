@@ -350,7 +350,7 @@ export default function AttendantHome() {
   const twoColGrid = isMobile ? '1fr' : '1fr 1fr'
 
   return (
-    <div style={{ padding: isMobile ? 16 : 24, display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 24, minHeight: '100%', background: '#f8f9fb' }}>
+    <div style={{ padding: isMobile ? 16 : 24, display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 24, minHeight: '100%', background: '#F5FAF9' }}>
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
