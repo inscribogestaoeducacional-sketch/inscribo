@@ -115,7 +115,6 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const allowed = visibleWhatsAppSections(role)
   const [metaConfig, setMetaConfig] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [usage, setUsage] = useState({ count: 0, limit: 1000 })
   const [phoneRecord, setPhoneRecord] = useState<any>(null)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
@@ -168,7 +167,6 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const [editQRData, setEditQRData] = useState({ title: '', message: '' })
   const [attendants, setAttendants] = useState<Attendant[]>([])
   const [savingAtt, setSavingAtt] = useState<string | null>(null)
-  const [monthlyConvCount, setMonthlyConvCount] = useState(0)
   const [blacklist, setBlacklist] = useState<{ id: string; phone_number: string; reason: string | null; created_at: string }[]>([])
   const [showAddBlock, setShowAddBlock] = useState(false)
   const [newBlockNum, setNewBlockNum] = useState('')
@@ -209,11 +207,6 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
       if (mounted.current) setShowAgentName(!!data?.show_agent_name_in_messages)
       if (mounted.current && data?.whatsapp_phone_id) {
         setMetaConfig(data)
-        const monthYear = new Date().toISOString().slice(0, 7)
-        const { data: u } = await supabase.from('whatsapp_usage')
-          .select('conversation_count,monthly_limit')
-          .eq('institution_id', institutionId).eq('month_year', monthYear).maybeSingle()
-        if (mounted.current && u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
         const { data: pr } = await supabase.from('whatsapp_phone_numbers')
           .select('phone_number,display_name,phone_number_id,waba_id')
           .eq('institution_id', institutionId).eq('is_active', true).maybeSingle()
@@ -273,11 +266,6 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         working_days: a.working_days || ['MON', 'TUE', 'WED', 'THU', 'FRI'],
         lunch_start: a.lunch_start || '12:00', lunch_end: a.lunch_end || '13:00', has_lunch_break: !!(a.lunch_start && a.lunch_end),
       })))
-    } catch {}
-    try {
-      const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
-      const { count } = await supabase.from('whatsapp_conversations').select('id', { count: 'exact', head: true }).eq('institution_id', institutionId).gte('created_at', startOfMonth.toISOString())
-      if (mounted.current) setMonthlyConvCount(count || 0)
     } catch {}
     try {
       const { data: bl } = await supabase.from('whatsapp_blacklist').select('id,phone_number,reason,created_at').eq('institution_id', institutionId).order('created_at', { ascending: false })
@@ -434,8 +422,6 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const isAdmin = role === 'admin'
   const connected = live ? live === 'ok' : metaConfig?.whatsapp_connected !== false
   const phoneLabel = phoneRecord?.phone_number || metaConfig?.whatsapp_phone_number || metaConfig?.whatsapp_display_name || 'Número conectado'
-  const usagePct = Math.min(100, Math.round((monthlyConvCount / (usage.limit || 1000)) * 100))
-  const usageColor = usagePct >= 90 ? '#EF4444' : usagePct >= 70 ? '#F59E0B' : BRAND.primary
   const dayNames: Record<string, string> = { MON: 'seg', TUE: 'ter', WED: 'qua', THU: 'qui', FRI: 'sex', SAT: 'sáb', SUN: 'dom' }
   const horarioTxt = `${workingDays.map(d => dayNames[d]).join(', ')}, das ${workingStart} às ${workingEnd}`
   const preview = (t?: string | null) => { const s = (t || '').replace(/\{horario\}/g, horarioTxt).replace(/\s+/g, ' ').trim(); return s.length > 120 ? s.slice(0, 120) + '…' : s }
@@ -546,13 +532,6 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
           <div>Número: <strong style={{ color: BRAND.ink }}>{phoneRecord?.phone_number || metaConfig.whatsapp_phone_number || '—'}</strong></div>
         </div>
         <div style={{ marginBottom: 16 }}><Pill tone={flow.bot_enabled ? 'ok' : 'gray'}>{flow.bot_enabled ? 'Robô ligado' : 'Atendimento manual'}</Pill></div>
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 12.5, color: BRAND.muted }}>Conversas este mês</span>
-            <span style={{ fontSize: 12.5, fontWeight: 800, color: usageColor }}>{monthlyConvCount.toLocaleString('pt-BR')} / {(usage.limit || 1000).toLocaleString('pt-BR')}</span>
-          </div>
-          <div style={{ height: 6, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}><div style={{ height: '100%', width: `${usagePct}%`, background: usageColor, borderRadius: 999 }} /></div>
-        </div>
         {testResult && (
           <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 12, fontSize: 12.5, fontWeight: 700, background: testResult.ok ? BRAND.successSoft : BRAND.dangerSoft, border: `1px solid ${testResult.ok ? '#BBF7D0' : '#FECACA'}`, color: testResult.ok ? BRAND.success : BRAND.danger }}>{testResult.msg}</div>
         )}
