@@ -212,7 +212,9 @@ export default function Sidebar() {
       alignItems: expanded ? 'stretch' : 'center',
       padding: expanded ? '12px 10px' : '12px 0',
       gap: 2,
-      overflow: 'hidden',
+      overflowY: 'auto',
+      overflowX: 'hidden',
+      scrollbarWidth: 'thin',
       transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1), min-width 0.22s cubic-bezier(0.4,0,0.2,1)',
       flexShrink: 0,
     }}>

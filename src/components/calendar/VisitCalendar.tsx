@@ -11,6 +11,7 @@ import { advanceLeadTo, isPastVisit } from '../../lib/visitOutcome'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { BRAND } from '../../lib/brand'
 import PageHeader from '../ui/PageHeader'
+import { CountUp } from '../campanha/CampaignCharts'
 import { sendVisitMessages, isVisitAutoMessageOn, setVisitAutoMessage } from '../../lib/visitMessages'
 import VisitOutcomePicker from '../visits/VisitOutcomePicker'
 import { DEFAULT_REASONS, useVisitReasons, type ReasonKind } from '../../lib/visitReasons'
@@ -442,14 +443,21 @@ export default function VisitCalendar() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-2 border-[#14b8a6] border-t-transparent" /></div>
 
-  const kpi = (key: Focus, label: string, value: string | number, sub: string, color: string, Icon: typeof Clock, alert?: boolean) => {
+  const kpi = (key: Focus, label: string, value: number, sub: string, color: string, Icon: typeof Clock, opts?: { alert?: boolean; suffix?: string; fill?: number }) => {
     const on = focus === key && key !== null
+    const alert = !!opts?.alert
+    const accent = alert ? '#B91C1C' : color
     return (
       <button key={label} type="button" className={`vs-kpi vs-in ${alert && !on ? 'vs-alert' : ''}`} onClick={() => key && setFocus(on ? null : key)}
-        style={{ background: on ? BRAND.softer : '#fff', borderRadius: 14, padding: '9px 12px', border: `${alert || on ? 2 : 1}px solid ${on ? BRAND.primary : alert ? '#EF4444' : BRAND.line}`, cursor: key ? 'pointer' : 'default' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase' }}><Icon size={13} />{label}</div>
-        <div style={{ fontSize: 24, fontWeight: 800, color: alert ? '#B91C1C' : BRAND.ink, lineHeight: 1.2 }}>{value}</div>
-        <div style={{ fontSize: 11.5, color: BRAND.muted }}>{sub}</div>
+        style={{ background: on ? BRAND.softer : '#fff', borderRadius: 16, padding: 0, overflow: 'hidden', border: `${alert || on ? 2 : 1}px solid ${on ? BRAND.primary : alert ? '#EF4444' : BRAND.line}`, cursor: key ? 'pointer' : 'default', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '14px 16px 12px', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', fontWeight: 600 }}>
+            <span style={{ width: 24, height: 24, borderRadius: 7, background: accent + '1F', color: accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={13} /></span>{label}
+          </div>
+          <div style={{ fontSize: 36, fontWeight: 800, color: accent, lineHeight: 1.15, marginTop: 8 }}><CountUp value={value} />{opts?.suffix}</div>
+          <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 2 }}>{sub}</div>
+        </div>
+        <div style={{ height: 4, background: '#EEF2F1' }}><div style={{ width: `${Math.max(0, Math.min(100, opts?.fill ?? (value > 0 ? 100 : 0)))}%`, height: '100%', background: accent, transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /></div>
       </button>
     )
   }
@@ -459,7 +467,7 @@ export default function VisitCalendar() {
     : focus === 'today' ? `Visitas de hoje (${todayVisits.length})` : ''
 
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflowY: 'auto', background: BRAND.bg }}>
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, minHeight: '100%', background: BRAND.bg }}>
       <style>{STAGE_CSS}</style>
       <PageHeader icon={CalendarCheck} title="Visitas"
         subtitle={today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -473,11 +481,11 @@ export default function VisitCalendar() {
           <button type="button" onClick={() => { setSelectedDate(new Date()); setShowModal(true) }} style={{ background: '#fff', color: BRAND.primaryDark, border: 'none', padding: '9px 16px', borderRadius: 11, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Nova visita</button>
         </>} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8 }}>
-        {kpi('today', 'Hoje', todayVisits.length, `${todayVisits.filter(v => v.confirmed_at).length} já confirmou`, '#D97706', Calendar)}
-        {kpi('pending', 'Sem baixa', pending.length, 'já passaram, falta dizer', '#B91C1C', AlertCircle, pending.length > 0)}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12 }}>
+        {kpi('today', 'Hoje', todayVisits.length, `${todayVisits.filter(v => v.confirmed_at).length} já confirmou`, '#D97706', Calendar, { fill: todayVisits.length ? todayVisits.filter(v => v.confirmed_at).length / todayVisits.length * 100 : 0 })}
+        {kpi('pending', 'Sem baixa', pending.length, 'já passaram, falta dizer', '#B91C1C', AlertCircle, { alert: pending.length > 0 })}
         {kpi('unconfirmed', 'Sem confirmação', unconfirmed.length, 'próximos 7 dias', '#6366F1', Clock)}
-        {kpi(null, 'Comparecimento', `${monthRate}%`, `no mês · ${monthNoShow} falta${monthNoShow === 1 ? '' : 's'}`, BRAND.primaryDark, Percent)}
+        {kpi(null, 'Comparecimento', monthRate, `no mês · ${monthNoShow} falta${monthNoShow === 1 ? '' : 's'}`, BRAND.primaryDark, Percent, { suffix: '%', fill: monthRate })}
       </div>
 
       {focus ? (

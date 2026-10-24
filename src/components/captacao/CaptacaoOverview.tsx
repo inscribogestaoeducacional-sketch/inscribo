@@ -97,25 +97,40 @@ export default function CaptacaoOverview(props: {
   const [sel, setSel] = useState<string | null>(null)
   const [showTable, setShowTable] = useState(false)
 
-  const range = useMemo(() => {
+  // Janela de consulta: calculada a cada carga (nunca congelada), para o "agora" ser sempre o de verdade.
+  const windowFor = () => {
     const end = new Date(Date.now() + 60_000)
     const start = period === 'campanha' && campaign
       ? new Date(campaign.start + 'T00:00:00-03:00')
       : new Date(Date.now() - (period === 'campanha' ? 30 : period) * 86400000)
     const span = end.getTime() - start.getTime()
     return { start, end, pStart: new Date(start.getTime() - span), pEnd: start }
-  }, [period, campaign?.start]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
+  const [range, setRange] = useState(() => windowFor())
+  const [tick, setTick] = useState(0)
 
+  // Atualiza sozinho: a cada 45 s e ao voltar para a aba.
+  useEffect(() => {
+    const iv = setInterval(() => setTick(x => x + 1), 45_000)
+    const vis = () => { if (document.visibilityState === 'visible') setTick(x => x + 1) }
+    document.addEventListener('visibilitychange', vis)
+    window.addEventListener('focus', vis)
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', vis); window.removeEventListener('focus', vis) }
+  }, [])
+
+  const loadedOnce = React.useRef(false)
   useEffect(() => {
     if (!institutionId) return
     let off = false
-    setBusy(true)
+    const w = windowFor()
+    setRange(w)
+    if (!loadedOnce.current) setBusy(true)
     const p = { p_institution_id: institutionId }
     Promise.all([
-      supabase.rpc('capture_trigger_stats', { ...p, p_start: range.start.toISOString(), p_end: range.end.toISOString() }),
-      supabase.rpc('capture_trigger_stats', { ...p, p_start: range.pStart.toISOString(), p_end: range.pEnd.toISOString() }),
-      supabase.rpc('capture_trigger_series', { ...p, p_start: range.start.toISOString(), p_end: range.end.toISOString() }),
-      supabase.rpc('capture_trigger_visits', { ...p, p_start: range.start.toISOString(), p_end: range.end.toISOString() }),
+      supabase.rpc('capture_trigger_stats', { ...p, p_start: w.start.toISOString(), p_end: w.end.toISOString() }),
+      supabase.rpc('capture_trigger_stats', { ...p, p_start: w.pStart.toISOString(), p_end: w.pEnd.toISOString() }),
+      supabase.rpc('capture_trigger_series', { ...p, p_start: w.start.toISOString(), p_end: w.end.toISOString() }),
+      supabase.rpc('capture_trigger_visits', { ...p, p_start: w.start.toISOString(), p_end: w.end.toISOString() }),
       supabase.from('capture_trigger_hits').select('trigger_id').eq('institution_id', institutionId)
         .gte('matched_at', new Date(Date.now() - 10 * 86400000).toISOString()).limit(2000),
     ]).then(([a, b, c, d, e]) => {
@@ -127,10 +142,11 @@ export default function CaptacaoOverview(props: {
       ;((d.data ?? []) as any[]).forEach(r => { v[r.trigger_id] = Number(r.visits) })
       setVisits(v)
       setRecent(new Set(((e.data ?? []) as any[]).map(r => r.trigger_id as string)))
+      loadedOnce.current = true
       setBusy(false)
-    })
+    }).catch(() => { if (!off) setBusy(false) })
     return () => { off = true }
-  }, [institutionId, range, props.reloadKey])
+  }, [institutionId, period, campaign?.start, props.reloadKey, tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!sel) return

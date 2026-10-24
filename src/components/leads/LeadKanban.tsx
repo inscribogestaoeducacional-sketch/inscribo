@@ -573,7 +573,7 @@ function DroppableColumn({ id, isOver, collapsed, tint, children }: { id: string
   const { setNodeRef } = useDroppable({ id })
   if (collapsed) return <div ref={setNodeRef} style={{ display: 'none' }}>{children}</div>
   return (
-    <div ref={setNodeRef} className={`flex-1 overflow-y-auto space-y-3 p-2.5 transition-all duration-200 ${isOver ? 'ring-2 ring-dashed ring-[#14b8a6] ring-inset' : ''}`} style={{ maxHeight: '72vh', borderRadius: '0 0 18px 18px', background: isOver ? '#14b8a614' : (tint ? `${tint}12` : '#F1F5F4') }}>
+    <div ref={setNodeRef} className={`flex-1 overflow-y-auto space-y-3 p-2.5 transition-all duration-200 ${isOver ? 'ring-2 ring-dashed ring-[#14b8a6] ring-inset' : ''}`} style={{ maxHeight: 'calc(100vh - 150px)', minHeight: 220, borderRadius: '0 0 18px 18px', background: isOver ? '#14b8a614' : (tint ? `${tint}12` : '#F1F5F4') }}>
       {children}
     </div>
   )
@@ -1610,7 +1610,7 @@ export default function LeadKanban() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14, height: '100%', overflowY: 'auto', background: BRAND.bg }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14, minHeight: '100%', background: BRAND.bg }}>
       <style>{LEADS_CSS}</style>
 
       <PageHeader icon={Users} title="Leads" subtitle={`${filteredTotal} ${filteredTotal === 1 ? 'família no funil' : 'famílias no funil'}${hasActiveFilters ? ' (com filtros)' : ''}`}
