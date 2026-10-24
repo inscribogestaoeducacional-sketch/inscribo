@@ -1721,20 +1721,32 @@ export default function LeadKanban() {
               const config = col.custom ? { ...statusConfig[col.status as keyof typeof statusConfig], label: col.custom.label } : statusConfig[col.status as keyof typeof statusConfig]
               const colLeads = getLeadsByStatus(status)
               return (
-                <div key={status} className="flex-shrink-0 min-w-[260px] max-w-[260px] flex flex-col">
-                  {/* Item 13 — clicável pra colapsar/expandir a coluna */}
+                <div key={status} className="flex-shrink-0 flex flex-col ld-in" style={{ width: collapsedColumns.has(status) ? 56 : 260, transition: 'width .28s cubic-bezier(.22,1,.36,1)' }}>
+                  {collapsedColumns.has(status) ? (
+                    <button type="button" title={`Abrir "${config.label}"`}
+                      onClick={() => setCollapsedColumns(prev => { const next = new Set(prev); next.delete(status); return next })}
+                      style={{ border: `1px solid ${config.accent}40`, background: `${config.accent}14`, borderRadius: 18, minHeight: 220, height: 'calc(100vh - 230px)', maxHeight: 520, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '14px 0', fontFamily: 'inherit' }}>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#fff', color: '#1A2B4A', minWidth: 26, textAlign: 'center' }}>{colLeads.length}</span>
+                      <ChevronRight className="w-4 h-4" style={{ color: config.accent }} />
+                      <span style={{ writingMode: 'vertical-rl', fontSize: 13, fontWeight: 800, color: '#1A2B4A', letterSpacing: '.02em', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: 99, background: config.accent }} />{config.label}
+                      </span>
+                    </button>
+                  ) : (
                   <div
-                    onClick={() => setCollapsedColumns(prev => { const next = new Set(prev); if (next.has(status)) next.delete(status); else next.add(status); return next })}
+                    onClick={() => setCollapsedColumns(prev => { const next = new Set(prev); next.add(status); return next })}
+                    title="Clique para recolher esta coluna"
                     className="px-4 py-3 flex items-center justify-between cursor-pointer select-none"
-                    style={{ background: `${config.accent}22`, borderRadius: collapsedColumns.has(status) ? 18 : '18px 18px 0 0' }}
+                    style={{ background: `${config.accent}22`, borderRadius: '18px 18px 0 0' }}
                   >
                     <span className="text-sm font-bold flex items-center gap-1.5" style={{ color: '#1A2B4A' }}>
                       <span style={{ width: 9, height: 9, borderRadius: 99, background: config.accent }} />
-                      {collapsedColumns.has(status) ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      <ChevronDown className="w-3.5 h-3.5" />
                       {config.label}
                     </span>
                     <span style={{ background: '#fff', color: '#1A2B4A' }} className="text-xs font-bold px-2.5 py-0.5 rounded-full min-w-[24px] text-center">{colLeads.length}</span>
                   </div>
+                  )}
                   {!collapsedColumns.has(status) && (
                     <DroppableColumn id={status} tint={config.accent} isOver={overColumnId === status && activeId !== null}>
                       <SortableContext items={colLeads.map(l => l.id)} strategy={verticalListSortingStrategy}>

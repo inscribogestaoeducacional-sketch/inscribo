@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
-import { useNotifications } from '../../hooks/useNotifications'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
 import {
@@ -90,8 +89,8 @@ export default function Sidebar() {
   const location = useLocation()
   const { user } = useAuth()
   const { isModuleEnabled } = usePermissions()
-  const { unreadCount } = useNotifications(user?.institution_id || null)
-  const badgeCountByPath: Record<string, number> = { '/reports': unreadCount }
+  // Sem contadores no menu: a central de notificações terá o seu próprio lugar.
+  const badgeCountByPath: Record<string, number> = {}
 
   const [expanded, setExpanded] = useState(() => {
     return localStorage.getItem('sidebar-expanded') === 'true'
