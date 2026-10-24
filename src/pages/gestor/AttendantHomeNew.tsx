@@ -1,6 +1,7 @@
 // Novo Início do consultor/atendente: tudo dele numa tela só — o que precisa de ação agora,
 // o mês dele, a carteira por etapa, o atendimento comparado com a média da equipe,
 // visitas, lembretes e conversas. Cada bloco leva para a tela certa.
+import { PillTabs, useTabSwipe } from '../../components/mobile/PillTabs'
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -188,7 +189,17 @@ const pillBtn = (color: string, bg: string): CSSProperties => ({ fontSize: 11, f
 const iconBtn = (color: string, bg: string): CSSProperties => ({ width: 28, height: 28, borderRadius: 8, background: bg, color, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', border: 'none', cursor: 'pointer' })
 
 // ─── tela ───────────────────────────────────────────────────────────────────
+type ATab = 'agora' | 'mes' | 'atend' | 'agenda'
+const A_TABS: [string, string][] = [['agora', 'Agora'], ['mes', 'Meu mês'], ['atend', 'Atendimento'], ['agenda', 'Agenda']]
+function AT({ id, tab, mobile, children }: { id: ATab; tab: ATab; mobile: boolean; children: ReactNode }) {
+  return <div style={{ display: !mobile || tab === id ? 'contents' : 'none' }}>{children}</div>
+}
+
 export default function AttendantHomeNew() {
+  const [aTab, setATab] = useState<ATab>('agora')
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => { const h = () => setIsMobile(window.innerWidth < 768); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h) }, [])
+  const aSwipe = useTabSwipe(A_TABS.map(t => t[0]), aTab, id => setATab(id as ATab), isMobile)
   const { user } = useAuth()
   const navigate = useNavigate()
   const institutionId = user?.institution_id
@@ -368,7 +379,7 @@ export default function AttendantHomeNew() {
   )
 
   return (
-    <div style={{ padding: 'clamp(12px, 3vw, 24px)', display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: BRAND.bg }}>
+    <div {...aSwipe} style={{ padding: 'clamp(12px, 3vw, 24px)', display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: BRAND.bg }}>
       <style>{LEADS_CSS}</style>
 
       <PageHeader icon={Home}
@@ -387,9 +398,12 @@ export default function AttendantHomeNew() {
           </div>
         } />
 
+      {isMobile && <PillTabs tabs={A_TABS} value={aTab} onChange={id => setATab(id as ATab)} />}
+
+      <AT id="agora" tab={aTab} mobile={isMobile}>
       {/* ── Preciso agir agora ── */}
       {sectionTitle('Preciso agir agora', 'o que está esperando por você')}
-      <div style={kpiGrid}>
+      <div className={isMobile ? 'aion-snap' : undefined} style={kpiGrid}>
         <Kpi label="Famílias esperando" value={waitUs.length} sub="mandaram mensagem e aguardam a escola" color="#B91C1C" icon={<AlertCircle size={16} />} alert={waitUs.length > 0} onClick={go('/leads?owner=mine&filter=us')} delay={0} />
         <Kpi label="Sem retorno da família" value={waitFamily.length} sub="esperando a família responder" color="#B45309" icon={<UserX size={16} />} onClick={go('/leads?owner=mine&filter=family')} delay={50} />
         <Kpi label="Lembretes vencidos" value={remindersDue} sub={`${reminders.length} no total · ${stale} sem contato`} color="#D97706" icon={<Bell size={16} />} alert={remindersDue > 0} onClick={go('/leads?owner=mine&filter=no_contact')} delay={100} />
@@ -454,9 +468,11 @@ export default function AttendantHomeNew() {
         </Panel>
       </div>
 
+      </AT>
+      <AT id="mes" tab={aTab} mobile={isMobile}>
       {/* ── Meu mês ── */}
       {sectionTitle('Meu mês', 'comparado com o mês anterior')}
-      <div style={kpiGrid}>
+      <div className={isMobile ? 'aion-snap' : undefined} style={kpiGrid}>
         <Kpi label="Matrículas no mês" value={enrollMonth} sub={enrollVar === null ? 'sem base no mês anterior' : `${enrollVar >= 0 ? '+' : ''}${enrollVar}% vs. mês anterior (${enrollPrev})`} color="#2DCBA4" icon={<GraduationCap size={16} />} onClick={go('/leads?owner=mine&filter=enrolled')} delay={0} />
         <Kpi label="Matrículas na campanha" value={enrollCampaign ?? 0} sub={campaign ? campaign.label : 'sem campanha ativa'} color="#05907B" icon={<Trophy size={16} />} onClick={go('/campanha')} delay={50} />
         <Kpi label="Meus leads no mês" value={leadsMonthCount} sub={leadsVar === null ? `${leadsTodayCount} hoje` : `${leadsVar >= 0 ? '+' : ''}${leadsVar}% vs. mês anterior · ${leadsTodayCount} hoje`} color="#3b82f6" icon={<Users size={16} />} onClick={go('/leads?owner=mine')} delay={100} />
@@ -501,6 +517,8 @@ export default function AttendantHomeNew() {
         )}
       </Panel>
 
+      </AT>
+      <AT id="atend" tab={aTab} mobile={isMobile}>
       {/* ── Meu atendimento × equipe ── */}
       {sectionTitle('Meu atendimento', 'últimos 90 dias · comparado com a média da equipe')}
       <div style={twoCol}>
@@ -544,13 +562,15 @@ export default function AttendantHomeNew() {
 
       {/* ── Conversas ── */}
       {sectionTitle('Minhas conversas', 'WhatsApp')}
-      <div style={kpiGrid}>
+      <div className={isMobile ? 'aion-snap' : undefined} style={kpiGrid}>
         <Kpi label="Abertas comigo" value={openConvs} sub="em atendimento agora" color="#10B981" icon={<MessageCircle size={16} />} onClick={go('/whatsapp')} />
         <Kpi label="Na fila da escola" value={queueCount} sub="sem atendente — qualquer um pode assumir" color="#D97706" icon={<Inbox size={16} />} alert={queueCount > 0} onClick={go('/whatsapp')} delay={50} />
         <Kpi label="Paradas" value={stoppedConvs} sub="sem movimento há mais de 2 dias" color="#C2410C" icon={<Clock size={16} />} onClick={go('/whatsapp')} delay={100} />
         <Kpi label="Mensagens (24h)" value={waReceived} sub={`recebidas · ${waSent} enviadas`} color="#0F6E56" icon={<ArrowRightLeft size={16} />} onClick={go('/whatsapp')} delay={150} />
       </div>
 
+      </AT>
+      <AT id="agenda" tab={aTab} mobile={isMobile}>
       {/* ── Visitas | Leads recentes ── */}
       <div style={twoCol}>
         <Panel title="Minhas visitas de hoje" icon={<Calendar size={15} />} color="#8b5cf6" link="Ver agenda" onLink={go('/visits')} delay={60}>
@@ -651,6 +671,7 @@ export default function AttendantHomeNew() {
           ))}
         </div>
       </section>
+      </AT>
     </div>
   )
 }

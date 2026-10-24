@@ -420,7 +420,7 @@ main table tbody tr:last-child td { border-bottom: none; }
 
 /* Cartões de números em fileira que desliza (celular) */
 @media (max-width: 767px) {
-  .aion-snap { display: grid !important; grid-template-columns: none !important; grid-auto-flow: column; grid-auto-columns: minmax(148px, 44vw); overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px !important; margin: 0 -12px; padding: 2px 12px 8px; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain }
+  .aion-snap { display: grid !important; grid-template-columns: none !important; grid-auto-flow: column; grid-auto-columns: minmax(148px, 44vw); overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 12px; gap: 10px !important; margin: 0 -12px; padding: 2px 12px 8px; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain }
   .aion-snap::-webkit-scrollbar { display: none }
   .aion-snap > * { scroll-snap-align: start }
 }
