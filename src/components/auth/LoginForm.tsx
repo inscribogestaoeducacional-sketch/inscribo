@@ -95,6 +95,20 @@ const CSS = `
 }
 .lf-btn:disabled { opacity: .65; cursor: not-allowed; }
 
+.lf-hero { display: none; }
+.lf-back-site { display: inline-flex; }
+@media (max-width: 767px) {
+  .lf-page { align-items: stretch; justify-content: flex-start; flex-direction: column; padding: 0; min-height: 100dvh; background: var(--aion-grad); }
+  .lf-blob1, .lf-blob2, .lf-logo-card, .lf-back-site { display: none !important; }
+  .lf-hero { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; color: #fff; padding: calc(58px + env(safe-area-inset-top)) 24px 30px; animation: fadeUp .5s ease both; }
+  .lf-hero h1 { font-family: 'Bricolage Grotesque', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -.01em; margin: 14px 0 4px; color: #fff; }
+  .lf-hero p { font-size: 13px; color: rgba(255,255,255,.85); }
+  .lf-card { flex: 1; max-width: none; border: none; border-radius: 28px 28px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,.12); padding: 26px 22px calc(24px + env(safe-area-inset-bottom)); animation: none; }
+  .lf-inp { height: 46px; font-size: 14px; border-radius: 14px; }
+  .lf-btn { height: 48px; font-size: 14.5px; border-radius: 14px; }
+  .lf-sub { font-size: 12.5px !important; margin-bottom: 20px !important; }
+}
+
 .lf-icon {
   position: absolute;
   left: 14px; top: 50%;
@@ -162,15 +176,20 @@ export default function LoginForm() {
         <div className="lf-blob2" />
 
         {isPhone && (
-          <button type="button" onClick={() => navigate('/entrar')} aria-label="Voltar"
-            style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top))', left: 14, zIndex: 2, display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #D1FAE5', background: '#fff', color: '#05907B', borderRadius: 14, padding: '9px 14px', fontSize: 13.5, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>
-            <ArrowLeft size={16} /> Voltar
+          <button type="button" onClick={() => (view === 'login' ? navigate('/entrar') : setView('login'))} aria-label="Voltar"
+            style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top))', left: 16, zIndex: 2, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(8px)', color: '#fff', borderRadius: 14, cursor: 'pointer' }}>
+            <ArrowLeft size={18} />
           </button>
         )}
+        <div className="lf-hero">
+          <img src="/aion-logo-icon.png" alt="Áion" style={{ width: 60, height: 60, borderRadius: 18, boxShadow: '0 12px 28px -10px rgba(0,0,0,.45)' }} />
+          <h1>{view === 'login' ? 'Bem-vindo de volta' : view === 'forgot' ? 'Recuperar senha' : 'Tudo certo'}</h1>
+          <p>Áion Edu · CRM para escolas</p>
+        </div>
         <div className="lf-card">
 
           {/* ── Logo ── */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+          <div className="lf-logo-card" style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
             <img
               src="/aion-logo-full.png"
               alt="Áion Edu"
@@ -181,7 +200,7 @@ export default function LoginForm() {
           {/* ══ LOGIN ══════════════════════════════════════════ */}
           {view === 'login' && (
             <>
-              <p style={{ fontSize:14, color:'#6B7280', textAlign:'center', marginBottom:28 }}>
+              <p className="lf-sub" style={{ fontSize:14, color:'#6B7280', textAlign:'center', marginBottom:28 }}>
                 Entre com suas credenciais
               </p>
 
@@ -232,7 +251,7 @@ export default function LoginForm() {
               </form>
 
               <div style={{ marginTop:24, textAlign:'center', display:'flex', flexDirection:'column', gap:8 }}>
-                <Link to="/" style={{ fontSize:12, color:'#9CA3AF', textDecoration:'none', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:4, transition:'color .15s' }}
+                <Link to="/" className="lf-back-site" style={{ fontSize:12, color:'#9CA3AF', textDecoration:'none', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:4, transition:'color .15s' }}
                   onMouseEnter={(e:any) => e.currentTarget.style.color='#374151'}
                   onMouseLeave={(e:any) => e.currentTarget.style.color='#9CA3AF'}
                 >
@@ -245,7 +264,7 @@ export default function LoginForm() {
           {/* ══ FORGOT ════════════════════════════════════════ */}
           {view === 'forgot' && (
             <>
-              <p style={{ fontSize:14, color:'#6B7280', textAlign:'center', marginBottom:28 }}>
+              <p className="lf-sub" style={{ fontSize:14, color:'#6B7280', textAlign:'center', marginBottom:28 }}>
                 Informe seu e-mail para recuperar a senha
               </p>
 

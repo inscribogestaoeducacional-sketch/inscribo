@@ -110,7 +110,7 @@ export default function TopBar() {
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Seletor de unidade — só aparece pro gestor de rede */}
-        <InstitutionSwitcher />
+        {!isMobile && <InstitutionSwitcher />}
 
         {/* Bell */}
         <NotificationBell institutionId={user?.institution_id || null} isSuperAdmin={user?.user_type === 'admin_geral'} />

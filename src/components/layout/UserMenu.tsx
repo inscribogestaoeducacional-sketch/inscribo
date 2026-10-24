@@ -4,7 +4,7 @@
 // WhatsApp (captação, grupos e robô). Conversas que já são dela continuam com ela.
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LogOut, Settings, UserCog, Check, ChevronDown, Loader2 } from 'lucide-react'
+import { Building2, LogOut, Settings, UserCog, Check, ChevronDown, Loader2 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
@@ -30,7 +30,8 @@ function Avatar({ name, size, color }: { name: string; size: number; color?: str
 }
 
 export default function UserMenu({ isMobile }: { isMobile?: boolean }) {
-  const { user, signOut } = useAuth()
+  const { user, signOut, switchInstitution } = useAuth()
+  const [switching, setSwitching] = useState(false)
   const [open, setOpen] = useState(false)
   const [presence, setPresence] = useState<Presence>(user?.is_available === false ? 'ausente' : 'disponivel')
   const [saving, setSaving] = useState(false)
@@ -50,6 +51,14 @@ export default function UserMenu({ isMobile }: { isMobile?: boolean }) {
   const roleLabel = user.role === 'admin' ? 'Administrador' : user.role === 'manager' ? 'Gestor' : 'Consultor'
   const canSettings = user.role === 'admin' || user.role === 'manager'
   const cur = PRESENCE[presence]
+  const institutions = user.available_institutions?.length ? user.available_institutions : user.group_institutions
+  const showInst = !!isMobile && !!institutions && institutions.length >= 2
+  const pickInst = async (id: string) => {
+    if (id === user.institution_id || switching) return
+    setSwitching(true)
+    try { await switchInstitution(id) } catch { /* erro já logado no context */ }
+    setSwitching(false); setOpen(false)
+  }
 
   const change = async (p: Presence) => {
     if (saving || p === presence) return
@@ -104,6 +113,19 @@ export default function UserMenu({ isMobile }: { isMobile?: boolean }) {
             <div style={{ fontSize: 11.5, color: BRAND.muted, padding: '2px 8px 8px', lineHeight: 1.4 }}>Conversas que já são suas continuam com você. Vale para a escola em que você está agora.</div>
             {failed && <div style={{ margin: '0 8px 8px', fontSize: 12, color: '#B91C1C', fontWeight: 700 }}>Não consegui salvar. Tente de novo.</div>}
           </div>
+
+          {showInst && (
+            <div style={{ padding: '6px 8px 6px', borderTop: `1px solid ${BRAND.line}`, maxHeight: 200, overflowY: 'auto' }}>
+              <div style={title}>Minhas instituições {switching && <Loader2 size={11} className="animate-spin" style={{ verticalAlign: -1, marginLeft: 4 }} />}</div>
+              {institutions!.map(inst => (
+                <button key={inst.id} onClick={() => pickInst(inst.id)} style={{ ...rowCss, background: inst.id === user.institution_id ? BRAND.softer : 'transparent', color: inst.id === user.institution_id ? BRAND.primaryDark : BRAND.ink, fontWeight: inst.id === user.institution_id ? 800 : 600 }}>
+                  <Building2 size={16} color={inst.id === user.institution_id ? BRAND.primaryDark : BRAND.muted} />
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inst.name}</span>
+                  {inst.id === user.institution_id && <Check size={15} color={BRAND.primaryDark} />}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div style={{ padding: '4px 8px 8px', borderTop: `1px solid ${BRAND.line}` }}>
             <Link to="/profile" onClick={() => setOpen(false)} style={rowCss}><UserCog size={16} color={BRAND.muted} />Editar meu perfil</Link>
