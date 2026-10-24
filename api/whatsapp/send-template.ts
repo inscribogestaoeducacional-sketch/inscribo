@@ -236,7 +236,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (bodyTmpl?.text) {
           let text: string = bodyTmpl.text
           ;(bodyComp.parameters as any[]).forEach((p: any, i: number) => {
-            text = text.replace(`{{${i + 1}}}`, p.text || '')
+            text = text.split(`{{${i + 1}}}`).join(p.text || '')
           })
           preview = text
         }

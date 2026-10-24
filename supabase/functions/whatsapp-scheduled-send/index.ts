@@ -112,11 +112,13 @@ serve(async (req) => {
 
         if (bodyTmpl?.text) {
           let text: string = bodyTmpl.text
-          const varCount = (text.match(/\{\{\d+\}\}/g) || []).length
-          for (let i = 1; i <= varCount; i++) {
-            const value = vars[String(i)] || ''
+          // Variáveis distintas: {{2}} repetido no texto conta como UMA só (a Meta
+          // espera um parâmetro por número, não por ocorrência).
+          const nums = Array.from(new Set((text.match(/\{\{(\d+)\}\}/g) || []).map(m => Number(m.replace(/\D/g, ''))))).sort((a, b) => a - b)
+          for (const i of nums) {
+            const value = (vars[String(i)] || '').replace(/\s*[\n\t]+\s*/g, ' ').trim() || '-'
             parameters.push({ type: 'text', text: value })
-            text = text.replace(`{{${i}}}`, value)
+            text = text.split(`{{${i}}}`).join(value)
           }
           preview = text
         }
