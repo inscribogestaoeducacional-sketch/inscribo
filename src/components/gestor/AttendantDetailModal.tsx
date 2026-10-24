@@ -24,7 +24,7 @@ export interface AttendantConv {
 }
 
 const toSatisfPct = (score: number | null) => score !== null ? Math.round(((score - 1) / 2) * 100) : null
-const satisfPctColor = (pct: number | null) => pct !== null ? pct >= 75 ? '#00A896' : pct >= 40 ? '#F59E0B' : '#EF4444' : '#94a3b8'
+const satisfPctColor = (pct: number | null) => pct !== null ? pct >= 75 ? '#05907B' : pct >= 40 ? '#F59E0B' : '#EF4444' : '#94a3b8'
 
 function fmtResponse(min: number | null) {
   if (min === null) return '—'

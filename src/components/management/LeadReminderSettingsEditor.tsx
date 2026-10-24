@@ -65,7 +65,7 @@ export default function LeadReminderSettingsEditor({ institutionId, onToast }: {
         <span style={{ fontSize: 13, color: '#475569' }}>dias sem interação</span>
         {canManage && days !== saved && (
           <button onClick={save} disabled={saving}
-            style={{ marginLeft: 'auto', padding: '8px 16px', borderRadius: 10, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
+            style={{ marginLeft: 'auto', padding: '8px 16px', borderRadius: 10, border: 'none', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
             {saving ? 'Salvando…' : 'Salvar'}
           </button>
         )}

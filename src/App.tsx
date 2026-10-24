@@ -1,3 +1,4 @@
+import { BrandLoader } from './components/ui/BrandLoader'
 import { useStageLabelsVersion } from './lib/stageLabels'
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
@@ -255,13 +256,7 @@ function AppContent() {
 
   if (initializing || !ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyan-50 to-blue-50">
-        <div className="text-center">
-          <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 48, objectFit: 'contain', marginBottom: 24 }} />
-          <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400 mt-1">Carregando...</p>
-        </div>
-      </div>
+      <BrandLoader fullscreen label="Carregando" />
     )
   }
 
@@ -343,7 +338,7 @@ function AppContent() {
   }
   // ── BLOQUEIO POR STATUS ───────────────────────────────────────────────────
   if (user.user_type === 'school_user') {
-    if (checkingStatus) return <div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>
+    if (checkingStatus) return <BrandLoader fullscreen label="Verificando acesso" />
     if (schoolStatus === 'pending_contract') return <PendingScreen type="contract" />
     if (schoolStatus === 'pending_payment') return <PendingScreen type="payment" />
     if (schoolStatus === 'suspended') return <PendingScreen type="suspended" />

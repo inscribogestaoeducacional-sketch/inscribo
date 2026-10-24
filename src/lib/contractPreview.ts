@@ -67,15 +67,15 @@ export function renderContractHtml(vars: ContractVars): string {
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, sans-serif; font-size: 13px; line-height: 1.8; color: #1a1a1a; background: #fff; }
-  .header { background: linear-gradient(135deg, #00523C, #00A896); padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; }
+  .header { background: linear-gradient(135deg, #00523C, #05907B); padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; }
   .header-title { color: white; }
   .header-title h1 { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
   .header-title p { font-size: 12px; opacity: 0.85; }
   .header-info { text-align: right; color: rgba(255,255,255,0.85); font-size: 11px; line-height: 1.6; }
   .content { padding: 40px 48px; }
-  .doc-title { text-align: center; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 2px solid #00A896; }
+  .doc-title { text-align: center; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 2px solid #05907B; }
   .doc-title h2 { font-size: 20px; font-weight: 800; color: #00523C; margin-bottom: 6px; }
-  .doc-title p { font-size: 13px; color: #00A896; font-weight: 600; }
+  .doc-title p { font-size: 13px; color: #05907B; font-weight: 600; }
   .partes-box { background: #F0FDF9; border: 1px solid #A7F3D0; border-radius: 10px; padding: 20px; margin-bottom: 28px; }
   .parte { display: flex; gap: 16px; margin-bottom: 12px; }
   .parte:last-child { margin-bottom: 0; }
@@ -83,7 +83,7 @@ export function renderContractHtml(vars: ContractVars): string {
   .parte-text { font-size: 12px; color: #1a1a1a; line-height: 1.6; }
   .intro { font-size: 13px; color: #374151; line-height: 1.8; margin-bottom: 28px; text-align: justify; }
   .clausula { margin-bottom: 24px; }
-  .clausula-title { font-size: 13px; font-weight: 800; color: #00523C; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px; padding: 8px 12px; background: #F0FDF9; border-left: 4px solid #00A896; border-radius: 0 6px 6px 0; }
+  .clausula-title { font-size: 13px; font-weight: 800; color: #00523C; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px; padding: 8px 12px; background: #F0FDF9; border-left: 4px solid #05907B; border-radius: 0 6px 6px 0; }
   .clausula p { font-size: 12.5px; color: #374151; line-height: 1.8; text-align: justify; margin-bottom: 8px; }
   .clausula ul { padding-left: 24px; margin: 8px 0; }
   .clausula ul li { font-size: 12px; color: #374151; line-height: 1.7; margin-bottom: 4px; }
@@ -96,7 +96,7 @@ export function renderContractHtml(vars: ContractVars): string {
   .assin-name { font-size: 12px; font-weight: 700; color: #1a1a1a; }
   .assin-role { font-size: 11px; color: #6B7280; }
   .assin-cpf { font-size: 11px; color: #6B7280; }
-  .footer { background: #F9FAFB; border-top: 2px solid #00A896; padding: 16px 48px; display: flex; justify-content: space-between; align-items: center; margin-top: 40px; }
+  .footer { background: #F9FAFB; border-top: 2px solid #05907B; padding: 16px 48px; display: flex; justify-content: space-between; align-items: center; margin-top: 40px; }
   .footer p { font-size: 10px; color: #9CA3AF; }
   .badge { display: inline-block; background: #E6F7F5; color: #00523C; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid #A7F3D0; }
 </style>

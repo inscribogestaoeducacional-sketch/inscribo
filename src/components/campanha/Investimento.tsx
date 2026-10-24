@@ -82,7 +82,7 @@ export default function Investimento({ institutionId, year, from, to }: { instit
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ ...card, flex: '1 1 220px' }}><div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B' }}>INVESTIMENTO TOTAL</div>
           <div style={{ fontSize: 28, fontWeight: 800, color: BRAND.ink }}>{brl(total)}</div>
-          {budgetTotal > 0 && <><div style={{ height: 10, borderRadius: 99, background: '#EDF1F0', marginTop: 8, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, total / budgetTotal * 100)}%`, height: '100%', background: total > budgetTotal ? '#DC2626' : '#00A896' }} /></div>
+          {budgetTotal > 0 && <><div style={{ height: 10, borderRadius: 99, background: '#EDF1F0', marginTop: 8, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, total / budgetTotal * 100)}%`, height: '100%', background: total > budgetTotal ? '#DC2626' : '#05907B' }} /></div>
             <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>{Math.round(total / budgetTotal * 100)}% da meta de {brl(budgetTotal)}</div></>}</div>
         <div style={{ ...card, flex: '1 1 160px' }}><div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B' }}>CUSTO POR LEAD</div><div style={{ fontSize: 28, fontWeight: 800 }}>{per(total, base.leads)}</div><div style={{ fontSize: 12, color: '#94A3B8' }}>{base.leads} leads</div></div>
         <div style={{ ...card, flex: '1 1 160px' }}><div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B' }}>CUSTO POR VISITA</div><div style={{ fontSize: 28, fontWeight: 800 }}>{per(total, base.visits)}</div><div style={{ fontSize: 12, color: '#94A3B8' }}>{base.visits} visitas</div></div>
@@ -116,7 +116,7 @@ export default function Investimento({ institutionId, year, from, to }: { instit
                     <div key={r.m} style={{ border: '1px solid #E3E8F0', borderRadius: 12, padding: '10px 12px', background: r.m === nowM ? '#FFFBEB' : '#fff' }}>
                       <div style={{ fontSize: 12.5, fontWeight: 800, color: BRAND.ink }}>{monthName(r.m + '-01')}{r.m === nowM ? ' · em andamento' : ''}</div>
                       <div style={{ fontSize: 20, fontWeight: 800, color: BRAND.primaryDark, margin: '4px 0' }}>{brl(r.g)}{dv != null && <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 6, color: dv > 0 ? '#B45309' : '#15803D' }}>{dv > 0 ? '↑' : '↓'}{Math.abs(dv)}%</span>}</div>
-                      <div style={{ height: 6, borderRadius: 99, background: '#EEF2F1', overflow: 'hidden' }}><div style={{ width: `${r.g / maxG * 100}%`, height: '100%', background: '#00A896', transition: 'width .9s' }} /></div>
+                      <div style={{ height: 6, borderRadius: 99, background: '#EEF2F1', overflow: 'hidden' }}><div style={{ width: `${r.g / maxG * 100}%`, height: '100%', background: '#05907B', transition: 'width .9s' }} /></div>
                       <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.6, marginTop: 6 }}>{r.l} leads · <b>{r.n}</b> novatos<br />Custo/lead: {per(r.g, r.l)}<br />Custo/aluno: <b style={{ color: '#7C3AED' }}>{r.cpa != null ? brl(r.cpa) : '—'}</b></div>
                     </div>
                   )
@@ -176,7 +176,7 @@ export default function Investimento({ institutionId, year, from, to }: { instit
           <select value={channel} onChange={e => setChannel(e.target.value)} style={inp}><option value="">Sem canal específico</option>{base.by_origin.map(o => <option key={o.source}>{o.source}</option>)}</select>
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, margin: '10px 0', cursor: 'pointer' }}><input type="checkbox" checked={paid} onChange={e => setPaid(e.target.checked)} /> Tráfego pago (anúncio)</label>
           {err && <div style={{ color: '#B91C1C', fontSize: 12.5, marginBottom: 6 }}>{err}</div>}
-          <button onClick={add} disabled={saving} style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#065F52,#00A896)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>Salvar investimento</button>
+          <button onClick={add} disabled={saving} style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#00695F,#05907B)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>Salvar investimento</button>
         </div>
       </div>
 

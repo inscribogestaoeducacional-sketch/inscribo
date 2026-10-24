@@ -340,11 +340,11 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
       <Modal title="Campanha criada" onClose={() => onCreated(result.campaignId)}
         footer={<Btn onClick={() => onCreated(result.campaignId)}>Ver campanha</Btn>}>
         <div style={{ display: 'grid', gap: 14, textAlign: 'center' }}>
-          <CheckCircle2 size={40} color="#00A896" style={{ margin: '0 auto' }} />
+          <CheckCircle2 size={40} color="#05907B" style={{ margin: '0 auto' }} />
           {result.total > 0 ? (
             result.paymentLink ? <>
               <p style={{ margin: 0, fontSize: 14, color: '#1e293b' }}>Falta só o pagamento de <strong>{brl(result.total)}</strong>. A campanha sai automaticamente assim que o pagamento for confirmado.</p>
-              <a href={result.paymentLink} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'center', padding: '10px 18px', borderRadius: 10, background: '#00A896', color: '#fff', fontWeight: 600, fontSize: 13, textDecoration: 'none', margin: '0 auto' }}>
+              <a href={result.paymentLink} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'center', padding: '10px 18px', borderRadius: 10, background: '#05907B', color: '#fff', fontWeight: 600, fontSize: 13, textDecoration: 'none', margin: '0 auto' }}>
                 <ExternalLink size={14} /> Pagar agora (Pix, boleto ou cartão)
               </a>
             </> : <ErrorBox message={`Campanha pronta, mas a cobrança não foi gerada: ${result.chargeError}`} details={['Você pode gerar a cobrança depois, no detalhe da campanha.']} />
@@ -390,7 +390,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
               const cat = t.approved_category || t.category
               return (
                 <button key={t.id} type="button" onClick={() => setTemplateId(t.id)}
-                  style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 12, cursor: 'pointer', border: sel ? '2px solid #00A896' : '1.5px solid #E2E8F0', background: sel ? '#F0FDFA' : '#fff' }}>
+                  style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 12, cursor: 'pointer', border: sel ? '2px solid #05907B' : '1.5px solid #E2E8F0', background: sel ? '#F0FDFA' : '#fff' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                     <strong style={{ fontSize: 13, color: '#1e293b' }}>{t.display_name || t.name}</strong>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -757,7 +757,7 @@ function Chips({ label, options, value, onChange }: { label: string; options: { 
 function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" onClick={onClick} style={{ padding: '5px 11px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-      border: on ? '1.5px solid #00A896' : '1.5px solid #E2E8F0', background: on ? '#F0FDFA' : '#fff', color: on ? '#047857' : '#475569' }}>
+      border: on ? '1.5px solid #05907B' : '1.5px solid #E2E8F0', background: on ? '#F0FDFA' : '#fff', color: on ? '#047857' : '#475569' }}>
       {children}
     </button>
   )

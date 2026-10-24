@@ -67,7 +67,7 @@ export default function VisaoGeral(p: Props) {
   const chart = useMemo(() => {
     const val = (y: HistYear, m: string, shift: number) => { const x = y.monthly.find(z => `${Number(z.m.slice(0, 4)) + shift}-${z.m.slice(5, 7)}` === m); return !x ? 0 : metric === 'total' ? x.novos + x.rematriculas : x[metric] }
     const cols = p.years.slice(-3).map((y, i) => ({ label: String(y.year), c: YC[i], vals: p.months.map(m => val(y, m.m, p.targetYear - y.year)) }))
-    cols.push({ label: `${p.targetYear} (em andamento)`, c: '#00A896', vals: p.months.map(m => (m.m <= now ? (p.cur?.monthly.find(z => z.m === m.m) ? (metric === 'total' ? (p.cur!.monthly.find(z => z.m === m.m)!.novos + p.cur!.monthly.find(z => z.m === m.m)!.rematriculas) : p.cur!.monthly.find(z => z.m === m.m)![metric]) : 0) : -1)) })
+    cols.push({ label: `${p.targetYear} (em andamento)`, c: '#05907B', vals: p.months.map(m => (m.m <= now ? (p.cur?.monthly.find(z => z.m === m.m) ? (metric === 'total' ? (p.cur!.monthly.find(z => z.m === m.m)!.novos + p.cur!.monthly.find(z => z.m === m.m)!.rematriculas) : p.cur!.monthly.find(z => z.m === m.m)![metric]) : 0) : -1)) })
     if (acc) for (const c of cols) { let s = 0; c.vals = c.vals.map(v => (v < 0 ? v : (s += v))) }
     return cols
   }, [p.years, p.cur, p.months, p.targetYear, metric, acc, now])
@@ -132,7 +132,7 @@ export default function VisaoGeral(p: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 12 }}>
         <Mini title="Funil" go={() => p.go('funil')}>
-          {fun && need ? ([['Leads', fun.entraram, need.registrations, '#0EA5E9'], ['Agendamentos', fun.totais.scheduled?.n ?? 0, need.schedules, '#14B8A6'], ['Visitas', fun.totais.visit?.n ?? 0, need.visits, '#10B981'], ['Matrículas novas', fun.totais.enrolled?.n ?? 0, p.goals.novos, '#059669']] as [string, number, number, string][]).map(([l, v, m, c]) => (
+          {fun && need ? ([['Leads', fun.entraram, need.registrations, '#0EA5E9'], ['Agendamentos', fun.totais.scheduled?.n ?? 0, need.schedules, '#2DCBA4'], ['Visitas', fun.totais.visit?.n ?? 0, need.visits, '#10B981'], ['Matrículas novas', fun.totais.enrolled?.n ?? 0, p.goals.novos, '#059669']] as [string, number, number, string][]).map(([l, v, m, c]) => (
             <div key={l}><div style={{ display: 'flex', justifyContent: 'space-between' }}><span>{l}</span><span><b>{v}</b> de {m} <b style={{ color: v >= m ? '#15803D' : '#B91C1C' }}>{m ? `${v >= m ? '+' : ''}${Math.round((v - m) / m * 100)}%` : ''}</b></span></div><Bar v={v} max={m} c={c} /></div>
           )) : <span style={{ color: '#94A3B8' }}>Carregando…</span>}
         </Mini>

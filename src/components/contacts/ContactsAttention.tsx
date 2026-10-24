@@ -43,7 +43,7 @@ export function ContactsAttentionStrip({ counts, active, onPick }: { counts: Cou
     { key: 'dup', label: 'Duplicados', value: c.duplicados, sub: 'telefones repetidos', color: '#B45309', icon: GitMerge },
     { key: 'rel', label: 'Sem relação', value: c.sem_relacao, sub: 'quem é esse contato?', color: '#6366F1', icon: HelpCircle },
     { key: 'nolead', label: 'Leads sem contato', value: c.sem_lead, sub: 'falta o WhatsApp deles', color: '#5B6B86', icon: Link2Off },
-    { key: 'api', label: 'Responsáveis da API', value: c.api_resp, sub: 'já estão nos contatos', color: '#007A6E', icon: Plug },
+    { key: 'api', label: 'Responsáveis da API', value: c.api_resp, sub: 'já estão nos contatos', color: '#00695F', icon: Plug },
   ]
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
@@ -135,7 +135,7 @@ export function ContactsResolvePanel({ kind, institutionId, counts, onClose, onC
   if (kind === 'api') return (
     <div className="ld-in" style={{ ...wrap, background: '#F0FDFB', borderColor: '#99F6E4' }}>
       {head('Responsáveis da API', 'Vêm da integração de alunos e ficam sincronizados.')}
-      <div style={{ padding: 14, fontSize: 13, color: '#065F52', display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div style={{ padding: 14, fontSize: 13, color: '#00695F', display: 'flex', gap: 8, alignItems: 'center' }}>
         <CheckCircle2 size={16} />{num(counts?.api_resp ?? 0)} responsáveis da integração já estão nos contatos, com a relação com a escola atualizada.
       </div>
     </div>

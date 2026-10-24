@@ -88,7 +88,7 @@ const ini = (n: string) => (n || '?').split(' ').filter(Boolean).map(p => p[0]).
 const card: CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 14, boxShadow: '0 1px 2px rgba(26,43,74,.04)', flexShrink: 0 }
 const REL: Record<string, string> = { aluno: 'Aluno', pre_matriculado: 'Pré-matriculado', ex_aluno: 'Ex-aluno', transferido: 'Transferido' }
 const VIS: Record<string, [string, string, string]> = {
-  scheduled: ['Marcada', '#B45309', '#FFFBEB'], confirmed: ['Confirmada', '#007A6E', '#F0FDFB'], completed: ['Realizada', '#15803D', '#F0FDF4'],
+  scheduled: ['Marcada', '#B45309', '#FFFBEB'], confirmed: ['Confirmada', '#00695F', '#F0FDFB'], completed: ['Realizada', '#15803D', '#F0FDF4'],
   cancelled: ['Cancelada', '#64748B', '#F1F5F9'], no_show: ['Faltou', '#B91C1C', '#FEF2F2'],
 }
 const chip = (on: boolean, color: string = BRAND.primary): CSSProperties => ({ border: `1.5px solid ${on ? color : BRAND.line}`, background: on ? `${color}14` : '#fff', color: on ? color : '#334155', borderRadius: 999, padding: '6px 11px', fontSize: 12.5, fontWeight: 700, cursor: on ? 'default' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' })
@@ -162,7 +162,7 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
   if (!isGroup) actions.push({ key: 'msg', label: 'Agendar msg', icon: <CalendarClock size={18} />, onClick: p.onScheduleMsg })
   if (!isGroup && !winOpen) actions.push({ key: 'tpl', label: 'Modelo', icon: <BadgeCheck size={18} />, onClick: p.onOpenTemplate, tone: 'warn' })
   if (!isGroup) actions.push({ key: 'ficha', label: 'Ficha', icon: <BookUser size={18} />, onClick: p.onFicha })
-  const typeOpts: [string, string, string][] = [['lead', 'Nova família', '#007A6E'], ['client', 'Cliente', '#047857'], ['supplier', 'Fornecedor', '#7C3AED'], ['other', 'Outro', '#64748B']]
+  const typeOpts: [string, string, string][] = [['lead', 'Nova família', '#00695F'], ['client', 'Cliente', '#047857'], ['supplier', 'Fornecedor', '#7C3AED'], ['other', 'Outro', '#64748B']]
   const stageOn = (k: string) => lead?.status === k
 
   const saveName = async () => { if (await p.onRename(p.nameDraft)) p.setEditing(false) }
@@ -385,7 +385,7 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
           {p.scheduled.length === 0 ? (
             <div style={{ fontSize: 12.5, color: '#94A3B8' }}>Nada agendado. Use para lembrar a família de um retorno, uma visita ou um prazo.</div>
           ) : p.scheduled.map(m => {
-            const tone = m.status === 'sent' ? ['#15803D', '#F0FDF4', 'Enviada'] : m.status === 'failed' ? ['#B91C1C', '#FEF2F2', 'Falhou'] : ['#007A6E', '#F0FDFB', 'Agendada']
+            const tone = m.status === 'sent' ? ['#15803D', '#F0FDF4', 'Enviada'] : m.status === 'failed' ? ['#B91C1C', '#FEF2F2', 'Falhou'] : ['#00695F', '#F0FDFB', 'Agendada']
             const d = new Date(m.scheduled_for)
             return (
               <div key={m.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 0', borderTop: '1px solid #F1F5F9' }}>

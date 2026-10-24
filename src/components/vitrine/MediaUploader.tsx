@@ -53,7 +53,7 @@ export default function MediaUploader({
         onDragLeave={() => setOver(false)}
         onDrop={e => { e.preventDefault(); setOver(false); send(e.dataTransfer.files?.[0]) }}
         style={{ ...box, position: 'relative', overflow: 'hidden', transition: T,
-          border: over ? '2px dashed #00A896' : value ? '1px solid #E2E8F0' : '1.5px dashed #CBD5E1',
+          border: over ? '2px dashed #05907B' : value ? '1px solid #E2E8F0' : '1.5px dashed #CBD5E1',
           background: over ? '#F0FDFB' : value ? '#F8FAFC' : '#FAFAFA',
           boxShadow: over ? '0 0 0 4px #D1FAE5' : 'none' }}>
         <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
@@ -69,13 +69,13 @@ export default function MediaUploader({
             : circle
               ? <ImagePlus size={18} />
               : <>
-                  {over ? <UploadCloud size={22} color="#00A896" /> : <ImagePlus size={20} />}
+                  {over ? <UploadCloud size={22} color="#05907B" /> : <ImagePlus size={20} />}
                   <span>{over ? 'Solte pra enviar' : 'Clique ou arraste uma imagem'}</span>
                   {recommended && !over && <span style={{ fontWeight: 500, color: '#94a3b8' }}>Recomendado: {recommended}</span>}
                 </>}
         </button>
         {busy && (
-          <div aria-live="polite" style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#007A6E' }}>
+          <div aria-live="polite" style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#00695F' }}>
             <Loader2 size={16} className="animate-spin" /> {circle ? '' : 'Enviando…'}
           </div>
         )}

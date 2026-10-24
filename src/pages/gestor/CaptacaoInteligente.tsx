@@ -340,12 +340,12 @@ export default function CaptacaoInteligente() {
 
             {/* Link wa.me gerado */}
             <div style={{ background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 12, padding: '12px 14px' }}>
-              <label style={{ ...labelStyle, color: '#007A6E' }}>Link para o anúncio</label>
+              <label style={{ ...labelStyle, color: '#00695F' }}>Link para o anúncio</label>
               {formLink && form.triggerText.trim() ? (
                 <>
                   <div style={{ fontSize: 12, color: '#1e293b', fontFamily: 'monospace', wordBreak: 'break-all', background: '#fff', border: '1px solid #D1FAE5', borderRadius: 8, padding: '8px 10px' }}>{formLink}</div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                    <ActionBtn onClick={() => copyLink(formLink)} color="#00A896" bg="#E6F7F5" icon={<Copy size={12} />} label="Copiar link" />
+                    <ActionBtn onClick={() => copyLink(formLink)} color="#05907B" bg="#E6F7F5" icon={<Copy size={12} />} label="Copiar link" />
                     <a href={formLink} target="_blank" rel="noopener noreferrer"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 7, background: '#F1F5F9', color: '#64748B', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>
                       <ExternalLink size={12} /> Testar
@@ -442,7 +442,7 @@ export default function CaptacaoInteligente() {
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={closeForm} style={{ flex: 1, padding: '12px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 14, color: '#64748B', cursor: 'pointer', fontWeight: 500, minHeight: 48 }}>Cancelar</button>
               <button onClick={handleSave} disabled={saving}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px', borderRadius: 9, border: 'none', background: '#00A896', color: 'white', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', minHeight: 48, opacity: saving ? 0.7 : 1 }}>
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px', borderRadius: 9, border: 'none', background: '#05907B', color: 'white', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', minHeight: 48, opacity: saving ? 0.7 : 1 }}>
                 {saving && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
                 {saving ? 'Salvando...' : editing ? 'Salvar' : 'Criar gatilho'}
               </button>

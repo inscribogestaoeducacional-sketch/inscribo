@@ -144,7 +144,7 @@ export default function DuplicateContactsModal({ institutionId, currentUserId, o
                           <label key={c.id}
                             style={{
                               display: 'block', cursor: 'pointer', padding: 12, borderRadius: 10,
-                              border: `1.5px solid ${isSelected ? '#00A896' : '#E2E8F0'}`,
+                              border: `1.5px solid ${isSelected ? '#05907B' : '#E2E8F0'}`,
                               background: isSelected ? '#F0FDFB' : '#F8FAFC',
                             }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -173,7 +173,7 @@ export default function DuplicateContactsModal({ institutionId, currentUserId, o
 
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button onClick={() => handleMerge(group)} disabled={busy}
-                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 9, border: 'none', background: '#00A896', color: '#fff', fontSize: 12, fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 9, border: 'none', background: '#05907B', color: '#fff', fontSize: 12, fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
                         {busy ? <Loader2 size={12} className="animate-spin" /> : <GitMerge size={12} />}
                         Mesclar
                       </button>

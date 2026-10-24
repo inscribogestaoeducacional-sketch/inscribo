@@ -65,7 +65,7 @@ export const LEAD_STAGES = [
 ] as const
 
 export function avatarColor(name: string): string {
-  const colors = ['#00A896', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981']
+  const colors = ['#05907B', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981']
   let h = 0
   for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
   return colors[Math.abs(h) % colors.length]

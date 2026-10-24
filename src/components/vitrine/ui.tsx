@@ -1,6 +1,6 @@
 // Peças visuais compartilhadas do editor da Vitrine (mesmo vocabulário
 // visual do Captação: inputs #FAFAFA com borda #E2E8F0, rótulo em caixa alta,
-// teal #00A896 como cor de ação).
+// teal #05907B como cor de ação).
 import React, { useId } from 'react'
 import MediaUploader from './MediaUploader'
 
@@ -35,7 +35,7 @@ export const cardStyle: React.CSSProperties = { background: '#fff', borderRadius
 export const sectionTitleStyle: React.CSSProperties = { margin: 0, fontSize: 15, fontWeight: 700, color: DS.navy, letterSpacing: '-0.01em' }
 
 // Foco dos campos: borda teal + anel suave (padrão dos formulários do Áion).
-const focusOn = (el: HTMLElement) => { el.style.borderColor = '#00A896'; el.style.boxShadow = DS.focusRing; el.style.background = '#fff' }
+const focusOn = (el: HTMLElement) => { el.style.borderColor = '#05907B'; el.style.boxShadow = DS.focusRing; el.style.background = '#fff' }
 const focusOff = (el: HTMLElement) => { el.style.borderColor = DS.border; el.style.boxShadow = 'none'; el.style.background = '#FAFAFA' }
 
 // O rótulo aponta pro campo (htmlFor/id) quando o filho é um input/textarea/
@@ -87,7 +87,7 @@ export function Toggle({ checked, onChange, label, description, disabled }: {
         onClick={() => onChange(!checked)}
         style={{
           flex: 'none', width: 36, height: 20, borderRadius: 999, border: 'none', padding: 2, marginTop: 1,
-          background: checked ? '#00A896' : '#CBD5E1', cursor: 'inherit', transition: DS.ease,
+          background: checked ? '#05907B' : '#CBD5E1', cursor: 'inherit', transition: DS.ease,
           display: 'flex', justifyContent: checked ? 'flex-end' : 'flex-start',
         }}>
         <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.2)' }} />

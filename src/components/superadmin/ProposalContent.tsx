@@ -31,14 +31,14 @@ export const PH = 637
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const VD   = '#00523C'
-const VM   = '#00A896'
-const VC   = '#0DD3BF'
+const VM   = '#05907B'
+const VC   = '#2DCBA4'
 const AZUL = '#1A2B4A'
 const CMID = '#64748B'
 const CLIGHT = '#94A3B8'
 const BORDA  = '#E2E8F0'
-const GRAD   = 'linear-gradient(135deg, #00523C, #006B50, #00A896)'
-const GRAD2  = 'linear-gradient(135deg, #00A896, #0DD3BF)'
+const GRAD   = 'linear-gradient(135deg, #00523C, #006B50, #05907B)'
+const GRAD2  = 'linear-gradient(135deg, #05907B, #2DCBA4)'
 
 const fmtBRL = (v: number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })

@@ -261,7 +261,7 @@ export default function Dashboard() {
           <p className="text-gray-600 mb-6">{error}</p>
           <button
             onClick={() => { setError(''); loadDashboardData() }}
-            className="bg-[#14b8a6] text-white px-6 py-2.5 rounded-xl hover:bg-[#0d9488] transition-all font-semibold"
+            className="bg-[#2DCBA4] text-white px-6 py-2.5 rounded-xl hover:bg-[#0d9488] transition-all font-semibold"
           >
             Tentar Novamente
           </button>
@@ -318,8 +318,8 @@ export default function Dashboard() {
       title: 'Taxa Rematrícula',
       value: `${kpis.taxaRematricula}%`,
       change: 2.1,
-      icon: <RefreshCw className="h-5 w-5 text-[#14b8a6]" />,
-      iconBg: 'bg-[#14b8a6]/10',
+      icon: <RefreshCw className="h-5 w-5 text-[#2DCBA4]" />,
+      iconBg: 'bg-[#2DCBA4]/10',
       onClick: () => navigate('/reports')
     }
   ]
@@ -337,7 +337,7 @@ export default function Dashboard() {
   // ── Quick actions config ─────────────────────────────────────────────────────
   const quickActions = [
     { action: 'new-lead',       label: 'Novo Lead',       icon: <Users className="w-6 h-6" />,          color: 'text-blue-600',    bg: 'bg-blue-50  hover:bg-blue-100' },
-    { action: 'schedule-visit', label: 'Agendar Visita',  icon: <Calendar className="w-6 h-6" />,       color: 'text-[#14b8a6]',   bg: 'bg-[#14b8a6]/10 hover:bg-[#14b8a6]/20' },
+    { action: 'schedule-visit', label: 'Agendar Visita',  icon: <Calendar className="w-6 h-6" />,       color: 'text-[#2DCBA4]',   bg: 'bg-[#2DCBA4]/10 hover:bg-[#2DCBA4]/20' },
     { action: 'new-enrollment', label: 'Nova Matrícula',  icon: <GraduationCap className="w-6 h-6" />,  color: 'text-purple-600',  bg: 'bg-purple-50 hover:bg-purple-100' },
     { action: 'view-reports',   label: 'Ver Relatórios',  icon: <BarChart3 className="w-6 h-6" />,      color: 'text-orange-500',  bg: 'bg-orange-50 hover:bg-orange-100' },
   ]
@@ -354,7 +354,7 @@ export default function Dashboard() {
           <p className="text-gray-500 mt-1">Vamos matricular hoje!</p>
         </div>
         <div className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-600 shadow-sm self-start sm:self-auto capitalize">
-          <Calendar className="w-4 h-4 text-[#14b8a6]" />
+          <Calendar className="w-4 h-4 text-[#2DCBA4]" />
           {dateBadge}
         </div>
       </div>
@@ -379,10 +379,10 @@ export default function Dashboard() {
               return stageRows.map(r => (
                 <div key={r.key} className="flex items-center gap-3">
                   <span className="w-44 shrink-0 text-sm text-gray-700 truncate">
-                    {r.label}{r.extra && <span className="ml-1.5 text-[10px] font-bold bg-[#00A896] text-white rounded-full px-2 py-0.5 align-middle">EXTRA</span>}
+                    {r.label}{r.extra && <span className="ml-1.5 text-[10px] font-bold bg-[#05907B] text-white rounded-full px-2 py-0.5 align-middle">EXTRA</span>}
                   </span>
                   <div className="flex-1 bg-gray-100 rounded-full h-2">
-                    <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${r.count ? Math.max(3, (r.count / max) * 100) : 0}%`, background: r.extra ? '#5CCBBF' : '#00A896' }} />
+                    <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${r.count ? Math.max(3, (r.count / max) * 100) : 0}%`, background: r.extra ? '#5CCBBF' : '#05907B' }} />
                   </div>
                   <span className="w-10 text-right text-sm font-bold text-[#1e2d6b]">{r.count}</span>
                 </div>
@@ -400,7 +400,7 @@ export default function Dashboard() {
           {/* Card header */}
           <div className="flex items-center justify-between px-6 py-4 bg-[#1e2d6b]">
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-[#14b8a6]" />
+              <BarChart3 className="w-5 h-5 text-[#2DCBA4]" />
               <h3 className="text-base font-bold text-white">Funil de Conversão</h3>
             </div>
             <span className="text-xs text-white/60">{funnelData.leads} leads totais</span>
@@ -419,14 +419,14 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-[#1e2d6b]">{row.valor}</span>
-                      <span className="text-xs font-semibold bg-[#14b8a6]/10 text-[#0d9488] px-2 py-0.5 rounded-full">
+                      <span className="text-xs font-semibold bg-[#2DCBA4]/10 text-[#0d9488] px-2 py-0.5 rounded-full">
                         {pct}%
                       </span>
                     </div>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2.5">
                     <div
-                      className="h-2.5 rounded-full bg-gradient-to-r from-[#14b8a6] to-[#0d9488] transition-all duration-500"
+                      className="h-2.5 rounded-full bg-gradient-to-r from-[#2DCBA4] to-[#0d9488] transition-all duration-500"
                       style={{ width: `${Math.max(pct, 2)}%` }}
                     />
                   </div>
@@ -468,7 +468,7 @@ export default function Dashboard() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Visitas (semana)</span>
-                <span className="text-sm font-bold text-[#14b8a6]">{kpis.visitasSemana}</span>
+                <span className="text-sm font-bold text-[#2DCBA4]">{kpis.visitasSemana}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Conversão</span>

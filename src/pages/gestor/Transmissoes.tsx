@@ -25,7 +25,7 @@ import CampaignDetail from '../../components/transmissoes/CampaignDetail'
 
 type Tab = 'campaigns' | 'templates' | 'suppressions'
 
-const TEAL = '#00A896', TEAL_D = '#007A6E', NAVY = '#1e2d6b', LINE = '#E3E8F0'
+const TEAL = '#05907B', TEAL_D = '#00695F', NAVY = '#1e2d6b', LINE = '#E3E8F0'
 const fmt = (n: number) => n.toLocaleString('pt-BR')
 const rate = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : null)
 const FILTERS = [

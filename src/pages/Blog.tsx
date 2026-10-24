@@ -24,7 +24,7 @@ function injectCSS() {
 }
 
 const POSTS = [
-  { slug: 'funil-de-matriculas', cat: 'Matrículas', catColor: '#00A896', title: 'Como estruturar o funil de matrículas da sua escola em 5 passos', desc: 'Da captação de leads até a assinatura do contrato — um guia prático para gestores que querem sair do improviso e criar um processo replicável.', date: '15 Mai 2026', Icon: IcTrendUp, bg: '#E6F7F5', ic: '#00523C' },
+  { slug: 'funil-de-matriculas', cat: 'Matrículas', catColor: '#05907B', title: 'Como estruturar o funil de matrículas da sua escola em 5 passos', desc: 'Da captação de leads até a assinatura do contrato — um guia prático para gestores que querem sair do improviso e criar um processo replicável.', date: '15 Mai 2026', Icon: IcTrendUp, bg: '#E6F7F5', ic: '#00523C' },
   { slug: 'whatsapp-oficial-vs-pessoal', cat: 'WhatsApp', catColor: '#25D366', title: 'WhatsApp Oficial vs WhatsApp pessoal: qual o risco para sua escola?', desc: 'Usar o celular pessoal da secretária para atender famílias pode custar caro. Entenda os riscos legais, operacionais e de imagem.', date: '8 Mai 2026', Icon: IcMsg, bg: '#E8F5E9', ic: '#25D366' },
   { slug: 'ia-plano-de-campanha', cat: 'IA', catColor: '#EA580C', title: 'Como a IA pode criar o plano de campanha de matrícula da sua escola', desc: 'Em menos de 10 minutos, a inteligência artificial pode gerar metas mensais, CPA sugerido e calendário de captação com base nos seus dados reais.', date: '2 Mai 2026', Icon: IcCpu, bg: '#FFF7ED', ic: '#EA580C' },
   { slug: 'relatorio-mensal-de-campanha', cat: 'Gestão', catColor: '#2563EB', title: 'Relatório mensal de campanha: por que seu gestor precisa dele', desc: 'Sem dados, decisão é chute. Entenda como um relatório mensal bem estruturado pode mudar o resultado da sua campanha de matrículas.', date: '24 Abr 2026', Icon: IcBarChart, bg: '#EFF6FF', ic: '#2563EB' },
@@ -51,7 +51,7 @@ export default function Blog() {
           <div style={{ position: 'relative', zIndex: 1 }}>
             <div className="tag-d" style={{ display: 'inline-flex', marginBottom: 24 }}>Blog ÁION EDU</div>
             <h1 className="s-title" style={{ fontSize: 'clamp(36px,5vw,60px)', color: '#fff', marginBottom: 20 }}>
-              Conteúdo estratégico para<br /><span style={{ color: '#0DD3BF' }}>gestores de escolas privadas</span>
+              Conteúdo estratégico para<br /><span style={{ color: '#2DCBA4' }}>gestores de escolas privadas</span>
             </h1>
             <p style={{ fontSize: 17, color: 'rgba(255,255,255,.7)', maxWidth: 500, margin: '0 auto', lineHeight: 1.8 }}>
               Matrículas, WhatsApp, gestão, IA e mercado educacional — tudo que você precisa saber para liderar sua campanha com confiança.
@@ -85,8 +85,8 @@ export default function Blog() {
                     </div>
                     <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 12, lineHeight: 1.45 }}>{post.title}</h2>
                     <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.75, flex: 1, marginBottom: 20 }}>{post.desc}</p>
-                    <a href={`/blog/${post.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#00A896', textDecoration: 'none' }}>
-                      Ler mais <IcArrowRight size={14} color="#00A896" />
+                    <a href={`/blog/${post.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#05907B', textDecoration: 'none' }}>
+                      Ler mais <IcArrowRight size={14} color="#05907B" />
                     </a>
                   </div>
                 </article>

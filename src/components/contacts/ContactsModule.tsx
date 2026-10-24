@@ -22,7 +22,7 @@ import { LEADS_CSS } from '../leads/LeadsAttention'
 import { ContactsResolvePanel, useContactsAttention, type ContactAttentionKey } from './ContactsAttention'
 
 // ─── Constants ───────────────────────────────────────────────
-const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
+const HEX_COLORS = ['#05907B','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
 const PAGE_SIZE  = 50
 // PostgREST limita a resposta a um número fixo de linhas por requisição
 // (tipicamente 1000). Exportar sem paginar cortava o CSV em silêncio pra
@@ -91,7 +91,7 @@ function typeCfg(type: string | null) {
 
 const hdrBtn = (primary = false): React.CSSProperties => ({
   display: 'flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 11, fontSize: 13, fontWeight: primary ? 800 : 600, cursor: 'pointer',
-  border: primary ? '1px solid #fff' : '1px solid rgba(255,255,255,.4)', background: primary ? '#fff' : 'rgba(255,255,255,.14)', color: primary ? '#007A6E' : '#fff',
+  border: primary ? '1px solid #fff' : '1px solid rgba(255,255,255,.4)', background: primary ? '#fff' : 'rgba(255,255,255,.14)', color: primary ? '#00695F' : '#fff',
 })
 
 const RELATION: Record<string, { label: string; bg: string; fg: string }> = {
@@ -980,7 +980,7 @@ export default function ContactsModule() {
   const SortTh = ({ col, label, width }: { col: string; label: string; width?: number | string }) => (
     <th
       onClick={() => handleSortClick(col)}
-      style={{ background: '#F5FAF9', padding: '11px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: sortCol === col ? '#007A6E' : '#5B6B86', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E3E8F0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', width }}
+      style={{ background: '#F5FAF9', padding: '11px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: sortCol === col ? '#00695F' : '#5B6B86', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E3E8F0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', width }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {label}
@@ -1097,9 +1097,9 @@ export default function ContactsModule() {
         {/* ── Contador ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#F0FDFA', borderRadius: 9, marginBottom: 18, border: '1px solid #CCFBF1' }}>
           {exportFetching && (
-            <div className="animate-spin" style={{ width: 12, height: 12, border: '2px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', flexShrink: 0 }} />
+            <div className="animate-spin" style={{ width: 12, height: 12, border: '2px solid #05907B', borderTopColor: 'transparent', borderRadius: '50%', flexShrink: 0 }} />
           )}
-          <p style={{ margin: 0, fontSize: 13, color: '#00A896', fontWeight: 600 }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#05907B', fontWeight: 600 }}>
             {exportFetching ? 'Calculando...' : `${exportCount} contato(s) com os filtros selecionados`}
           </p>
         </div>
@@ -1108,12 +1108,12 @@ export default function ContactsModule() {
         <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Campos a exportar</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
           {EXPORT_FIELD_DEFS.map(f => (
-            <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: '#1A2B4A', padding: '7px 10px', borderRadius: 8, border: `1px solid ${exportFields[f.key] ? '#00A896' : '#E2E8F0'}`, background: exportFields[f.key] ? '#F0FDFA' : '#fff', transition: 'all 0.12s' }}>
+            <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: '#1A2B4A', padding: '7px 10px', borderRadius: 8, border: `1px solid ${exportFields[f.key] ? '#05907B' : '#E2E8F0'}`, background: exportFields[f.key] ? '#F0FDFA' : '#fff', transition: 'all 0.12s' }}>
               <input
                 type="checkbox"
                 checked={exportFields[f.key]}
                 onChange={e => setExportFields(prev => ({ ...prev, [f.key]: e.target.checked }))}
-                style={{ width: 15, height: 15, accentColor: '#00A896', flexShrink: 0 }}
+                style={{ width: 15, height: 15, accentColor: '#05907B', flexShrink: 0 }}
               />
               {f.label}
             </label>
@@ -1128,7 +1128,7 @@ export default function ContactsModule() {
           <button
             onClick={() => exportContacts('csv')}
             disabled={exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0) ? 0.5 : 1 }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', border: 'none', borderRadius: 9, background: '#05907B', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0) ? 0.5 : 1 }}>
             <Download size={14} /> {exportLoading ? (exportProgress > 0 ? `Exportando... ${exportProgress}/${exportCount}` : 'Exportando...') : `CSV (${exportCount})`}
           </button>
           <button
@@ -1222,7 +1222,7 @@ export default function ContactsModule() {
             Cancelar
           </button>
           <button onClick={handleSaveNewContact} disabled={savingNewContact}
-            style={{ padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: savingNewContact ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: savingNewContact ? 0.7 : 1 }}>
+            style={{ padding: '9px 18px', border: 'none', borderRadius: 9, background: '#05907B', color: '#fff', fontSize: 13, cursor: savingNewContact ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: savingNewContact ? 0.7 : 1 }}>
             {savingNewContact ? 'Criando...' : 'Criar contato'}
           </button>
         </div>
@@ -1280,7 +1280,7 @@ export default function ContactsModule() {
             {Object.entries(statusConfig).map(([value, cfg]) => (
               <button key={value} onClick={() => setFilterStatus(filterStatus === value ? 'all' : value)}
                 style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-                  background: filterStatus === value ? '#00A896' : '#F0FFF4',
+                  background: filterStatus === value ? '#05907B' : '#F0FFF4',
                   color:      filterStatus === value ? '#fff'    : '#64748B' }}>
                 {cfg.label}
               </button>
@@ -1291,7 +1291,7 @@ export default function ContactsModule() {
           <div style={{ flex: 1, overflowY: 'auto', marginTop: 10, background: '#fff', borderTop: '1px solid #F1F5F9' }}>
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center' }}>
-                <div className="animate-spin" style={{ width: 28, height: 28, border: '3px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 10px' }} />
+                <div className="animate-spin" style={{ width: 28, height: 28, border: '3px solid #05907B', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 10px' }} />
                 <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>Carregando...</p>
               </div>
             ) : contacts.length === 0 ? (
@@ -1342,7 +1342,7 @@ export default function ContactsModule() {
           </div>
         </div>
         <button onClick={openNewContact}
-          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}>
+          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}>
           <Plus size={24} />
         </button>
         {importModal}
@@ -1417,7 +1417,7 @@ export default function ContactsModule() {
                 <Download size={12} /> Exportar
               </button>
               <button onClick={() => { setBulkTagNames([]); setShowBulkTagModal(true) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', cursor: 'pointer' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9, background: '#05907B', color: '#fff', cursor: 'pointer' }}>
                 <TagIcon size={12} /> Aplicar etiqueta
               </button>
               <button onClick={openBulkDeleteConfirm}
@@ -1522,7 +1522,7 @@ export default function ContactsModule() {
                         <div style={{ display: 'flex', gap: 6 }}>
                           {c.lead_id && (
                             <button onClick={e => { e.stopPropagation(); navigate(`/leads?open=${c.lead_id}`) }}
-                              style={{ padding: '5px 12px', fontSize: 12, fontWeight: 700, border: '1px solid #99F6E4', borderRadius: 8, background: '#F0FDFA', color: '#007A6E', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              style={{ padding: '5px 12px', fontSize: 12, fontWeight: 700, border: '1px solid #99F6E4', borderRadius: 8, background: '#F0FDFA', color: '#00695F', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                               Ver lead
                             </button>
                           )}
@@ -1586,7 +1586,7 @@ export default function ContactsModule() {
                 Cancelar
               </button>
               <button onClick={applyBulkTags} disabled={bulkTagNames.length === 0 || bulkTagSaving}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 9, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: bulkTagSaving ? 'not-allowed' : 'pointer', opacity: bulkTagNames.length === 0 || bulkTagSaving ? 0.6 : 1 }}>
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 9, border: 'none', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, cursor: bulkTagSaving ? 'not-allowed' : 'pointer', opacity: bulkTagNames.length === 0 || bulkTagSaving ? 0.6 : 1 }}>
                 {bulkTagSaving && <Loader2 size={13} className="animate-spin" />}
                 {bulkTagSaving ? 'Aplicando...' : 'Aplicar'}
               </button>

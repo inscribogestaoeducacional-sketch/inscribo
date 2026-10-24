@@ -18,7 +18,7 @@ const evMeta = (type: string, desc: string): { icon: ReactNode; color: string } 
   if (type === 'assignment' || /assum/.test(d)) return { icon: <UserCheck size={14} />, color: '#2563EB' }
   if (type === 'reopened') return { icon: <RotateCcw size={14} />, color: '#B45309' }
   if (type === 'broadcast_reply') return { icon: <Megaphone size={14} />, color: '#DB2777' }
-  if (type === 'contact_identified') return { icon: <Tag size={14} />, color: '#007A6E' }
+  if (type === 'contact_identified') return { icon: <Tag size={14} />, color: '#00695F' }
   if (/conclu|encerr|fechad/.test(d)) return { icon: <CheckCircle2 size={14} />, color: '#15803D' }
   if (/fila|aguard/.test(d)) return { icon: <Inbox size={14} />, color: '#B45309' }
   if (/rob[oô]/.test(d)) return { icon: <MessageCircle size={14} />, color: BRAND.primary }
@@ -56,7 +56,7 @@ export default function ConversationTimeline({ institutionId, remoteJid, leadId,
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid).in('status', ['sent', 'failed']).order('scheduled_for', { ascending: false }).limit(30),
       ])
       const l = (lead as any).data
-      if (l) out.push({ id: 'lead', at: l.created_at, kind: 'funil', title: 'Entrou no funil como lead', sub: [l.student_name && `Aluno: ${l.student_name}`, l.source && `Origem: ${l.source}`].filter(Boolean).join(' · ') || null, icon: <UserPlus size={14} />, color: '#007A6E' })
+      if (l) out.push({ id: 'lead', at: l.created_at, kind: 'funil', title: 'Entrou no funil como lead', sub: [l.student_name && `Aluno: ${l.student_name}`, l.source && `Origem: ${l.source}`].filter(Boolean).join(' · ') || null, icon: <UserPlus size={14} />, color: '#00695F' })
       for (const h of ((hist as any).data || []) as any[]) {
         const to = h.to_status ?? h.new_status ?? h.status
         if (!to) continue

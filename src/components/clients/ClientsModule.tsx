@@ -62,7 +62,7 @@ const STATUS_CONFIG = {
   lead:        { label: 'Lead',        bg: '#FEF3C7', color: '#92400E' },
 }
 
-const AVATAR_COLORS = ['#00A896', '#3B82F6', '#8B5CF6', '#F97316', '#EF4444', '#10B981', '#F59E0B', '#EC4899']
+const AVATAR_COLORS = ['#05907B', '#3B82F6', '#8B5CF6', '#F97316', '#EF4444', '#10B981', '#F59E0B', '#EC4899']
 
 function fmt(date: string) {
   return new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -549,7 +549,7 @@ export default function ClientsModule() {
             {editMode && (
               <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button onClick={() => setEditMode(false)} style={{ padding: '10px 20px', borderRadius: 10, border: '1px solid #E2E8F0', background: 'white', fontSize: 13, color: '#64748B', cursor: 'pointer' }}>Cancelar</button>
-                <button onClick={updateClient} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 24px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+                <button onClick={updateClient} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 24px', borderRadius: 10, background: '#05907B', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
                   {saving ? 'Salvando...' : <><Check size={14} /> Salvar</>}
                 </button>
               </div>
@@ -604,7 +604,7 @@ export default function ClientsModule() {
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button onClick={saveNote} disabled={!newNote.trim() || savingNote}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !newNote.trim() ? 0.6 : 1 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 10, background: '#05907B', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !newNote.trim() ? 0.6 : 1 }}>
                   {savingNote ? 'Salvando...' : <><Check size={13} /> Salvar anotação</>}
                 </button>
               </div>
@@ -620,7 +620,7 @@ export default function ClientsModule() {
                 <div key={note.id} style={{ ...card, padding: 20 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#00A896' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#05907B' }}>
                         {getInitials(note.author_name)}
                       </div>
                       <div>
@@ -680,7 +680,7 @@ export default function ClientsModule() {
             <Tag size={14} /> Campos
           </button>
           <button onClick={() => setShowNewModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#05907B', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
             <Plus size={14} /> Novo cliente
           </button>
         </div>
@@ -721,7 +721,7 @@ export default function ClientsModule() {
       <div style={card}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60, color: '#94A3B8' }}>
-            <div style={{ width: 32, height: 32, border: '3px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+            <div style={{ width: 32, height: 32, border: '3px solid #05907B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
             Carregando clientes...
           </div>
         ) : filtered.length === 0 ? (
@@ -731,7 +731,7 @@ export default function ClientsModule() {
               {clients.length === 0 ? 'Nenhum cliente cadastrado' : 'Nenhum resultado encontrado'}
             </p>
             {clients.length === 0 && (
-              <button onClick={() => setShowNewModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: 8 }}>
+              <button onClick={() => setShowNewModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderRadius: 10, background: '#05907B', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: 8 }}>
                 <Plus size={14} /> Cadastrar primeiro cliente
               </button>
             )}
@@ -849,7 +849,7 @@ export default function ClientsModule() {
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button onClick={() => setShowNewModal(false)} style={{ padding: '10px 20px', borderRadius: 10, border: '1px solid #E2E8F0', background: 'white', fontSize: 13, color: '#64748B', cursor: 'pointer' }}>Cancelar</button>
                 <button onClick={createClient} disabled={!form.student_name.trim() || !form.guardian_name.trim() || saving}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 24px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !form.student_name.trim() || !form.guardian_name.trim() ? 0.6 : 1 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 24px', borderRadius: 10, background: '#05907B', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !form.student_name.trim() || !form.guardian_name.trim() ? 0.6 : 1 }}>
                   {saving ? 'Salvando...' : <><Check size={13} /> Cadastrar</>}
                 </button>
               </div>
@@ -923,7 +923,7 @@ function AddFieldForm({ institutionId, onAdded }: { institutionId: string; onAdd
         </select>
         {type === 'select' && <input value={options} onChange={e => setOptions(e.target.value)} placeholder="Opções separadas por vírgula" style={inp} />}
         <button onClick={save} disabled={!label.trim() || saving}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !label.trim() ? 0.6 : 1 }}>
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', borderRadius: 10, background: '#05907B', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !label.trim() ? 0.6 : 1 }}>
           <Plus size={13} /> Adicionar campo
         </button>
       </div>

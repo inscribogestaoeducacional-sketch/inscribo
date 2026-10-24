@@ -368,7 +368,7 @@ export default function CampanhaMatriculas() {
       {cycle && cycle.status !== 'active' && !readOnly && (
         <div style={{ ...card, border: `2px solid ${BRAND.primary}`, background: BRAND.softer, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: '#065F52' }}>Campanha {targetYear} liberada. Falta configurar e ativar.</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#00695F' }}>Campanha {targetYear} liberada. Falta configurar e ativar.</div>
             <div style={{ fontSize: 13, color: BRAND.text, marginTop: 3 }}>Já deixei tudo preenchido com o histórico da escola. Confira, ajuste o que quiser e ative.</div>
           </div>
           <Chip c="#B45309" bg="#FEF3C7">Em configuração</Chip>
@@ -739,5 +739,5 @@ function Aviso({ t, d, go }: { t: string; d: string; go: () => void }) {
     </div>
   )
 }
-const primaryBtn = (disabled: boolean): CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 11, border: 'none', cursor: disabled ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'linear-gradient(135deg,#065F52,#00A896)', opacity: disabled ? 0.55 : 1, fontFamily: 'inherit' })
+const primaryBtn = (disabled: boolean): CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 11, border: 'none', cursor: disabled ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'linear-gradient(135deg,#00695F,#05907B)', opacity: disabled ? 0.55 : 1, fontFamily: 'inherit' })
 const secondaryBtn: CSSProperties = { padding: '10px 18px', borderRadius: 11, border: `1px solid ${BRAND.line}`, background: '#fff', color: BRAND.text, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit' }

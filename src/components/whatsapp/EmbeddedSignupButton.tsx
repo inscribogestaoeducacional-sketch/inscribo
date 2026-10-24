@@ -511,7 +511,7 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
                 Cancelar
               </button>
               <button onClick={handleConfirmReconnect} disabled={!canContinue}
-                style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: canContinue ? '#00A896' : '#94A3B8', fontSize: 13, fontWeight: 700, color: '#fff', cursor: canContinue ? 'pointer' : 'default' }}>
+                style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: canContinue ? '#05907B' : '#94A3B8', fontSize: 13, fontWeight: 700, color: '#fff', cursor: canContinue ? 'pointer' : 'default' }}>
                 Continuar para a Meta
               </button>
             </div>
@@ -526,7 +526,7 @@ export default function EmbeddedSignupButton({ institutionId, onConnected, mode 
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           padding: '11px 20px', borderRadius: 10, border: 'none',
-          background: busy || status === 'sdk-error' ? '#94A3B8' : isReconnect ? '#B45309' : '#00A896',
+          background: busy || status === 'sdk-error' ? '#94A3B8' : isReconnect ? '#B45309' : '#05907B',
           color: '#fff', fontSize: 14, fontWeight: 700,
           cursor: busy || status === 'sdk-error' ? 'default' : 'pointer',
         }}

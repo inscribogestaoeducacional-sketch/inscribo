@@ -61,11 +61,11 @@ export default function InstitutionSelectionScreen() {
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F0FDFB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
                   {inst.logo_url
                     ? <img src={inst.logo_url} alt={inst.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <Building2 size={20} color="#00A896" />}
+                    : <Building2 size={20} color="#05907B" />}
                 </div>
                 <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>{inst.name}</span>
                 {loading
-                  ? <Loader2 size={18} color="#00A896" className="animate-spin" />
+                  ? <Loader2 size={18} color="#05907B" className="animate-spin" />
                   : <ArrowRight size={18} color="#94A3B8" />}
               </button>
             )

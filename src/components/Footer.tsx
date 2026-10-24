@@ -32,7 +32,7 @@ export default function Footer() {
           <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
             <a href="https://instagram.com/meuaionedu" target="_blank" rel="noopener noreferrer"
               style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.7)', transition: 'color .2s, background .2s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#0DD3BF'; (e.currentTarget as HTMLElement).style.background = 'rgba(13,211,191,.1)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#2DCBA4'; (e.currentTarget as HTMLElement).style.background = 'rgba(13,211,191,.1)' }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.7)'; (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.08)' }}
             >
               <IconInstagram size={15} />
@@ -69,14 +69,14 @@ export default function Footer() {
         <div>
           <div style={{ fontWeight: 700, marginBottom: 20, fontSize: 12, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.1em' }}>Contato</div>
           <p style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, marginBottom: 8 }}>WhatsApp</p>
-          <a href="https://wa.me/5583993444383" target="_blank" rel="noopener noreferrer" style={{ color: '#0DD3BF', textDecoration: 'none', fontSize: 16, fontWeight: 700, display: 'block', marginBottom: 20 }}>
+          <a href="https://wa.me/5583993444383" target="_blank" rel="noopener noreferrer" style={{ color: '#2DCBA4', textDecoration: 'none', fontSize: 16, fontWeight: 700, display: 'block', marginBottom: 20 }}>
             (83) 9 9344-4383
           </a>
           <a href="mailto:contato@aionedu.com.br" className="footer-link" style={{ fontSize: 13 }}>
             contato@aionedu.com.br
           </a>
           <div style={{ marginTop: 24 }}>
-            <a href="/#demo" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(13,211,191,.15)', border: '1px solid rgba(13,211,191,.35)', color: '#0DD3BF', padding: '9px 18px', borderRadius: 999, fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'background .2s' }}
+            <a href="/#demo" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(13,211,191,.15)', border: '1px solid rgba(13,211,191,.35)', color: '#2DCBA4', padding: '9px 18px', borderRadius: 999, fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'background .2s' }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(13,211,191,.25)'}
               onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'rgba(13,211,191,.15)'}
             >

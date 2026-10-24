@@ -186,7 +186,7 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
       className={`group relative ld-card ld-in overflow-hidden ${isFlashing ? 'animate-pulse' : ''}`}
       style={{
         background: selectMode && selected ? '#EEF2FF' : '#fff', borderRadius: 16, borderLeft: `4px solid ${stripe}`,
-        border: `1px solid ${selectMode && selected ? '#818CF8' : isFlashing ? '#14B8A6' : '#fff'}`, borderLeftWidth: 4, borderLeftColor: stripe,
+        border: `1px solid ${selectMode && selected ? '#818CF8' : isFlashing ? '#2DCBA4' : '#fff'}`, borderLeftWidth: 4, borderLeftColor: stripe,
         boxShadow: overlay ? '0 18px 32px -12px rgba(26,43,74,.35)' : '0 1px 2px rgba(26,43,74,.05), 0 6px 16px -10px rgba(26,43,74,.22)',
         opacity: overlay ? 0.6 : 1,
       }}
@@ -233,7 +233,7 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
         {(unitName || lead.grade_interest || lead.source || temperature || lead.campaign_cycle_id || lead.year_interest) && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
             {unitName && <span style={pill('#EEF2FF', '#4338CA')}><MapPin size={10} />{unitName}</span>}
-            {lead.grade_interest && <span style={pill('#E6F7F5', '#007A6E')}>{lead.grade_interest}</span>}
+            {lead.grade_interest && <span style={pill('#E6F7F5', '#00695F')}>{lead.grade_interest}</span>}
             {lead.year_interest && !compact && <span title="Ano de interesse" style={pill('#FEF3C7', '#B45309')}>{lead.year_interest}</span>}
             {lead.source && (lead.source === 'embed'
               ? <span style={pill('#E0F2FE', '#0369A1')}>Via site</span>
@@ -538,7 +538,7 @@ function FilterDrawer(props: FilterDrawerProps) {
 
         <div style={{ padding: '14px 20px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: 10, flexShrink: 0 }}>
           <button onClick={onClear} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Limpar</button>
-          <button onClick={onClose} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Aplicar</button>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Aplicar</button>
         </div>
       </div>
     </div>
@@ -573,7 +573,7 @@ function DroppableColumn({ id, isOver, collapsed, tint, children }: { id: string
   const { setNodeRef } = useDroppable({ id })
   if (collapsed) return <div ref={setNodeRef} style={{ display: 'none' }}>{children}</div>
   return (
-    <div ref={setNodeRef} className={`flex-1 overflow-y-auto space-y-3 p-2.5 transition-all duration-200 ${isOver ? 'ring-2 ring-dashed ring-[#14b8a6] ring-inset' : ''}`} style={{ maxHeight: 'calc(100vh - 150px)', minHeight: 220, borderRadius: '0 0 18px 18px', background: isOver ? '#14b8a614' : (tint ? `${tint}12` : '#F1F5F4') }}>
+    <div ref={setNodeRef} className={`flex-1 overflow-y-auto space-y-3 p-2.5 transition-all duration-200 ${isOver ? 'ring-2 ring-dashed ring-[#2DCBA4] ring-inset' : ''}`} style={{ maxHeight: 'calc(100vh - 150px)', minHeight: 220, borderRadius: '0 0 18px 18px', background: isOver ? '#2DCBA414' : (tint ? `${tint}12` : '#F1F5F4') }}>
       {children}
     </div>
   )
@@ -1411,7 +1411,7 @@ export default function LeadKanban() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#14b8a6] border-t-transparent mx-auto mb-4" />
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#2DCBA4] border-t-transparent mx-auto mb-4" />
           <p className="text-gray-500 font-medium">Carregando leads...</p>
         </div>
       </div>
@@ -1497,10 +1497,10 @@ export default function LeadKanban() {
           </div>
           {/* Atalho rápido "Meus leads" — alterna direto sem abrir o drawer completo */}
           <button onClick={() => setOwnerFilter(o => o === 'mine' ? 'all' : 'mine')} title="Meus leads"
-            style={{ width: 44, height: 44, borderRadius: 12, background: ownerFilter === 'mine' ? '#00A896' : '#fff', border: '1.5px solid ' + (ownerFilter === 'mine' ? '#00A896' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            style={{ width: 44, height: 44, borderRadius: 12, background: ownerFilter === 'mine' ? '#05907B' : '#fff', border: '1.5px solid ' + (ownerFilter === 'mine' ? '#05907B' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <UserCog style={{ width: 17, height: 17, color: ownerFilter === 'mine' ? '#fff' : '#64748B' }} />
           </button>
-          <button onClick={() => setFilterDrawerOpen(true)} style={{ position: 'relative', width: 44, height: 44, borderRadius: 12, background: hasActiveFilters ? '#00A896' : '#fff', border: '1.5px solid ' + (hasActiveFilters ? '#00A896' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          <button onClick={() => setFilterDrawerOpen(true)} style={{ position: 'relative', width: 44, height: 44, borderRadius: 12, background: hasActiveFilters ? '#05907B' : '#fff', border: '1.5px solid ' + (hasActiveFilters ? '#05907B' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <SlidersHorizontal style={{ width: 17, height: 17, color: hasActiveFilters ? '#fff' : '#64748B' }} />
           </button>
           {unitCfg.enabled && (
@@ -1516,7 +1516,7 @@ export default function LeadKanban() {
           {[{ value: '', label: 'Todos' }, ...Object.entries(statusConfig).map(([v, c]) => ({ value: v, label: c.label }))].map(({ value, label }) => (
             <button key={value} onClick={() => setFilterStatus(value)}
               style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-                background: filterStatus === value ? '#00A896' : '#F0FDFB',
+                background: filterStatus === value ? '#05907B' : '#F0FDFB',
                 color: filterStatus === value ? '#fff' : '#64748B' }}>
               {label}
             </button>
@@ -1579,7 +1579,7 @@ export default function LeadKanban() {
 
         {/* FAB */}
         <button onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }}
-          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', color: '#fff', border: 'none', fontSize: 28, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', color: '#fff', border: 'none', fontSize: 28, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Plus style={{ width: 26, height: 26 }} />
         </button>
 
@@ -1638,21 +1638,21 @@ export default function LeadKanban() {
       <div className="flex gap-3 mb-2 flex-wrap items-center">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <input type="text" placeholder="Buscar por nome..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 pr-4 py-2.5 w-full border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none transition-all text-sm shadow-sm" />
+          <input type="text" placeholder="Buscar por nome..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 pr-4 py-2.5 w-full border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#2DCBA4] focus:border-[#2DCBA4] outline-none transition-all text-sm shadow-sm" />
         </div>
         {/* Atalho rápido "Meus leads" — alterna direto sem abrir o drawer completo */}
         <button
           onClick={() => setOwnerFilter(o => o === 'mine' ? 'all' : 'mine')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (ownerFilter === 'mine' ? '#00A896' : '#E2E8F0'), background: ownerFilter === 'mine' ? '#00A896' : '#fff', color: ownerFilter === 'mine' ? '#fff' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (ownerFilter === 'mine' ? '#05907B' : '#E2E8F0'), background: ownerFilter === 'mine' ? '#05907B' : '#fff', color: ownerFilter === 'mine' ? '#fff' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
         >
           <UserCog style={{ width: 14, height: 14 }} /> Meus Leads
         </button>
         <button
           onClick={() => setFilterDrawerOpen(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (hasActiveFilters ? '#00A896' : '#E2E8F0'), background: hasActiveFilters ? '#F0FDFB' : '#fff', color: hasActiveFilters ? '#00A896' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (hasActiveFilters ? '#05907B' : '#E2E8F0'), background: hasActiveFilters ? '#F0FDFB' : '#fff', color: hasActiveFilters ? '#05907B' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
         >
           <SlidersHorizontal style={{ width: 14, height: 14 }} /> Filtros
-          {hasActiveFilters && <span style={{ width: 6, height: 6, borderRadius: 999, background: '#00A896' }} />}
+          {hasActiveFilters && <span style={{ width: 6, height: 6, borderRadius: 999, background: '#05907B' }} />}
         </button>
         {unitCfg.enabled && (
           <button onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)} title={`Definir ${unitCfg.label.toLowerCase()} para vários leads`} style={selectButtonStyle(selectMode)}>

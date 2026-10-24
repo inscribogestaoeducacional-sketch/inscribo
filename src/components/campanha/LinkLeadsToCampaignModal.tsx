@@ -190,8 +190,8 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
   const tabBtn = (tab: typeof activeTab, label: string, icon: React.ReactNode) => (
     <button onClick={() => setActiveTab(tab)} style={{
       display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', fontSize: 13, fontWeight: 600,
-      border: 'none', cursor: 'pointer', borderBottom: activeTab === tab ? '2px solid #00A896' : '2px solid transparent',
-      color: activeTab === tab ? '#00A896' : '#64748B', background: 'transparent', transition: 'all 0.15s'
+      border: 'none', cursor: 'pointer', borderBottom: activeTab === tab ? '2px solid #05907B' : '2px solid transparent',
+      color: activeTab === tab ? '#05907B' : '#64748B', background: 'transparent', transition: 'all 0.15s'
     }}>{icon}{label}</button>
   )
 
@@ -199,7 +199,7 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: '#FFFFFF', borderRadius: 20, width: '100%', maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.2)', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
         {/* Header */}
-        <div style={{ background: 'linear-gradient(135deg, #00A896 0%, #007A6E 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+        <div style={{ background: 'linear-gradient(135deg, #05907B 0%, #00695F 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
           <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Link2 size={20} color="#fff" />
           </div>
@@ -272,7 +272,7 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
                       <button onClick={() => setPreviewCount(null)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, color: '#64748B', cursor: 'pointer', fontWeight: 600 }}>
                         Cancelar
                       </button>
-                      <button onClick={handleConfirmPeriod} disabled={applying} style={{ flex: 2, padding: '9px', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: applying ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: applying ? 0.7 : 1 }}>
+                      <button onClick={handleConfirmPeriod} disabled={applying} style={{ flex: 2, padding: '9px', borderRadius: 9, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: applying ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: applying ? 0.7 : 1 }}>
                         {applying ? <><Loader2 size={14} className="animate-spin" /> Vinculando...</> : <><Link2 size={14} /> Confirmar vínculo</>}
                       </button>
                     </div>
@@ -320,7 +320,7 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
               <div style={{ minHeight: 180, maxHeight: 340, overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: 12 }}>
                 {searching && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
-                    <Loader2 size={20} color="#00A896" className="animate-spin" />
+                    <Loader2 size={20} color="#05907B" className="animate-spin" />
                   </div>
                 )}
                 {!searching && search.trim().length < 2 && (
@@ -345,7 +345,7 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
                       background: isChecked ? '#F0FDFA' : '#fff'
                     }}>
                       <input type="checkbox" checked={isChecked} onChange={() => toggleSelect(l.id)}
-                        style={{ width: 16, height: 16, accentColor: '#00A896', cursor: 'pointer', flexShrink: 0 }} />
+                        style={{ width: 16, height: 16, accentColor: '#05907B', cursor: 'pointer', flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {l.responsible_name || l.student_name}
@@ -371,7 +371,7 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
 
               <button onClick={handleLinkSelected} disabled={selected.size === 0 || linking} style={{
                 padding: '11px', borderRadius: 10,
-                background: selected.size === 0 ? '#E2E8F0' : '#00A896',
+                background: selected.size === 0 ? '#E2E8F0' : '#05907B',
                 color: selected.size === 0 ? '#94A3B8' : '#fff',
                 border: 'none', fontSize: 13, fontWeight: 700,
                 cursor: selected.size === 0 || linking ? 'not-allowed' : 'pointer',

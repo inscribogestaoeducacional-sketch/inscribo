@@ -6,7 +6,7 @@ import { pdf } from '@react-pdf/renderer'
 import ProposalContent, { PW } from '../components/superadmin/ProposalContent'
 import ProposalPdfDocument from '../lib/proposalPdf'
 
-const VM = '#00A896'
+const VM = '#05907B'
 
 export default function ProposalView() {
   const { token } = useParams<{ token: string }>()
@@ -135,7 +135,7 @@ export default function ProposalView() {
             )}
 
             <button onClick={handleDownloadPdf} disabled={generatingPdf}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'linear-gradient(135deg,#00523C,#00A896)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: generatingPdf ? 0.7 : 1 }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'linear-gradient(135deg,#00523C,#05907B)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: generatingPdf ? 0.7 : 1 }}>
               {generatingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
               {generatingPdf ? 'Gerando…' : 'Baixar PDF'}
             </button>
@@ -173,7 +173,7 @@ export default function ProposalView() {
               {feedback === 'accepted' ? (
                 <>
                   <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
-                  <h3 style={{ fontSize: 20, fontWeight: 700, color: '#00A896', marginBottom: 8 }}>Ótima decisão!</h3>
+                  <h3 style={{ fontSize: 20, fontWeight: 700, color: '#05907B', marginBottom: 8 }}>Ótima decisão!</h3>
                   <p style={{ fontSize: 14, color: 'rgba(208,237,229,0.6)', marginBottom: 20 }}>
                     Seu consultor entrará em contato em breve para dar continuidade ao processo.
                   </p>
@@ -205,7 +205,7 @@ export default function ProposalView() {
               </p>
               <div style={{ display: 'flex', gap: 14 }}>
                 <button onClick={() => handleFeedback('accepted')} disabled={submitting}
-                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px', background: '#002918', border: '2px solid #00A896', borderRadius: 14, color: '#00A896', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: submitting ? 0.6 : 1 }}>
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px', background: '#002918', border: '2px solid #05907B', borderRadius: 14, color: '#05907B', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: submitting ? 0.6 : 1 }}>
                   <ThumbsUp className="w-5 h-5" /> Tenho interesse!
                 </button>
                 <button onClick={() => handleFeedback('thinking')} disabled={submitting}

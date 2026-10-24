@@ -36,7 +36,7 @@ export default function ContatosReport({ institutionId, institutionName }: { ins
           <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Contatos" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="CONTATOS NA BASE" value={d.base_total.toLocaleString('pt-BR')} color="#0EA5E9" sub="todo o histórico" />
-            <Kpi label="NOVOS NO PERÍODO" value={d.novos} color="#00A896" now={d.novos} before={d.anterior_novos} sub={`${d.novos_com_lead} viraram lead`} />
+            <Kpi label="NOVOS NO PERÍODO" value={d.novos} color="#05907B" now={d.novos} before={d.anterior_novos} sub={`${d.novos_com_lead} viraram lead`} />
             <Kpi label="COM RELAÇÃO DEFINIDA" value={pct(d.base_com_relacao, d.base_total)} color="#6366F1" sub={`${d.base_com_relacao.toLocaleString('pt-BR')} contatos`} />
             <Kpi label="COM E-MAIL" value={pct(d.base_com_email, d.base_total)} color="#F59E0B" sub={`${d.base_com_aluno.toLocaleString('pt-BR')} com aluno vinculado`} />
           </KpiGrid>

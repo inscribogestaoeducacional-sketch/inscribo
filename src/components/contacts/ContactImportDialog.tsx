@@ -12,7 +12,7 @@ import {
   type Sheet, type ContactField, type ColumnMode, type TagsMode, type ImportResult, type UpdatableField,
 } from '../../lib/contactImport'
 
-const C = { navy: '#1A2B4A', teal: '#00A896', muted: '#64748B', light: '#94A3B8', line: '#E2E8F0', soft: '#F8FAFC' }
+const C = { navy: '#1A2B4A', teal: '#05907B', muted: '#64748B', light: '#94A3B8', line: '#E2E8F0', soft: '#F8FAFC' }
 
 // Padrões aprovados: nome só preenche vazio (preserva ajuste da atendente);
 // o resto sobrescreve; etiquetas somam.

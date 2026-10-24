@@ -36,8 +36,8 @@ function NavTile({ item }: { item: NavItem }) {
 }
 
 const NAV_CFG: NavItem[] = [
-  { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager'],        module: 'inicio' },
-  { path: '/atendente',       label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['user'],                   module: 'inicio' },
+  { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#05907B', Icon: LayoutDashboard, roles: ['admin','manager'],        module: 'inicio' },
+  { path: '/atendente',       label: 'Início',          iconBg: '#E6F7F5', iconColor: '#05907B', Icon: LayoutDashboard, roles: ['user'],                   module: 'inicio' },
   // Comercial
   { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#7C3AED', Icon: Users,           roles: ['admin','manager','user'], module: 'leads',        group: 'Comercial' },
   { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#D97706', Icon: CalendarCheck,   roles: ['admin','manager','user'], module: 'visitas',      group: 'Comercial' },
@@ -160,7 +160,7 @@ export default function Sidebar() {
               width: 28, height: 28, borderRadius: 8,
               border: '0.5px solid #D1FAE5', background: '#F0FDFB',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: '#00A896',
+              cursor: 'pointer', color: '#05907B',
             }}>
               <X size={14} />
             </button>
@@ -226,7 +226,7 @@ export default function Sidebar() {
             width: 24, height: 24, borderRadius: 6,
             border: '0.5px solid #D1FAE5', background: '#F0FDFB',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', flexShrink: 0, color: '#00A896',
+            cursor: 'pointer', flexShrink: 0, color: '#05907B',
           }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="15 18 9 12 15 6" />
@@ -244,7 +244,7 @@ export default function Sidebar() {
             width: 24, height: 24, borderRadius: 6,
             border: '0.5px solid #D1FAE5', background: '#F0FDFB',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', color: '#00A896',
+            cursor: 'pointer', color: '#05907B',
           }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="9 18 15 12 9 6" />

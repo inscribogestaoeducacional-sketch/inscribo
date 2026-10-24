@@ -26,7 +26,7 @@ import IntegrationsTab from './IntegrationsTab'
 import { useSearchParams } from 'react-router-dom'
 import { canSeeSettingsItem, canSeeSettingsTab, type SettingsTabId } from '../../lib/settingsAccess'
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
+const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#05907B] focus:border-[#05907B] outline-none transition-all'
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function Toast({ msg, ok }: { msg: string; ok: boolean }) {
@@ -82,7 +82,7 @@ function GeralTab({ institutionId, onToast, part }: { institutionId: string; onT
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-      <Loader2 size={28} color="#00A896" className="animate-spin" />
+      <Loader2 size={28} color="#05907B" className="animate-spin" />
     </div>
   )
 
@@ -148,7 +148,7 @@ function GeralTab({ institutionId, onToast, part }: { institutionId: string; onT
 // ─── Aba: Identidade Visual ───────────────────────────────────────────────────
 function IdentidadeTab({ institutionId, onToast }: { institutionId: string; onToast: (msg: string, ok?: boolean) => void }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
-  const [primaryColor, setPrimaryColor] = useState('#00A896')
+  const [primaryColor, setPrimaryColor] = useState('#05907B')
   const [secondaryColor, setSecondaryColor] = useState('#1A2B4A')
   const [institutionName, setInstitutionName] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -166,7 +166,7 @@ function IdentidadeTab({ institutionId, onToast }: { institutionId: string; onTo
     if (mountedRef.current && data) {
       setInstitutionName(data.name ?? '')
       setLogoUrl(data.logo_url ?? null)
-      setPrimaryColor(data.primary_color ?? '#00A896')
+      setPrimaryColor(data.primary_color ?? '#05907B')
       setSecondaryColor(data.secondary_color ?? '#1A2B4A')
     }
   }
@@ -331,7 +331,7 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-      <Loader2 size={28} color="#00A896" className="animate-spin" />
+      <Loader2 size={28} color="#05907B" className="animate-spin" />
     </div>
   )
 

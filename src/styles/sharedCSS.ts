@@ -76,7 +76,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
 
 .btn-teal {
   display:inline-flex; align-items:center; gap:8px;
-  background:#00A896; color:#fff; border:none; border-radius:999px;
+  background:#05907B; color:#fff; border:none; border-radius:999px;
   padding:15px 32px; font-size:15px; font-weight:700;
   cursor:pointer; text-decoration:none;
   transition:transform .18s, box-shadow .18s;
@@ -89,7 +89,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
   background:#fff; border:1.5px solid #E8ECF0; border-radius:20px; overflow:hidden;
   transition:border-color .25s, box-shadow .25s, transform .25s;
 }
-.card:hover { border-color:#0DD3BF; box-shadow:0 16px 48px rgba(13,211,191,.15); transform:translateY(-6px); }
+.card:hover { border-color:#2DCBA4; box-shadow:0 16px 48px rgba(13,211,191,.15); transform:translateY(-6px); }
 
 .card-dark {
   background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:20px;
@@ -101,7 +101,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
 .tag-d { display:inline-flex; align-items:center; gap:7px; border-radius:999px; padding:7px 18px; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; background:rgba(255,255,255,.1); color:rgba(255,255,255,.9); border:1px solid rgba(255,255,255,.2); font-family:'Plus Jakarta Sans',sans-serif; }
 
 .inp { width:100%; padding:13px 16px; border-radius:11px; border:1.5px solid #D1D5DB; font-size:14px; outline:none; transition:border-color .2s, box-shadow .2s; background:#fff; font-family:'Plus Jakarta Sans',sans-serif; color:#111827; }
-.inp:focus { border-color:#00A896; box-shadow:0 0 0 4px rgba(0,168,150,.1); }
+.inp:focus { border-color:#05907B; box-shadow:0 0 0 4px rgba(0,168,150,.1); }
 
 .ticker-wrap { overflow:hidden; width:100%; }
 .ticker-track { display:flex; animation:slideLeft 36s linear infinite; width:max-content; }
@@ -125,7 +125,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
 
 /* Footer link hover */
 .footer-link { color:rgba(255,255,255,.7); text-decoration:none; font-size:14px; transition:color .2s; }
-.footer-link:hover { color:#0DD3BF; }
+.footer-link:hover { color:#2DCBA4; }
 
 /* Section padding */
 .section-pad { padding:112px 48px; }

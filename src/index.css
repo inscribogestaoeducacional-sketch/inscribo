@@ -18,15 +18,15 @@ html, body { width: 100%; min-height: 100%; }
 
 /* ====== VARIÁVEIS ====== */
 :root {
-  --aion-grad: linear-gradient(135deg, #065F52 0%, #00897B 52%, #14B8A6 100%); /* degradê oficial: uma só fonte */
+  --aion-grad: linear-gradient(135deg, #00695F 0%, #05907B 52%, #2DCBA4 100%); /* degradê oficial: uma só fonte */
   --aion-grad-soft: linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%);
   --bg-page:       #FAFFFE;
   --bg-surface:    #FFFFFF;
   --bg-teal-soft:  #F0FDFB;
   --bg-teal-light: #E6F7F5;
 
-  --color-primary:    #00A896;
-  --color-primary-dk: #007A6E;
+  --color-primary:    #05907B;
+  --color-primary-dk: #00695F;
   --color-navy:       #1A2B4A;
 
   --color-purple-bg:  #EDE9FE;
@@ -87,7 +87,7 @@ body {
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #D1FAE5; border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: #00A896; }
+::-webkit-scrollbar-thumb:hover { background: #05907B; }
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
@@ -230,3 +230,14 @@ main table tbody tr:last-child td { border-bottom: none; }
 @keyframes ldFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .ld-in { animation: ldFadeUp .35s ease both; }
 @media (prefers-reduced-motion: reduce) { .ld-in { animation: none; } }
+
+/* ── Carregamento da marca e esqueletos ── */
+@keyframes aion-ring { 0% { transform: scale(.88); opacity: .9; } 100% { transform: scale(1.35); opacity: 0; } }
+@keyframes aion-pop { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes aion-bar { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+@keyframes aion-skel { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+.aion-ring { animation: aion-ring 1.5s ease-out infinite; }
+.aion-logo-pop { animation: aion-pop 1.5s ease-in-out infinite; }
+.aion-bar { animation: aion-bar 1.2s ease-in-out infinite; }
+.aion-skel { background: linear-gradient(100deg, #EAF1F0 30%, #F6FAF9 50%, #EAF1F0 70%); background-size: 220% 100%; animation: aion-skel 1.3s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .aion-ring, .aion-logo-pop, .aion-bar, .aion-skel { animation: none; } }

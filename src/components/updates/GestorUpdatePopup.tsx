@@ -54,7 +54,7 @@ export default function GestorUpdatePopup({ institutionId }: { institutionId: st
       footer={
         <button
           onClick={dismiss}
-          style={{ width: '100%', padding: '12px 0', background: '#00A896', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+          style={{ width: '100%', padding: '12px 0', background: '#05907B', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
         >
           Ok, entendi
         </button>

@@ -399,7 +399,7 @@ export default function EnrollmentManager() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 38, height: 38, borderRadius: 12, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <GraduationCap style={{ width: 18, height: 18, color: '#00A896' }} />
+            <GraduationCap style={{ width: 18, height: 18, color: '#05907B' }} />
           </div>
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Matrículas</h1>
@@ -408,9 +408,9 @@ export default function EnrollmentManager() {
         </div>
         <button
           onClick={() => setShowForm(true)}
-          style={{ background: '#00A896', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'translateY(0)' }}
+          style={{ background: '#05907B', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#00695F'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#05907B'; e.currentTarget.style.transform = 'translateY(0)' }}
         >
           <Plus style={{ width: 16, height: 16 }} />
           Nova Matrícula

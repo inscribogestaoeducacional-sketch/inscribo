@@ -28,7 +28,7 @@ const card: CSSProperties = { background: '#fff', borderRadius: 16, border: '1px
 const h3: CSSProperties = { fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 8 }
 const hint: CSSProperties = { fontSize: 13, color: '#64748B', margin: '0 0 16px', lineHeight: 1.6 }
 const input: CSSProperties = { padding: '8px 10px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', color: '#1A2B4A', boxSizing: 'border-box' }
-const btn: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
+const btn: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: 'none', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
 const btnSec: CSSProperties = { ...btn, background: '#F1F5F9', color: '#1A2B4A' }
 const warnBox: CSSProperties = { fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px', margin: '10px 0 0', lineHeight: 1.6 }
 
@@ -100,12 +100,12 @@ export default function RosterUploadCard({ institutionId, onToast }: { instituti
 
   return (
     <div style={card}>
-      <h3 style={h3}><FileSpreadsheet size={16} color="#00A896" /> Enviar relatório de alunos</h3>
+      <h3 style={h3}><FileSpreadsheet size={16} color="#05907B" /> Enviar relatório de alunos</h3>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '4px 0 12px' }}>
         {['1 · Escolha o arquivo ou cole o texto', '2 · Confira o resumo', '3 · Grave'].map((t, i) => {
           const on = i === 0 ? !summary : i === 1 ? !!summary?.previa : !!summary && !summary.previa
           return <span key={t} style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
-            background: on ? '#E6F7F5' : '#F1F5F9', color: on ? '#00A896' : '#94A3B8' }}>{t}</span>
+            background: on ? '#E6F7F5' : '#F1F5F9', color: on ? '#05907B' : '#94A3B8' }}>{t}</span>
         })}
       </div>
       <p style={hint}>
@@ -124,7 +124,7 @@ export default function RosterUploadCard({ institutionId, onToast }: { instituti
         <div style={{ display: 'flex', gap: 6 }}>
           {(['arquivo', 'colar'] as const).map(m => (
             <button key={m} type="button" onClick={() => { setMode(m); reset() }}
-              style={{ ...btnSec, padding: '8px 12px', background: mode === m ? '#E6F7F5' : '#F1F5F9', color: mode === m ? '#00A896' : '#475569' }}>
+              style={{ ...btnSec, padding: '8px 12px', background: mode === m ? '#E6F7F5' : '#F1F5F9', color: mode === m ? '#05907B' : '#475569' }}>
               {m === 'arquivo' ? 'Arquivo (.csv / .xlsx)' : 'Colar texto'}
             </button>
           ))}
@@ -216,7 +216,7 @@ export default function RosterUploadCard({ institutionId, onToast }: { instituti
           ) : (
             <p style={{ fontSize: 13, color: '#059669', margin: '12px 0 0' }}>
               <CheckCircle2 size={14} style={{ verticalAlign: -2 }} /> Relatório gravado. Acompanhe em{' '}
-              <a href="/base-alunos" style={{ color: '#00A896', fontWeight: 600 }}>Base de alunos</a>.
+              <a href="/base-alunos" style={{ color: '#05907B', fontWeight: 600 }}>Base de alunos</a>.
             </p>
           )}
         </div>

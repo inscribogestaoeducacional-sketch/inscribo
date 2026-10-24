@@ -59,7 +59,7 @@ function HeroMockup() {
 
   return (
     <div style={{ animation: 'floatY 5.5s ease-in-out infinite', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: -14, right: 16, background: 'linear-gradient(135deg,#0DD3BF,#00A896)', color: '#fff', padding: '5px 13px', borderRadius: 999, fontSize: 11, fontWeight: 800, zIndex: 10, display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 16px rgba(13,211,191,.45)' }}>
+      <div style={{ position: 'absolute', top: -14, right: 16, background: 'linear-gradient(135deg,#2DCBA4,#05907B)', color: '#fff', padding: '5px 13px', borderRadius: 999, fontSize: 11, fontWeight: 800, zIndex: 10, display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 16px rgba(13,211,191,.45)' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', display: 'inline-block', animation: 'blink 1.4s infinite' }} />
         AO VIVO
       </div>
@@ -145,7 +145,7 @@ function Hero() {
               <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.85)', letterSpacing: '.04em' }}>CRM · WhatsApp Oficial Meta · IA · Pipeline · Relatórios</span>
             </div>
             <h1 className="s-title" style={{ fontSize: 'clamp(36px,5.5vw,72px)', color: '#fff', marginBottom: 28, animation: 'fadeUp .9s ease .1s both', lineHeight: 1.05, letterSpacing: '-0.03em', maxWidth: 640 }}>
-              A campanha de matrículas da sua escola começa <span style={{ color: '#0DD3BF' }}>AGORA</span> com a <span style={{ color: '#0DD3BF' }}>ÁION EDU!</span>
+              A campanha de matrículas da sua escola começa <span style={{ color: '#2DCBA4' }}>AGORA</span> com a <span style={{ color: '#2DCBA4' }}>ÁION EDU!</span>
             </h1>
             <p style={{ fontSize: 17, color: 'rgba(255,255,255,.75)', lineHeight: 1.8, marginBottom: 40, maxWidth: 520, animation: 'fadeUp .9s ease .2s both' }}>
               A ÁION EDU lê os dados da sua escola, cria um plano de campanha com metas e ações, centraliza o atendimento das famílias e entrega ao gestor visibilidade total — do primeiro contato até a matrícula assinada.
@@ -185,7 +185,7 @@ function Ticker() {
         <div className="ticker-track">
           {doubled.map((item, i) => (
             <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 24, padding: '0 30px', fontSize: 13, fontWeight: 700, color: '#00523C', whiteSpace: 'nowrap' }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#00A896', display: 'inline-block' }} />
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#05907B', display: 'inline-block' }} />
               {item}
             </span>
           ))}
@@ -240,7 +240,7 @@ function EscolasParceiras() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 56 }}>
           <div className="tag-g" style={{ marginBottom: 20 }}>Prova social</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 16 }}>
-            Escolas de <span style={{ color: '#0DD3BF' }}>todo o Brasil</span><br />já crescem com a ÁION EDU
+            Escolas de <span style={{ color: '#2DCBA4' }}>todo o Brasil</span><br />já crescem com a ÁION EDU
           </h2>
           <p style={{ fontSize: 16, color: '#4B5563', maxWidth: 560, margin: '0 auto', lineHeight: 1.8 }}>
             {schools.length} escola{schools.length !== 1 ? 's' : ''} parceira{schools.length !== 1 ? 's' : ''} em {stateCount} estado{stateCount !== 1 ? 's' : ''} já usam a plataforma pra captar e converter mais matrículas.
@@ -278,7 +278,7 @@ function Dores() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 64 }}>
           <div className="tag-g" style={{ marginBottom: 20 }}>O problema</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(34px,4.5vw,56px)', color: '#111827', marginBottom: 18 }}>
-            Sua escola <span style={{ color: '#0DD3BF' }}>perde matrículas</span><br />todos os anos.
+            Sua escola <span style={{ color: '#2DCBA4' }}>perde matrículas</span><br />todos os anos.
           </h2>
           <p style={{ fontSize: 17, color: '#4B5563', maxWidth: 580, margin: '0 auto', lineHeight: 1.8 }}>
             Não é falta de esforço. É falta de processo. Sem um sistema adequado, leads somem, a equipe trabalha no improviso e você só descobre o problema quando não há mais tempo de agir.
@@ -330,7 +330,7 @@ function Solucoes() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 64 }}>
           <div className="tag-g" style={{ marginBottom: 20 }}>Plataforma completa</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 16 }}>
-            Solução completa para campanha de<br /><span style={{ color: '#0DD3BF' }}>matrícula e atendimento</span>
+            Solução completa para campanha de<br /><span style={{ color: '#2DCBA4' }}>matrícula e atendimento</span>
           </h2>
           <p style={{ fontSize: 16, color: '#4B5563', maxWidth: 560, margin: '0 auto', lineHeight: 1.8 }}>
             Cada módulo resolve um problema real. Juntos, formam a operação mais eficiente do mercado educacional brasileiro.
@@ -356,7 +356,7 @@ function Solucoes() {
                 <ul style={{ listStyle: 'none', padding: 0, marginBottom: 22 }}>
                   {s.bullets.map((b, j) => (
                     <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginBottom: 8 }}>
-                      <div style={{ flexShrink: 0, marginTop: 1 }}><IcCheck size={14} color="#00A896" /></div>
+                      <div style={{ flexShrink: 0, marginTop: 1 }}><IcCheck size={14} color="#05907B" /></div>
                       <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{b}</span>
                     </li>
                   ))}
@@ -385,7 +385,7 @@ function CaptacaoInteligente() {
             Novo módulo · Captação Inteligente
           </div>
           <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,50px)', color: '#111827', marginBottom: 18 }}>
-            Saiba de qual anúncio veio <span style={{ color: '#0DD3BF' }}>cada matrícula</span>
+            Saiba de qual anúncio veio <span style={{ color: '#2DCBA4' }}>cada matrícula</span>
           </h2>
           <p style={{ fontSize: 16, color: '#4B5563', lineHeight: 1.8, marginBottom: 26 }}>
             Cadastre um gatilho para cada campanha e use o link de WhatsApp gerado pela Áion no anúncio. Toda conversa chega marcada com a origem, vira lead no CRM e vai direto pra consultora certa.
@@ -398,7 +398,7 @@ function CaptacaoInteligente() {
               'Dashboard com conversas, matrículas e conversão por anúncio',
             ].map((b, j) => (
               <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-                <div style={{ flexShrink: 0, marginTop: 2 }}><IcCheck size={15} color="#00A896" stroke={2.2} /></div>
+                <div style={{ flexShrink: 0, marginTop: 2 }}><IcCheck size={15} color="#05907B" stroke={2.2} /></div>
                 <span style={{ fontSize: 14, color: '#374151', lineHeight: 1.65 }}>{b}</span>
               </li>
             ))}
@@ -464,13 +464,13 @@ function NovoModulo(p: NovoModuloProps) {
             {p.tag}
           </div>
           <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,50px)', color: '#111827', marginBottom: 18 }}>
-            {p.title} <span style={{ color: '#0DD3BF' }}>{p.hl}</span>
+            {p.title} <span style={{ color: '#2DCBA4' }}>{p.hl}</span>
           </h2>
           <p style={{ fontSize: 16, color: '#4B5563', lineHeight: 1.8, marginBottom: 26 }}>{p.text}</p>
           <ul style={{ listStyle: 'none', padding: 0, marginBottom: 32 }}>
             {p.bullets.map((b, j) => (
               <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-                <div style={{ flexShrink: 0, marginTop: 2 }}><IcCheck size={15} color="#00A896" stroke={2.2} /></div>
+                <div style={{ flexShrink: 0, marginTop: 2 }}><IcCheck size={15} color="#05907B" stroke={2.2} /></div>
                 <span style={{ fontSize: 14, color: '#374151', lineHeight: 1.65 }}>{b}</span>
               </li>
             ))}
@@ -500,11 +500,11 @@ function MetaPartner() {
           <img src="https://static.xx.fbcdn.net/rsrc.php/y1/r/4hZ1LkFP2sW.webp" alt="Meta" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
         </div>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 999, padding: '7px 18px', marginBottom: 28 }}>
-          <IcShield size={14} color="#0DD3BF" />
+          <IcShield size={14} color="#2DCBA4" />
           <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.9)', letterSpacing: '.06em', textTransform: 'uppercase' }}>Parceiro Oficial de Integração WhatsApp</span>
         </div>
         <h2 className="s-title" style={{ fontSize: 'clamp(28px,3.5vw,44px)', color: '#fff', marginBottom: 20 }}>
-          Somos Parceiros Oficiais de<br /><span style={{ color: '#0DD3BF' }}>Integração WhatsApp Meta</span>
+          Somos Parceiros Oficiais de<br /><span style={{ color: '#2DCBA4' }}>Integração WhatsApp Meta</span>
         </h2>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,.72)', maxWidth: 600, margin: '0 auto 40px', lineHeight: 1.8 }}>
           Isso significa número oficial homologado, atendimento centralizado de toda a equipe, bot inteligente, histórico preservado e zero risco de bloqueio. A conexão do seu número comercial acontece direto pelo painel, pelo fluxo oficial da Meta — sem enviar token nem depender de TI.
@@ -512,7 +512,7 @@ function MetaPartner() {
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
           {[{ Icon: IcShield, label: 'Conta verificada Meta' }, { Icon: IcCheck, label: 'API Oficial WhatsApp Business' }, { Icon: IcUsers, label: 'Multi-atendente centralizado' }, { Icon: IcSettings, label: 'Conexão em 1 clique, sem token manual' }].map((b, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', padding: '10px 20px', borderRadius: 999 }}>
-              <b.Icon size={15} color="#0DD3BF" />
+              <b.Icon size={15} color="#2DCBA4" />
               <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{b.label}</span>
             </div>
           ))}
@@ -533,12 +533,12 @@ function ComoFunciona() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 64 }}>
           <div className="tag-d" style={{ marginBottom: 20 }}>Como funciona</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#fff', marginBottom: 16 }}>
-            Do zero ao plano de campanha<br />em menos de <span style={{ color: '#0DD3BF' }}>10 minutos</span>
+            Do zero ao plano de campanha<br />em menos de <span style={{ color: '#2DCBA4' }}>10 minutos</span>
           </h2>
           <p style={{ fontSize: 16, color: 'rgba(255,255,255,.62)', maxWidth: 480, margin: '0 auto', lineHeight: 1.75 }}>Simples para a equipe, poderoso para a gestão.</p>
         </div>
         <div className="steps-g" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24, position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 50, left: '18%', right: '18%', height: 2, background: 'linear-gradient(90deg,#00A896,#0DD3BF,#00A896)', opacity: .3, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: 50, left: '18%', right: '18%', height: 2, background: 'linear-gradient(90deg,#05907B,#2DCBA4,#05907B)', opacity: .3, pointerEvents: 'none' }} />
           {[
             { num: '01', Icon: IcSettings, title: 'Configure sua escola em 5 dias', desc: 'Nossa equipe configura tudo: integração com o ERP, WhatsApp oficial homologado, equipe treinada e plano de campanha gerado pela IA.' },
             { num: '02', Icon: IcCpu, title: 'IA lê seus dados e cria o plano', desc: 'O sistema lê automaticamente o histórico do ERP, cruza com dado real de mercado da sua cidade e com os leads que você já tem no funil, e gera metas mensais, ações e calendário de captação.' },
@@ -547,10 +547,10 @@ function ComoFunciona() {
             <RevealCard key={i} delay={`${i + 1}`}>
               <div className="card-dark" style={{ padding: 36, textAlign: 'center', position: 'relative', height: '100%' }}>
                 <div className="s-title" style={{ position: 'absolute', top: 10, right: 20, fontSize: 80, color: 'rgba(255,255,255,.04)', lineHeight: 1, pointerEvents: 'none' }}>{s.num}</div>
-                <div style={{ width: 68, height: 68, borderRadius: 20, background: 'linear-gradient(135deg,#00523C,#00A896)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 22px', boxShadow: '0 8px 28px rgba(0,168,150,.3)' }}>
+                <div style={{ width: 68, height: 68, borderRadius: 20, background: 'linear-gradient(135deg,#00523C,#05907B)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 22px', boxShadow: '0 8px 28px rgba(0,168,150,.3)' }}>
                   <s.Icon size={28} color="#fff" />
                 </div>
-                <div style={{ fontSize: 11, fontWeight: 800, color: '#0DD3BF', letterSpacing: '.12em', marginBottom: 11, textTransform: 'uppercase' }}>PASSO {s.num}</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#2DCBA4', letterSpacing: '.12em', marginBottom: 11, textTransform: 'uppercase' }}>PASSO {s.num}</div>
                 <h3 style={{ fontSize: 17, fontWeight: 800, color: '#fff', marginBottom: 13, lineHeight: 1.35 }}>{s.title}</h3>
                 <p style={{ fontSize: 14, color: 'rgba(255,255,255,.58)', lineHeight: 1.8 }}>{s.desc}</p>
               </div>
@@ -569,7 +569,7 @@ function ComoFunciona() {
 function Implantacao() {
   const r0 = useReveal()
   const etapas = [
-    { num: '01', Icon: IcSettings, color: '#0DD3BF', title: 'Implantação', sub: 'CONFIGURAÇÃO COMPLETA', desc: 'Nossa equipe configura tudo em até 5 dias úteis.', bullets: ['Integração com o ERP da escola','Homologação WhatsApp Oficial Meta','Cadastro e permissões da equipe','Personalização dos fluxos','Treinamento presencial ou remoto'] },
+    { num: '01', Icon: IcSettings, color: '#2DCBA4', title: 'Implantação', sub: 'CONFIGURAÇÃO COMPLETA', desc: 'Nossa equipe configura tudo em até 5 dias úteis.', bullets: ['Integração com o ERP da escola','Homologação WhatsApp Oficial Meta','Cadastro e permissões da equipe','Personalização dos fluxos','Treinamento presencial ou remoto'] },
     { num: '02', Icon: IcCpu, color: '#6366F1', title: 'Criação da Campanha', sub: 'COM APOIO DA IA', desc: 'A IA lê os dados da escola e constrói o plano completo com metas e ações.', bullets: ['Reunião de kickoff com consultor','IA gera plano de campanha','Metas mensais por série','Calendário de captação','Estratégia por canal'] },
     { num: '03', Icon: IcBarChart, color: '#F59E0B', title: 'Acompanhamento Mensal', sub: 'PARCERIA ATIVA', desc: 'Todo mês: reunião de performance, relatório automático e ajuste de estratégia.', bullets: ['Reunião mensal com consultor','Relatório mensal automático','Análise de desvios','Ajuste de estratégia','Suporte prioritário WhatsApp'] },
   ]
@@ -579,7 +579,7 @@ function Implantacao() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 64 }}>
           <div className="tag-g" style={{ marginBottom: 20 }}>Fluxo de implantação</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 16 }}>
-            Você não precisa fazer<br /><span style={{ color: '#0DD3BF' }}>nada sozinho</span>
+            Você não precisa fazer<br /><span style={{ color: '#2DCBA4' }}>nada sozinho</span>
           </h2>
           <p style={{ fontSize: 17, color: '#6B7280', maxWidth: 500, margin: '0 auto', lineHeight: 1.75 }}>Nossa equipe conduz cada etapa — do primeiro acesso até a campanha rodando com dados reais.</p>
         </div>
@@ -630,7 +630,7 @@ function Diferenciais() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 62 }}>
           <div className="tag-g" style={{ marginBottom: 20 }}>Por que ÁION EDU</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 16 }}>
-            Mais do que um software —<br /><span style={{ color: '#0DD3BF' }}>um parceiro de resultados</span>
+            Mais do que um software —<br /><span style={{ color: '#2DCBA4' }}>um parceiro de resultados</span>
           </h2>
           <p style={{ fontSize: 16, color: '#4B5563', maxWidth: 490, margin: '0 auto', lineHeight: 1.75 }}>O que separa a ÁION EDU de qualquer outra ferramenta do mercado educacional.</p>
         </div>
@@ -668,7 +668,7 @@ function ParaQuem() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 56 }}>
           <div className="tag-g" style={{ marginBottom: 20 }}>Para quem é</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 14 }}>
-            A ÁION EDU foi feita para escolas que<br /><span style={{ color: '#0DD3BF' }}>querem crescer com inteligência</span>
+            A ÁION EDU foi feita para escolas que<br /><span style={{ color: '#2DCBA4' }}>querem crescer com inteligência</span>
           </h2>
         </div>
         <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24 }}>
@@ -687,7 +687,7 @@ function ParaQuem() {
                 <ul style={{ listStyle: 'none', padding: 0 }}>
                   {card.items.map((item, j) => (
                     <li key={j} style={{ fontSize: 13, color: '#374151', marginBottom: 9, display: 'flex', alignItems: 'center', gap: 9 }}>
-                      <IcCheck size={14} color="#00A896" />{item}
+                      <IcCheck size={14} color="#05907B" />{item}
                     </li>
                   ))}
                 </ul>
@@ -724,8 +724,8 @@ function FAQ() {
           <div key={i} style={{ borderBottom: '1px solid #E5E7EB' }}>
             <button className="faq-btn" onClick={() => setOpen(open === i ? null : i)}>
               <span>{item.q}</span>
-              <span style={{ flexShrink: 0, color: '#00A896', transition: 'transform .25s', transform: open === i ? 'rotate(180deg)' : 'none', display: 'flex' }}>
-                <IcChevDown size={20} color="#00A896" />
+              <span style={{ flexShrink: 0, color: '#05907B', transition: 'transform .25s', transform: open === i ? 'rotate(180deg)' : 'none', display: 'flex' }}>
+                <IcChevDown size={20} color="#05907B" />
               </span>
             </button>
             {open === i && <div style={{ paddingBottom: 22, fontSize: 15, color: '#4B5563', lineHeight: 1.85, animation: 'fadeUp .3s ease' }}>{item.a}</div>}
@@ -761,13 +761,13 @@ function CTAFinal() {
   }
 
   return (
-    <section id="demo" className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 50%,#00A896 100%)', position: 'relative', overflow: 'hidden' }}>
+    <section id="demo" className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 50%,#05907B 100%)', position: 'relative', overflow: 'hidden' }}>
       <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div style={{ maxWidth: 840, margin: '0 auto', position: 'relative', zIndex: 1 }}>
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 52 }}>
           <div className="tag-d" style={{ marginBottom: 20 }}>Pronto para começar?</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(32px,4.5vw,52px)', color: '#fff', marginBottom: 16 }}>
-            Agende uma reunião e veja a<br /><span style={{ color: '#0DD3BF' }}>ÁION EDU em ação</span>
+            Agende uma reunião e veja a<br /><span style={{ color: '#2DCBA4' }}>ÁION EDU em ação</span>
           </h2>
           <p style={{ fontSize: 17, color: 'rgba(255,255,255,.78)', maxWidth: 520, margin: '0 auto', lineHeight: 1.8 }}>
             Preencha o formulário e nossa equipe entra em contato em até 2 horas úteis para apresentar a plataforma e entender o momento da sua escola.

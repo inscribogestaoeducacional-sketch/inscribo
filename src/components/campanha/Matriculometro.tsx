@@ -77,7 +77,7 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: BRAND.text, cursor: 'pointer' }}>
           <input type="checkbox" checked={withPre} onChange={e => setWithPre(e.target.checked)} /> Contar pré-matriculados no percentual
         </label>
-        <button onClick={() => window.print()} style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', padding: '8px 14px', borderRadius: 9, border: 'none', background: '#00A896', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+        <button onClick={() => window.print()} style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', padding: '8px 14px', borderRadius: 9, border: 'none', background: '#05907B', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           <Printer size={15} /> Imprimir (A4)
         </button>
       </div>
@@ -172,7 +172,7 @@ function Alunos({ institutionId, year, sel, onClose }: { institutionId: string; 
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
           {(['falta', 'pre', 'matriculado', 'saiu', 'todos'] as const).map(k => (
             <button key={k} onClick={() => setF(k)} style={{ padding: '5px 12px', borderRadius: 99, border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-              background: f === k ? '#00A896' : '#EEF3F2', color: f === k ? '#fff' : '#475569' }}>
+              background: f === k ? '#05907B' : '#EEF3F2', color: f === k ? '#fff' : '#475569' }}>
               {k === 'todos' ? `Todos (${list?.length ?? 0})` : `${ST[k]} (${count(k)})`}
             </button>
           ))}

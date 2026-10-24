@@ -36,7 +36,7 @@ export default function AtendimentoReport({ institutionId, institutionName }: { 
             <Kpi label="CONVERSAS ATENDIDAS" value={d.total} color="#6366F1" now={d.total} before={d.anterior_total} />
             <Kpi label="SEM ATENDENTE" value={d.sem_atendente} color="#B45309" sub="conversas só com o robô" />
             <Kpi label="SEM RESPOSTA DE PESSOA" value={tot('sem_resposta_humana')} color="#B91C1C" sub="entre as atendidas" />
-            <Kpi label="MENSAGENS ENVIADAS" value={tot('mensagens_enviadas').toLocaleString('pt-BR')} color="#00A896" sub="por pessoas da equipe" />
+            <Kpi label="MENSAGENS ENVIADAS" value={tot('mensagens_enviadas').toLocaleString('pt-BR')} color="#05907B" sub="por pessoas da equipe" />
           </KpiGrid>
           <div style={{ ...card, overflowX: 'auto' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Cada atendente</div>
@@ -49,7 +49,7 @@ export default function AtendimentoReport({ institutionId, institutionName }: { 
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>{sel.atendente} em {per.label}</div>
               <KpiGrid>
                 <Kpi label="CONVERSAS" value={sel.conversas} color="#6366F1" sub={`${d.total ? Math.round(sel.conversas / d.total * 100) : 0}% do total da equipe`} />
-                <Kpi label="ENCERRADAS" value={sel.encerradas} color="#00A896" sub={`${sel.conversas ? Math.round(sel.encerradas / sel.conversas * 100) : 0}% das conversas`} />
+                <Kpi label="ENCERRADAS" value={sel.encerradas} color="#05907B" sub={`${sel.conversas ? Math.round(sel.encerradas / sel.conversas * 100) : 0}% das conversas`} />
                 <Kpi label="SEM RESPOSTA DE PESSOA" value={sel.sem_resposta_humana} color="#B91C1C" sub="das conversas dela" />
                 <Kpi label="SATISFAÇÃO" value={satPct(sel.satisfacao) != null ? `${satPct(sel.satisfacao)}%` : '—'} color="#F59E0B" sub={`nota ${String(sel.satisfacao ?? '—').replace('.', ',')} de 3 · ${sel.avaliacoes} avaliações`} />
               </KpiGrid>
@@ -57,7 +57,7 @@ export default function AtendimentoReport({ institutionId, institutionName }: { 
           )}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ ...card, flex: '1 1 320px' }}><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Conversas por atendente</div><BarList color="#6366F1" rows={d.por_atendente.map(a => ({ label: a.atendente, n: a.conversas }))} /></div>
-            <div style={{ ...card, flex: '1 1 320px' }}><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Mensagens enviadas</div><BarList color="#00A896" rows={d.por_atendente.map(a => ({ label: a.atendente, n: a.mensagens_enviadas }))} /></div>
+            <div style={{ ...card, flex: '1 1 320px' }}><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Mensagens enviadas</div><BarList color="#05907B" rows={d.por_atendente.map(a => ({ label: a.atendente, n: a.mensagens_enviadas }))} /></div>
           </div>
         </>
       )}

@@ -330,14 +330,14 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
   const buildDesc = (item: AuditEntry): string => item.field_changed || item.new_value || ''
 
   const tabBtn = (tab: typeof activeTab, label: string) => (
-    <button onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', borderBottom: activeTab === tab ? '2px solid #00A896' : '2px solid transparent', color: activeTab === tab ? '#00A896' : '#64748B', background: 'transparent', transition: 'all 0.15s' }}>{label}</button>
+    <button onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', borderBottom: activeTab === tab ? '2px solid #05907B' : '2px solid transparent', color: activeTab === tab ? '#05907B' : '#64748B', background: 'transparent', transition: 'all 0.15s' }}>{label}</button>
   )
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: '#FFFFFF', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.2)', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
         {/* Header */}
-        <div style={{ background: 'linear-gradient(135deg, #00A896 0%, #007A6E 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+        <div style={{ background: 'linear-gradient(135deg, #05907B 0%, #00695F 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
           <div style={{ width: 52, height: 52, borderRadius: 16, background: bgColor, border: '2px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
             {initials}
           </div>
@@ -522,7 +522,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                   </div>
                 ))}
                 <button onClick={addStudent} type="button"
-                  style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1.5px dashed #14b8a6', background: '#F0FDFB', color: '#0d9488', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1.5px dashed #2DCBA4', background: '#F0FDFB', color: '#0d9488', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                   <Plus size={14} /> Adicionar outro filho
                 </button>
                 {editingLead && (
@@ -620,10 +620,10 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                         return (
                           <React.Fragment key={stage.key}>
                             <div onClick={() => { setLostReason(null); setFormData(f => ({ ...f, status: stage.key as Lead['status'] })) }} title={stage.label}
-                              style={{ width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: done || active ? '#00A896' : '#E2E8F0', border: active ? '2.5px solid #007A6E' : '2px solid transparent', boxShadow: active ? '0 0 0 3px rgba(0,168,150,0.2)' : 'none', transition: 'all 0.15s' }}>
+                              style={{ width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: done || active ? '#05907B' : '#E2E8F0', border: active ? '2.5px solid #00695F' : '2px solid transparent', boxShadow: active ? '0 0 0 3px rgba(0,168,150,0.2)' : 'none', transition: 'all 0.15s' }}>
                               {done && <span style={{ fontSize: 9, color: '#fff', fontWeight: 700 }}>✓</span>}
                             </div>
-                            {idx < LEAD_STAGES.length - 1 && <div style={{ flex: 1, height: 2, background: done ? '#00A896' : '#E2E8F0', transition: 'background 0.2s' }} />}
+                            {idx < LEAD_STAGES.length - 1 && <div style={{ flex: 1, height: 2, background: done ? '#05907B' : '#E2E8F0', transition: 'background 0.2s' }} />}
                           </React.Fragment>
                         )
                       })}
@@ -631,7 +631,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                     <div style={{ display: 'flex' }}>
                       {LEAD_STAGES.map((stage, idx) => (
                         <div key={stage.key} style={{ flex: idx === 0 ? '0 0 22px' : 1, textAlign: idx === 0 ? 'left' : idx === LEAD_STAGES.length - 1 ? 'right' : 'center' }}>
-                          <span style={{ fontSize: 10, color: idx === curStageIdx ? '#00A896' : '#94A3B8', fontWeight: idx === curStageIdx ? 700 : 400 }}>{stage.label}</span>
+                          <span style={{ fontSize: 10, color: idx === curStageIdx ? '#05907B' : '#94A3B8', fontWeight: idx === curStageIdx ? 700 : 400 }}>{stage.label}</span>
                         </div>
                       ))}
                     </div>
@@ -675,7 +675,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                 <textarea value={activityForm.descricao} onChange={e => setActivityForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Descreva o contato..." rows={2}
                   style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 12, outline: 'none', resize: 'none', boxSizing: 'border-box', color: '#1A2B4A', marginBottom: 8 }} />
                 <button onClick={handleAddActivity} disabled={savingActivity || !activityForm.descricao.trim()}
-                  style={{ padding: '6px 14px', borderRadius: 8, background: '#00A896', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingActivity || !activityForm.descricao.trim() ? 0.5 : 1 }}>
+                  style={{ padding: '6px 14px', borderRadius: 8, background: '#05907B', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingActivity || !activityForm.descricao.trim() ? 0.5 : 1 }}>
                   {savingActivity ? 'Salvando...' : 'Registrar'}
                 </button>
               </div>
@@ -724,7 +724,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                 <textarea value={quickNote || formData.notes} onChange={e => setQuickNote(e.target.value)} placeholder="Anotações importantes sobre este lead..." rows={6}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', color: '#1A2B4A', lineHeight: 1.6 }} />
                 <button onClick={handleSaveNote} disabled={savingNote}
-                  style={{ marginTop: 8, padding: '7px 16px', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingNote ? 0.6 : 1 }}>
+                  style={{ marginTop: 8, padding: '7px 16px', borderRadius: 9, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingNote ? 0.6 : 1 }}>
                   {savingNote ? 'Salvando...' : 'Salvar nota'}
                 </button>
               </div>
@@ -741,7 +741,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
             <button onClick={handleSubmit} disabled={saving}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9, background: saving ? '#94A3B8' : '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9, background: saving ? '#94A3B8' : '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
               {saving
                 ? <><div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />Salvando...</>
                 : <><Save style={{ width: 14, height: 14 }} />{editingLead ? 'Salvar alterações' : 'Criar Lead'}</>}

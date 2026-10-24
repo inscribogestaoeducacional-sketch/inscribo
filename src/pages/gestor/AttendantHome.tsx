@@ -400,7 +400,7 @@ export default function AttendantHome() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16 }}>
             <StatCard label="Matrículas fechadas" value={enrolledMonthCount} variation={enrollVariation} icon={<GraduationCap size={18} color="#7C3AED" />} iconBg="#f5f3ff" onClick={() => navigate('/leads')} />
-            <StatCard label="Meus leads no mês" value={leadsMonthCount} variation={leadsVariation} icon={<Users size={18} color="#00A896" />} iconBg="#e6f7f5" onClick={() => navigate('/leads')} />
+            <StatCard label="Meus leads no mês" value={leadsMonthCount} variation={leadsVariation} icon={<Users size={18} color="#05907B" />} iconBg="#e6f7f5" onClick={() => navigate('/leads')} />
             <StatCard label="Taxa de conversão" value={`${conversionRate}%`} icon={<Target size={18} color="#F59E0B" />} iconBg="#fffbeb" sub={`${convertedMonthCount} de ${leadsMonthCount} leads`} />
           </div>
         )}

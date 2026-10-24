@@ -101,7 +101,7 @@ export default function SaidasReport({ institutionId, institutionName, defaultYe
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {rep && <button onClick={() => window.print()} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', padding: '9px 14px', borderRadius: 11, border: '1px solid #E3E8F0', background: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}><Printer size={15} /> PDF</button>}
-          <button onClick={generate} disabled={busy} style={{ display: 'inline-flex', gap: 7, alignItems: 'center', padding: '10px 18px', borderRadius: 11, border: 'none', cursor: busy ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'linear-gradient(135deg,#065F52,#00A896)', opacity: busy ? 0.6 : 1 }}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{rep ? 'Gerar de novo' : 'Gerar relatório'}</button>
+          <button onClick={generate} disabled={busy} style={{ display: 'inline-flex', gap: 7, alignItems: 'center', padding: '10px 18px', borderRadius: 11, border: 'none', cursor: busy ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, color: '#fff', background: 'linear-gradient(135deg,#00695F,#05907B)', opacity: busy ? 0.6 : 1 }}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{rep ? 'Gerar de novo' : 'Gerar relatório'}</button>
         </div>
       </div>
       {rep && (

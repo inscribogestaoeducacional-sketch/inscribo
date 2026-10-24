@@ -279,7 +279,7 @@ export default function AdminHome() {
                     <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#9ca3af' }} />
                     <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                     <Tooltip formatter={v => [fmtBRL(Number(v)), 'MRR']} />
-                    <Line type="monotone" dataKey="mrr" stroke="#14b8a6" strokeWidth={3} dot={{ fill: '#14b8a6', r: 4 }} />
+                    <Line type="monotone" dataKey="mrr" stroke="#2DCBA4" strokeWidth={3} dot={{ fill: '#2DCBA4', r: 4 }} />
                   </LineChart>
                 </ResponsiveContainer>
             }
@@ -310,7 +310,7 @@ export default function AdminHome() {
                     <XAxis type="number" tick={{ fontSize: 11, fill: '#9ca3af' }} />
                     <YAxis type="category" dataKey="stage" tick={{ fontSize: 10, fill: '#6b7280' }} width={75} />
                     <Tooltip />
-                    <Bar dataKey="n" fill="#14b8a6" radius={[0, 6, 6, 0]} />
+                    <Bar dataKey="n" fill="#2DCBA4" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
             }
@@ -538,13 +538,13 @@ export default function AdminHome() {
                 <div className="flex gap-3 mb-3">
                   <button
                     onClick={() => setNotifForm(f => ({ ...f, target: 'all', institutionId: '' }))}
-                    className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all ${notifForm.target === 'all' ? 'border-[#00A896] bg-[#E6F7F5] text-[#00A896]' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                    className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all ${notifForm.target === 'all' ? 'border-[#05907B] bg-[#E6F7F5] text-[#05907B]' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
                   >
                     Todas as escolas
                   </button>
                   <button
                     onClick={() => setNotifForm(f => ({ ...f, target: 'specific' }))}
-                    className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all ${notifForm.target === 'specific' ? 'border-[#00A896] bg-[#E6F7F5] text-[#00A896]' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                    className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all ${notifForm.target === 'specific' ? 'border-[#05907B] bg-[#E6F7F5] text-[#05907B]' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
                   >
                     Escola específica
                   </button>
@@ -576,7 +576,7 @@ export default function AdminHome() {
               <button
                 disabled={!notifForm.title.trim() || !notifForm.message.trim() || (notifForm.target === 'specific' && !notifForm.institutionId) || sendingNotif}
                 onClick={handleSendNotif}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#00A896] text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors hover:bg-[#008f81]"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#05907B] text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors hover:bg-[#008f81]"
               >
                 {sendingNotif
                   ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Enviando...</>

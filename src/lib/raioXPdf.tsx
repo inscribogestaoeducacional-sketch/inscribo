@@ -31,8 +31,8 @@ Font.register({
 
 // ─── Design tokens — mesma paleta de proposalPdf.tsx / RaioXPage.tsx ─────────
 const VD     = '#00523C' // verde escuro — marca / bom desempenho
-const VM     = '#00A896' // teal — marca / desempenho consolidado
-const VC     = '#0DD3BF' // mint — destaque
+const VM     = '#05907B' // teal — marca / desempenho consolidado
+const VC     = '#2DCBA4' // mint — destaque
 const AZUL   = '#1A2B4A'
 const CMID   = '#64748B'
 const CLIGHT = '#94A3B8'

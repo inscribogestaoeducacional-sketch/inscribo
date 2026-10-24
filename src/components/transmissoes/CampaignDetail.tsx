@@ -110,13 +110,13 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
       </>}
       tabs={([['resumo', 'Resumo'], ['destinatarios', `Destinatários${c.total_recipients ? ` (${c.total_recipients.toLocaleString('pt-BR')})` : ''}`], ['custo', 'Custo e cobrança']] as const).map(([k, l]) => (
         <button key={k} type="button" onClick={() => setTab(k)}
-          style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 800, padding: '9px 16px', borderRadius: '12px 12px 0 0', background: tab === k ? '#fff' : 'transparent', color: tab === k ? '#007A6E' : 'rgba(255,255,255,.9)', transition: 'background .15s' }}>{l}</button>
+          style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 800, padding: '9px 16px', borderRadius: '12px 12px 0 0', background: tab === k ? '#fff' : 'transparent', color: tab === k ? '#00695F' : 'rgba(255,255,255,.9)', transition: 'background .15s' }}>{l}</button>
       ))}
       footer={readOnly ? <Btn variant="ghost" onClick={() => run('refresh', async () => {})} loading={busy === 'refresh'}><RefreshCw size={14} /> Atualizar</Btn> : <>
         <Btn variant="ghost" onClick={() => run('refresh', async () => {})} loading={busy === 'refresh'}><RefreshCw size={14} /> Atualizar</Btn>
         {c.status === 'draft' && <Btn loading={busy === 'price'} onClick={() => run('price', () => broadcastAction('price', { campaign_id: c.id }))}><Calculator size={14} /> Calcular valor e liberar</Btn>}
         {canPay && (payLink
-          ? <a href={payLink} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#00A896', color: '#fff', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}><ExternalLink size={14} /> Pagar {brl(c.total_charged_brl)}</a>
+          ? <a href={payLink} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#05907B', color: '#fff', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}><ExternalLink size={14} /> Pagar {brl(c.total_charged_brl)}</a>
           : <Btn loading={busy === 'charge'} onClick={() => run('charge', async () => { const r = await chargeCampaign(c.id); window.open(r.paymentLink, '_blank') })}><CreditCard size={14} /> Gerar cobrança</Btn>)}
         {['scheduled', 'sending'].includes(c.status) && <Btn variant="secondary" loading={busy === 'pause'} onClick={() => run('pause', () => broadcastAction('pause', { campaign_id: c.id }))}><Pause size={14} /> Pausar</Btn>}
         {c.status === 'paused' && <Btn loading={busy === 'resume'} onClick={() => run('resume', () => broadcastAction('resume', { campaign_id: c.id }))}><Play size={14} /> Retomar</Btn>}
@@ -138,8 +138,8 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
           const days = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].filter((_, i) => weekdaysFromDb(c.send_weekdays)[i])
           return (
             <div style={{ border: '1.5px solid #99E0D7', background: '#F0FDFA', borderRadius: 12, padding: 14, display: 'grid', gap: 6 }}>
-              <label style={{ ...labelStyle, margin: 0, color: '#007A6E' }}><CalendarClock size={12} style={{ verticalAlign: -2 }} /> Plano de envio</label>
-              <div style={{ fontSize: 13, color: '#065F52', lineHeight: 1.6 }}>
+              <label style={{ ...labelStyle, margin: 0, color: '#00695F' }}><CalendarClock size={12} style={{ verticalAlign: -2 }} /> Plano de envio</label>
+              <div style={{ fontSize: 13, color: '#00695F', lineHeight: 1.6 }}>
                 {cap > 0 && <><b>{cap} mensagens por dia</b>{c.send_spread ? ' espalhadas no horário' : ''} · </>}
                 {c.send_window_start && c.send_window_end && <>das <b>{c.send_window_start.slice(0, 5)}</b> às <b>{c.send_window_end.slice(0, 5)}</b> · </>}
                 {c.send_weekdays?.length ? days.join(', ') : ''}
@@ -171,7 +171,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
         {tab === 'resumo' && c.total_recipients > 0 && (
           <div style={{ border: '1px solid #E3E8F0', borderRadius: 16, padding: '14px 16px', display: 'grid', gap: 9 }}>
             <label style={{ ...labelStyle, margin: 0 }}>Funil da campanha</label>
-            {([['Enviadas', c.sent_count, '#00A896'], ['Entregues', c.delivered_count, '#0284C7'], ['Lidas', c.read_count, '#7C3AED'], ['Responderam', c.replied_count, '#DB2777']] as const).map(([l, n, col]) => (
+            {([['Enviadas', c.sent_count, '#05907B'], ['Entregues', c.delivered_count, '#0284C7'], ['Lidas', c.read_count, '#7C3AED'], ['Responderam', c.replied_count, '#DB2777']] as const).map(([l, n, col]) => (
               <div key={l} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 88px', alignItems: 'center', gap: 10, fontSize: 12.5, color: '#475569' }}>
                 <span style={{ fontWeight: 700 }}>{l}</span>
                 <span style={{ height: 9, borderRadius: 99, background: '#EEF3F2', overflow: 'hidden' }}>
@@ -239,8 +239,8 @@ export default function CampaignDetail({ campaignId, onClose, onChanged, readOnl
                     <td style={{ padding: '7px 12px', color: '#64748b' }}>{fmtDate(r.sent_at)}</td>
                     <td style={{ padding: '7px 12px', color: '#64748b' }}>{r.first_reply_at ? `${fmtDate(r.first_reply_at)}${r.clicked_button_index !== null ? ` · ${buttons.find(b => b.index === r.clicked_button_index)?.text || 'botão'}` : ''}` : '—'}</td>
                     <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
-                      {!readOnly && r.first_reply_at && <button type="button" onClick={() => navigate(`/whatsapp?phone=${r.phone}`)} style={{ marginRight: 6, padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#007A6E', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}><MessageSquare size={11} style={{ verticalAlign: -1 }} /> Conversa</button>}
-                      {!readOnly && r.lead_id && <button type="button" onClick={() => navigate(`/leads?open=${r.lead_id}`)} style={{ padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#007A6E', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}><UserRound size={11} style={{ verticalAlign: -1 }} /> Ver lead</button>}
+                      {!readOnly && r.first_reply_at && <button type="button" onClick={() => navigate(`/whatsapp?phone=${r.phone}`)} style={{ marginRight: 6, padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#00695F', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}><MessageSquare size={11} style={{ verticalAlign: -1 }} /> Conversa</button>}
+                      {!readOnly && r.lead_id && <button type="button" onClick={() => navigate(`/leads?open=${r.lead_id}`)} style={{ padding: '3px 8px', borderRadius: 7, border: '1px solid #E3E8F0', background: '#fff', color: '#00695F', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}><UserRound size={11} style={{ verticalAlign: -1 }} /> Ver lead</button>}
                     </td>
                   </tr>
                 ))}

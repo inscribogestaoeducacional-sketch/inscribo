@@ -116,7 +116,7 @@ function mapMsgType(messageType: string): MsgType {
 }
 
 const AVATAR_BG_COLORS = [
-  'linear-gradient(135deg, #00A896, #0DD3BF)',
+  'linear-gradient(135deg, #05907B, #2DCBA4)',
   'linear-gradient(135deg, #667eea, #764ba2)',
   'linear-gradient(135deg, #f093fb, #f5576c)',
   'linear-gradient(135deg, #4facfe, #00f2fe)',
@@ -371,10 +371,10 @@ function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: nu
   }
 
   const btnCls = `w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
-    isDark ? 'bg-white/20 hover:bg-white/30' : 'bg-[#00A896] hover:bg-[#008f81]'
+    isDark ? 'bg-white/20 hover:bg-white/30' : 'bg-[#05907B] hover:bg-[#008f81]'
   }`
   const trackCls = `h-[3px] rounded-full overflow-hidden ${isDark ? 'bg-white/30' : 'bg-[#E2E8F0]'}`
-  const fillCls  = `h-full rounded-full transition-all duration-100 ${isDark ? 'bg-white' : 'bg-[#00A896]'}`
+  const fillCls  = `h-full rounded-full transition-all duration-100 ${isDark ? 'bg-white' : 'bg-[#05907B]'}`
   const timeCls  = `text-xs ${isDark ? 'text-white/60' : 'text-[#64748B]'}`
   const speedCls = `text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors ${isDark ? 'text-white/70 hover:text-white' : 'text-[#64748B] hover:text-[#1A2B4A]'}`
 
@@ -595,7 +595,7 @@ function RenderMessageContent({ message, fromMe, onImageClick }: { message: any;
         >
           <span style={{ fontSize: 22 }}>📄</span>
           <span style={{ fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: fromMe ? '#fff' : '#1A2B4A' }}>{filename}</span>
-          <span style={{ fontSize: 18, color: '#00A896' }}>↓</span>
+          <span style={{ fontSize: 18, color: '#05907B' }}>↓</span>
         </div>
       )
     }
@@ -657,7 +657,7 @@ function MessageBubble({ msg, onImageClick, contactName }: { msg: Message; onIma
         {msg.quoted_content && (
           <div style={{
             borderLeft: '3px solid',
-            borderColor: isMe ? 'rgba(255,255,255,0.6)' : '#00A896',
+            borderColor: isMe ? 'rgba(255,255,255,0.6)' : '#05907B',
             background: isMe ? 'rgba(0,0,0,0.15)' : 'rgba(0,168,150,0.08)',
             borderRadius: '4px',
             padding: '6px 10px',
@@ -667,7 +667,7 @@ function MessageBubble({ msg, onImageClick, contactName }: { msg: Message; onIma
             <div style={{
               fontSize: 12,
               fontWeight: 600,
-              color: isMe ? 'rgba(255,255,255,0.9)' : '#00A896',
+              color: isMe ? 'rgba(255,255,255,0.9)' : '#05907B',
               marginBottom: 2,
             }}>
               {msg.quoted_from_me ? 'Você' : (contactName || 'Contato')}
@@ -702,7 +702,7 @@ function MessageBubble({ msg, onImageClick, contactName }: { msg: Message; onIma
             if (msg.status === 'failed') {
               return <span style={{ fontSize: 12, color: '#EF4444' }} title="Falha ao enviar">⚠</span>
             }
-            const color = msg.status === 'read' ? '#0DD3BF' : 'rgba(255,255,255,0.45)'
+            const color = msg.status === 'read' ? '#2DCBA4' : 'rgba(255,255,255,0.45)'
             const showDouble = msg.status === 'delivered' || msg.status === 'read'
             return (
               <svg width={showDouble ? 18 : 12} height="11" viewBox={showDouble ? '0 0 18 11' : '0 0 12 11'} fill="none">
@@ -2631,7 +2631,7 @@ export default function AionWhatsAppHub() {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#F0FDFB' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#00A896] border-t-transparent" />
+        <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#05907B] border-t-transparent" />
       </div>
     )
   }
@@ -2642,7 +2642,7 @@ export default function AionWhatsAppHub() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#F0FDFB' }}>
         <div style={{ textAlign: 'center', maxWidth: 360 }}>
           <div style={{ width: 80, height: 80, background: '#E6F7F5', border: '2px solid #D1FAE5', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-            <MessageCircle style={{ width: 40, height: 40, color: '#00A896' }} />
+            <MessageCircle style={{ width: 40, height: 40, color: '#05907B' }} />
           </div>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', marginBottom: 8 }}>WhatsApp não conectado</h2>
           <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24, lineHeight: 1.6 }}>
@@ -2650,9 +2650,9 @@ export default function AionWhatsAppHub() {
           </p>
           <button
             onClick={() => navigate('/settings')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#00A896', color: '#fff', fontSize: 14, fontWeight: 600, borderRadius: 10, border: 'none', cursor: 'pointer' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
-            onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#05907B', color: '#fff', fontSize: 14, fontWeight: 600, borderRadius: 10, border: 'none', cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#00695F')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#05907B')}
           >
             <Settings style={{ width: 16, height: 16 }} />
             Ir para Configurações
@@ -2693,7 +2693,7 @@ export default function AionWhatsAppHub() {
               value={newConvName}
               onChange={e => setNewConvName(e.target.value)}
               placeholder="Nome do contato (opcional)"
-              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none mb-3"
+              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none mb-3"
             />
             <input
               type="tel"
@@ -2701,7 +2701,7 @@ export default function AionWhatsAppHub() {
               onChange={e => setNewConvPhone(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleNewConv() }}
               placeholder="+55 (00) 00000-0000"
-              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none mb-4"
+              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none mb-4"
             />
             <div className="flex gap-2">
               <button onClick={() => { setShowNewConvModal(false); setNewConvPhone(''); setNewConvName('') }}
@@ -2709,7 +2709,7 @@ export default function AionWhatsAppHub() {
                 Cancelar
               </button>
               <button onClick={handleNewConv} disabled={!newConvPhone.trim()}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#05907B] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 Iniciar
               </button>
             </div>
@@ -2732,30 +2732,30 @@ export default function AionWhatsAppHub() {
                 <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do Responsável *</label>
                 <input value={leadForm.responsible_name} onChange={e => setLeadForm(f => ({...f, responsible_name: e.target.value}))}
                   placeholder="Nome completo"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#05907B] outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do Aluno</label>
                 <input value={leadForm.student_name} onChange={e => setLeadForm(f => ({...f, student_name: e.target.value}))}
                   placeholder="Nome do aluno"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#05907B] outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">Telefone</label>
                 <input value={leadForm.phone} onChange={e => setLeadForm(f => ({...f, phone: e.target.value}))}
                   placeholder="+55 00 00000-0000"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#05907B] outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">E-mail</label>
                 <input type="email" value={leadForm.email} onChange={e => setLeadForm(f => ({...f, email: e.target.value}))}
                   placeholder="email@exemplo.com"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#05907B] outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">Série de Interesse</label>
                 <select value={leadForm.grade_interest} onChange={e => setLeadForm(f => ({...f, grade_interest: e.target.value}))}
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#05907B] outline-none">
                   <option value="">Selecionar...</option>
                   {['Educação Infantil','1º Ano','2º Ano','3º Ano','4º Ano','5º Ano','6º Ano','7º Ano','8º Ano','9º Ano','1º EM','2º EM','3º EM'].map(g => (
                     <option key={g} value={g}>{g}</option>
@@ -2769,7 +2769,7 @@ export default function AionWhatsAppHub() {
                 Cancelar
               </button>
               <button onClick={handleCreateLead} disabled={!leadForm.responsible_name.trim()}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#05907B] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 Criar Lead
               </button>
             </div>
@@ -2813,7 +2813,7 @@ export default function AionWhatsAppHub() {
                 }).then(() => {}, () => {})
                 setShowClientModal(false)
               }}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81]">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#05907B] rounded-lg hover:bg-[#008f81]">
                 Confirmar
               </button>
             </div>
@@ -2842,21 +2842,21 @@ export default function AionWhatsAppHub() {
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 32, height: 32, borderRadius: 8, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <MessageCircle style={{ width: 18, height: 18, color: '#00A896' }} />
+                <MessageCircle style={{ width: 18, height: 18, color: '#05907B' }} />
               </div>
               <span style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>WhatsApp</span>
               {totalUnread > 0 && (
-                <span style={{ background: '#00A896', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center' }}>
+                <span style={{ background: '#05907B', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center' }}>
                   {totalUnread}
                 </span>
               )}
             </div>
             <button
-              style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', border: 'none', cursor: 'pointer', color: '#fff', transition: 'background 0.15s' }}
+              style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05907B', border: 'none', cursor: 'pointer', color: '#fff', transition: 'background 0.15s' }}
               title="Nova conversa"
               onClick={() => setShowNewConvModal(true)}
-              onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
+              onMouseEnter={e => (e.currentTarget.style.background = '#00695F')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#05907B')}
             >
               <Plus style={{ width: 16, height: 16 }} />
             </button>
@@ -2872,7 +2872,7 @@ export default function AionWhatsAppHub() {
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar nome ou número..."
                 style={{ width: '100%', paddingLeft: 34, paddingRight: 12, paddingTop: 8, paddingBottom: 8, fontSize: 13, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 10, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#00A896')}
+                onFocus={e => (e.currentTarget.style.borderColor = '#05907B')}
                 onBlur={e => (e.currentTarget.style.borderColor = '#D1FAE5')}
               />
             </div>
@@ -2977,7 +2977,7 @@ export default function AionWhatsAppHub() {
                       gap: 10,
                       padding: '11px 14px',
                       cursor: 'pointer',
-                      borderLeft: isActive ? '3px solid #00A896' : '3px solid transparent',
+                      borderLeft: isActive ? '3px solid #05907B' : '3px solid transparent',
                       borderBottom: '1px solid #F0FDFB',
                       background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : 'transparent',
                       transition: 'all 0.15s',
@@ -2990,11 +2990,11 @@ export default function AionWhatsAppHub() {
                       <div style={{
                         width: 44, height: 44, borderRadius: '50%',
                         background: isActive
-                          ? 'linear-gradient(135deg, #00A896, #0DD3BF)'
+                          ? 'linear-gradient(135deg, #05907B, #2DCBA4)'
                           : getAvatarBgColor(conv.name),
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 16, fontWeight: 700, color: 'white',
-                        border: isActive ? '2px solid #00A896' : '2px solid transparent',
+                        border: isActive ? '2px solid #05907B' : '2px solid transparent',
                         boxShadow: isActive ? '0 0 0 3px rgba(0,168,150,0.15)' : 'none',
                         transition: 'all 0.2s',
                         overflow: 'hidden',
@@ -3025,7 +3025,7 @@ export default function AionWhatsAppHub() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                         <span style={{
                           fontSize: 13, fontWeight: 700,
-                          color: isActive ? '#007A6E' : '#1A2B4A',
+                          color: isActive ? '#00695F' : '#1A2B4A',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           maxWidth: 160,
                         }}>
@@ -3041,7 +3041,7 @@ export default function AionWhatsAppHub() {
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
                         {preview.icon ? (
-                          <span style={{ color: '#00A896', fontStyle: 'italic' }}>
+                          <span style={{ color: '#05907B', fontStyle: 'italic' }}>
                             {preview.icon} {preview.text}
                           </span>
                         ) : preview.text}
@@ -3066,7 +3066,7 @@ export default function AionWhatsAppHub() {
                         {/* Unread badge */}
                         {conv.unreadCount > 0 && (
                           <span style={{
-                            background: '#00A896', color: 'white',
+                            background: '#05907B', color: 'white',
                             fontSize: 10, fontWeight: 700,
                             minWidth: 20, height: 20, borderRadius: 999,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -3120,7 +3120,7 @@ export default function AionWhatsAppHub() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>
                       {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                      {activeConv.online && <span style={{ marginLeft: 6, color: '#00A896', fontWeight: 500 }}>• online</span>}
+                      {activeConv.online && <span style={{ marginLeft: 6, color: '#05907B', fontWeight: 500 }}>• online</span>}
                     </p>
                     {(() => {
                       const statusColors: Record<string, { bg: string; dot: string; text: string }> = {
@@ -3149,7 +3149,7 @@ export default function AionWhatsAppHub() {
                       <button key={btn.key} onClick={btn.onClick} title={btn.title}
                         style={{
                           width: 36, height: 36, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: btn.active ? '#E6F7F5' : '#F0FDFB', color: btn.active ? '#00A896' : '#64748B',
+                          background: btn.active ? '#E6F7F5' : '#F0FDFB', color: btn.active ? '#05907B' : '#64748B',
                           border: 'none', cursor: 'pointer', transition: 'background 0.15s',
                         }}
                         onMouseEnter={e => { if (!btn.active) e.currentTarget.style.background = '#D1FAE5' }}
@@ -3243,7 +3243,7 @@ export default function AionWhatsAppHub() {
             {!activeConv && conversations.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                 <div style={{ width: 72, height: 72, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                  <MessageCircle style={{ width: 36, height: 36, color: '#00A896' }} />
+                  <MessageCircle style={{ width: 36, height: 36, color: '#05907B' }} />
                 </div>
                 <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2B4A', margin: '0 0 6px' }}>Aguardando mensagens</p>
                 <p style={{ fontSize: 13, color: '#94A3B8', maxWidth: 280, lineHeight: 1.6, margin: 0 }}>
@@ -3254,7 +3254,7 @@ export default function AionWhatsAppHub() {
             {!activeConv && conversations.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                 <div style={{ width: 64, height: 64, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-                  <MessageCircle style={{ width: 30, height: 30, color: '#00A896' }} />
+                  <MessageCircle style={{ width: 30, height: 30, color: '#05907B' }} />
                 </div>
                 <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2B4A', margin: '0 0 4px' }}>Selecione uma conversa</p>
                 <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>Escolha uma conversa para começar</p>
@@ -3265,7 +3265,7 @@ export default function AionWhatsAppHub() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0 10px' }}>
                   <div style={{ flex: 1, height: 1, background: 'linear-gradient(to right, transparent, #D1FAE5, transparent)' }} />
                   <span style={{
-                    fontSize: 11, fontWeight: 600, color: '#007A6E',
+                    fontSize: 11, fontWeight: 600, color: '#00695F',
                     background: '#E6F7F5', border: '1px solid #B2E8E2',
                     padding: '4px 14px', borderRadius: 999,
                     boxShadow: '0 1px 4px rgba(0,168,150,0.12)',
@@ -3282,7 +3282,7 @@ export default function AionWhatsAppHub() {
             {activeConv?.messages.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '64px 0' }}>
                 <div style={{ width: 56, height: 56, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
-                  <MessageCircle style={{ width: 26, height: 26, color: '#00A896' }} />
+                  <MessageCircle style={{ width: 26, height: 26, color: '#05907B' }} />
                 </div>
                 <p style={{ fontSize: 14, color: '#1A2B4A', margin: '0 0 4px', fontWeight: 500 }}>Nenhuma mensagem ainda</p>
                 <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Envie a primeira mensagem abaixo</p>
@@ -3325,7 +3325,7 @@ export default function AionWhatsAppHub() {
                 {templates.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 10px' }}>
                     Nenhum template aprovado cadastrado.
-                    <span style={{ color: '#00A896', cursor: 'pointer', marginLeft: 4 }} onClick={() => navigate('/settings?tab=whatsapp')}>
+                    <span style={{ color: '#05907B', cursor: 'pointer', marginLeft: 4 }} onClick={() => navigate('/settings?tab=whatsapp')}>
                       Configurar templates
                     </span>
                   </p>
@@ -3392,7 +3392,7 @@ export default function AionWhatsAppHub() {
                 {quickReplies.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '12px 0' }}>
                     Nenhuma resposta rápida cadastrada.<br />
-                    <span style={{ color: '#00A896', cursor: 'pointer' }} onClick={() => navigate('/settings?tab=whatsapp')}>
+                    <span style={{ color: '#05907B', cursor: 'pointer' }} onClick={() => navigate('/settings?tab=whatsapp')}>
                       Configure em Configurações → WhatsApp
                     </span>
                   </p>
@@ -3403,7 +3403,7 @@ export default function AionWhatsAppHub() {
                         key={qr.id}
                         onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
                         style={{ textAlign: 'left', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, cursor: 'pointer' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#05907B'; e.currentTarget.style.background = '#E6F7F5' }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#FFFFFF' }}
                       >
                         <p style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{qr.label}</p>
@@ -3458,12 +3458,12 @@ export default function AionWhatsAppHub() {
                   <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>{(pendingFile.size / 1024).toFixed(1)} KB</p>
                   {uploadProgress > 0 && (
                     <div style={{ marginTop: 4, height: 4, background: '#D1FAE5', borderRadius: 9999, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', background: '#00A896', transition: 'width 0.3s', width: `${uploadProgress}%` }} />
+                      <div style={{ height: '100%', background: '#05907B', transition: 'width 0.3s', width: `${uploadProgress}%` }} />
                     </div>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <button onClick={sendPendingFile} style={{ padding: 6, background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                  <button onClick={sendPendingFile} style={{ padding: 6, background: '#05907B', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                     <Send style={{ width: 14, height: 14 }} />
                   </button>
                   <button onClick={() => { setPendingFile(null); setPendingFilePreview(null) }} style={{ padding: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
@@ -3518,13 +3518,13 @@ export default function AionWhatsAppHub() {
                   </span>
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 28 }}>
                     {waveformBars.map((h, i) => (
-                      <div key={i} style={{ flex: 1, height: `${Math.round(h * 100)}%`, minHeight: 3, background: '#00A896', borderRadius: 2, transition: 'height 0.08s ease' }} />
+                      <div key={i} style={{ flex: 1, height: `${Math.round(h * 100)}%`, minHeight: 3, background: '#05907B', borderRadius: 2, transition: 'height 0.08s ease' }} />
                     ))}
                   </div>
                 </div>
                 {/* Stop → preview */}
                 <button onClick={stopRecordingForPreview} title="Parar e pré-visualizar"
-                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#05907B', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
                   <Check size={20} />
                 </button>
               </div>
@@ -3539,7 +3539,7 @@ export default function AionWhatsAppHub() {
                 <audio src={audioPreviewUrl} controls style={{ flex: 1, height: 36, minWidth: 0 }} />
                 {/* Send */}
                 <button onClick={sendAudio} title="Enviar áudio"
-                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#05907B', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
                   <Send size={18} />
                 </button>
               </div>
@@ -3555,7 +3555,7 @@ export default function AionWhatsAppHub() {
                     <button key={btn.title} onClick={btn.onClick} title={btn.title}
                       style={{
                         padding: 8, borderRadius: 8, flexShrink: 0, background: btn.active ? '#E6F7F5' : 'none',
-                        color: btn.active ? '#00A896' : '#64748B', border: 'none', cursor: 'pointer', transition: 'background 0.15s',
+                        color: btn.active ? '#05907B' : '#64748B', border: 'none', cursor: 'pointer', transition: 'background 0.15s',
                       }}
                       onMouseEnter={e => { if (!btn.active) e.currentTarget.style.background = '#F0FDFB' }}
                       onMouseLeave={e => { if (!btn.active) e.currentTarget.style.background = 'none' }}
@@ -3593,22 +3593,22 @@ export default function AionWhatsAppHub() {
                     boxShadow: '0 1px 4px rgba(0,168,150,0.08) inset',
                     cursor: windowExpired ? 'not-allowed' : 'text',
                   }}
-                  onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#FFFFFF' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#05907B'; e.currentTarget.style.background = '#FFFFFF' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
                 />
                 {inputText.trim() ? (
                   <button onClick={handleSend}
-                    style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s, transform 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'scale(1.08)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'scale(1)' }}
+                    style={{ width: 44, height: 44, borderRadius: '50%', background: '#05907B', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s, transform 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#00695F'; e.currentTarget.style.transform = 'scale(1.08)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#05907B'; e.currentTarget.style.transform = 'scale(1)' }}
                   >
                     <Send style={{ width: 18, height: 18 }} />
                   </button>
                 ) : (
                   <button onClick={startRecording} title="Gravar áudio"
-                    style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', color: '#fff', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#007A6E' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#00A896' }}
+                    style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05907B', color: '#fff', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#00695F' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#05907B' }}
                   >
                     <Mic style={{ width: 18, height: 18 }} />
                   </button>
@@ -3636,7 +3636,7 @@ export default function AionWhatsAppHub() {
                   style={{
                     flex: 1, padding: '12px 0', fontSize: 12, fontWeight: rightPanelTab === tab.key ? 700 : 500,
                     color: rightPanelTab === tab.key ? '#1A2B4A' : '#64748B',
-                    borderBottom: rightPanelTab === tab.key ? '2px solid #00A896' : '2px solid transparent',
+                    borderBottom: rightPanelTab === tab.key ? '2px solid #05907B' : '2px solid transparent',
                     background: 'none', border: 'none',
                     cursor: 'pointer', transition: 'all 0.15s',
                   }}
@@ -3646,7 +3646,7 @@ export default function AionWhatsAppHub() {
               ))}
               <button onClick={exportConversation} title="Exportar conversa"
                 style={{ padding: '8px 10px', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', flexShrink: 0, transition: 'color 0.15s' }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#00A896')}
+                onMouseEnter={e => (e.currentTarget.style.color = '#05907B')}
                 onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}
               >
                 <Download size={14} />
@@ -3661,7 +3661,7 @@ export default function AionWhatsAppHub() {
                 {activeConv.status !== 'closed' && (
                   <div style={{ padding: '10px 12px', borderBottom: '1px solid #e2f5f3', background: '#f0fdfb', display: 'flex', flexDirection: 'column', gap: 7 }}>
                     <button onClick={handleCloseConversation}
-                      style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 3px 10px rgba(13,148,136,0.35)', transition: 'all 0.2s' }}
+                      style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #0d9488 0%, #2DCBA4 100%)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 3px 10px rgba(13,148,136,0.35)', transition: 'all 0.2s' }}
                       onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 5px 16px rgba(13,148,136,0.45)' }}
                       onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 3px 10px rgba(13,148,136,0.35)' }}>
                       ✅ Concluir Atendimento
@@ -3969,7 +3969,7 @@ export default function AionWhatsAppHub() {
                           </div>
                           <div style={{
                             width: 32, height: 18, borderRadius: 9999,
-                            background: activeConv.bot_active ? '#00A896' : '#CBD5E1',
+                            background: activeConv.bot_active ? '#05907B' : '#CBD5E1',
                             position: 'relative', transition: 'background 0.2s', flexShrink: 0,
                           }}>
                             <div style={{
@@ -4245,7 +4245,7 @@ export default function AionWhatsAppHub() {
                 <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Histórico de eventos</p>
                 {historyLoading || leadCrmLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 0' }}>
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#00A896] border-t-transparent" />
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#05907B] border-t-transparent" />
                   </div>
                 ) : convHistory.length === 0 && leadCrmEvents.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#64748B', textAlign: 'center', padding: '32px 0' }}>Nenhum evento registrado</p>
@@ -4351,7 +4351,7 @@ export default function AionWhatsAppHub() {
                   matches.forEach(([, n]) => { autoVars[n] = getDefaultVarValue(parseInt(n)) })
                   setTemplateVars(autoVars)
                 }}
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#05907B] outline-none">
                   <option value="">Selecionar template...</option>
                   {templates.length === 0 && (
                     <option value="hello_world">hello_world (padrão Meta)</option>
@@ -4379,7 +4379,7 @@ export default function AionWhatsAppHub() {
                             value={templateVars[n] || ''}
                             onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
                             placeholder={`Variável ${n}`}
-                            className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
+                            className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#05907B] outline-none"
                           />
                         </div>
                       ))}
@@ -4404,7 +4404,7 @@ export default function AionWhatsAppHub() {
                 Cancelar
               </button>
               <button onClick={handleSendTemplate} disabled={sendingTemplate || (!selectedTemplate && templates.length > 0)}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#05907B] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 {sendingTemplate ? 'Enviando...' : 'Enviar Template'}
               </button>
             </div>

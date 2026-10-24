@@ -126,7 +126,7 @@ import type { SocialNet } from '../../api/_lib/vitrineRender'
 // mesmos quando a chave não existe). font_pair fica sem padrão de propósito:
 // página antiga continua na fonte única dela até a escola escolher um par.
 export const DEFAULT_THEME: VitrineTheme = {
-  primary: '#00A896', background: '#FFFFFF', text: '#111827',
+  primary: '#05907B', background: '#FFFFFF', text: '#111827',
   button_style: 'filled', radius: 16,
   bg_type: 'solid', bg_gradient_angle: 180, bg_overlay: 40, bg_overlay_tone: 'dark',
   shadow: 'none', spacing: 'normal', card_style: 'bordered', logo_shape: 'circle', animation: 'none',
@@ -158,7 +158,7 @@ export const MSG_ENROLL = 'Olá! Vim pela página da escola e quero fazer a matr
 // Confiança = âmbar, Informações = azul-claro).
 export const BLOCK_TYPES: Record<BlockType, { label: string; description: string; color: string; bg: string }> = {
   whatsapp: { label: 'WhatsApp',             description: 'Botão que abre uma conversa com a escola', color: '#059669', bg: '#D1FAE5' },
-  enroll:   { label: 'Botão de matrícula',   description: 'Destaque pra matrícula: link ou WhatsApp',  color: '#00A896', bg: '#E6F7F5' },
+  enroll:   { label: 'Botão de matrícula',   description: 'Destaque pra matrícula: link ou WhatsApp',  color: '#05907B', bg: '#E6F7F5' },
   link:     { label: 'Link',                 description: 'Site, Instagram, formulário, qualquer link', color: '#1D4ED8', bg: '#DBEAFE' },
   text:     { label: 'Texto / Sobre',        description: 'Um parágrafo sobre a escola',                color: '#7C3AED', bg: '#EDE9FE' },
   gallery:  { label: 'Galeria de imagens',   description: 'Até 12 fotos em grade ou carrossel',         color: '#7C3AED', bg: '#EDE9FE' },
@@ -602,7 +602,7 @@ function hexMix(a: string, b: string, t: number): string {
 // logo são aproveitados — o resto é do modelo).
 export function templateTheme(key: TemplateKey, current: Partial<VitrineTheme> | null | undefined): VitrineTheme {
   const cur = readTheme(current)
-  const primary = HEX_RE.test(cur.primary) ? cur.primary.toUpperCase() : '#00A896'
+  const primary = HEX_RE.test(cur.primary) ? cur.primary.toUpperCase() : '#05907B'
   const keep = { logo_shape: cur.logo_shape || 'circle', template: key } as const
   switch (key) {
     case 'essencial':

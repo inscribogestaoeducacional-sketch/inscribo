@@ -295,10 +295,10 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave, o
         value={value}
         onChange={e => onChange(e.target.value)}
         style={darkInp}
-        onFocus={e => { e.currentTarget.style.borderColor = '#00A896' }}
+        onFocus={e => { e.currentTarget.style.borderColor = '#05907B' }}
         onBlur={e => { e.currentTarget.style.borderColor = DARK_BORDER }}
       />
-      {hint && <p style={{ fontSize: 11, color: '#00A896', margin: '4px 0 0' }}>{hint}</p>}
+      {hint && <p style={{ fontSize: 11, color: '#05907B', margin: '4px 0 0' }}>{hint}</p>}
     </div>
   )
 
@@ -354,8 +354,8 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave, o
                   style={{
                     flex: 1, padding: '10px 0', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                     background: 'transparent', border: 'none',
-                    borderBottom: activeTab === t.id ? '2px solid #00A896' : '2px solid transparent',
-                    color: activeTab === t.id ? '#00A896' : DARK_MUTED,
+                    borderBottom: activeTab === t.id ? '2px solid #05907B' : '2px solid transparent',
+                    color: activeTab === t.id ? '#05907B' : DARK_MUTED,
                     transition: 'color 0.15s',
                   }}>
                   {t.label}
@@ -413,13 +413,13 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave, o
               </button>
 
               <button onClick={handleGeneratePdf} disabled={generatingPdf}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', background: '#0a3d28', border: `1px solid ${DARK_BORDER}`, borderRadius: 10, color: '#00A896', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: generatingPdf ? 0.6 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', background: '#0a3d28', border: `1px solid ${DARK_BORDER}`, borderRadius: 10, color: '#05907B', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: generatingPdf ? 0.6 : 1 }}>
                 {generatingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 {generatingPdf ? 'Gerando PDF…' : 'Gerar PDF'}
               </button>
 
               <button onClick={handleSendEmail} disabled={sendingEmail || !form.client_email}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', background: 'linear-gradient(135deg,#00523C,#00A896)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (sendingEmail || !form.client_email) ? 0.6 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', background: 'linear-gradient(135deg,#00523C,#05907B)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (sendingEmail || !form.client_email) ? 0.6 : 1 }}>
                 {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 {sendingEmail ? 'Enviando…' : 'Enviar por Email'}
               </button>
@@ -435,7 +435,7 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave, o
           <div style={{ flex: 1, overflowY: 'auto', background: '#0a1f16' }}>
             {/* Preview bar */}
             <div style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0a3d28', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${DARK_BORDER}` }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00A896' }} />
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#05907B' }} />
               <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(208,237,229,0.7)' }}>Preview ao vivo — A4 landscape (7 páginas)</span>
             </div>
 

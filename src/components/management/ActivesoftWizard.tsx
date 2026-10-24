@@ -61,7 +61,7 @@ const stepLabel = (k: string) => {
 
 const box: CSSProperties = { border: '1px solid #E2E8F0', borderRadius: 12, padding: '14px 16px' }
 const input: CSSProperties = { padding: '8px 10px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', color: '#1A2B4A', boxSizing: 'border-box' }
-const btn: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
+const btn: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: 'none', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
 const btnSec: CSSProperties = { ...btn, background: '#F1F5F9', color: '#475569' }
 const off = (s: CSSProperties): CSSProperties => ({ ...s, opacity: 0.55, cursor: 'not-allowed' })
 const small: CSSProperties = { fontSize: 12, color: '#64748B', margin: '4px 0 10px', lineHeight: 1.6 }
@@ -124,7 +124,7 @@ export default function ActivesoftWizard({ institutionId, onToast }: { instituti
             <button onClick={() => enabled && setOpen(open === s.n ? 0 : s.n)}
               style={{ all: 'unset', cursor: enabled ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
               <span style={{ width: 24, height: 24, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                background: s.done ? '#00A896' : '#F1F5F9', color: s.done ? '#fff' : '#475569', fontSize: 12, fontWeight: 800 }}>
+                background: s.done ? '#05907B' : '#F1F5F9', color: s.done ? '#fff' : '#475569', fontSize: 12, fontWeight: 800 }}>
                 {s.done ? '✓' : s.n}
               </span>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>{s.title}</span>

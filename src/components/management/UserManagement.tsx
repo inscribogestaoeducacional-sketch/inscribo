@@ -118,7 +118,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
 
   if (!isOpen) return null
 
-  const S = { input: 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#00A896] focus:outline-none transition-all text-sm' }
+  const S = { input: 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#05907B] focus:outline-none transition-all text-sm' }
   const showPerms = isConsultor(formData.role)
 
   return (
@@ -169,7 +169,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
-            <input type="checkbox" id="active" checked={formData.active} onChange={e => setFormData({ ...formData, active: e.target.checked })} style={{ width: 16, height: 16, accentColor: '#00A896' }} />
+            <input type="checkbox" id="active" checked={formData.active} onChange={e => setFormData({ ...formData, active: e.target.checked })} style={{ width: 16, height: 16, accentColor: '#05907B' }} />
             <label htmlFor="active" style={{ fontSize: 13, color: '#475569', cursor: 'pointer' }}>Usuário ativo no sistema</label>
           </div>
 
@@ -177,7 +177,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
               <div
                 onClick={() => setFormData(f => ({ ...f, can_see_all_conversations: !f.can_see_all_conversations }))}
-                style={{ width: 36, height: 20, borderRadius: 999, background: formData.can_see_all_conversations ? '#00A896' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s', cursor: 'pointer', marginTop: 2 }}
+                style={{ width: 36, height: 20, borderRadius: 999, background: formData.can_see_all_conversations ? '#05907B' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s', cursor: 'pointer', marginTop: 2 }}
               >
                 <span style={{ position: 'absolute', top: 2, left: formData.can_see_all_conversations ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />
               </div>
@@ -192,7 +192,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
               <div
                 onClick={() => setFormData(f => ({ ...f, can_see_full_history: !f.can_see_full_history }))}
-                style={{ width: 36, height: 20, borderRadius: 999, background: formData.can_see_full_history ? '#00A896' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s', cursor: 'pointer', marginTop: 2 }}
+                style={{ width: 36, height: 20, borderRadius: 999, background: formData.can_see_full_history ? '#05907B' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s', cursor: 'pointer', marginTop: 2 }}
               >
                 <span style={{ position: 'absolute', top: 2, left: formData.can_see_full_history ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />
               </div>
@@ -210,7 +210,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
                 <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>Administradores e gestores têm acesso total.</p>
               </div>
               {loadingPerms ? (
-                <div style={{ textAlign: 'center', padding: 24 }}><Loader2 size={18} color="#00A896" className="animate-spin" style={{ margin: '0 auto' }} /></div>
+                <div style={{ textAlign: 'center', padding: 24 }}><Loader2 size={18} color="#05907B" className="animate-spin" style={{ margin: '0 auto' }} /></div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: '#E2E8F0' }}>
                   {PERM_MODULES.map(m => {
@@ -228,7 +228,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
                             </span>
                           )}
                         </div>
-                        <div style={{ width: 36, height: 20, borderRadius: 999, background: enabled ? '#00A896' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s' }}>
+                        <div style={{ width: 36, height: 20, borderRadius: 999, background: enabled ? '#05907B' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s' }}>
                           <span style={{ position: 'absolute', top: 2, left: enabled ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />
                         </div>
                       </div>
@@ -247,7 +247,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
             <button type="button" onClick={onClose} style={{ padding: '9px 20px', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
-            <button type="submit" disabled={loading} style={{ padding: '9px 20px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: loading ? 0.7 : 1 }}>
+            <button type="submit" disabled={loading} style={{ padding: '9px 20px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: loading ? 0.7 : 1 }}>
               {loading ? <><Loader2 size={13} className="animate-spin" />{editingUser ? 'Salvando...' : 'Criando...'}</> : editingUser ? 'Salvar alterações' : 'Criar usuário'}
             </button>
           </div>
@@ -293,7 +293,7 @@ function PasswordModal({ isOpen, onClose, targetUser }: { isOpen: boolean; onClo
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 420, boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Key size={16} color="#00A896" />Redefinir Senha</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Key size={16} color="#05907B" />Redefinir Senha</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
         </div>
 
@@ -306,7 +306,7 @@ function PasswordModal({ isOpen, onClose, targetUser }: { isOpen: boolean; onClo
             <CheckCircle size={32} color="#16a34a" style={{ margin: '0 auto 10px' }} />
             <p style={{ fontSize: 13, color: '#166534', fontWeight: 600, margin: 0 }}>Email de redefinição enviado!</p>
             <p style={{ fontSize: 12, color: '#16a34a', margin: '4px 0 0' }}>O usuário receberá instruções por email.</p>
-            <button onClick={onClose} style={{ marginTop: 14, padding: '8px 20px', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Fechar</button>
+            <button onClick={onClose} style={{ marginTop: 14, padding: '8px 20px', borderRadius: 9, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Fechar</button>
           </div>
         ) : (
           <>
@@ -350,7 +350,7 @@ function BlockedRemovalModal({ info, onClose, onGoToLeads, onGoToWhatsApp }: {
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {info.pendingLeads > 0 && (
-            <button onClick={onGoToLeads} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={onGoToLeads} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             Ver leads deste usuário
             </button>
           )}
@@ -712,7 +712,7 @@ export default function UserManagement() {
         <div style={{ flex: 1, padding: '0 0 16px' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: 40 }}>
-              <Loader2 size={28} color="#00A896" className="animate-spin" style={{ margin: '0 auto 12px' }} />
+              <Loader2 size={28} color="#05907B" className="animate-spin" style={{ margin: '0 auto 12px' }} />
               <p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando...</p>
             </div>
           ) : filtered.length === 0 ? (
@@ -723,7 +723,7 @@ export default function UserManagement() {
           ) : filtered.map(u => (
             <div key={u.id} style={{ margin: '0 16px 10px', background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid #E2E8F0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#00A896,#0DD3BF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#05907B,#2DCBA4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                   {u.full_name.charAt(0).toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -772,7 +772,7 @@ export default function UserManagement() {
         {/* FAB */}
         <button
           onClick={() => { setEditingUser(null); setShowModal(true) }}
-          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}
+          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}
         >
           <Plus size={24} />
         </button>
@@ -806,7 +806,7 @@ export default function UserManagement() {
           <button onClick={loadUsers} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
             <RefreshCw size={14} /> Atualizar
           </button>
-          <button onClick={() => { setEditingUser(null); setShowModal(true) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#007A6E', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
+          <button onClick={() => { setEditingUser(null); setShowModal(true) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#00695F', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
             <Plus size={15} /> Novo Usuário
           </button>
         </>} />
@@ -854,7 +854,7 @@ export default function UserManagement() {
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '48px 0' }}>
-            <Loader2 size={28} color="#00A896" className="animate-spin" style={{ margin: '0 auto 12px' }} />
+            <Loader2 size={28} color="#05907B" className="animate-spin" style={{ margin: '0 auto 12px' }} />
             <p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando usuários...</p>
           </div>
         ) : filtered.length === 0 ? (
@@ -877,7 +877,7 @@ export default function UserManagement() {
                 <tr key={u.id} style={{ borderBottom: '1px solid #F8FAFC', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#00A896,#0DD3BF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#05907B,#2DCBA4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                         {u.full_name.charAt(0).toUpperCase()}
                       </div>
                       <div>

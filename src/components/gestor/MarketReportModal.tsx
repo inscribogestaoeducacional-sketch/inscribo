@@ -88,7 +88,7 @@ export default function MarketReportModal({
         onClick={e => e.stopPropagation()}>
         <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <MapPin size={16} color="#00A896" />
+            <MapPin size={16} color="#05907B" />
             <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Relatório de Mercado Completo</h3>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 6, borderRadius: 8 }}>
@@ -106,7 +106,7 @@ export default function MarketReportModal({
           {showCarousel && !loadError && (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginBottom: 18 }}>
-                <div style={{ width: 16, height: 16, border: '2.5px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                <div style={{ width: 16, height: 16, border: '2.5px solid #05907B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
                 <h2 style={{ margin: 0, fontSize: 16, color: '#1e2d6b', fontWeight: 700 }}>Gerando seu relatório...</h2>
               </div>
 
@@ -125,7 +125,7 @@ export default function MarketReportModal({
               </div>
 
               <div style={{ height: 5, borderRadius: 3, background: '#E5E7EB', marginTop: 12, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${progress}%`, borderRadius: 3, background: 'linear-gradient(90deg, #00523C, #00A896)', transition: 'width 0.1s linear' }} />
+                <div style={{ height: '100%', width: `${progress}%`, borderRadius: 3, background: 'linear-gradient(90deg, #00523C, #05907B)', transition: 'width 0.1s linear' }} />
               </div>
             </div>
           )}
@@ -167,8 +167,8 @@ export default function MarketReportModal({
                   <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>de {metrics.rankingTotal} escolas privadas</div>
                 </div>
                 <div style={{ background: '#F0FDFA', borderRadius: 12, padding: '14px 12px', textAlign: 'center' }}>
-                  <Users size={18} color="#00A896" style={{ marginBottom: 6 }} />
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#00A896' }}>{metrics.marketSharePct.toFixed(1)}%</div>
+                  <Users size={18} color="#05907B" style={{ marginBottom: 6 }} />
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#05907B' }}>{metrics.marketSharePct.toFixed(1)}%</div>
                   <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>participação de mercado</div>
                 </div>
                 <div style={{ background: '#FFFBEB', borderRadius: 12, padding: '14px 12px', textAlign: 'center' }}>
@@ -197,7 +197,7 @@ export default function MarketReportModal({
                         {c.no_entidade}{c.isSelected ? ' (você)' : ''}
                       </span>
                       <div style={{ width: 80, height: 5, background: '#e5e7eb', borderRadius: 9999, flexShrink: 0 }}>
-                        <div style={{ width: `${Math.min(100, c.marketSharePct)}%`, height: 5, borderRadius: 9999, background: c.isSelected ? '#00A896' : '#94a3b8' }} />
+                        <div style={{ width: `${Math.min(100, c.marketSharePct)}%`, height: 5, borderRadius: 9999, background: c.isSelected ? '#05907B' : '#94a3b8' }} />
                       </div>
                       <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', minWidth: 60, textAlign: 'right' }}>{fmt(c.qt_mat_total)} ({c.marketSharePct.toFixed(1)}%)</span>
                     </div>
@@ -246,7 +246,7 @@ export default function MarketReportModal({
               {/* Distribuição por rede de ensino (privada vs pública) */}
               {metrics.dependencyBreakdown.length > 0 && (() => {
                 const totalStudentsAllNetworks = metrics.dependencyBreakdown.reduce((s, d) => s + d.totalStudents, 0)
-                const depColor: Record<string, string> = { Privada: '#00A896', Federal: '#6366F1', Estadual: '#F59E0B', Municipal: '#94A3B8' }
+                const depColor: Record<string, string> = { Privada: '#05907B', Federal: '#6366F1', Estadual: '#F59E0B', Municipal: '#94A3B8' }
                 return (
                   <div>
                     <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>

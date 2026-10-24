@@ -32,7 +32,7 @@ export default function MatriculasReport({ institutionId, institutionName }: { i
         <>
           <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Matrículas por pessoa" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
-            <Kpi label="MATRÍCULAS NO PERÍODO" value={d.total} color="#00A896" now={d.total} before={d.anterior_total} />
+            <Kpi label="MATRÍCULAS NO PERÍODO" value={d.total} color="#05907B" now={d.total} before={d.anterior_total} />
             <Kpi label="PESSOAS QUE MATRICULARAM" value={d.por_pessoa.length} color="#6366F1" sub="inclui “sem responsável”, se houver" />
             <Kpi label="DATAS ESTIMADAS" value={d.sem_data_exata} color="#B45309" sub="sem a data exata registrada" />
           </KpiGrid>
@@ -43,7 +43,7 @@ export default function MatriculasReport({ institutionId, institutionName }: { i
                 <tbody>{d.por_pessoa.map(p => <tr key={p.pessoa}><td style={{ ...td, fontWeight: 700 }}>{p.pessoa}</td><td style={{ ...td, textAlign: 'right' }}>{p.matriculas}</td><td style={{ ...td, textAlign: 'right' }}>{d.total ? Math.round(p.matriculas / d.total * 100) : 0}%</td><td style={{ ...td, textAlign: 'right', color: '#64748B' }}>{p.dias_mediana ?? '—'}</td></tr>)}</tbody></table>
             </div>
             <div style={{ ...card, flex: '1 1 300px' }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Por série</div><BarList color="#00A896" rows={d.por_serie.map(s => ({ label: s.serie, n: s.n }))} />
+              <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Por série</div><BarList color="#05907B" rows={d.por_serie.map(s => ({ label: s.serie, n: s.n }))} />
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, margin: '14px 0 6px' }}>De onde vieram</div><BarList color="#8B5CF6" rows={d.por_origem.map(s => ({ label: s.origem, n: s.n }))} />
             </div>
           </div>

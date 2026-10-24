@@ -36,7 +36,7 @@ export default function RematriculasReport({ institutionId, institutionName }: {
           <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Rematrículas" periodLabel={`Ano letivo ${year}`} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="ALUNOS A REMATRICULAR" value={elegiveis} color="#6366F1" sub={`${base} no ano anterior, ${grad} concluintes`} />
-            <Kpi label="REMATRICULADOS" value={rema} color="#00A896" sub={`${pct(rema, elegiveis)} dos elegíveis`} />
+            <Kpi label="REMATRICULADOS" value={rema} color="#05907B" sub={`${pct(rema, elegiveis)} dos elegíveis`} />
             <Kpi label="PRÉ-MATRICULADOS" value={pre} color="#0EA5E9" sub="aguardando confirmação" />
             <Kpi label="A REMATRICULAR" value={pend} color="#F59E0B" sub="ainda sem resposta" />
             <Kpi label="SAÍRAM" value={saiu} color="#EF4444" sub={`${novos} alunos novos`} />
@@ -47,7 +47,7 @@ export default function RematriculasReport({ institutionId, institutionName }: {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Série</th><th style={{ ...th, textAlign: 'right' }}>Ano anterior</th><th style={{ ...th, textAlign: 'right' }}>Rematriculados</th><th style={{ ...th, textAlign: 'right' }}>Pré-matr.</th><th style={{ ...th, textAlign: 'right' }}>A rematricular</th><th style={{ ...th, textAlign: 'right' }}>Saíram</th><th style={{ ...th, textAlign: 'right' }}>Novos</th><th style={{ ...th, textAlign: 'right' }}>Taxa</th></tr></thead>
                 <tbody>{(rows ?? []).map(g => { const el = g.base_prev_year - g.graduates; return <tr key={g.grade_name}><td style={{ ...td, fontWeight: 700 }}>{g.grade_name}</td><td style={{ ...td, textAlign: 'right' }}>{g.base_prev_year}</td><td style={{ ...td, textAlign: 'right' }}>{g.reenrolled}</td><td style={{ ...td, textAlign: 'right' }}>{g.pre_enrolled}</td><td style={{ ...td, textAlign: 'right' }}>{g.pending}</td><td style={{ ...td, textAlign: 'right' }}>{g.left_school}</td><td style={{ ...td, textAlign: 'right' }}>{g.new_students}</td><td style={{ ...td, textAlign: 'right', fontWeight: 800 }}>{el > 0 ? `${Math.round(g.reenrolled / el * 100)}%` : '—'}</td></tr> })}</tbody></table>
             </div>
-            <div style={{ ...card, flex: '1 1 280px' }}><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Rematriculados por série</div><BarList color="#00A896" rows={(rows ?? []).filter(g => g.reenrolled > 0).map(g => ({ label: g.grade_name, n: g.reenrolled }))} /></div>
+            <div style={{ ...card, flex: '1 1 280px' }}><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Rematriculados por série</div><BarList color="#05907B" rows={(rows ?? []).filter(g => g.reenrolled > 0).map(g => ({ label: g.grade_name, n: g.reenrolled }))} /></div>
           </div>
           <div style={{ fontSize: 12.5, color: BRAND.muted }}>Mesmos números do painel de rematrícula da Campanha de Matrículas, vindos da Base de alunos. Taxa = rematriculados ÷ (alunos do ano anterior − concluintes). Este módulo não usa o filtro de período: ele é por ano letivo.</div>
         </>

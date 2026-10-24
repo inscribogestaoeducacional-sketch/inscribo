@@ -30,8 +30,8 @@ const timeSlots = [
   '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
 ]
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none transition-all'
-const btnPrimary = 'px-4 py-2 bg-gradient-to-r from-[#14b8a6] to-[#1e2d6b] text-white rounded-lg hover:from-[#0d9488] hover:to-[#151b4e] transition-all font-semibold text-sm flex items-center gap-2'
+const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#2DCBA4] focus:border-[#2DCBA4] outline-none transition-all'
+const btnPrimary = 'px-4 py-2 bg-gradient-to-r from-[#2DCBA4] to-[#1e2d6b] text-white rounded-lg hover:from-[#0d9488] hover:to-[#151b4e] transition-all font-semibold text-sm flex items-center gap-2'
 
 function toLocalDateStr(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -441,7 +441,7 @@ export default function VisitCalendar() {
     </div>
   )
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-2 border-[#14b8a6] border-t-transparent" /></div>
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-2 border-[#2DCBA4] border-t-transparent" /></div>
 
   const kpi = (key: Focus, label: string, value: number, sub: string, color: string, Icon: typeof Clock, opts?: { alert?: boolean; suffix?: string; fill?: number }) => {
     const on = focus === key && key !== null

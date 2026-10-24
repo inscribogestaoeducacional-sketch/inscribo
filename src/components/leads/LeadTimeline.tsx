@@ -10,7 +10,7 @@ interface Ev { at: string; kind: string; title: string; detail: string | null; w
 const STAGE: Record<string, string> = { new: 'Novo', contact: 'Contato', scheduled: 'Agendado', visit: 'Visita', proposal: 'Proposta', enrolled: 'Matriculado', lost: 'Perdido' }
 const KIND: Record<string, { color: string; label: string }> = {
   acao: { color: '#6366F1', label: 'Equipe' },
-  etapa: { color: '#00A896', label: 'Etapa' },
+  etapa: { color: '#05907B', label: 'Etapa' },
   visita: { color: '#8B5CF6', label: 'Visita' },
   visita_baixa: { color: '#8B5CF6', label: 'Visita' },
   msg: { color: '#15803D', label: 'WhatsApp' },
@@ -52,7 +52,7 @@ export default function LeadTimeline({ leadId, refreshKey }: { leadId: string; r
           <button key={k} type="button" onClick={() => setF(k)} style={{ padding: '5px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `1px solid ${f === k ? BRAND.primary : BRAND.line}`, background: f === k ? BRAND.soft : '#fff', color: f === k ? BRAND.primaryDark : BRAND.muted }}>{l}</button>
         ))}
       </div>
-      {loading && <div style={{ textAlign: 'center', padding: 28 }}><div className="animate-spin rounded-full h-7 w-7 border-4 border-[#00A896] border-t-transparent mx-auto" /></div>}
+      {loading && <div style={{ textAlign: 'center', padding: 28 }}><div className="animate-spin rounded-full h-7 w-7 border-4 border-[#05907B] border-t-transparent mx-auto" /></div>}
       {!loading && err && <div style={{ textAlign: 'center', padding: 24, color: BRAND.danger, fontSize: 13 }}>{err}</div>}
       {!loading && !err && shown.length === 0 && <div style={{ textAlign: 'center', padding: 28, color: BRAND.faint, fontSize: 13 }}>Nada registrado ainda.</div>}
       {!loading && !err && shown.length > 0 && (

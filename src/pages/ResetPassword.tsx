@@ -81,7 +81,7 @@ export default function ResetPassword() {
     if (len === 0) return { label: '', color: '#E5E7EB', width: '0%' }
     if (len < 6) return { label: 'Fraca', color: '#EF4444', width: '25%' }
     if (len < 8) return { label: 'Regular', color: '#F59E0B', width: '50%' }
-    if (len < 12) return { label: 'Boa', color: '#00A896', width: '75%' }
+    if (len < 12) return { label: 'Boa', color: '#05907B', width: '75%' }
     return { label: 'Forte', color: '#00523C', width: '100%' }
   }
 
@@ -164,12 +164,12 @@ export default function ResetPassword() {
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-12 pr-12 block w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl placeholder-gray-400 focus:outline-none focus:border-[#00A896] transition-all text-base"
+                      className="pl-12 pr-12 block w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl placeholder-gray-400 focus:outline-none focus:border-[#05907B] transition-all text-base"
                       placeholder="Mínimo 6 caracteres"
                     />
                     <button
                       type="button"
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#00A896] transition-colors"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#05907B] transition-colors"
                       onClick={() => setShowPassword(!showPassword)}
                     >
                       {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -195,7 +195,7 @@ export default function ResetPassword() {
                       required
                       value={confirm}
                       onChange={(e) => setConfirm(e.target.value)}
-                      className="pl-12 block w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl placeholder-gray-400 focus:outline-none focus:border-[#00A896] transition-all text-base"
+                      className="pl-12 block w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl placeholder-gray-400 focus:outline-none focus:border-[#05907B] transition-all text-base"
                       placeholder="Repita a senha"
                     />
                   </div>
@@ -208,7 +208,7 @@ export default function ResetPassword() {
                   type="submit"
                   disabled={loading || !sessionReady}
                   className="w-full flex justify-center items-center py-4 px-4 rounded-xl text-base font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                  style={{ background: 'linear-gradient(135deg, #00523C, #00A896)' }}
+                  style={{ background: 'linear-gradient(135deg, #00523C, #05907B)' }}
                 >
                   {loading ? (
                     <>

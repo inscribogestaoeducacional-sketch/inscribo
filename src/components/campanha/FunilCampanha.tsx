@@ -88,7 +88,7 @@ export default function FunilCampanha({ institutionId, from, to, planMonths, rat
   )
 }
 
-const STG: [string, string, string][] = [['entraram', 'Leads', '#0EA5E9'], ['scheduled', 'Agendamentos', '#14B8A6'], ['visit', 'Visitas', '#10B981'], ['enrolled', 'Matrículas novas', '#059669']]
+const STG: [string, string, string][] = [['entraram', 'Leads', '#0EA5E9'], ['scheduled', 'Agendamentos', '#2DCBA4'], ['visit', 'Visitas', '#10B981'], ['enrolled', 'Matrículas novas', '#059669']]
 
 const lostN = (e?: { n: number }) => e?.n ?? 0
 function stagesOf(data: Data, mes: string) {
@@ -97,7 +97,7 @@ function stagesOf(data: Data, mes: string) {
 }
 const pc = (a: number, b: number) => (b > 0 ? `${Math.round(a / b * 100)}%` : '—')
 
-const STAGE_COL = ['#6366F1', '#8B5CF6', '#F59E0B', '#00A896']
+const STAGE_COL = ['#6366F1', '#8B5CF6', '#F59E0B', '#05907B']
 function metaOf(planMonths: PlanMonth[], rates: FunnelRates, mes: string) {
   const novos = mes ? (planMonths.find(m => m.m === mes)?.novos ?? 0) : planMonths.reduce((a, m) => a + m.novos, 0)
   const need = funnelNeeds(novos, rates)

@@ -32,7 +32,7 @@ export default function UsuariosReport({ institutionId, institutionName }: { ins
           <AnalisePanel busy={ai.busy} rep={ai.rep} err={ai.err} title="Usuários" periodLabel={per.label} institutionId={institutionId} institutionName={institutionName} />
           <KpiGrid>
             <Kpi label="USUÁRIOS" value={d.total} color="#6366F1" sub={`${d.ativos} ativos`} />
-            <Kpi label="SEM ACESSO HÁ 30 DIAS" value={d.sem_acesso_30d} color={d.sem_acesso_30d ? '#B45309' : '#00A896'} sub="entre os ativos" />
+            <Kpi label="SEM ACESSO HÁ 30 DIAS" value={d.sem_acesso_30d} color={d.sem_acesso_30d ? '#B45309' : '#05907B'} sub="entre os ativos" />
           </KpiGrid>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ ...card, flex: '2 1 520px', overflowX: 'auto' }}>

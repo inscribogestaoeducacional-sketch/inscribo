@@ -31,8 +31,8 @@ Font.register({
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const VD     = '#00523C'
-const VM     = '#00A896'
-const VC     = '#0DD3BF'
+const VM     = '#05907B'
+const VC     = '#2DCBA4'
 const AZUL   = '#1A2B4A'
 const CMID   = '#64748B'
 const CLIGHT = '#94A3B8'

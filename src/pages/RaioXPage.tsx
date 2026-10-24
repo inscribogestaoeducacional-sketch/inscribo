@@ -23,8 +23,8 @@ type SearchStage = 'uf' | 'city' | 'school'
 // ─── design tokens — paleta oficial da Áion Edu (ver src/styles/sharedCSS.ts) ─
 const VD     = '#00523C' // verde escuro — cor primária da marca
 const VMID   = '#006B50' // verde médio — hover
-const VM     = '#00A896' // teal — acento/CTA secundário
-const VC     = '#0DD3BF' // mint — destaque
+const VM     = '#05907B' // teal — acento/CTA secundário
+const VC     = '#2DCBA4' // mint — destaque
 const TEXT   = '#111827'
 const MUTED  = '#6b7280'
 const BORDER = '#E5E7EB'

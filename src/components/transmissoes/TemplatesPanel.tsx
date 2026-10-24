@@ -373,7 +373,7 @@ export default function TemplatesPanel({ institutionId, onChanged, hideLists, re
                     <button key={k} type="button"
                       onClick={() => setEditor(s => s && ({ ...s, headerType: k, media: k === s.headerType ? s.media : null }))}
                       style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        border: editor.headerType === k ? '1.5px solid #00A896' : '1.5px solid #E2E8F0',
+                        border: editor.headerType === k ? '1.5px solid #05907B' : '1.5px solid #E2E8F0',
                         background: editor.headerType === k ? '#F0FDFA' : '#fff', color: editor.headerType === k ? '#047857' : '#475569' }}>
                       {k === 'IMAGE' ? <ImageIcon size={12} style={{ marginRight: 4, verticalAlign: -2 }} /> : k === 'VIDEO' ? <Film size={12} style={{ marginRight: 4, verticalAlign: -2 }} /> : null}{l}
                     </button>

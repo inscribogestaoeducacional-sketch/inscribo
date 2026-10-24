@@ -36,7 +36,7 @@ function InstitutionSwitcher() {
         onClick={() => setOpen(v => !v)}
         disabled={switching}
         style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 10, background: '#F0FDFB', border: '0.5px solid #D1FAE5', cursor: 'pointer', color: '#1A2B4A' }}>
-        <Network size={14} color="#00A896" />
+        <Network size={14} color="#05907B" />
         <span style={{ fontSize: 12.5, fontWeight: 600, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {user.institution_name || 'Selecionar unidade'}
         </span>
@@ -51,7 +51,7 @@ function InstitutionSwitcher() {
             </div>
             {institutions.map(inst => (
               <button key={inst.id} onClick={() => handleSwitch(inst.id)}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: 13, border: 'none', background: inst.id === user.institution_id ? '#F0FDFB' : 'transparent', color: inst.id === user.institution_id ? '#00A896' : '#1A2B4A', fontWeight: inst.id === user.institution_id ? 700 : 500, cursor: 'pointer' }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: 13, border: 'none', background: inst.id === user.institution_id ? '#F0FDFB' : 'transparent', color: inst.id === user.institution_id ? '#05907B' : '#1A2B4A', fontWeight: inst.id === user.institution_id ? 700 : 500, cursor: 'pointer' }}
                 onMouseEnter={e => { if (inst.id !== user.institution_id) (e.currentTarget as HTMLElement).style.background = '#F8FAFC' }}
                 onMouseLeave={e => { if (inst.id !== user.institution_id) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
                 {inst.name}
@@ -108,7 +108,7 @@ export default function TopBar() {
             borderRadius: 9999, fontSize: 13, color: '#1A2B4A',
             outline: 'none', transition: 'all 0.18s ease',
           }}
-          onFocus={e => { e.target.style.background = '#fff'; e.target.style.borderColor = '#00A896'; e.target.style.boxShadow = '0 0 0 3px rgba(0,168,150,0.10)' }}
+          onFocus={e => { e.target.style.background = '#fff'; e.target.style.borderColor = '#05907B'; e.target.style.boxShadow = '0 0 0 3px rgba(0,168,150,0.10)' }}
           onBlur={e => { e.target.style.background = '#F0FDFB'; e.target.style.borderColor = '#D1FAE5'; e.target.style.boxShadow = 'none' }}
         />
         <svg style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8', pointerEvents: 'none' }}

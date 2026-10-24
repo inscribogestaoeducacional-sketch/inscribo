@@ -137,7 +137,7 @@ export default function LeadUnitFieldEditor({ institutionId, onToast }: { instit
         <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
           <MapPin size={15} color="#4F46E5" /> Campo de unidade do lead
         </h3>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: cfg.enabled ? '#00A896' : '#64748B', cursor: canManage ? 'pointer' : 'default', flexShrink: 0 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: cfg.enabled ? '#05907B' : '#64748B', cursor: canManage ? 'pointer' : 'default', flexShrink: 0 }}>
           <input type="checkbox" checked={cfg.enabled} disabled={!canManage || saving || cfg.loading}
             onChange={e => saveSettings({ enabled: e.target.checked })} />
           {cfg.enabled ? 'Ligado' : 'Desligado'}
@@ -162,7 +162,7 @@ export default function LeadUnitFieldEditor({ institutionId, onToast }: { instit
             <input value={labelDraft} maxLength={30} disabled={!canManage} onChange={e => setLabelDraft(e.target.value)}
               placeholder="Unidade, Campus, Polo..." style={{ ...inputStyle, flex: 1 }} />
             <button onClick={() => saveSettings({ label: labelDraft })} disabled={!canManage || saving || !labelDraft.trim() || labelDraft.trim() === cfg.label}
-              style={{ padding: '0 16px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!labelDraft.trim() || labelDraft.trim() === cfg.label) ? 0.5 : 1 }}>
+              style={{ padding: '0 16px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!labelDraft.trim() || labelDraft.trim() === cfg.label) ? 0.5 : 1 }}>
               Salvar
             </button>
           </div>
@@ -181,7 +181,7 @@ export default function LeadUnitFieldEditor({ institutionId, onToast }: { instit
                   )}
                   {editingId === u.id ? (
                     <input autoFocus value={editingName} maxLength={60} onChange={e => setEditingName(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveName()}
-                      style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1.5px solid #00A896', fontSize: 13, outline: 'none' }} />
+                      style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1.5px solid #05907B', fontSize: 13, outline: 'none' }} />
                   ) : (
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>
                       {u.name}
@@ -193,12 +193,12 @@ export default function LeadUnitFieldEditor({ institutionId, onToast }: { instit
                   {canManage && (
                     <>
                       {editingId === u.id ? (
-                        <button onClick={saveName} disabled={saving} title="Salvar" style={{ ...iconBtn, background: '#E6F7F5' }}><Check size={13} color="#00A896" /></button>
+                        <button onClick={saveName} disabled={saving} title="Salvar" style={{ ...iconBtn, background: '#E6F7F5' }}><Check size={13} color="#05907B" /></button>
                       ) : (
                         <button onClick={() => { setEditingId(u.id); setEditingName(u.name) }} title="Renomear" style={iconBtn}><Pencil size={13} color="#94A3B8" /></button>
                       )}
                       <button onClick={() => toggleActive(u)} disabled={saving}
-                        style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: 11, fontWeight: 600, color: u.active ? '#64748B' : '#00A896', cursor: 'pointer' }}>
+                        style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: 11, fontWeight: 600, color: u.active ? '#64748B' : '#05907B', cursor: 'pointer' }}>
                         {u.active ? 'Desativar' : 'Reativar'}
                       </button>
                       {used === 0 ? (
@@ -218,7 +218,7 @@ export default function LeadUnitFieldEditor({ institutionId, onToast }: { instit
             <div style={{ display: 'flex', gap: 8 }}>
               <input value={newName} maxLength={60} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRow()}
                 placeholder={`Nova opção (ex: ${cfg.label} Centro)`} style={{ ...inputStyle, flex: 1 }} />
-              <button onClick={addRow} disabled={saving || !newName.trim()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 16px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: !newName.trim() ? 0.5 : 1 }}>
+              <button onClick={addRow} disabled={saving || !newName.trim()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 16px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: !newName.trim() ? 0.5 : 1 }}>
                 <Plus size={14} />Adicionar
               </button>
             </div>

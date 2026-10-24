@@ -7,7 +7,7 @@ export default function GestorEmbed() {
   const { user } = useAuth()
   const institutionId = user?.institution_id ?? ''
 
-  const [color, setColor] = useState('#00A896')
+  const [color, setColor] = useState('#05907B')
   const [title, setTitle] = useState('Quero conhecer a escola')
   const [success, setSuccess] = useState('Obrigado! Entraremos em contato em breve.')
   const [copied, setCopied] = useState(false)
@@ -83,7 +83,7 @@ export default function GestorEmbed() {
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Code2 size={18} color="#00A896" />
+            <Code2 size={18} color="#05907B" />
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A' }}>Formulário de captação para seu site</h1>
         </div>
@@ -95,7 +95,7 @@ export default function GestorEmbed() {
       {/* Estatísticas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 32 }}>
         {[
-          { label: 'Leads via site', value: stats.total, color: '#00A896', bg: '#E6F7F5' },
+          { label: 'Leads via site', value: stats.total, color: '#05907B', bg: '#E6F7F5' },
           { label: 'Este mês', value: stats.thisMonth, color: '#6366F1', bg: '#EDE9FE' },
           {
             label: 'Último lead',
@@ -126,7 +126,7 @@ export default function GestorEmbed() {
                 <input type="text" value={color} onChange={e => setColor(e.target.value)}
                   style={{ ...inputStyle, width: 120, padding: '9px 12px' }} />
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {['#00A896', '#00523C', '#6366F1', '#F59E0B', '#EF4444'].map(c => (
+                  {['#05907B', '#00523C', '#6366F1', '#F59E0B', '#EF4444'].map(c => (
                     <button key={c} onClick={() => setColor(c)}
                       style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: color === c ? '2px solid #1A2B4A' : '2px solid transparent', cursor: 'pointer' }} />
                   ))}
@@ -199,7 +199,7 @@ export default function GestorEmbed() {
               ))}
             </ol>
             <a href="https://aionedu.com.br/embed.js" target="_blank" rel="noopener noreferrer"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 10, fontSize: 12, color: '#00A896', textDecoration: 'none', fontWeight: 600 }}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 10, fontSize: 12, color: '#05907B', textDecoration: 'none', fontWeight: 600 }}>
               <ExternalLink size={12} /> Ver embed.js
             </a>
           </div>

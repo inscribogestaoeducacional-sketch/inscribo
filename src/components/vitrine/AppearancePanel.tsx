@@ -18,7 +18,7 @@ interface Props {
   onError: (msg: string) => void
 }
 
-const PRIMARY_SWATCHES = ['#00A896', '#3B82F6', '#1e2d6b', '#7C3AED', '#DB2777', '#DC2626', '#F59E0B', '#059669']
+const PRIMARY_SWATCHES = ['#05907B', '#3B82F6', '#1e2d6b', '#7C3AED', '#DB2777', '#DC2626', '#F59E0B', '#059669']
 const BG_SWATCHES = ['#FFFFFF', '#F8FAFC', '#FFF7ED', '#F0FDFB', '#EFF6FF', '#F8F5EE', '#0F172A', '#111827']
 const TEXT_SWATCHES = ['#111827', '#1E293B', '#1e2d6b', '#FFFFFF', '#F8FAFC']
 // Ícones do mesmo desenho (os caracteres ↘ ↗ saíam menores que ↓ → ↑).
@@ -108,7 +108,7 @@ function Choice({ selected, onClick, children, label }: { selected: boolean; onC
     <button type="button" role="radio" aria-checked={selected} aria-label={label} onClick={onClick}
       style={{
         textAlign: 'left', padding: 12, borderRadius: 12, cursor: 'pointer', background: '#fff', minWidth: 0,
-        border: selected ? '2px solid #00A896' : '1px solid #e2e8f0', boxShadow: selected ? '0 0 0 3px #D1FAE5' : '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)',
+        border: selected ? '2px solid #05907B' : '1px solid #e2e8f0', boxShadow: selected ? '0 0 0 3px #D1FAE5' : '0 1px 3px rgba(0,168,150,0.06), 0 1px 2px rgba(0,0,0,0.04)',
       }}>
       {children}
     </button>
@@ -176,7 +176,7 @@ function CoverVideoField({ institutionId, value, hasCoverImage, onChange, onErro
         ) : (
           <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
             style={{ width: '100%', height: 72, borderRadius: 16, cursor: busy ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13, fontWeight: 600,
-              border: over ? '2px dashed #00A896' : '1.5px dashed #CBD5E1', background: over ? '#F0FDFB' : '#FAFAFA', color: over ? '#007A6E' : '#64748b', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)' }}>
+              border: over ? '2px dashed #05907B' : '1.5px dashed #CBD5E1', background: over ? '#F0FDFB' : '#FAFAFA', color: over ? '#00695F' : '#64748b', transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)' }}>
             <Film size={17} /> {busy ? 'Enviando o vídeo…' : over ? 'Solte o vídeo aqui' : 'Clique ou arraste um vídeo MP4'}
           </button>
         )}
@@ -264,7 +264,7 @@ export default function AppearancePanel({ page, institution, institutionId, onCh
               onError={onError} onChange={url => onChange({ logo_url: url })} />
             {institution.logo_url && page.logo_url !== institution.logo_url && (
               <button type="button" onClick={() => onChange({ logo_url: institution.logo_url })}
-                style={{ marginTop: 8, background: 'none', border: 'none', padding: 0, color: '#00A896', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                style={{ marginTop: 8, background: 'none', border: 'none', padding: 0, color: '#05907B', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 Usar a logo da escola
               </button>
             )}
@@ -321,7 +321,7 @@ export default function AppearancePanel({ page, institution, institutionId, onCh
             </Field>
             <Field label={`Película sobre a imagem: ${theme.bg_overlay ?? 40}%`} hint="Escurece ou clareia a foto pra o texto ficar legível.">
               <input type="range" min={0} max={80} step={10} value={theme.bg_overlay ?? 40}
-                onChange={e => setTheme({ bg_overlay: Number(e.target.value) })} style={{ width: '100%', accentColor: '#00A896' }} />
+                onChange={e => setTheme({ bg_overlay: Number(e.target.value) })} style={{ width: '100%', accentColor: '#05907B' }} />
             </Field>
             <Field label="Tom da película">
               <Segmented value={theme.bg_overlay_tone || 'dark'} onChange={v => setTheme({ bg_overlay_tone: v })}

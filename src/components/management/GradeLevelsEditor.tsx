@@ -6,7 +6,7 @@ import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 import { Card, Title, input } from './settings/ui'
 import { BRAND, GRAD } from '../../lib/brand'
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
+const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#05907B] focus:border-[#05907B] outline-none transition-all'
 
 // ─── Item 4b — editor de séries/etapas de ensino (school_grade_levels) ─────────
 // Antes hardcoded em ~10 arquivos com nomenclaturas divergentes entre si
@@ -101,17 +101,17 @@ export default function GradeLevelsEditor({ institutionId, onToast }: { institut
               </div>
               {editingId === g.id ? (
                 <input autoFocus value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveEdit()}
-                  style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1.5px solid #00A896', fontSize: 13, outline: 'none' }} />
+                  style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1.5px solid #05907B', fontSize: 13, outline: 'none' }} />
               ) : (
                 <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: g.active === false ? '#94A3B8' : '#1A2B4A' }}>{g.name}{g.active === false && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700 }}>desativada</span>}</span>
               )}
               {editingId === g.id ? (
-                <button onClick={saveEdit} disabled={saving} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Check size={13} color="#00A896" /></button>
+                <button onClick={saveEdit} disabled={saving} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Check size={13} color="#05907B" /></button>
               ) : (
                 <button onClick={() => startEdit(g)} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Pencil size={13} color="#94A3B8" /></button>
               )}
               {g.active === false ? (
-                <button onClick={() => setActive(g, true)} disabled={saving} title="Reativar" style={{ height: 28, padding: '0 10px', borderRadius: 8, border: 'none', background: '#E6F7F5', color: '#00A896', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>Reativar</button>
+                <button onClick={() => setActive(g, true)} disabled={saving} title="Reativar" style={{ height: 28, padding: '0 10px', borderRadius: 8, border: 'none', background: '#E6F7F5', color: '#05907B', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>Reativar</button>
               ) : (
                 <button onClick={() => setActive(g, false)} disabled={saving} title="Desativar" style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><EyeOff size={13} color="#94A3B8" /></button>
               )}

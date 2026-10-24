@@ -43,7 +43,7 @@ const TAG = {
   warn:  { color: '#D97706', background: '#FEF3C7' },
   error: { color: '#DC2626', background: '#FEF2F2' },
   cap:   { color: '#DB2777', background: '#FCE7F3' },
-  on:    { color: '#00A896', background: '#E6F7F5' },
+  on:    { color: '#05907B', background: '#E6F7F5' },
   muted: { color: '#64748B', background: '#F1F5F9' },
 }
 function Tag({ tone, icon: Icon, children, title }: { tone: keyof typeof TAG; icon: LucideIcon; children: React.ReactNode; title?: string }) {

@@ -57,7 +57,7 @@ function ChatIlustracao() {
   return (
     <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #E5E7EB', boxShadow: '0 32px 72px rgba(0,48,31,.14)', overflow: 'hidden', maxWidth: 520, margin: '0 auto', width: '100%' }}>
       <div style={{ padding: '14px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,#00523C,#00A896)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14 }}>MC</div>
+        <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,#00523C,#05907B)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14 }}>MC</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Mariana Costa</p>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3, padding: '2px 9px', borderRadius: 999, background: '#FCE7F3', color: '#BE185D', fontSize: 11, fontWeight: 700 }}>
@@ -79,7 +79,7 @@ function ChatIlustracao() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
           {[{ Icon: IcTag, l: 'Etiqueta aplicada' }, { Icon: IcUserPlus, l: 'Lead criado no CRM' }, { Icon: IcUsers, l: 'Encaminhado pra Ana' }].map((c, i) => (
             <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #A7F3D0', color: '#00523C', fontSize: 11, fontWeight: 700, padding: '5px 11px', borderRadius: 999 }}>
-              <c.Icon size={12} color="#00A896" /> {c.l}
+              <c.Icon size={12} color="#05907B" /> {c.l}
             </span>
           ))}
         </div>
@@ -105,7 +105,7 @@ function Hero() {
           <span className="tag-d">{COPY.hero.date}</span>
         </div>
         <h1 className="s-title" style={{ fontSize: 'clamp(38px,5.6vw,72px)', color: '#fff', marginBottom: 24, animation: 'fadeUp .9s ease .1s both', maxWidth: 900, marginInline: 'auto' }}>
-          {COPY.hero.title} <span style={{ color: '#0DD3BF' }}>{COPY.hero.hl}</span>
+          {COPY.hero.title} <span style={{ color: '#2DCBA4' }}>{COPY.hero.hl}</span>
         </h1>
         <p style={{ fontSize: 18, color: 'rgba(255,255,255,.75)', lineHeight: 1.8, maxWidth: 680, margin: '0 auto 40px', animation: 'fadeUp .9s ease .2s both' }}>
           {COPY.hero.sub}
@@ -133,7 +133,7 @@ function OQueE() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 56 }}>
           <div className="tag-g" style={{ marginBottom: 20 }}>{COPY.oQueE.tag}</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(30px,4vw,48px)', color: '#111827', marginBottom: 16 }}>
-            {COPY.oQueE.title}<br /><span style={{ color: '#0DD3BF' }}>{COPY.oQueE.hl}</span>
+            {COPY.oQueE.title}<br /><span style={{ color: '#2DCBA4' }}>{COPY.oQueE.hl}</span>
           </h2>
           <p style={{ fontSize: 16, color: '#4B5563', maxWidth: 640, margin: '0 auto', lineHeight: 1.8 }}>
             {COPY.oQueE.sub}
@@ -152,7 +152,7 @@ function OQueE() {
                 <h3 style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 10, lineHeight: 1.35 }}>{f.title}</h3>
                 <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.75 }}>{f.desc}</p>
               </div>
-              {i < FLUXO.length - 1 && <div className="nv-flow-arrow"><IcArrowRight size={13} color="#00A896" stroke={2.4} /></div>}
+              {i < FLUXO.length - 1 && <div className="nv-flow-arrow"><IcArrowRight size={13} color="#05907B" stroke={2.4} /></div>}
             </Reveal>
           ))}
         </div>
@@ -171,7 +171,7 @@ function PorQue() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 56 }}>
           <div className="tag-d" style={{ marginBottom: 20 }}>{COPY.porQue.tag}</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(30px,4vw,48px)', color: '#fff', marginBottom: 16 }}>
-            {COPY.porQue.title}<br /><span style={{ color: '#0DD3BF' }}>{COPY.porQue.hl}</span>
+            {COPY.porQue.title}<br /><span style={{ color: '#2DCBA4' }}>{COPY.porQue.hl}</span>
           </h2>
           <p style={{ fontSize: 16, color: 'rgba(255,255,255,.62)', maxWidth: 600, margin: '0 auto', lineHeight: 1.8 }}>
             {COPY.porQue.sub}
@@ -181,7 +181,7 @@ function PorQue() {
           {POR_QUE.map((p, i) => (
             <Reveal key={i} delay={`${(i % 2) + 1}`}>
               <div className="card-dark" style={{ padding: 32, height: '100%', display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-                <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#00523C,#00A896)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 24px rgba(0,168,150,.25)' }}>
+                <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#00523C,#05907B)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 24px rgba(0,168,150,.25)' }}>
                   <p.Icon size={24} color="#fff" />
                 </div>
                 <div>
@@ -205,7 +205,7 @@ function PassoAPasso() {
         <div ref={r0} style={{ textAlign: 'center', marginBottom: 80 }}>
           <div className="tag-g" style={{ marginBottom: 20 }}>{COPY.passos.tag}</div>
           <h2 className="s-title" style={{ fontSize: 'clamp(30px,4vw,48px)', color: '#111827', marginBottom: 16 }}>
-            {COPY.passos.title}<br /><span style={{ color: '#0DD3BF' }}>{COPY.passos.hl}</span>
+            {COPY.passos.title}<br /><span style={{ color: '#2DCBA4' }}>{COPY.passos.hl}</span>
           </h2>
           <p style={{ fontSize: 16, color: '#4B5563', maxWidth: 560, margin: '0 auto', lineHeight: 1.8 }}>
             {COPY.passos.sub}
@@ -217,14 +217,14 @@ function PassoAPasso() {
               <div style={{ flex: '0 0 40%' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
                   <span className="nv-step-num">{i + 1}</span>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: '#00A896', letterSpacing: '.12em', textTransform: 'uppercase' }}>Passo {i + 1}</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#05907B', letterSpacing: '.12em', textTransform: 'uppercase' }}>Passo {i + 1}</span>
                 </div>
                 <h3 className="s-title" style={{ fontSize: 'clamp(24px,2.6vw,32px)', color: '#111827', marginBottom: 16 }}>{p.title}</h3>
                 <p style={{ fontSize: 15, color: '#4B5563', lineHeight: 1.85, marginBottom: 22 }}>{p.desc}</p>
                 <ul style={{ listStyle: 'none', padding: 0 }}>
                   {p.bullets.map((b, j) => (
                     <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-                      <div style={{ flexShrink: 0, marginTop: 2 }}><IcCheck size={15} color="#00A896" stroke={2.2} /></div>
+                      <div style={{ flexShrink: 0, marginTop: 2 }}><IcCheck size={15} color="#05907B" stroke={2.2} /></div>
                       <span style={{ fontSize: 14, color: '#374151', lineHeight: 1.65 }}>{b}</span>
                     </li>
                   ))}
@@ -259,7 +259,7 @@ function Perguntas() {
             <div key={i} style={{ borderBottom: '1px solid #E5E7EB' }}>
               <button className="faq-btn" onClick={() => setOpen(open === i ? null : i)} aria-expanded={open === i}>
                 {f.q}
-                <span style={{ transform: open === i ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0, display: 'flex' }}><IcChevDown size={18} color="#00A896" /></span>
+                <span style={{ transform: open === i ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0, display: 'flex' }}><IcChevDown size={18} color="#05907B" /></span>
               </button>
               {open === i && <p style={{ fontSize: 15, color: '#4B5563', lineHeight: 1.8, paddingBottom: 22 }}>{f.a}</p>}
             </div>
@@ -273,7 +273,7 @@ function Perguntas() {
 function CTA() {
   const r0 = useReveal()
   return (
-    <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 50%,#00A896 100%)', position: 'relative', overflow: 'hidden' }}>
+    <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 50%,#05907B 100%)', position: 'relative', overflow: 'hidden' }}>
       <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div ref={r0} style={{ maxWidth: 980, margin: '0 auto', position: 'relative', zIndex: 1 }}>
         <div className="grid-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>

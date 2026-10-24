@@ -89,7 +89,7 @@ export default function ConversationNotifier({ userId }: { userId: string | null
       >
         <div style={{ fontSize: 12, fontWeight: 700, color: '#059669' }}>{toast.title}</div>
         {toast.body && <div style={{ fontSize: 12, color: '#1A2B4A', marginTop: 2 }}>{toast.body}</div>}
-        <div style={{ fontSize: 11, color: '#00A896', fontWeight: 600, marginTop: 4 }}>{toast.type?.startsWith('visit_') && !toast.remote_jid ? 'Abrir visitas' : 'Abrir conversa'}</div>
+        <div style={{ fontSize: 11, color: '#05907B', fontWeight: 600, marginTop: 4 }}>{toast.type?.startsWith('visit_') && !toast.remote_jid ? 'Abrir visitas' : 'Abrir conversa'}</div>
       </button>
     </div>
   )

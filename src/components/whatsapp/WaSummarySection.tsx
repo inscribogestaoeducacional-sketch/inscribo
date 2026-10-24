@@ -46,7 +46,7 @@ export default function WaSummarySection({ conversationId, institutionId, initia
               </div>
             </div>
           ) : (
-            <button onClick={run} disabled={busy} style={{ width: '100%', border: '1px dashed #99F6E4', background: '#F0FDFB', color: '#007A6E', borderRadius: 10, padding: '9px 0', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <button onClick={run} disabled={busy} style={{ width: '100%', border: '1px dashed #99F6E4', background: '#F0FDFB', color: '#00695F', borderRadius: 10, padding: '9px 0', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{busy ? 'Resumindo...' : 'Resumir com IA'}
             </button>
           )}

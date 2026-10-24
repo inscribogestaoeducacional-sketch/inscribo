@@ -16,7 +16,7 @@ import {
 // Item 4c — série antes hardcoded aqui, agora vem de school_grade_levels
 // via useGradeLevels() dentro do componente (precisa de institutionId).
 
-const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
+const HEX_COLORS = ['#05907B','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
 function nameHash(s: string) {
   let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffffff; return Math.abs(h)
 }
@@ -781,7 +781,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
             </span>
             {contact.lead_id && (
               <button onClick={() => navigate(`/leads?open=${contact.lead_id}`)}
-                style={{ padding: '5px 14px', fontSize: 12, fontWeight: 700, border: '1px solid #99F6E4', borderRadius: 9, background: '#F0FDFA', color: '#007A6E', cursor: 'pointer' }}>
+                style={{ padding: '5px 14px', fontSize: 12, fontWeight: 700, border: '1px solid #99F6E4', borderRadius: 9, background: '#F0FDFA', color: '#00695F', cursor: 'pointer' }}>
                 Ver lead
               </button>
             )}
@@ -805,8 +805,8 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                 display: 'flex', alignItems: 'center', gap: 5, padding: '10px 14px',
                 border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
                 background: 'transparent', transition: 'all 0.15s',
-                color:         tab === t.key ? '#00A896' : '#94A3B8',
-                borderBottom:  tab === t.key ? '2px solid #00A896' : '2px solid transparent',
+                color:         tab === t.key ? '#05907B' : '#94A3B8',
+                borderBottom:  tab === t.key ? '2px solid #05907B' : '2px solid transparent',
               }}>
               {t.icon} {t.label}
             </button>
@@ -863,7 +863,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                 <div>
                   <label style={lbl}>Relação com a escola</label>
                   <div style={{ padding: '10px 12px', background: '#EEF3F2', borderRadius: 8, border: '1px solid #cfe3df' }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#007A6E', marginBottom: 6 }}>{schoolCard.label || 'Responsável de aluno'}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#00695F', marginBottom: 6 }}>{schoolCard.label || 'Responsável de aluno'}</div>
                     {schoolCard.students.map((st, i) => (
                       <div key={i} style={{ fontSize: 12.5, color: '#475569', padding: '3px 0', borderTop: i ? '1px solid #dbe7e4' : 'none' }}>
                         <strong style={{ color: '#1A2B4A' }}>{st.name}</strong>
@@ -967,7 +967,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                       </div>
                     ))}
                     <button onClick={handleSaveCustomFields} disabled={savingCustomFields}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0', borderRadius: 9, border: '1.5px solid #00A896', background: '#F0FDFB', color: '#00A896', fontSize: 13, fontWeight: 700, cursor: savingCustomFields ? 'not-allowed' : 'pointer', opacity: savingCustomFields ? 0.7 : 1 }}>
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0', borderRadius: 9, border: '1.5px solid #05907B', background: '#F0FDFB', color: '#05907B', fontSize: 13, fontWeight: 700, cursor: savingCustomFields ? 'not-allowed' : 'pointer', opacity: savingCustomFields ? 0.7 : 1 }}>
                       {savingCustomFields ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                       {savingCustomFields ? 'Salvando...' : 'Salvar campos personalizados'}
                     </button>
@@ -984,7 +984,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                     padding: '10px',
                     borderRadius: 10,
                     border: 'none',
-                    background: '#00A896',
+                    background: '#05907B',
                     color: 'white',
                     fontSize: 13,
                     fontWeight: 600,
@@ -1002,7 +1002,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
               )}
 
               <button onClick={handleSaveDados} disabled={saving}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', borderRadius: 10, border: 'none', background: '#00A896', color: 'white', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, marginTop: 4 }}>
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', borderRadius: 10, border: 'none', background: '#05907B', color: 'white', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, marginTop: 4 }}>
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 {saving ? 'Salvando...' : 'Salvar dados'}
               </button>
@@ -1086,7 +1086,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                     <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Adicionar anotação..."
                       style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 13, resize: 'vertical', minHeight: 72, outline: 'none', fontFamily: 'inherit', color: '#1A2B4A' }} />
                     <button onClick={handleAddNote} disabled={savingNote || !noteText.trim()}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 10, border: 'none', background: '#00A896', color: 'white', cursor: 'pointer', opacity: savingNote || !noteText.trim() ? 0.5 : 1, flexShrink: 0 }}>
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 10, border: 'none', background: '#05907B', color: 'white', cursor: 'pointer', opacity: savingNote || !noteText.trim() ? 0.5 : 1, flexShrink: 0 }}>
                       <Plus size={16} />
                     </button>
                   </div>
@@ -1104,7 +1104,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                                 style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 13, resize: 'vertical', outline: 'none', fontFamily: 'inherit', color: '#1A2B4A', boxSizing: 'border-box' }} />
                               <div style={{ display: 'flex', gap: 8 }}>
                                 <button onClick={handleSaveNoteEdit} disabled={savingNoteEdit || !editingNoteText.trim()}
-                                  style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', opacity: savingNoteEdit || !editingNoteText.trim() ? 0.5 : 1 }}>
+                                  style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#05907B', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', opacity: savingNoteEdit || !editingNoteText.trim() ? 0.5 : 1 }}>
                                   {savingNoteEdit ? 'Salvando...' : 'Salvar'}
                                 </button>
                                 <button onClick={() => { setEditingNoteId(null); setEditingNoteText('') }}
@@ -1153,7 +1153,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                 </div>
               ) : loadingT ? (
                 <div style={{ textAlign: 'center', padding: '32px 0', color: '#94A3B8' }}>
-                  <div className="animate-spin" style={{ width: 24, height: 24, border: '2px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 8px' }} />
+                  <div className="animate-spin" style={{ width: 24, height: 24, border: '2px solid #05907B', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 8px' }} />
                   Carregando...
                 </div>
               ) : transfers.length > 0 ? (

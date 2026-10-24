@@ -72,7 +72,7 @@ export function AttentionStrip({ counts, active, onPick }: { counts: StripCounts
     { key: 'us', label: 'Sem resposta nossa', value: counts.us, sub: 'famílias esperando a escola', color: '#B91C1C', icon: AlertCircle, alert: counts.us > 0 },
     { key: 'family', label: 'Sem retorno da família', value: counts.family, sub: 'esperando a família responder', color: '#B45309', icon: UserX },
     { key: 'visits', label: 'Visitas da semana', value: counts.visits, sub: counts.todayVisits ? `${counts.todayVisits} hoje` : 'nenhuma hoje', color: '#6366F1', icon: CalendarCheck },
-    { key: 'enrolled', label: 'Matrículas no mês', value: counts.enrolled, sub: 'leads que matricularam', color: '#007A6E', icon: Trophy },
+    { key: 'enrolled', label: 'Matrículas no mês', value: counts.enrolled, sub: 'leads que matricularam', color: '#00695F', icon: Trophy },
     { key: 'incomplete', label: 'Dados incompletos', value: counts.incomplete, sub: 'sem série, origem ou atendente', color: '#5B6B86', icon: ClipboardList },
   ]
   return (
@@ -122,7 +122,7 @@ export function WaitingList({ title, color, rows, onOpenChat, onOpenLead, onClos
           const hot = d >= 2
           return (
             <div key={r.id} className="ld-row ld-in" onClick={() => onOpenChat(r)} style={{ animationDelay: `${Math.min(i, 12) * 25}ms`, display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: '1px solid #F1F5F4', cursor: 'pointer' }}>
-              <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#D1FAE5', color: '#065F52', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{r.initials}</div>
+              <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#D1FAE5', color: '#00695F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{r.initials}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1A2B4A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name} <span style={{ fontWeight: 400, color: '#5B6B86' }}>· {r.sub}</span></div>
                 {r.w.last_text && <div style={{ fontSize: 12, color: '#5B6B86', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>“{r.w.last_text}”</div>}

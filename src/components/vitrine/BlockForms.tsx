@@ -55,12 +55,12 @@ function Warn({ children }: { children: React.ReactNode }) {
 
 function CaptureNote({ active }: { active: boolean }) {
   return (
-    <p style={{ margin: 0, fontSize: 12, color: '#007A6E', background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, padding: '8px 10px', display: 'flex', gap: 6, lineHeight: 1.5 }}>
+    <p style={{ margin: 0, fontSize: 12, color: '#00695F', background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, padding: '8px 10px', display: 'flex', gap: 6, lineHeight: 1.5 }}>
       <Megaphone size={14} style={{ flex: 'none', marginTop: 2 }} />
       <span>
         {active ? 'Gatilho criado no Captação: ' : 'Ao salvar, vira um gatilho no Captação: '}
         quem mandar essa mensagem chega marcado com a origem “Vitrine” e vira lead automaticamente.
-        {active && <> Resposta automática e distribuição podem ser ajustadas em <Link to="/captacao" style={{ color: '#007A6E', fontWeight: 600 }}>Captação</Link>.</>}
+        {active && <> Resposta automática e distribuição podem ser ajustadas em <Link to="/captacao" style={{ color: '#00695F', fontWeight: 600 }}>Captação</Link>.</>}
       </span>
     </p>
   )
@@ -365,7 +365,7 @@ function BannerForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange'
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Imagem</span>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#007A6E', background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 999, padding: '2px 10px' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#00695F', background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 999, padding: '2px 10px' }}>
             Tamanho recomendado: {info.size}
           </span>
         </div>
@@ -436,8 +436,8 @@ function GalleryForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange
             <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
               onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
               onDrop={e => { e.preventDefault(); setOver(false); add(e.dataTransfer.files) }}
-              style={{ marginTop: 8, width: '100%', height: 64, borderRadius: 12, border: over ? '2px dashed #00A896' : '1.5px dashed #CBD5E1',
-                background: over ? '#F0FDFB' : '#FAFAFA', cursor: busy ? 'wait' : 'pointer', color: over ? '#007A6E' : '#64748b', fontSize: 12, fontWeight: 600,
+              style={{ marginTop: 8, width: '100%', height: 64, borderRadius: 12, border: over ? '2px dashed #05907B' : '1.5px dashed #CBD5E1',
+                background: over ? '#F0FDFB' : '#FAFAFA', cursor: busy ? 'wait' : 'pointer', color: over ? '#00695F' : '#64748b', fontSize: 12, fontWeight: 600,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)' }}>
               <ImagePlus size={15} /> {busy ? 'Enviando…' : over ? 'Solte as fotos aqui' : 'Clique ou arraste fotos (várias de uma vez)'}
             </button>
@@ -478,7 +478,7 @@ function Face({ url, name }: { url?: string; name?: string }) {
   if (url) return <img src={url} alt="" style={{ ...base, objectFit: 'cover' }} />
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
   const ini = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] || '?').slice(0, 2)
-  return <span aria-hidden="true" style={{ ...base, background: '#F0FDFB', color: '#007A6E', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{ini.toUpperCase()}</span>
+  return <span aria-hidden="true" style={{ ...base, background: '#F0FDFB', color: '#00695F', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{ini.toUpperCase()}</span>
 }
 
 function FaqForm({ config, onChange }: Pick<Props, 'config' | 'onChange'>) {
@@ -519,7 +519,7 @@ function Stars({ value, onChange }: { value: number | null; onChange: (v: number
         </button>
       ))}
       <button type="button" onClick={() => onChange(null)} aria-pressed={value == null}
-        style={{ marginLeft: 8, fontSize: 12, color: value == null ? '#007A6E' : '#64748b', fontWeight: value == null ? 700 : 500, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+        style={{ marginLeft: 8, fontSize: 12, color: value == null ? '#00695F' : '#64748b', fontWeight: value == null ? 700 : 500, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
         Sem nota
       </button>
     </div>
@@ -680,11 +680,11 @@ function PdfForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 
           onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
           onDrop={e => { e.preventDefault(); setOver(false); send(e.dataTransfer.files?.[0]) }}>
           {config.file_url ? (
-            <div style={{ ...box, border: over ? '2px dashed #00A896' : '1px solid #E2E8F0', background: over ? '#F0FDFB' : '#fff' }}>
+            <div style={{ ...box, border: over ? '2px dashed #05907B' : '1px solid #E2E8F0', background: over ? '#F0FDFB' : '#fff' }}>
               <span aria-hidden="true" style={{ width: 40, height: 48, borderRadius: 6, background: '#FFE4E6', color: '#E11D48', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>PDF</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{config.file_name || 'arquivo.pdf'}</span>
-                <span style={{ fontSize: 12, color: '#64748b' }}>{config.file_size ? fmtBytes(config.file_size) + ' · ' : ''}<a href={config.file_url} target="_blank" rel="noopener noreferrer" style={{ color: '#007A6E', fontWeight: 600 }}>Abrir</a></span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>{config.file_size ? fmtBytes(config.file_size) + ' · ' : ''}<a href={config.file_url} target="_blank" rel="noopener noreferrer" style={{ color: '#00695F', fontWeight: 600 }}>Abrir</a></span>
               </span>
               <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
                 style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#475569', cursor: busy ? 'wait' : 'pointer' }}>
@@ -694,7 +694,7 @@ function PdfForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 
           ) : (
             <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
               style={{ ...box, width: '100%', justifyContent: 'center', height: 88, cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600,
-                border: over ? '2px dashed #00A896' : '1.5px dashed #CBD5E1', background: over ? '#F0FDFB' : '#FAFAFA', color: over ? '#007A6E' : '#64748b' }}>
+                border: over ? '2px dashed #05907B' : '1.5px dashed #CBD5E1', background: over ? '#F0FDFB' : '#FAFAFA', color: over ? '#00695F' : '#64748b' }}>
               <FileUp size={18} /> {busy ? 'Enviando…' : over ? 'Solte o PDF aqui' : 'Clique ou arraste o PDF (até 10 MB)'}
             </button>
           )}
@@ -840,7 +840,7 @@ function HoursForm({ config, onChange }: Pick<Props, 'config' | 'onChange'>) {
           return (
             <div key={dow} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 36, flexWrap: 'wrap' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, width: 110, fontSize: 13, color: '#1e293b', cursor: 'pointer' }}>
-                <input type="checkbox" checked={!d.closed} onChange={e => setDay(dow, { closed: !e.target.checked })} style={{ accentColor: '#00A896' }} />
+                <input type="checkbox" checked={!d.closed} onChange={e => setDay(dow, { closed: !e.target.checked })} style={{ accentColor: '#05907B' }} />
                 {DAYS[dow]}
               </label>
               {d.closed

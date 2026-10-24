@@ -84,7 +84,7 @@ export default function SettingsPanel({ page, onChange, onSlugSaved, onToast, fl
               style={{ ...inputStyle, border: 'none', background: 'transparent', paddingLeft: 0, flex: 1, minWidth: 80 }} />
           </div>
           <button type="button" onClick={saveSlug} disabled={!canSave}
-            style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: canSave ? '#00A896' : '#E2E8F0', color: canSave ? '#fff' : '#94a3b8', fontSize: 13, fontWeight: 600, cursor: canSave ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 6 }}>
+            style={{ padding: '10px 18px', borderRadius: 12, border: 'none', background: canSave ? '#05907B' : '#E2E8F0', color: canSave ? '#fff' : '#94a3b8', fontSize: 13, fontWeight: 600, cursor: canSave ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 6 }}>
             {saving && <Loader2 size={14} className="animate-spin" />} Salvar endereço
           </button>
         </div>

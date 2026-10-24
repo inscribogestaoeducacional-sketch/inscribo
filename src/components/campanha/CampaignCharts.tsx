@@ -56,7 +56,7 @@ export function CompensationChart({ months, cur, kind, now }: { months: PlanMont
           return (
             <g key={m.m}>
               <rect x={cx(i) - bw - 2} width={bw} y={H - B - hh(p)} height={hh(p)} rx="3" fill="#CBD5E1" style={{ transition: 'all .7s cubic-bezier(.2,.8,.2,1)' }} />
-              {r != null && <rect x={cx(i) + 2} width={bw} y={H - B - hh(r)} height={hh(r)} rx="3" fill={open ? '#F59E0B' : r >= p ? '#00A896' : '#EF4444'} style={{ transition: 'all .9s cubic-bezier(.2,.8,.2,1)' }} />}
+              {r != null && <rect x={cx(i) + 2} width={bw} y={H - B - hh(r)} height={hh(r)} rx="3" fill={open ? '#F59E0B' : r >= p ? '#05907B' : '#EF4444'} style={{ transition: 'all .9s cubic-bezier(.2,.8,.2,1)' }} />}
               {r != null && <text x={cx(i) + 2 + bw / 2} y={H - B - hh(r) - 4} fontSize="11" fontWeight="700" fill="#1A2B4A" textAnchor="middle" opacity={on ? 1 : 0}>{r}</text>}
               <text x={cx(i)} y={H - 10} fontSize="12" fontWeight="700" fill="#1A2B4A" textAnchor="middle">{monthName(m.m + '-01')}</text>
             </g>
@@ -65,7 +65,7 @@ export function CompensationChart({ months, cur, kind, now }: { months: PlanMont
         {adjPts.length > 0 && <polyline points={adjPts.join(' ')} fill="none" stroke="#B45309" strokeWidth="2.5" strokeDasharray="6 4" opacity={on ? 1 : 0} style={{ transition: 'opacity 1s .5s' }} />}
         {months.map((m, i) => c.adjusted[i] != null && <g key={'a' + m.m} opacity={on ? 1 : 0} style={{ transition: 'opacity 1s .6s' }}><circle cx={cx(i)} cy={y(c.adjusted[i] as number)} r="4" fill="#B45309" /><text x={cx(i)} y={y(c.adjusted[i] as number) - 8} fontSize="11" fontWeight="800" fill="#B45309" textAnchor="middle">{c.adjusted[i]}</text></g>)}
       </svg>
-      <Legend items={[{ c: '#CBD5E1', t: 'Meta do plano' }, { c: '#00A896', t: 'Realizado (bateu)' }, { c: '#EF4444', t: 'Realizado (abaixo)' }, { c: '#F59E0B', t: 'Mês em andamento' }, { c: '#B45309', t: 'Meta ajustada (compensação)', line: true, dash: true }]} />
+      <Legend items={[{ c: '#CBD5E1', t: 'Meta do plano' }, { c: '#05907B', t: 'Realizado (bateu)' }, { c: '#EF4444', t: 'Realizado (abaixo)' }, { c: '#F59E0B', t: 'Mês em andamento' }, { c: '#B45309', t: 'Meta ajustada (compensação)', line: true, dash: true }]} />
     </div>
   )
 }
@@ -89,10 +89,10 @@ export function CumulativeChart({ months, cur, years, targetYear, kind, now }: {
         {months.map((m, i) => <text key={m.m} x={x(i)} y={H - 10} fontSize="12" fontWeight="700" fill="#1A2B4A" textAnchor="middle">{monthName(m.m + '-01')}</text>)}
         {c.prev.map((p, k) => <polyline key={p.year} points={pts(p.series)} fill="none" stroke={PREV_COLORS[k % 3]} strokeWidth="2" strokeDasharray="3 4" opacity={on ? 0.9 : 0} style={{ transition: 'opacity 1s' }} />)}
         <polyline points={pts(c.plan)} fill="none" stroke="#64748B" strokeWidth="2.5" style={lineStyle} />
-        <polyline points={pts(c.real)} fill="none" stroke="#00A896" strokeWidth="3.5" strokeLinecap="round" style={lineStyle} />
-        {lastReal >= 0 && <g opacity={on ? 1 : 0} style={{ transition: 'opacity .5s 1.4s' }}><circle cx={x(lastReal)} cy={y(c.real[lastReal] as number)} r="5.5" fill="#00A896" /><text x={x(lastReal) + 8} y={y(c.real[lastReal] as number) + 4} fontSize="12" fontWeight="800" fill="#007A6E">{c.real[lastReal]}</text></g>}
+        <polyline points={pts(c.real)} fill="none" stroke="#05907B" strokeWidth="3.5" strokeLinecap="round" style={lineStyle} />
+        {lastReal >= 0 && <g opacity={on ? 1 : 0} style={{ transition: 'opacity .5s 1.4s' }}><circle cx={x(lastReal)} cy={y(c.real[lastReal] as number)} r="5.5" fill="#05907B" /><text x={x(lastReal) + 8} y={y(c.real[lastReal] as number) + 4} fontSize="12" fontWeight="800" fill="#00695F">{c.real[lastReal]}</text></g>}
       </svg>
-      <Legend items={[{ c: '#00A896', t: `Realizado ${targetYear}`, line: true }, { c: '#64748B', t: 'Plano', line: true }, ...c.prev.map((p, k) => ({ c: PREV_COLORS[k % 3], t: `Campanha ${p.year}`, line: true, dash: true }))]} />
+      <Legend items={[{ c: '#05907B', t: `Realizado ${targetYear}`, line: true }, { c: '#64748B', t: 'Plano', line: true }, ...c.prev.map((p, k) => ({ c: PREV_COLORS[k % 3], t: `Campanha ${p.year}`, line: true, dash: true }))]} />
     </div>
   )
 }
@@ -119,7 +119,7 @@ export default function MetaCharts({ kind, months, cur, years, targetYear, label
   return (
     <>
       <div style={{ ...card, display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-        {kpi(<><CountUp value={feito} /> <span style={{ fontSize: 14, color: '#94A3B8', fontWeight: 600 }}>de {total}</span></>, '#00A896', `${label} · ${total ? Math.round(feito / total * 100) : 0}% da meta`)}
+        {kpi(<><CountUp value={feito} /> <span style={{ fontSize: 14, color: '#94A3B8', fontWeight: 600 }}>de {total}</span></>, '#05907B', `${label} · ${total ? Math.round(feito / total * 100) : 0}% da meta`)}
         {kpi(`${atraso >= 0 ? '+' : ''}${atraso}`, atraso >= 0 ? '#15803D' : '#B91C1C', `${atraso >= 0 ? 'Adiantado' : 'Atrasado'} frente ao plano nos meses já fechados (esperado ${esperado})`)}
         {kpi(restantes ? `${ritmo} por mês` : '—', ritmo > ritmoPlano ? '#B45309' : '#15803D', restantes ? `Ritmo para fechar a meta nos ${restantes} mês(es) que faltam (plano: ${ritmoPlano})` : 'Campanha sem meses restantes')}
       </div>

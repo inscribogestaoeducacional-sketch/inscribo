@@ -49,7 +49,7 @@ export default function TemplatePicker({ page, blocks, schoolPhone, institutionN
   return (
     <section style={{ ...cardStyle, padding: 24 }} aria-labelledby="vit-tpl-title">
       <h3 id="vit-tpl-title" style={{ ...sectionTitleStyle, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <LayoutTemplate size={16} color="#00A896" /> Modelos
+        <LayoutTemplate size={16} color="#05907B" /> Modelos
       </h3>
       <p style={{ ...hintStyle, margin: '0 0 18px' }}>
         Um visual pronto com a cor da escola. Trocar de modelo muda cores, fundo, fontes e botões; os blocos, textos e imagens continuam.
@@ -62,12 +62,12 @@ export default function TemplatePicker({ page, blocks, schoolPhone, institutionN
             <div key={t.key} className="vit-tpl" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button type="button" onClick={() => setConfirm(t.key)} aria-label={`Ver o modelo ${t.name}`}
                 className="vit-tpl-thumb"
-                style={{ position: 'relative', padding: 0, border: on ? '2px solid #00A896' : '1px solid #E2E8F0', borderRadius: 16, overflow: 'hidden', cursor: 'pointer', background: '#fff',
+                style={{ position: 'relative', padding: 0, border: on ? '2px solid #05907B' : '1px solid #E2E8F0', borderRadius: 16, overflow: 'hidden', cursor: 'pointer', background: '#fff',
                   height: Math.round(H * SCALE) + 2, boxShadow: on ? '0 0 0 3px #D1FAE5' : DS.shadowSm }}>
                 <iframe title={`Prévia do modelo ${t.name}`} srcDoc={docs[t.key]} sandbox="" tabIndex={-1} aria-hidden="true"
                   style={{ width: W, height: H, border: 0, transform: `scale(${SCALE})`, transformOrigin: 'top left', pointerEvents: 'none', display: 'block' }} />
                 {on && (
-                  <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: '#00A896', color: '#fff' }}>
+                  <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: '#05907B', color: '#fff' }}>
                     <Check size={11} /> Atual
                   </span>
                 )}
@@ -100,7 +100,7 @@ export default function TemplatePicker({ page, blocks, schoolPhone, institutionN
                 </p>
                 {empty && (
                   <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: '#1e293b', cursor: 'pointer', lineHeight: 1.45 }}>
-                    <input type="checkbox" checked={withStarter} onChange={e => setWithStarter(e.target.checked)} style={{ marginTop: 2, accentColor: '#00A896' }} />
+                    <input type="checkbox" checked={withStarter} onChange={e => setWithStarter(e.target.checked)} style={{ marginTop: 2, accentColor: '#05907B' }} />
                     <span>Adicionar também os blocos sugeridos: {pick.starter.map(s => BLOCK_TYPES[s].label).join(', ')}.</span>
                   </label>
                 )}
@@ -111,7 +111,7 @@ export default function TemplatePicker({ page, blocks, schoolPhone, institutionN
               <button type="button" onClick={() => setConfirm(null)} className="vit-btn"
                 style={{ padding: '9px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}>Cancelar</button>
               <button type="button" className="vit-btn" onClick={() => { onApply(pick.key, empty && withStarter); setConfirm(null) }}
-                style={{ padding: '9px 18px', borderRadius: 12, border: 'none', background: '#00A896', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,168,150,0.25)' }}>
+                style={{ padding: '9px 18px', borderRadius: 12, border: 'none', background: '#05907B', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,168,150,0.25)' }}>
                 {current === pick.key ? 'Reaplicar modelo' : 'Usar este modelo'}
               </button>
             </div>

@@ -12,7 +12,7 @@ interface Conn { status: string; token_last4: string | null; token_expires_at: s
 interface Run { id: string; status: string; counts: Record<string, unknown>; error: string | null; finished_at: string | null }
 
 const card: React.CSSProperties = { border: '1px solid #E2E8F0', borderRadius: 14, padding: '16px 18px', background: '#fff' }
-const btn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 10, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
+const btn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 10, border: 'none', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
 
 const ago = (iso: string | null) => {
   if (!iso) return 'nunca'
@@ -103,7 +103,7 @@ export default function ActivesoftSimple({ institutionId, onToast }: { instituti
       {ready && (
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <CheckCircle2 size={20} color="#00A896" />
+            <CheckCircle2 size={20} color="#05907B" />
             <div style={{ flex: 1, minWidth: 220 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: '#1A2B4A' }}>Activesoft conectado</div>
               <div style={{ fontSize: 12.5, color: '#64748B' }}>

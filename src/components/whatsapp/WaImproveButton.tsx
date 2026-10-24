@@ -51,12 +51,12 @@ export default function WaImproveButton({ text, institutionId, onApply, onError,
         </button>
       )}
       <button type="button" aria-label="Melhorar com IA" title={has ? 'Melhorar com IA' : 'Escreva a mensagem para melhorar com IA'} onClick={() => has && setOpen(o => !o)}
-        style={{ width: size, height: size, borderRadius: 12, border: `1px solid ${open ? '#00A896' : '#E3E8F0'}`, background: open ? '#F0FDFB' : '#fff', color: has ? '#007A6E' : '#CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: has ? 'pointer' : 'default', transition: 'all .15s' }}>
+        style={{ width: size, height: size, borderRadius: 12, border: `1px solid ${open ? '#05907B' : '#E3E8F0'}`, background: open ? '#F0FDFB' : '#fff', color: has ? '#00695F' : '#CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: has ? 'pointer' : 'default', transition: 'all .15s' }}>
         {busy ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />}
       </button>
       {open && (
         <div role="menu" style={{ position: 'absolute', bottom: size + 8, right: 0, width: 250, background: '#fff', border: '1px solid #E3E8F0', borderRadius: 14, padding: 6, boxShadow: '0 14px 32px -12px rgba(26,43,74,.35)', zIndex: 30 }}>
-          <div style={{ padding: '6px 10px 4px', fontSize: 12, color: '#5B6B86', display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13} color="#00A896" />Melhorar com IA</div>
+          <div style={{ padding: '6px 10px 4px', fontSize: 12, color: '#5B6B86', display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13} color="#05907B" />Melhorar com IA</div>
           {MODES.map(m => (
             <button key={m.mode} type="button" role="menuitem" disabled={busy} onClick={() => run(m.mode)}
               style={{ width: '100%', textAlign: 'left', border: 'none', background: 'none', borderRadius: 9, padding: '8px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
@@ -70,7 +70,7 @@ export default function WaImproveButton({ text, institutionId, onApply, onError,
               onKeyDown={e => { if (e.key === 'Enter' && custom.trim()) run('custom', custom.trim()) }}
               style={{ flex: 1, minWidth: 0, border: '1px solid #E3E8F0', borderRadius: 9, padding: '6px 9px', fontSize: 16, outline: 'none' }} />
             <button type="button" disabled={busy || !custom.trim()} onClick={() => run('custom', custom.trim())} aria-label="Aplicar pedido"
-              style={{ width: 34, border: 'none', borderRadius: 9, background: custom.trim() ? '#00A896' : '#E3E8F0', color: '#fff', cursor: custom.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              style={{ width: 34, border: 'none', borderRadius: 9, background: custom.trim() ? '#05907B' : '#E3E8F0', color: '#fff', cursor: custom.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
             </button>
           </div>

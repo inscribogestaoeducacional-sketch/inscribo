@@ -40,7 +40,7 @@ function PersonCard({ name, role, bio }: { name: string; role: string; bio: stri
         {name[0]}
       </div>
       <h3 style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4 }}>{name}</h3>
-      <p style={{ fontSize: 12, fontWeight: 800, color: '#00A896', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 16 }}>{role}</p>
+      <p style={{ fontSize: 12, fontWeight: 800, color: '#05907B', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 16 }}>{role}</p>
       <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.8, marginBottom: 20 }}>{bio}</p>
       <div style={{ display: 'flex', gap: 10 }}>
         {[IcLinkedin, IcInstagram].map((Icon, i) => (
@@ -83,7 +83,7 @@ export default function SobreNos() {
           <div style={{ maxWidth: 860, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
             <div className="tag-d" style={{ marginBottom: 24, display: 'inline-flex', animation: 'fadeIn .8s ease both' }}>Quem somos</div>
             <h1 className="s-title" style={{ fontSize: 'clamp(40px,5vw,64px)', color: '#fff', marginBottom: 24, animation: 'fadeUp .9s ease .1s both', lineHeight: 1.04 }}>
-              Construindo o futuro das<br /><span style={{ color: '#0DD3BF' }}>escolas privadas brasileiras</span>
+              Construindo o futuro das<br /><span style={{ color: '#2DCBA4' }}>escolas privadas brasileiras</span>
             </h1>
             <p style={{ fontSize: 18, color: 'rgba(255,255,255,.72)', maxWidth: 620, margin: '0 auto', lineHeight: 1.8, animation: 'fadeUp .9s ease .2s both' }}>
               A ÁION EDU nasceu da experiência direta com a realidade das escolas privadas brasileiras — e da convicção de que tecnologia, quando bem aplicada, transforma resultados.
@@ -98,7 +98,7 @@ export default function SobreNos() {
               <div ref={r1}>
                 <div className="tag-g" style={{ marginBottom: 20 }}>Nossa história</div>
                 <h2 className="s-title" style={{ fontSize: 'clamp(28px,3.5vw,42px)', color: '#111827', marginBottom: 24 }}>
-                  De uma pergunta simples a uma<br /><span style={{ color: '#0DD3BF' }}>plataforma completa</span>
+                  De uma pergunta simples a uma<br /><span style={{ color: '#2DCBA4' }}>plataforma completa</span>
                 </h2>
                 <p style={{ fontSize: 16, color: '#4B5563', lineHeight: 1.85, marginBottom: 20 }}>
                   A ÁION EDU surgiu de uma pergunta simples: por que escolas privadas brasileiras ainda gerenciam campanhas de matrícula no improviso?
@@ -116,7 +116,7 @@ export default function SobreNos() {
                 <div className="card" style={{ padding: 36 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 28 }}>Nossa linha do tempo</h3>
                   {[
-                    { year: '2024', title: 'Fundação', desc: 'Victor e Fábio fundam a ÁION Soluções Tecnológicas Ltda. em Patos, Paraíba.', color: '#00A896' },
+                    { year: '2024', title: 'Fundação', desc: 'Victor e Fábio fundam a ÁION Soluções Tecnológicas Ltda. em Patos, Paraíba.', color: '#05907B' },
                     { year: '2025', title: 'Lançamento', desc: 'Lançamento oficial da plataforma com CRM, WhatsApp Oficial Meta e Diagnóstico IA.', color: '#6366F1' },
                     { year: '2026', title: 'Primeiras escolas', desc: 'Colégio Ágape torna-se a primeira escola parceira, validando o produto com dados reais.', color: '#F59E0B' },
                   ].map((t, i) => (
@@ -170,7 +170,7 @@ export default function SobreNos() {
               <div className="tag-g" style={{ marginBottom: 20 }}>Nossa missão</div>
               <h2 className="s-title" style={{ fontSize: 'clamp(28px,3.5vw,44px)', color: '#111827', maxWidth: 720, margin: '0 auto' }}>
                 Transformar campanhas de matrícula que funcionam no improviso em operações{' '}
-                <span style={{ color: '#0DD3BF' }}>organizadas, previsíveis e inteligentes.</span>
+                <span style={{ color: '#2DCBA4' }}>organizadas, previsíveis e inteligentes.</span>
               </h2>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24 }}>
@@ -194,7 +194,7 @@ export default function SobreNos() {
         </section>
 
         {/* CTA */}
-        <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C,#00A896)', position: 'relative', overflow: 'hidden' }}>
+        <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C,#05907B)', position: 'relative', overflow: 'hidden' }}>
           <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
           <div ref={r4} style={{ maxWidth: 640, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
             <div className="tag-d" style={{ marginBottom: 20, display: 'inline-flex' }}>Vamos conversar?</div>

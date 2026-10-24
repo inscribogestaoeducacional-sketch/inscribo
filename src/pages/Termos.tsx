@@ -57,8 +57,8 @@ export default function Termos() {
             <div style={{ background: '#F9FAFB', borderRadius: 16, padding: '24px', marginTop: 20, border: '1px solid #E5E7EB' }}>
               <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.8 }}>
                 <strong>Dúvidas sobre os termos?</strong> Entre em contato pelo WhatsApp{' '}
-                <a href="https://wa.me/5583933444383" style={{ color: '#00A896', fontWeight: 700 }}>(83) 9344-4383</a>{' '}
-                ou pelo e-mail <a href="mailto:contato@aionedu.com.br" style={{ color: '#00A896', fontWeight: 700 }}>contato@aionedu.com.br</a>.
+                <a href="https://wa.me/5583933444383" style={{ color: '#05907B', fontWeight: 700 }}>(83) 9344-4383</a>{' '}
+                ou pelo e-mail <a href="mailto:contato@aionedu.com.br" style={{ color: '#05907B', fontWeight: 700 }}>contato@aionedu.com.br</a>.
               </p>
             </div>
           </div>

@@ -999,7 +999,7 @@ export default function GestorHome() {
   })
 
   const getYearLineProps = (yr: number): { stroke: string; strokeWidth: number; strokeDasharray?: string } => {
-    if (showActiveLine && yr === activeCycleYear) return { stroke: '#00A896', strokeWidth: 2.5 }
+    if (showActiveLine && yr === activeCycleYear) return { stroke: '#05907B', strokeWidth: 2.5 }
     if (yr === lastHistYear) return { stroke: '#9ca3af', strokeWidth: 1.5, strokeDasharray: '4 4' }
     const idx = olderHistYears.indexOf(yr)
     return { stroke: '#d1d5db', strokeWidth: 1.5, ...(idx < 0 ? {} : {}) }
@@ -1026,7 +1026,7 @@ export default function GestorHome() {
   const avgResponseTime = waAvgResponse
   const toSatisfPct = (score: number | null) => score !== null ? Math.round(((score - 1) / 2) * 100) : null
   const satisfPct = toSatisfPct(avgSatisfaction)
-  const satisfPctColor = (pct: number | null) => pct !== null ? pct >= 75 ? '#00A896' : pct >= 40 ? '#F59E0B' : '#EF4444' : '#94a3b8'
+  const satisfPctColor = (pct: number | null) => pct !== null ? pct >= 75 ? '#05907B' : pct >= 40 ? '#F59E0B' : '#EF4444' : '#94a3b8'
 
   // Salvar score
   useEffect(() => {
@@ -1065,7 +1065,7 @@ export default function GestorHome() {
       withCoords.forEach((s: any) => {
         const isMySchool = s.co_entidade === inepMyCode
         const isPrivate  = s.tp_dependencia === 4
-        const color = isMySchool ? '#00A896' : isPrivate ? '#3B82F6' : '#9CA3AF'
+        const color = isMySchool ? '#05907B' : isPrivate ? '#3B82F6' : '#9CA3AF'
         const size  = isMySchool ? 14 : 9
         const icon  = L.divIcon({
           className: '',
@@ -1081,7 +1081,7 @@ export default function GestorHome() {
         const div = L.DomUtil.create('div', '')
         div.style.cssText = 'background:white;padding:8px 12px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,0.2);font-size:11px;line-height:1.8'
         div.innerHTML = [
-          '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#00A896;margin-right:6px"></span>Sua escola</div>',
+          '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#05907B;margin-right:6px"></span>Sua escola</div>',
           '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3B82F6;margin-right:6px"></span>Concorrentes privadas</div>',
           '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#9CA3AF;margin-right:6px"></span>Escolas públicas</div>',
         ].join('')
@@ -1183,7 +1183,7 @@ export default function GestorHome() {
         {!loading && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {[
-              { label: 'Total Alunos', value: totalStudents || 0, icon: GraduationCap, color: '#00A896', bg: '#E6F7F5' },
+              { label: 'Total Alunos', value: totalStudents || 0, icon: GraduationCap, color: '#05907B', bg: '#E6F7F5' },
               { label: 'Novatos', value: newStudents || 0, icon: TrendingUp, color: '#7C3AED', bg: '#EDE9FE' },
               { label: 'Market Share', value: marketSharePct !== null ? `${marketSharePct}%` : '—', icon: Target, color: '#2563EB', bg: '#DBEAFE' },
               { label: 'Próx. Campanha', value: monthsUntil === 0 ? 'Agora' : `${monthsUntil}m`, icon: Bell, color: '#D97706', bg: '#FEF3C7' },
@@ -1221,13 +1221,13 @@ export default function GestorHome() {
                     <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 4px', fontWeight: 500 }}>{label}</p>
                     <p style={{ fontSize: 18, fontWeight: 700, color: '#1A2B4A', margin: '0 0 6px' }}>{val}<span style={{ fontSize: 11, color: '#94A3B8' }}>/{target}</span></p>
                     <div style={{ height: 4, background: '#E2E8F0', borderRadius: 9999 }}>
-                      <div style={{ height: 4, width: `${pct}%`, background: pct >= 80 ? '#00A896' : pct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 9999 }} />
+                      <div style={{ height: 4, width: `${pct}%`, background: pct >= 80 ? '#05907B' : pct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 9999 }} />
                     </div>
                   </div>
                 )
               })}
             </div>
-            <button onClick={() => navigate('/reports')} style={{ width: '100%', padding: '10px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={() => navigate('/reports')} style={{ width: '100%', padding: '10px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               Ver relatório completo
             </button>
           </div>
@@ -1290,7 +1290,7 @@ export default function GestorHome() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {(['hoje', 'semana', 'mes', 'ano'] as const).map(p => (
-            <button key={p} onClick={() => setPeriodFilter(p)} style={{ padding: '6px 14px', borderRadius: 20, border: 'none', background: periodFilter === p ? '#00A896' : '#F3F4F6', color: periodFilter === p ? 'white' : '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+            <button key={p} onClick={() => setPeriodFilter(p)} style={{ padding: '6px 14px', borderRadius: 20, border: 'none', background: periodFilter === p ? '#05907B' : '#F3F4F6', color: periodFilter === p ? 'white' : '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               {p === 'hoje' ? 'Hoje' : p === 'semana' ? 'Semana' : p === 'mes' ? 'Mês' : 'Ano'}
             </button>
           ))}
@@ -1355,7 +1355,7 @@ export default function GestorHome() {
       {!loading && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(6,1fr)', gap: 12 }}>
           {[
-            { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: <Users size={20} color="#00A896" />, color: '#00A896', bg: '#F0FDFA', path: '/leads' },
+            { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: <Users size={20} color="#05907B" />, color: '#05907B', bg: '#F0FDFA', path: '/leads' },
             { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: <MessageCircle size={20} color="#25D366" />, color: '#25D366', bg: '#F0FDF4', path: '/whatsapp' },
             { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <GraduationCap size={20} color="#7C3AED" />, color: '#7C3AED', bg: '#F5F3FF', path: '/leads' },
             { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: <TrendingUp size={20} color="#F59E0B" />, color: '#F59E0B', bg: '#FFFBEB', path: '/leads' },
@@ -1439,7 +1439,7 @@ export default function GestorHome() {
               </div>
             </div>
             <div style={{ ...(isMobile ? {} : { flex: 1 }), display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-              <KpiCard label={`Alunos ${latestYear ?? ''}`} value={fmt(totalStudents)} icon={<Users size={20} color="#00A896" />} iconBg="#E6F7F5" variation={totalVariation} />
+              <KpiCard label={`Alunos ${latestYear ?? ''}`} value={fmt(totalStudents)} icon={<Users size={20} color="#05907B" />} iconBg="#E6F7F5" variation={totalVariation} />
               <KpiCard label="Novatos" value={fmt(newStudents)} icon={<TrendingUp size={20} color="#8B5CF6" />} iconBg="#EDE9FE" variation={newVariation} sub={totalStudents > 0 ? `${Math.round((newStudents / totalStudents) * 100)}% do total` : undefined} />
               <KpiCard label="Market share" value={inepSharePct !== null ? `${inepSharePct}%` : (inepMyStudents === null ? '—' : '…')} icon={<BarChart3 size={20} color="#F59E0B" />} iconBg="#FEF3C7" sub={estimatedSchools ? `~${estimatedSchools} escolas na cidade` : undefined} />
               <KpiCard label="Próxima campanha" value={monthsUntil > 0 ? `${monthsUntil} ${monthsUntil === 1 ? 'mês' : 'meses'}` : 'Ativa'} icon={<Calendar size={20} color="#3B82F6" />} iconBg="#DBEAFE" sub={`Ano letivo ${campaignYear}`} onClick={() => navigate('/reports')} />
@@ -1485,15 +1485,15 @@ export default function GestorHome() {
                 <AreaChart data={days} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#00A896" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#00A896" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#05907B" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#05907B" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(v) => [v, 'Leads']} />
-                  <Area type="monotone" dataKey="count" name="Leads" stroke="#00A896" strokeWidth={2} fill="url(#gradLeads)" />
+                  <Area type="monotone" dataKey="count" name="Leads" stroke="#05907B" strokeWidth={2} fill="url(#gradLeads)" />
                 </AreaChart>
               </ResponsiveContainer></div>
             </div>
@@ -1523,7 +1523,7 @@ export default function GestorHome() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 32, height: 32, borderRadius: 10, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Filter size={16} color="#00A896" />
+                    <Filter size={16} color="#05907B" />
                   </div>
                   <div>
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Funil de Leads</h3>
@@ -1565,7 +1565,7 @@ export default function GestorHome() {
                       })}
                       <div style={{ background: '#f0fdf9', borderRadius: 8, padding: '6px 10px', marginTop: 2 }}>
                         <p style={{ margin: 0, fontSize: 10, color: '#065f46' }}>Taxa lead → matrícula</p>
-                        <p style={{ margin: '1px 0 0', fontSize: 18, fontWeight: 700, color: '#00A896' }}>{conversionRateNum.toFixed(1)}%</p>
+                        <p style={{ margin: '1px 0 0', fontSize: 18, fontWeight: 700, color: '#05907B' }}>{conversionRateNum.toFixed(1)}%</p>
                       </div>
                     </div>
                   </div>
@@ -1790,7 +1790,7 @@ export default function GestorHome() {
                 <XAxis dataKey="day" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(v) => [v, 'Conversas']} />
-                <Bar dataKey="count" name="Conversas" fill="#00A896" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" name="Conversas" fill="#05907B" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer></div>
           </div>
@@ -1880,14 +1880,14 @@ export default function GestorHome() {
           const maxH = Math.max(...heatmap.flatMap(d => [d.manha, d.tarde, d.noite]), 1)
           const getColor = (val: number) => {
             const i = val / maxH
-            if (i > 0.7) return { bg: '#00A896', color: '#fff' }
+            if (i > 0.7) return { bg: '#05907B', color: '#fff' }
             if (i > 0.4) return { bg: '#7dd3ca', color: '#fff' }
             if (i > 0.1) return { bg: '#ccf2ee', color: '#0F6E56' }
             return { bg: '#F8FAFC', color: '#94a3b8' }
           }
           return (
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><Clock size={16} color="#00A896" style={{marginRight:6}} />Horários de maior movimento</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><Clock size={16} color="#05907B" style={{marginRight:6}} />Horários de maior movimento</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(7,1fr)', gap: 4 }}>
                 <div />
                 {DAYS.map(d => (
@@ -1977,7 +1977,7 @@ export default function GestorHome() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <TrendingUp size={16} color="#00A896" />
+            <TrendingUp size={16} color="#05907B" />
             <div>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Evolução de matrículas</span>
               <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 1 }}>Histórico importado vs. matrículas do CRM</span>
@@ -2156,9 +2156,9 @@ export default function GestorHome() {
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 10 }}>
               {[
                 { label: 'Escolas privadas', value: fmt(inepTotalSchools), icon: <Building2 size={16} color="#7C3AED" />, bg: '#f5f3ff' },
-                { label: 'Alunos no setor', value: fmt(inepTotalStudents), icon: <Users size={16} color="#00A896" />, bg: '#e6f7f5' },
+                { label: 'Alunos no setor', value: fmt(inepTotalStudents), icon: <Users size={16} color="#05907B" />, bg: '#e6f7f5' },
                 { label: 'Média por escola', value: inepAvgStudents ? fmt(inepAvgStudents) : '—', icon: <BarChart2 size={16} color="#F59E0B" />, bg: '#fef3c7' },
-                { label: 'Market share', value: inepSharePct !== null ? `${inepSharePct}%` : '—', icon: <Trophy size={16} color="#00A896" />, bg: '#e6f7f5' },
+                { label: 'Market share', value: inepSharePct !== null ? `${inepSharePct}%` : '—', icon: <Trophy size={16} color="#05907B" />, bg: '#e6f7f5' },
               ].map(item => (
                 <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 30, height: 30, borderRadius: 8, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -2226,7 +2226,7 @@ export default function GestorHome() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <MapPin size={16} color="#00A896" />
+            <MapPin size={16} color="#05907B" />
             <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Mapa de Oportunidades</span>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -2279,7 +2279,7 @@ export default function GestorHome() {
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ClipboardCheck size={16} color="#00A896" />
+              <ClipboardCheck size={16} color="#05907B" />
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Pesquisa de satisfação</span>
             </div>
             <button onClick={() => navigate('/pesquisas')} style={{ fontSize: 11, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -2400,7 +2400,7 @@ export default function GestorHome() {
                     <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                     <YAxis type="category" dataKey="reason" tick={{ fontSize: 11 }} width={90} />
                     <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }} />
-                    <Bar dataKey="value" name="Transferências" fill="#00A896" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="value" name="Transferências" fill="#05907B" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

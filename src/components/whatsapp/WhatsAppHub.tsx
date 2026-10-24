@@ -167,7 +167,7 @@ function mapMsgType(messageType: string): MsgType {
 }
 
 const AVATAR_BG_COLORS = [
-  'linear-gradient(135deg, #00A896, #0DD3BF)',
+  'linear-gradient(135deg, #05907B, #2DCBA4)',
   'linear-gradient(135deg, #667eea, #764ba2)',
   'linear-gradient(135deg, #f093fb, #f5576c)',
   'linear-gradient(135deg, #4facfe, #00f2fe)',
@@ -483,10 +483,10 @@ function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: nu
   }
 
   const btnCls = `w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
-    isDark ? 'bg-white/20 hover:bg-white/30' : 'bg-[#00A896] hover:bg-[#008f81]'
+    isDark ? 'bg-white/20 hover:bg-white/30' : 'bg-[#05907B] hover:bg-[#008f81]'
   }`
   const trackCls = `h-[3px] rounded-full overflow-hidden ${isDark ? 'bg-white/30' : 'bg-[#E2E8F0]'}`
-  const fillCls  = `h-full rounded-full transition-all duration-100 ${isDark ? 'bg-white' : 'bg-[#00A896]'}`
+  const fillCls  = `h-full rounded-full transition-all duration-100 ${isDark ? 'bg-white' : 'bg-[#05907B]'}`
   const timeCls  = `text-xs ${isDark ? 'text-white/60' : 'text-[#64748B]'}`
   const speedCls = `text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors ${isDark ? 'text-white/70 hover:text-white' : 'text-[#64748B] hover:text-[#1A2B4A]'}`
 
@@ -707,7 +707,7 @@ function RenderMessageContent({ message, fromMe, onImageClick }: { message: any;
         >
           <span style={{ fontSize: 22 }}>📄</span>
           <span style={{ fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: fromMe ? '#fff' : '#1A2B4A' }}>{filename}</span>
-          <span style={{ fontSize: 18, color: '#00A896' }}>↓</span>
+          <span style={{ fontSize: 18, color: '#05907B' }}>↓</span>
         </div>
       )
     }
@@ -795,7 +795,7 @@ function MessageBubble({
           <button
             onClick={() => onReply?.(msg)}
             title="Responder"
-            style={{ width: 28, height: 28, borderRadius: '50%', background: '#F0FDFB', border: '1px solid #B2E8E2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00A896' }}
+            style={{ width: 28, height: 28, borderRadius: '50%', background: '#F0FDFB', border: '1px solid #B2E8E2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#05907B' }}
           >
             <CornerUpLeft size={13} />
           </button>
@@ -883,7 +883,7 @@ function MessageBubble({
         {msg.quoted_content && (
           <div style={{
             borderLeft: '3px solid',
-            borderColor: isMe ? 'rgba(255,255,255,0.6)' : '#00A896',
+            borderColor: isMe ? 'rgba(255,255,255,0.6)' : '#05907B',
             background: isMe ? 'rgba(0,0,0,0.15)' : 'rgba(0,168,150,0.08)',
             borderRadius: '4px',
             padding: '6px 10px',
@@ -893,7 +893,7 @@ function MessageBubble({
             <div style={{
               fontSize: 12,
               fontWeight: 600,
-              color: isMe ? 'rgba(255,255,255,0.9)' : '#00A896',
+              color: isMe ? 'rgba(255,255,255,0.9)' : '#05907B',
               marginBottom: 2,
             }}>
               {msg.quoted_from_me ? 'Você' : (contactName || 'Contato')}
@@ -928,7 +928,7 @@ function MessageBubble({
             if (msg.status === 'failed') {
               return <span style={{ fontSize: 12, color: '#FECACA', fontWeight: 700 }} title={msg.error_reason || 'Falha ao enviar'}>⚠ Não enviada</span>
             }
-            const color = msg.status === 'read' ? '#0DD3BF' : 'rgba(255,255,255,0.45)'
+            const color = msg.status === 'read' ? '#2DCBA4' : 'rgba(255,255,255,0.45)'
             const showDouble = msg.status === 'delivered' || msg.status === 'read'
             return (
               <svg width={showDouble ? 18 : 12} height="11" viewBox={showDouble ? '0 0 18 11' : '0 0 12 11'} fill="none">
@@ -1087,12 +1087,12 @@ function QuickReplyManagerModal({ isOpen, onClose, institutionId, userId, onSave
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setShowForm(false)} style={{ padding: '8px 16px', borderRadius: 9, border: '1.5px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
-              <button type="submit" style={{ padding: '8px 16px', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
+              <button type="submit" style={{ padding: '8px 16px', borderRadius: 9, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
             </div>
           </form>
         ) : (
           <>
-            <button onClick={startNew} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 14 }}>
+            <button onClick={startNew} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 14 }}>
               <Plus size={14} /> Nova resposta
             </button>
             {loading ? (
@@ -3145,7 +3145,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           // a borda esquerda de 3px conta na margem
           padding: `11px ${GUTTER}px 11px ${GUTTER - 3}px`,
           cursor: 'pointer',
-          borderLeft: isActive ? '3px solid #00A896' : isStale ? '3px solid #F97316' : isFree ? '3px solid #F59E0B' : '3px solid transparent',
+          borderLeft: isActive ? '3px solid #05907B' : isStale ? '3px solid #F97316' : isFree ? '3px solid #F59E0B' : '3px solid transparent',
           borderBottom: '1px solid #F0FDFB',
           background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : isStale ? '#FFF7ED' : isFree ? '#FFFBEB' : 'transparent',
           transition: 'all 0.15s',
@@ -3158,11 +3158,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           <div style={{
             width: 44, height: 44, borderRadius: '50%',
             background: isActive
-              ? 'linear-gradient(135deg, #00A896, #0DD3BF)'
+              ? 'linear-gradient(135deg, #05907B, #2DCBA4)'
               : getAvatarBgColor(conv.name),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 16, fontWeight: 700, color: 'white',
-            border: isActive ? '2px solid #00A896' : '2px solid transparent',
+            border: isActive ? '2px solid #05907B' : '2px solid transparent',
             boxShadow: isActive ? '0 0 0 3px rgba(0,168,150,0.15)' : 'none',
             transition: 'all 0.2s',
             overflow: 'hidden',
@@ -3193,7 +3193,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
             <span style={{
               fontSize: 13, fontWeight: 700,
-              color: isActive ? '#007A6E' : '#1A2B4A',
+              color: isActive ? '#00695F' : '#1A2B4A',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               maxWidth: 160,
             }}>
@@ -3209,7 +3209,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {preview.icon ? (
-              <span style={{ color: '#00A896', fontStyle: 'italic' }}>
+              <span style={{ color: '#05907B', fontStyle: 'italic' }}>
                 {preview.icon} {preview.text}
               </span>
             ) : preview.text}
@@ -3312,7 +3312,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               {/* Unread badge */}
               {conv.unreadCount > 0 && (
                 <span style={{
-                  background: '#00A896', color: 'white',
+                  background: '#05907B', color: 'white',
                   fontSize: 10, fontWeight: 700,
                   minWidth: 20, height: 20, borderRadius: 999,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -4655,7 +4655,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#F0FDFB' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#00A896] border-t-transparent" />
+        <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#05907B] border-t-transparent" />
       </div>
     )
   }
@@ -4666,7 +4666,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#F0FDFB' }}>
         <div style={{ textAlign: 'center', maxWidth: 360 }}>
           <div style={{ width: 80, height: 80, background: '#E6F7F5', border: '2px solid #D1FAE5', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-            <MessageCircle style={{ width: 40, height: 40, color: '#00A896' }} />
+            <MessageCircle style={{ width: 40, height: 40, color: '#05907B' }} />
           </div>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', marginBottom: 8 }}>WhatsApp não conectado</h2>
           <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24, lineHeight: 1.6 }}>
@@ -4674,9 +4674,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           </p>
           <button
             onClick={() => navigate('/settings')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#00A896', color: '#fff', fontSize: 14, fontWeight: 600, borderRadius: 10, border: 'none', cursor: 'pointer' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
-            onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#05907B', color: '#fff', fontSize: 14, fontWeight: 600, borderRadius: 10, border: 'none', cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#00695F')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#05907B')}
           >
             <Settings style={{ width: 16, height: 16 }} />
             Ir para Configurações
@@ -4717,7 +4717,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               value={newConvName}
               onChange={e => setNewConvName(e.target.value)}
               placeholder="Nome do contato (opcional)"
-              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none mb-3"
+              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none mb-3"
             />
             <input
               type="tel"
@@ -4725,7 +4725,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               onChange={e => setNewConvPhone(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleNewConv() }}
               placeholder="+55 (00) 00000-0000"
-              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none"
+              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none"
             />
             {checkingNewConv && (
               <p className="text-[11px] text-[#94A3B8] mt-1.5 mb-2">Verificando...</p>
@@ -4747,7 +4747,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 Cancelar
               </button>
               <button onClick={handleNewConv} disabled={!newConvPhone.trim()}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#05907B] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 {newConvMatch?.kind === 'conversation' ? 'Abrir conversa' : 'Iniciar'}
               </button>
             </div>
@@ -4823,7 +4823,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 })
                 setShowClientModal(false)
               }}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81]">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#05907B] rounded-lg hover:bg-[#008f81]">
                 Confirmar
               </button>
             </div>
@@ -4858,7 +4858,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>WhatsApp</span>
               </div>
               <button
-                style={{ width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: 'none', cursor: 'pointer', color: '#007A6E', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)', transition: 'transform .15s' }}
+                style={{ width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: 'none', cursor: 'pointer', color: '#00695F', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)', transition: 'transform .15s' }}
                 title="Nova conversa"
                 onClick={() => setShowNewConvModal(true)}
                 onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.07)')}
@@ -4879,7 +4879,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar nome ou número..."
                 style={{ width: '100%', paddingLeft: 34, paddingRight: 12, paddingTop: 8, paddingBottom: 8, fontSize: 13, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 10, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#00A896')}
+                onFocus={e => (e.currentTarget.style.borderColor = '#05907B')}
                 onBlur={e => (e.currentTarget.style.borderColor = '#D1FAE5')}
               />
             </div>
@@ -4989,7 +4989,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 )}
                 {filteredMyConvs.length > 0 && (
                   <>
-                    <div id="wa-sec-minhas" style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div id="wa-sec-minhas" style={{ padding: `10px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#05907B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Minhas conversas
                     </div>
                     {filteredMyConvs.map(conv => renderConvItem(conv))}
@@ -5017,7 +5017,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             {hiddenByFilterCount > 0 && (
               <div style={{ padding: `10px ${GUTTER}px`, fontSize: 11, color: '#94A3B8', textAlign: 'center' }}>
                 {hiddenByFilterCount} {hiddenByFilterCount === 1 ? 'conversa oculta' : 'conversas ocultas'} pelo filtro ·{' '}
-                <button onClick={() => setAssignFilter('all')} style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, color: '#00A896', fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={() => setAssignFilter('all')} style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, color: '#05907B', fontWeight: 600, cursor: 'pointer' }}>
                   Mostrar todas
                 </button>
               </div>
@@ -5059,7 +5059,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>
                       {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                      {activeConv.online && <span style={{ marginLeft: 6, color: '#00A896', fontWeight: 500 }}>• online</span>}
+                      {activeConv.online && <span style={{ marginLeft: 6, color: '#05907B', fontWeight: 500 }}>• online</span>}
                     </p>
                     {(() => {
                       const statusColors: Record<string, { bg: string; dot: string; text: string }> = {
@@ -5109,7 +5109,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                       <button key={btn.key} onClick={btn.onClick} title={btn.title}
                         style={{
                           width: 36, height: 36, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: btn.active ? '#E6F7F5' : '#F0FDFB', color: btn.active ? '#00A896' : '#64748B',
+                          background: btn.active ? '#E6F7F5' : '#F0FDFB', color: btn.active ? '#05907B' : '#64748B',
                           border: 'none', cursor: 'pointer', transition: 'background 0.15s',
                         }}
                         onMouseEnter={e => { if (!btn.active) e.currentTarget.style.background = '#D1FAE5' }}
@@ -5248,7 +5248,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             {!activeConv && conversations.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                 <div style={{ width: 72, height: 72, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                  <MessageCircle style={{ width: 36, height: 36, color: '#00A896' }} />
+                  <MessageCircle style={{ width: 36, height: 36, color: '#05907B' }} />
                 </div>
                 <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2B4A', margin: '0 0 6px' }}>Aguardando mensagens</p>
                 <p style={{ fontSize: 13, color: '#94A3B8', maxWidth: 280, lineHeight: 1.6, margin: 0 }}>
@@ -5259,7 +5259,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             {!activeConv && conversations.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                 <div style={{ width: 64, height: 64, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-                  <MessageCircle style={{ width: 30, height: 30, color: '#00A896' }} />
+                  <MessageCircle style={{ width: 30, height: 30, color: '#05907B' }} />
                 </div>
                 <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2B4A', margin: '0 0 4px' }}>Selecione uma conversa</p>
                 <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>Escolha uma conversa para começar</p>
@@ -5270,7 +5270,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0 10px' }}>
                   <div style={{ flex: 1, height: 1, background: 'linear-gradient(to right, transparent, #D1FAE5, transparent)' }} />
                   <span style={{
-                    fontSize: 11, fontWeight: 600, color: '#007A6E',
+                    fontSize: 11, fontWeight: 600, color: '#00695F',
                     background: '#E6F7F5', border: '1px solid #B2E8E2',
                     padding: '4px 14px', borderRadius: 999,
                     boxShadow: '0 1px 4px rgba(0,168,150,0.12)',
@@ -5294,7 +5294,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             {activeConv?.messages.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '64px 0' }}>
                 <div style={{ width: 56, height: 56, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
-                  <MessageCircle style={{ width: 26, height: 26, color: '#00A896' }} />
+                  <MessageCircle style={{ width: 26, height: 26, color: '#05907B' }} />
                 </div>
                 <p style={{ fontSize: 14, color: '#1A2B4A', margin: '0 0 4px', fontWeight: 500 }}>Nenhuma mensagem ainda</p>
                 <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Envie a primeira mensagem abaixo</p>
@@ -5329,7 +5329,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             >
               <ChevronDown style={{ width: 20, height: 20 }} />
               {unseenCount > 0 && (
-                <span style={{ position: 'absolute', top: -6, right: -4, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: '#00A896', color: '#FFFFFF', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ position: 'absolute', top: -6, right: -4, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: '#05907B', color: '#FFFFFF', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {unseenCount > 99 ? '99+' : unseenCount}
                 </span>
               )}
@@ -5355,7 +5355,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 {templatesForNewConversation.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 10px' }}>
                     Nenhum template aprovado disponível pra nova conversa.
-                    <span style={{ color: '#00A896', cursor: 'pointer', marginLeft: 4 }} onClick={() => navigate('/settings?tab=whatsapp')}>
+                    <span style={{ color: '#05907B', cursor: 'pointer', marginLeft: 4 }} onClick={() => navigate('/settings?tab=whatsapp')}>
                       Configurar templates
                     </span>
                   </p>
@@ -5439,7 +5439,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 12px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>⚡ Respostas rápidas</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <button onClick={() => { closeQuickReplies(); setShowQRManager(true) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#00A896', fontSize: 11, fontWeight: 600 }}>
+                  <button onClick={() => { closeQuickReplies(); setShowQRManager(true) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#05907B', fontSize: 11, fontWeight: 600 }}>
                     Gerenciar minhas
                   </button>
                   <button onClick={closeQuickReplies} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 2 }}>
@@ -5464,7 +5464,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 {quickReplies.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '24px 0' }}>
                     Nenhuma resposta rápida cadastrada.<br />
-                    <span style={{ color: '#00A896', cursor: 'pointer' }} onClick={() => { closeQuickReplies(); navigate('/settings?tab=whatsapp') }}>
+                    <span style={{ color: '#05907B', cursor: 'pointer' }} onClick={() => { closeQuickReplies(); navigate('/settings?tab=whatsapp') }}>
                       Configure em Configurações → WhatsApp
                     </span>
                   </p>
@@ -5478,7 +5478,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                         title={qr.text}
                         onClick={() => { setInputText(qr.text); closeQuickReplies() }}
                         style={{ textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 9, cursor: 'pointer' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#05907B'; e.currentTarget.style.background = '#E6F7F5' }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#FFFFFF' }}
                       >
                         <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.label}</span>
@@ -5535,12 +5535,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>{(pendingFile.size / 1024).toFixed(1)} KB</p>
                   {uploadProgress > 0 && (
                     <div style={{ marginTop: 4, height: 4, background: '#D1FAE5', borderRadius: 9999, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', background: '#00A896', transition: 'width 0.3s', width: `${uploadProgress}%` }} />
+                      <div style={{ height: '100%', background: '#05907B', transition: 'width 0.3s', width: `${uploadProgress}%` }} />
                     </div>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <button onClick={sendPendingFile} style={{ padding: 6, background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                  <button onClick={sendPendingFile} style={{ padding: 6, background: '#05907B', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                     <Send style={{ width: 14, height: 14 }} />
                   </button>
                   <button onClick={() => { setPendingFile(null); setPendingFilePreview(null) }} style={{ padding: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
@@ -5553,9 +5553,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             {/* [FIX P3] Reply preview bar */}
             {replyTo && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F0FDFB', border: '1px solid #B2E8E2', borderRadius: 10, padding: '6px 12px', marginBottom: 8 }}>
-                <CornerUpLeft size={14} color="#00A896" style={{ flexShrink: 0 }} />
+                <CornerUpLeft size={14} color="#05907B" style={{ flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#00A896', marginBottom: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#05907B', marginBottom: 1 }}>
                     {replyTo.from === 'me' ? 'Você' : (activeConv?.name || 'Contato')}
                   </div>
                   <div style={{ fontSize: 12, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -5658,9 +5658,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 {!isAionInbox && (
                   <button
                     onClick={handleClaimConversation}
-                    style={{ background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
+                    style={{ background: '#05907B', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#00695F')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#05907B')}
                   >
                     {activeConv.status === 'closed' ? 'Reabrir e assumir' : 'Assumir conversa'}
                   </button>
@@ -5701,13 +5701,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   </span>
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 28 }}>
                     {waveformBars.map((h, i) => (
-                      <div key={i} style={{ flex: 1, height: `${Math.round(h * 100)}%`, minHeight: 3, background: '#00A896', borderRadius: 2, transition: 'height 0.08s ease' }} />
+                      <div key={i} style={{ flex: 1, height: `${Math.round(h * 100)}%`, minHeight: 3, background: '#05907B', borderRadius: 2, transition: 'height 0.08s ease' }} />
                     ))}
                   </div>
                 </div>
                 {/* Stop → preview */}
                 <button onClick={stopRecordingForPreview} title="Parar e pré-visualizar"
-                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#05907B', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
                   <Check size={20} />
                 </button>
               </div>
@@ -5722,7 +5722,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 <audio src={audioPreviewUrl} controls style={{ flex: 1, height: 36, minWidth: 0 }} />
                 {/* Send */}
                 <button onClick={sendAudio} title="Enviar áudio"
-                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#05907B', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
                   <Send size={18} />
                 </button>
               </div>
@@ -5738,7 +5738,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     <button key={btn.title} onClick={btn.onClick} title={btn.title}
                       style={{
                         padding: 8, borderRadius: 8, flexShrink: 0, background: btn.active ? '#E6F7F5' : 'none',
-                        color: btn.active ? '#00A896' : '#64748B', border: 'none', cursor: 'pointer', transition: 'background 0.15s',
+                        color: btn.active ? '#05907B' : '#64748B', border: 'none', cursor: 'pointer', transition: 'background 0.15s',
                       }}
                       onMouseEnter={e => { if (!btn.active) e.currentTarget.style.background = '#F0FDFB' }}
                       onMouseLeave={e => { if (!btn.active) e.currentTarget.style.background = 'none' }}
@@ -5786,7 +5786,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     boxShadow: '0 1px 4px rgba(0,168,150,0.08) inset',
                     cursor: windowExpired ? 'not-allowed' : 'text',
                   }}
-                  onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#FFFFFF' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#05907B'; e.currentTarget.style.background = '#FFFFFF' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
                 />
                 {!windowExpired && inputText.trim().length >= 3 && (
@@ -5796,17 +5796,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 )}
                 {inputText.trim() ? (
                   <button onClick={handleSend}
-                    style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s, transform 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'scale(1.08)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'scale(1)' }}
+                    style={{ width: 44, height: 44, borderRadius: '50%', background: '#05907B', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s, transform 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#00695F'; e.currentTarget.style.transform = 'scale(1.08)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#05907B'; e.currentTarget.style.transform = 'scale(1)' }}
                   >
                     <Send style={{ width: 18, height: 18 }} />
                   </button>
                 ) : (
                   <button onClick={startRecording} title="Gravar áudio"
-                    style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', color: '#fff', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#007A6E' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#00A896' }}
+                    style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05907B', color: '#fff', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#00695F' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#05907B' }}
                   >
                     <Mic style={{ width: 18, height: 18 }} />
                   </button>
@@ -5870,7 +5870,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           ) : (
             <div style={isMobile ? { position: 'fixed', inset: 0, zIndex: 70, background: '#fff' } : { width: 330, flexShrink: 0, background: '#fff', borderLeft: '1px solid #E3E8F0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32 }}>
               <div style={{ width: 56, height: 56, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-                <MessageCircle style={{ width: 26, height: 26, color: '#00A896' }} />
+                <MessageCircle style={{ width: 26, height: 26, color: '#05907B' }} />
               </div>
               <p style={{ color: '#1A2B4A', fontSize: 13, fontWeight: 600, margin: '0 0 4px' }}>Selecione uma conversa</p>
               <p style={{ color: '#94A3B8', fontSize: 12, margin: 0 }}>para ver os detalhes do contato</p>
@@ -5921,7 +5921,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   matches.forEach(([, n]) => { autoVars[n] = getDefaultVarValue(parseInt(n)) })
                   setTemplateVars(autoVars)
                 }}
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#05907B] outline-none">
                   <option value="">Selecionar template...</option>
                   {templatesForManualSend.length === 0 && (
                     <option value="hello_world">hello_world (padrão Meta)</option>
@@ -5949,7 +5949,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                             value={templateVars[n] || ''}
                             onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
                             placeholder={variableLabel(templateMeta, tmpl.name, n)}
-                            className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
+                            className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#05907B] outline-none"
                           />
                         </div>
                       ))}
@@ -5974,7 +5974,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 Cancelar
               </button>
               <button onClick={handleSendTemplate} disabled={sendingTemplate || (!selectedTemplate && templates.length > 0)}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#05907B] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 {sendingTemplate ? 'Enviando...' : 'Enviar Template'}
               </button>
             </div>
@@ -6003,7 +6003,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   matches.forEach(([, n]) => { autoVars[n] = getDefaultVarValue(parseInt(n)) })
                   setScheduleVars(autoVars)
                 }}
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#05907B] outline-none">
                   <option value="">Selecionar template aprovado...</option>
                   {templatesForScheduled.map(t => (
                     <option key={t.id} value={t.id}>{templateDisplayName(templateMeta, t.name)}</option>
@@ -6031,7 +6031,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                             value={scheduleVars[n] || ''}
                             onChange={e => setScheduleVars(v => ({ ...v, [n]: e.target.value }))}
                             placeholder={variableLabel(templateMeta, tmpl.name, n)}
-                            className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
+                            className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#05907B] outline-none"
                           />
                         </div>
                       ))}
@@ -6046,7 +6046,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   value={scheduleDateTime}
                   min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
                   onChange={e => setScheduleDateTime(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#05907B] outline-none"
                 />
               </div>
             </div>
@@ -6061,7 +6061,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 Cancelar
               </button>
               <button onClick={handleConfirmSchedule} disabled={savingSchedule || !scheduleTemplate || !scheduleDateTime}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#05907B] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 {savingSchedule ? 'Agendando...' : 'Agendar'}
               </button>
             </div>

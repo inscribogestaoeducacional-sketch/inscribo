@@ -1,4 +1,5 @@
-import { Loader2, RefreshCw, AlertCircle } from 'lucide-react'
+import { RefreshCw, AlertCircle } from 'lucide-react'
+import { BrandLoader } from './BrandLoader'
 
 interface LoadingStateProps {
   loading?: boolean
@@ -22,13 +23,7 @@ export function LoadingState({
   minHeight = 200,
 }: LoadingStateProps) {
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight, flexDirection: 'column', gap: 12 }}>
-        <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid #E2E8F0', borderTopColor: '#00A896', animation: 'spin 0.8s linear infinite' }} />
-        <p style={{ color: '#94A3B8', fontSize: 13, margin: 0 }}>Carregando...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-      </div>
-    )
+    return <div style={{ minHeight }}><BrandLoader /></div>
   }
 
   if (error) {

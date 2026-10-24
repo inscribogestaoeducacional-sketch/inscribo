@@ -133,7 +133,7 @@ export default function GestorUpdates() {
                     href={u.media_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ display: 'inline-block', marginTop: 10, fontSize: 13, color: '#00A896', fontWeight: 600, textDecoration: 'none' }}
+                    style={{ display: 'inline-block', marginTop: 10, fontSize: 13, color: '#05907B', fontWeight: 600, textDecoration: 'none' }}
                   >
                     Ver mais →
                   </a>
@@ -151,7 +151,7 @@ export default function GestorUpdates() {
                       onClick={() => markAsRead(u.id)}
                       disabled={markingId === u.id}
                       style={{
-                        padding: '8px 18px', background: '#F0FDFB', color: '#00A896',
+                        padding: '8px 18px', background: '#F0FDFB', color: '#05907B',
                         border: '1px solid #A7F3D0', borderRadius: 10,
                         fontSize: 12, fontWeight: 700, cursor: markingId === u.id ? 'not-allowed' : 'pointer',
                         opacity: markingId === u.id ? 0.6 : 1,

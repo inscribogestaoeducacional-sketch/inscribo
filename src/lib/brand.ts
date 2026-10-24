@@ -1,7 +1,7 @@
 // Identidade visual do Áion Edu nas telas de Configurações (out/2026).
 // O desenho segue o do AION Business (cabeçalho em faixa degradê, cartões brancos
 // com borda fina, raio 14–18, botão principal em degradê), com as cores do Edu:
-// verde-água #00A896 no lugar do azul do Business.
+// verde-água #05907B no lugar do azul do Business.
 export const BRAND = {
   ink: '#1A2B4A',        // títulos e texto principal
   text: '#334155',       // texto de leitura
@@ -9,8 +9,8 @@ export const BRAND = {
   faint: '#94A3B8',      // dicas, placeholders
   line: '#E3E8F0',       // bordas
   bg: '#F5FAF9',         // fundo das páginas
-  primary: '#00A896',    // verde-água do Edu
-  primaryDark: '#007A6E',
+  primary: '#05907B',    // verde-água do Edu
+  primaryDark: '#00695F',
   soft: '#E6F7F5',       // fundo suave
   softer: '#F0FDFB',
   softLine: '#BDEBE4',

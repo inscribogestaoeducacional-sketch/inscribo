@@ -196,7 +196,7 @@ export default function CustomFieldsAdminModal({ institutionId, onClose }: Props
                 </div>
               )}
               <button onClick={handleAdd} disabled={saving}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 9, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 9, border: 'none', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
                 {saving ? 'Salvando...' : 'Adicionar campo'}
               </button>

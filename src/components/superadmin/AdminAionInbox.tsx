@@ -175,7 +175,7 @@ function SettingsTab({ aionPlatformId }: { aionPlatformId: string }) {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300 }}>
-        <Loader2 style={{ width: 28, height: 28, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+        <Loader2 style={{ width: 28, height: 28, color: '#05907B', animation: 'spin 1s linear infinite' }} />
       </div>
     )
   }
@@ -219,7 +219,7 @@ function SettingsTab({ aionPlatformId }: { aionPlatformId: string }) {
               <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{desc}</div>
             </div>
             {flow[key]
-              ? <ToggleRight style={{ width: 32, height: 32, color: '#00A896' }} />
+              ? <ToggleRight style={{ width: 32, height: 32, color: '#05907B' }} />
               : <ToggleLeft  style={{ width: 32, height: 32, color: '#94A3B8' }} />}
           </div>
         ))}
@@ -256,9 +256,9 @@ function SettingsTab({ aionPlatformId }: { aionPlatformId: string }) {
               style={{
                 padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
                 border: '1.5px solid',
-                borderColor: flow.working_days.includes(d.key) ? '#00A896' : '#E2E8F0',
+                borderColor: flow.working_days.includes(d.key) ? '#05907B' : '#E2E8F0',
                 background: flow.working_days.includes(d.key) ? '#E6F7F5' : '#F8FAFC',
-                color: flow.working_days.includes(d.key) ? '#00A896' : '#64748B',
+                color: flow.working_days.includes(d.key) ? '#05907B' : '#64748B',
                 cursor: 'pointer',
               }}>
               {d.label}
@@ -302,7 +302,7 @@ function SettingsTab({ aionPlatformId }: { aionPlatformId: string }) {
           </div>
           <div onClick={() => setFlow({ ...flow, satisfaction_enabled: !flow.satisfaction_enabled })} style={{ cursor: 'pointer' }}>
             {flow.satisfaction_enabled
-              ? <ToggleRight style={{ width: 28, height: 28, color: '#00A896' }} />
+              ? <ToggleRight style={{ width: 28, height: 28, color: '#05907B' }} />
               : <ToggleLeft  style={{ width: 28, height: 28, color: '#94A3B8' }} />}
           </div>
         </div>
@@ -324,7 +324,7 @@ function SettingsTab({ aionPlatformId }: { aionPlatformId: string }) {
       <button onClick={save} disabled={saving}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          padding: '10px 24px', background: saved ? '#10B981' : '#00A896',
+          padding: '10px 24px', background: saved ? '#10B981' : '#05907B',
           color: '#fff', fontSize: 14, fontWeight: 700, borderRadius: 10,
           border: 'none', cursor: saving ? 'not-allowed' : 'pointer',
           opacity: saving ? 0.7 : 1, transition: 'background 0.2s',
@@ -432,7 +432,7 @@ function QuickRepliesSection({ platformWhatsappId }: { platformWhatsappId: strin
           <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Mensagens prontas pra inserir na conversa com um clique</div>
         </div>
         <button onClick={startNew}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer', flexShrink: 0 }}>
           <Plus style={{ width: 16, height: 16 }} /> Nova Resposta
         </button>
       </div>
@@ -463,7 +463,7 @@ function QuickRepliesSection({ platformWhatsappId }: { platformWhatsappId: strin
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={saveItem} disabled={saving || !form.title.trim() || !form.message.trim()}
               style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: '#00A896', color: '#fff',
+                display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: '#05907B', color: '#fff',
                 fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none',
                 cursor: (saving || !form.title.trim() || !form.message.trim()) ? 'not-allowed' : 'pointer',
                 opacity: (saving || !form.title.trim() || !form.message.trim()) ? 0.6 : 1,
@@ -481,7 +481,7 @@ function QuickRepliesSection({ platformWhatsappId }: { platformWhatsappId: strin
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
-          <Loader2 style={{ width: 22, height: 22, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+          <Loader2 style={{ width: 22, height: 22, color: '#05907B', animation: 'spin 1s linear infinite' }} />
         </div>
       ) : items.length === 0 ? (
         !showForm && (
@@ -498,7 +498,7 @@ function QuickRepliesSection({ platformWhatsappId }: { platformWhatsappId: strin
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{item.title}</span>
                   {item.shortcut && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '1px 8px', borderRadius: 20 }}>{item.shortcut}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#05907B', background: '#E6F7F5', padding: '1px 8px', borderRadius: 20 }}>{item.shortcut}</span>
                   )}
                 </div>
                 <div style={{ fontSize: 12, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.message}</div>
@@ -788,7 +788,7 @@ function CampaignsTab() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ width: 44, height: 44, background: '#E6F7F5', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <TrendingUp style={{ width: 22, height: 22, color: '#00A896' }} />
+              <TrendingUp style={{ width: 22, height: 22, color: '#05907B' }} />
             </div>
             <div>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{totalInPeriod}</div>
@@ -802,7 +802,7 @@ function CampaignsTab() {
               <button key={p} onClick={() => setPeriod(p)}
                 style={{
                   padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
-                  background: period === p ? '#00A896' : 'transparent', color: period === p ? '#fff' : '#64748B',
+                  background: period === p ? '#05907B' : 'transparent', color: period === p ? '#fff' : '#64748B',
                 }}>
                 {PERIOD_LABELS[p]}
               </button>
@@ -815,7 +815,7 @@ function CampaignsTab() {
         <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, maxWidth: 260 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', flex: 1 }}>Raio-X Estratégico</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>INEP</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#05907B', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>INEP</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
             <Users style={{ width: 13, height: 13, color: '#94A3B8' }} />
@@ -903,7 +903,7 @@ function CampaignsTab() {
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {keyword.label}
                   </span>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#05907B', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>
                     {keyword.keyword}
                   </span>
                 </div>
@@ -913,7 +913,7 @@ function CampaignsTab() {
                     <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>conversa{convCount === 1 ? '' : 's'}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: '#00A896', lineHeight: 1 }}>{leadCount}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#05907B', lineHeight: 1 }}>{leadCount}</div>
                     <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>lead{leadCount === 1 ? '' : 's'}</div>
                   </div>
                 </div>
@@ -942,7 +942,7 @@ function CampaignsTab() {
           <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>Cada keyword gera um link/QR Code para o WhatsApp da Áion</div>
         </div>
         <button onClick={() => setShowForm(v => !v)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer' }}>
           <Plus style={{ width: 16, height: 16 }} /> Nova Keyword
         </button>
       </div>
@@ -994,7 +994,7 @@ function CampaignsTab() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 20 }}>
               <input type="checkbox" id="create_lead" checked={form.create_lead}
                 onChange={e => setForm({ ...form, create_lead: e.target.checked })}
-                style={{ width: 16, height: 16, accentColor: '#00A896' }} />
+                style={{ width: 16, height: 16, accentColor: '#05907B' }} />
               <label htmlFor="create_lead" style={{ fontSize: 13, color: '#1A2B4A', cursor: 'pointer' }}>
                 Criar lead automaticamente
               </label>
@@ -1002,7 +1002,7 @@ function CampaignsTab() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 20, gridColumn: '1 / -1' }}>
               <input type="checkbox" id="cta_enabled" checked={form.cta_enabled}
                 onChange={e => setForm({ ...form, cta_enabled: e.target.checked })}
-                style={{ width: 16, height: 16, accentColor: '#00A896' }} />
+                style={{ width: 16, height: 16, accentColor: '#05907B' }} />
               <label htmlFor="cta_enabled" style={{ fontSize: 13, color: '#1A2B4A', cursor: 'pointer' }}>
                 Adicionar botão CTA (link) na resposta automática
               </label>
@@ -1028,7 +1028,7 @@ function CampaignsTab() {
               const disabled = saving || !form.keyword.trim() || !form.label.trim() || ctaIncomplete
               return (
                 <button onClick={saveKeyword} disabled={disabled}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
                   {saving ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Check style={{ width: 14, height: 14 }} />}
                   Salvar
                 </button>
@@ -1045,7 +1045,7 @@ function CampaignsTab() {
       {/* List */}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-          <Loader2 style={{ width: 28, height: 28, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+          <Loader2 style={{ width: 28, height: 28, color: '#05907B', animation: 'spin 1s linear infinite' }} />
         </div>
       ) : keywords.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#94A3B8', fontSize: 14 }}>
@@ -1057,12 +1057,12 @@ function CampaignsTab() {
             <div key={kw.id}
               style={{ background: '#fff', border: `1.5px solid ${kw.is_active ? '#E2E8F0' : '#F1F5F9'}`, borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'flex-start', gap: 16, opacity: kw.is_active ? 1 : 0.55 }}>
               <div style={{ width: 40, height: 40, background: '#E6F7F5', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <QrCode style={{ width: 20, height: 20, color: '#00A896' }} />
+                <QrCode style={{ width: 20, height: 20, color: '#05907B' }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>{kw.label}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 8px', borderRadius: 20 }}>{kw.keyword}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#05907B', background: '#E6F7F5', padding: '2px 8px', borderRadius: 20 }}>{kw.keyword}</span>
                   {kw.tag && (
                     <span style={{ fontSize: 11, color: '#6366F1', background: '#EEF2FF', padding: '2px 8px', borderRadius: 20 }}>
                       {kw.tag}
@@ -1086,7 +1086,7 @@ function CampaignsTab() {
                 </button>
                 <button onClick={() => toggleActive(kw)} title={kw.is_active ? 'Desativar' : 'Ativar'}
                   style={{ width: 34, height: 34, border: '1.5px solid #E2E8F0', borderRadius: 8, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {kw.is_active ? <ToggleRight style={{ width: 16, height: 16, color: '#00A896' }} /> : <ToggleLeft style={{ width: 16, height: 16, color: '#94A3B8' }} />}
+                  {kw.is_active ? <ToggleRight style={{ width: 16, height: 16, color: '#05907B' }} /> : <ToggleLeft style={{ width: 16, height: 16, color: '#94A3B8' }} />}
                 </button>
                 <button onClick={() => deleteKeyword(kw.id)} title="Excluir"
                   style={{ width: 34, height: 34, border: '1.5px solid #FEE2E2', borderRadius: 8, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1107,7 +1107,7 @@ function CampaignsTab() {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>{detailKeyword.label}</h2>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 8px', borderRadius: 20 }}>{detailKeyword.keyword}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#05907B', background: '#E6F7F5', padding: '2px 8px', borderRadius: 20 }}>{detailKeyword.keyword}</span>
                 </div>
                 <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 3 }}>{detailKeyword.whatsapp_link}</div>
               </div>
@@ -1118,7 +1118,7 @@ function CampaignsTab() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
               {[
                 { label: 'Toques (QR/link)', value: detailHitsLoading ? '…' : String(detailHits.length), icon: QrCode, color: '#6366F1', bg: '#EEF2FF' },
-                { label: 'Conversas únicas', value: String(detailConvs.length), icon: MessageCircle, color: '#00A896', bg: '#E6F7F5' },
+                { label: 'Conversas únicas', value: String(detailConvs.length), icon: MessageCircle, color: '#05907B', bg: '#E6F7F5' },
                 { label: 'Leads convertidos', value: String(detailLeads.length), icon: Users, color: '#7C3AED', bg: '#F5F3FF' },
                 { label: 'Conversa → lead', value: detailConversionPct !== null ? `${detailConversionPct}%` : '—', icon: Percent, color: '#D97706', bg: '#FFFBEB' },
               ].map(c => (
@@ -1143,7 +1143,7 @@ function CampaignsTab() {
                     <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
                     <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Line type="monotone" dataKey="conversas" name="Conversas" stroke="#00A896" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="conversas" name="Conversas" stroke="#05907B" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
                     <Line type="monotone" dataKey="leads" name="Leads" stroke="#7C3AED" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -1629,7 +1629,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
             <Upload style={{ width: 15, height: 15 }} /> Importar CSV
           </button>
           <button onClick={() => { setAddForm({ phone: '', name: '', email: '', notes: '' }); setAddError(''); setShowAddModal(true) }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer' }}>
             <Plus style={{ width: 16, height: 16 }} /> Adicionar contato
           </button>
         </div>
@@ -1661,7 +1661,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
               Limpar seleção
             </button>
             <button onClick={() => { setBulkTagNames([]); setShowBulkTagModal(true) }}
-              style={{ padding: '7px 14px', fontSize: 12, fontWeight: 700, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+              style={{ padding: '7px 14px', fontSize: 12, fontWeight: 700, color: '#fff', background: '#05907B', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
               Aplicar tag aos selecionados
             </button>
           </div>
@@ -1672,7 +1672,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
       <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-            <Loader2 style={{ width: 26, height: 26, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+            <Loader2 style={{ width: 26, height: 26, color: '#05907B', animation: 'spin 1s linear infinite' }} />
           </div>
         ) : contacts.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#94A3B8', fontSize: 14 }}>
@@ -1682,11 +1682,11 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '9px 18px', borderBottom: '1px solid #F1F5F9', background: '#F8FAFC' }}>
               <input type="checkbox" checked={selectedIds.size > 0 && selectedIds.size === contacts.length} onChange={toggleSelectAll}
-                style={{ width: 15, height: 15, accentColor: '#00A896', cursor: 'pointer', flexShrink: 0 }} />
+                style={{ width: 15, height: 15, accentColor: '#05907B', cursor: 'pointer', flexShrink: 0 }} />
               <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Selecionar carregados ({contacts.length})</span>
               {total > contacts.length && (
                 <button onClick={selectAllMatchingFilter} disabled={selectingAllFilter}
-                  style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#00A896', fontSize: 11, fontWeight: 700, cursor: selectingAllFilter ? 'not-allowed' : 'pointer', padding: 0 }}>
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#05907B', fontSize: 11, fontWeight: 700, cursor: selectingAllFilter ? 'not-allowed' : 'pointer', padding: 0 }}>
                   {selectingAllFilter ? 'Buscando...' : `Selecionar todos os ${total} contatos deste filtro`}
                 </button>
               )}
@@ -1695,7 +1695,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
               <div key={c.id} onClick={() => setEditingContact(c)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', opacity: c.opted_out ? 0.55 : 1 }}>
                 <input type="checkbox" checked={selectedIds.has(c.id)} onClick={e => e.stopPropagation()} onChange={() => toggleSelect(c.id)}
-                  style={{ width: 15, height: 15, accentColor: '#00A896', cursor: 'pointer', flexShrink: 0 }} />
+                  style={{ width: 15, height: 15, accentColor: '#05907B', cursor: 'pointer', flexShrink: 0 }} />
                 <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#3B82F6', fontWeight: 700, fontSize: 13 }}>
                   {(c.name || c.phone).slice(0, 1).toUpperCase()}
                 </div>
@@ -1711,7 +1711,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#7C3AED', background: '#EDE9FE', padding: '2px 7px', borderRadius: 20 }}>Lead</span>
                     )}
                     {c.conversation_id && (
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20 }}>Já conversou</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#05907B', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20 }}>Já conversou</span>
                     )}
                   </div>
                   <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{formatContactPhone(c.phone)}{c.email ? ` · ${c.email}` : ''}</div>
@@ -1775,7 +1775,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
               <div style={{ marginTop: 12, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: '#DC2626' }}>{addError}</div>
             )}
             <button onClick={handleAddContact} disabled={addSaving || !addForm.phone.trim()}
-              style={{ marginTop: 16, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: (addSaving || !addForm.phone.trim()) ? 'not-allowed' : 'pointer', opacity: (addSaving || !addForm.phone.trim()) ? 0.6 : 1 }}>
+              style={{ marginTop: 16, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px', background: '#05907B', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: (addSaving || !addForm.phone.trim()) ? 'not-allowed' : 'pointer', opacity: (addSaving || !addForm.phone.trim()) ? 0.6 : 1 }}>
               {addSaving ? <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} /> : <Check style={{ width: 15, height: 15 }} />}
               Adicionar
             </button>
@@ -1853,7 +1853,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
                   </table>
                 </div>
                 <button onClick={handleImport} disabled={importLoading}
-                  style={{ marginTop: 12, width: '100%', padding: 12, background: '#00A896', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: importLoading ? 'not-allowed' : 'pointer', opacity: importLoading ? 0.7 : 1 }}>
+                  style={{ marginTop: 12, width: '100%', padding: 12, background: '#05907B', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: importLoading ? 'not-allowed' : 'pointer', opacity: importLoading ? 0.7 : 1 }}>
                   {importLoading ? 'Importando...' : `Importar ${importRows.length} contatos`}
                 </button>
               </div>
@@ -1949,7 +1949,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
                 Cancelar
               </button>
               <button onClick={applyBulkTags} disabled={bulkTagSaving || bulkTagNames.length === 0}
-                style={{ padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (bulkTagSaving || bulkTagNames.length === 0) ? 0.5 : 1 }}>
+                style={{ padding: '9px 18px', border: 'none', borderRadius: 9, background: '#05907B', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (bulkTagSaving || bulkTagNames.length === 0) ? 0.5 : 1 }}>
                 {bulkTagSaving ? 'Aplicando...' : 'Aplicar'}
               </button>
             </div>
@@ -2871,7 +2871,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
   const RECIPIENT_STATUS_CFG: Record<AionBroadcastRecipient['status'], { label: string; color: string }> = {
     pending: { label: 'Pendente', color: '#94A3B8' },
-    sent:    { label: 'Enviado',  color: '#00A896' },
+    sent:    { label: 'Enviado',  color: '#05907B' },
     failed:  { label: 'Falhou',   color: '#DC2626' },
     skipped: { label: 'Ignorado', color: '#D97706' },
   }
@@ -2884,14 +2884,14 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
           <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>Disparo em massa de templates aprovados para segmentos de contatos</div>
         </div>
         <button onClick={openCreateModal}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#05907B', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer' }}>
           <Plus style={{ width: 16, height: 16 }} /> Nova transmissão
         </button>
       </div>
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-          <Loader2 style={{ width: 26, height: 26, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+          <Loader2 style={{ width: 26, height: 26, color: '#05907B', animation: 'spin 1s linear infinite' }} />
         </div>
       ) : broadcasts.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#94A3B8', fontSize: 14, background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12 }}>
@@ -2924,7 +2924,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                 <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>Template: {b.template_name}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ flex: 1, height: 6, background: '#F1F5F9', borderRadius: 20, overflow: 'hidden' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: b.failed_count > 0 ? '#F59E0B' : '#00A896', transition: 'width 0.3s' }} />
+                    <div style={{ width: `${pct}%`, height: '100%', background: b.failed_count > 0 ? '#F59E0B' : '#05907B', transition: 'width 0.3s' }} />
                   </div>
                   <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600, flexShrink: 0 }}>
                     {processed}/{b.total_recipients} {b.failed_count > 0 ? `(${b.failed_count} falha${b.failed_count === 1 ? '' : 's'})` : ''}
@@ -3002,7 +3002,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
               <label style={labelStyle}>Template aprovado *</label>
               {loadingTemplates ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}>
-                  <Loader2 style={{ width: 18, height: 18, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                  <Loader2 style={{ width: 18, height: 18, color: '#05907B', animation: 'spin 1s linear infinite' }} />
                 </div>
               ) : (
                 <>
@@ -3046,7 +3046,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Variáveis do template</label>
                 {templateVarNumbers.includes('1') && (
-                  <p style={{ fontSize: 12, color: '#00A896', background: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: 8, padding: '8px 11px', margin: '0 0 8px' }}>
+                  <p style={{ fontSize: 12, color: '#05907B', background: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: 8, padding: '8px 11px', margin: '0 0 8px' }}>
                     Variável <strong>1</strong> é preenchida automaticamente com o nome de cada contato ("{FALLBACK_CONTACT_NAME}" se não houver nome cadastrado).
                   </p>
                 )}
@@ -3101,14 +3101,14 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                 <input type="checkbox" checked={audienceMode === 'manual'}
                   onChange={e => setAudienceMode(e.target.checked ? 'manual' : 'tags')}
-                  style={{ width: 15, height: 15, accentColor: '#00A896', cursor: 'pointer' }} />
+                  style={{ width: 15, height: 15, accentColor: '#05907B', cursor: 'pointer' }} />
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>Selecionar manualmente a partir destes contatos</span>
               </label>
               {audienceMode === 'manual' && (
                 <div style={{ marginTop: 10, border: '1.5px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
                   {loadingManualCandidates ? (
                     <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}>
-                      <Loader2 style={{ width: 18, height: 18, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                      <Loader2 style={{ width: 18, height: 18, color: '#05907B', animation: 'spin 1s linear infinite' }} />
                     </div>
                   ) : manualCandidates.length === 0 ? (
                     <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: '#94A3B8' }}>Nenhum contato elegível com esse filtro.</div>
@@ -3121,7 +3121,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
                         <input type="checkbox" checked={manualSelectedIds.size > 0 && manualSelectedIds.size === manualCandidates.length} onChange={toggleManualSelectAll}
-                          style={{ width: 14, height: 14, accentColor: '#00A896', cursor: 'pointer' }} />
+                          style={{ width: 14, height: 14, accentColor: '#05907B', cursor: 'pointer' }} />
                         <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           Selecionar todos ({manualCandidates.length}{manualCandidates.length === MANUAL_CANDIDATES_LIMIT ? '+' : ''})
                           {manualSearch.trim() && ` — ${filteredManualCandidates.length} encontrado(s)`}
@@ -3133,7 +3133,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                         ) : filteredManualCandidates.map(c => (
                           <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', borderBottom: '1px solid #F8FAFC', cursor: 'pointer' }}>
                             <input type="checkbox" checked={manualSelectedIds.has(c.id)} onChange={() => toggleManualContact(c.id)}
-                              style={{ width: 14, height: 14, accentColor: '#00A896', cursor: 'pointer', flexShrink: 0 }} />
+                              style={{ width: 14, height: 14, accentColor: '#05907B', cursor: 'pointer', flexShrink: 0 }} />
                             <span style={{ fontSize: 12, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {c.name || formatContactPhone(c.phone)}
                             </span>
@@ -3147,8 +3147,8 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#F0FDFA', borderRadius: 9, marginBottom: selectedTemplate ? 8 : 14, border: '1px solid #CCFBF1' }}>
-              {audienceMode === 'tags' && audienceLoading && <div style={{ width: 12, height: 12, border: '2px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
-              <p style={{ margin: 0, fontSize: 13, color: '#00A896', fontWeight: 600 }}>
+              {audienceMode === 'tags' && audienceLoading && <div style={{ width: 12, height: 12, border: '2px solid #05907B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
+              <p style={{ margin: 0, fontSize: 13, color: '#05907B', fontWeight: 600 }}>
                 {audienceMode === 'tags' && audienceLoading ? 'Calculando...' : `${effectiveAudienceCount} contato(s) elegível(is) — opt-out excluído`}
               </p>
             </div>
@@ -3193,7 +3193,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
               </button>
               <button onClick={handleCreateBroadcast}
                 disabled={creating || !campaignName.trim() || !templateName || effectiveAudienceCount === 0 || uploadingHeaderMedia || (!!getTemplateHeaderMediaFormat(selectedTemplate) && !headerMediaUrl)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (creating || !campaignName.trim() || !templateName || effectiveAudienceCount === 0) ? 0.5 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#05907B', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (creating || !campaignName.trim() || !templateName || effectiveAudienceCount === 0) ? 0.5 : 1 }}>
                 {creating ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Send style={{ width: 14, height: 14 }} />}
                 {creating
                   ? (editingBroadcastId ? 'Salvando...' : 'Criando...')
@@ -3223,7 +3223,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
             </div>
             <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 12 }}>
               Template: {detailBroadcast.template_name} · {liveCounts ? liveCounts.sent : detailBroadcast.sent_count} enviados, {liveCounts ? liveCounts.failed : detailBroadcast.failed_count} falhas, de {detailBroadcast.total_recipients}
-              {liveCounts && detailBroadcast.status === 'sending' && <span style={{ color: '#00A896' }}> · ao vivo</span>}
+              {liveCounts && detailBroadcast.status === 'sending' && <span style={{ color: '#05907B' }}> · ao vivo</span>}
             </div>
 
             {/* Métricas visuais — status de envio (rosca, de liveCounts) +
@@ -3351,7 +3351,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
             )}
             {loadingRecipients ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}>
-                <Loader2 style={{ width: 22, height: 22, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                <Loader2 style={{ width: 22, height: 22, color: '#05907B', animation: 'spin 1s linear infinite' }} />
               </div>
             ) : (
               <>
@@ -3387,7 +3387,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                           {loadingMoreRecipients ? 'Carregando...' : `+${Math.min(RECIPIENTS_PAGE_SIZE, detailBroadcast.total_recipients - recipients.length)}`}
                         </button>
                         <button onClick={handleLoadAllRecipients} disabled={loadingMoreRecipients || loadingAllRecipients}
-                          style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#00A896', background: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: 7, cursor: (loadingMoreRecipients || loadingAllRecipients) ? 'not-allowed' : 'pointer', opacity: (loadingMoreRecipients || loadingAllRecipients) ? 0.6 : 1 }}>
+                          style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#05907B', background: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: 7, cursor: (loadingMoreRecipients || loadingAllRecipients) ? 'not-allowed' : 'pointer', opacity: (loadingMoreRecipients || loadingAllRecipients) ? 0.6 : 1 }}>
                           {loadingAllRecipients ? 'Carregando...' : 'Ver todos de uma vez'}
                         </button>
                       </div>
@@ -3445,16 +3445,16 @@ export default function AdminAionInbox() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#F0FDFB' }}>
           <div style={{ textAlign: 'center', maxWidth: 360 }}>
             <div style={{ width: 80, height: 80, background: '#E6F7F5', border: '2px solid #D1FAE5', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-              <MessageCircle style={{ width: 40, height: 40, color: '#00A896' }} />
+              <MessageCircle style={{ width: 40, height: 40, color: '#05907B' }} />
             </div>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', marginBottom: 8 }}>WhatsApp Áion não configurado</h2>
             <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24, lineHeight: 1.6 }}>
               Configure o WhatsApp corporativo da Áion nas Configurações para acessar o inbox.
             </p>
             <button onClick={() => navigate('/super-admin/settings')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#00A896', color: '#fff', fontSize: 14, fontWeight: 600, borderRadius: 10, border: 'none', cursor: 'pointer' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#05907B', color: '#fff', fontSize: 14, fontWeight: 600, borderRadius: 10, border: 'none', cursor: 'pointer' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#00695F')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#05907B')}>
               <Settings style={{ width: 16, height: 16 }} />
               Ir para Configurações
             </button>
@@ -3485,8 +3485,8 @@ export default function AdminAionInbox() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 7,
                   padding: '9px 18px', fontSize: 13, fontWeight: active ? 700 : 500,
-                  color: active ? '#00A896' : '#64748B', background: 'transparent',
-                  border: 'none', borderBottom: active ? '2.5px solid #00A896' : '2.5px solid transparent',
+                  color: active ? '#05907B' : '#64748B', background: 'transparent',
+                  border: 'none', borderBottom: active ? '2.5px solid #05907B' : '2.5px solid transparent',
                   marginBottom: -1, cursor: 'pointer', borderRadius: '6px 6px 0 0', transition: 'color 0.15s',
                 }}>
                 <Icon style={{ width: 15, height: 15 }} />
@@ -3503,7 +3503,7 @@ export default function AdminAionInbox() {
             aionPlatformId
               ? <FlowEditor institutionId={aionPlatformId} ownerType="platform" onClose={() => setTab('inbox')} />
               : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                  <Loader2 style={{ width: 28, height: 28, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                  <Loader2 style={{ width: 28, height: 28, color: '#05907B', animation: 'spin 1s linear infinite' }} />
                 </div>
           )}
           {tab === 'qrcodes'    && <div style={{ overflowY: 'auto', height: '100%' }}><CampaignsTab /></div>}

@@ -111,7 +111,7 @@ export default function AdminUpdates() {
           </div>
           <button
             onClick={() => { setForm(EMPTY_FORM); setError(''); setModal(true) }}
-            style={{ padding: '10px 20px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+            style={{ padding: '10px 20px', background: '#05907B', color: '#fff', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
           >
             + Nova Atualização
           </button>
@@ -138,7 +138,7 @@ export default function AdminUpdates() {
                       <div style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 4 }}>{u.title}</div>
                       <div style={{ fontSize: 13, color: '#64748B', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{u.content}</div>
                       {u.media_url && (
-                        <a href={u.media_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#00A896', marginTop: 6, display: 'inline-block' }}>
+                        <a href={u.media_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#05907B', marginTop: 6, display: 'inline-block' }}>
                           Ver mídia →
                         </a>
                       )}
@@ -234,7 +234,7 @@ export default function AdminUpdates() {
                 <button type="button" onClick={() => setModal(false)} style={{ padding: '10px 20px', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                   Cancelar
                 </button>
-                <button type="submit" disabled={saving} style={{ padding: '10px 20px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+                <button type="submit" disabled={saving} style={{ padding: '10px 20px', background: '#05907B', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
                   {saving ? 'Publicando...' : 'Publicar para todas as escolas'}
                 </button>
               </div>

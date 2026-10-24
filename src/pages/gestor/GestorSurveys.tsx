@@ -141,7 +141,7 @@ function ReenrollmentBadge({ value }: { value: string | undefined | null }) {
 
 // ─── pills de filtro rápido por rematrícula (aba "Respostas") ─────────
 const REENROLL_PILL_ACCENT: Record<'' | ReenrollBucket, string> = {
-  '':      '#00A896',
+  '':      '#05907B',
   sim:     '#10B981',
   talvez:  '#F59E0B',
   nao:     '#EF4444',
@@ -388,7 +388,7 @@ function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]
                       {texts.length > 5 && (
                         <button
                           onClick={() => setExpandedText(prev => ({ ...prev, [q.id]: !isExpanded }))}
-                          style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', color: '#00A896', fontSize: 12, fontWeight: 600, padding: '4px 0' }}
+                          style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', color: '#05907B', fontSize: 12, fontWeight: 600, padding: '4px 0' }}
                         >
                           {isExpanded ? 'Mostrar menos' : `Ver todas (${texts.length})`}
                         </button>
@@ -468,7 +468,7 @@ function SortableTh({ label, column, sortColumn, sortDir, onSort }: {
     <th
       onClick={column ? () => onSort(column) : undefined}
       style={{
-        padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: active ? '#00A896' : '#64748B',
+        padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: active ? '#05907B' : '#64748B',
         borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', cursor: column ? 'pointer' : 'default', userSelect: 'none',
       }}
     >
@@ -1408,8 +1408,8 @@ export default function GestorSurveys() {
               onClick={() => setActiveTab(t.key)}
               style={{
                 padding: '10px 18px', background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, color: activeTab === t.key ? '#00A896' : '#94A3B8',
-                borderBottom: activeTab === t.key ? '2px solid #00A896' : '2px solid transparent',
+                fontSize: 13, fontWeight: 700, color: activeTab === t.key ? '#05907B' : '#94A3B8',
+                borderBottom: activeTab === t.key ? '2px solid #05907B' : '2px solid transparent',
                 marginBottom: -1,
               }}
             >
@@ -1683,7 +1683,7 @@ export default function GestorSurveys() {
         {/* FAB */}
         <button
           onClick={openNewModal}
-          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}
+          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}
         >
           <Plus size={24} />
         </button>
@@ -1707,7 +1707,7 @@ export default function GestorSurveys() {
               <button
                 onClick={createSurvey}
                 disabled={saving || !form.title.trim()}
-                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: saving || !form.title.trim() ? '#94A3B8' : '#00A896', color: 'white', fontWeight: 700, fontSize: 15, cursor: saving || !form.title.trim() ? 'not-allowed' : 'pointer', minHeight: 48 }}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: saving || !form.title.trim() ? '#94A3B8' : '#05907B', color: 'white', fontWeight: 700, fontSize: 15, cursor: saving || !form.title.trim() ? 'not-allowed' : 'pointer', minHeight: 48 }}
               >
                 {saving ? 'Criando...' : 'Criar pesquisa'}
               </button>
@@ -1729,7 +1729,7 @@ export default function GestorSurveys() {
               </div>
               <button
                 onClick={() => { copyLink(showLinkModal.survey.survey_token); setShowLinkModal(null) }}
-                style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: '#00A896', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', minHeight: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: '#05907B', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', minHeight: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               >
                 <Copy size={16} /> Copiar link
               </button>
@@ -1758,7 +1758,7 @@ export default function GestorSurveys() {
             <button onClick={createStaffSurvey} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
               <Users size={16} /> Pesquisa dos colaboradores
             </button>
-            <button onClick={openNewModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#007A6E', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
+            <button onClick={openNewModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#00695F', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
               <Plus size={16} /> Nova pesquisa
             </button>
           </>} />
@@ -1783,14 +1783,14 @@ export default function GestorSurveys() {
       <div style={card}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60, color: '#94A3B8' }}>
-            <div style={{ width: 32, height: 32, border: '3px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+            <div style={{ width: 32, height: 32, border: '3px solid #05907B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
             Carregando...
           </div>
         ) : surveys.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 64 }}>
             <ClipboardList size={48} color="#CBD5E1" style={{ margin: '0 auto 16px', display: 'block' }} />
             <p style={{ fontSize: 16, fontWeight: 600, color: '#94A3B8', margin: '0 0 8px' }}>Nenhuma pesquisa criada ainda</p>
-            <button onClick={openNewModal} style={btn('#00A896')}>
+            <button onClick={openNewModal} style={btn('#05907B')}>
               <Plus size={15} /> Criar primeira pesquisa
             </button>
           </div>
@@ -1810,7 +1810,7 @@ export default function GestorSurveys() {
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{s.title}</p>
                     {s.description && <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>{s.description}</p>}
                     {s.survey_mode === 'custom' && (
-                      <p style={{ fontSize: 11, color: '#00A896', margin: '4px 0 0', fontWeight: 600 }}>✦ Pesquisa personalizada</p>
+                      <p style={{ fontSize: 11, color: '#05907B', margin: '4px 0 0', fontWeight: 600 }}>✦ Pesquisa personalizada</p>
                     )}
                   </td>
                   <td style={{ padding: '14px 16px' }}><StatusBadge status={s.status} /></td>
@@ -1881,7 +1881,7 @@ export default function GestorSurveys() {
                     onClick={() => { setPendingMode('custom'); setNewModalStep('form') }}
                     style={{ textAlign: 'left', padding: 20, borderRadius: 14, border: '2px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer' }}
                   >
-                    <Sparkles size={22} color="#00A896" style={{ marginBottom: 10 }} />
+                    <Sparkles size={22} color="#05907B" style={{ marginBottom: 10 }} />
                     <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 4px' }}>Criar minha própria pesquisa</p>
                     <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Personalize as perguntas e os tipos de resposta</p>
                   </button>
@@ -1892,7 +1892,7 @@ export default function GestorSurveys() {
                 <button onClick={() => setNewModalStep('mode')} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 12, padding: 0 }}>
                   ← Trocar tipo de pesquisa
                 </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: pendingMode === 'custom' ? '#00A896' : '#F97316' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: pendingMode === 'custom' ? '#05907B' : '#F97316' }}>
                   {pendingMode === 'custom' ? <Sparkles size={14} /> : <ClipboardList size={14} />}
                   {pendingMode === 'custom' ? 'Pesquisa personalizada' : 'Pesquisa padrão do sistema'}
                 </div>
@@ -1912,7 +1912,7 @@ export default function GestorSurveys() {
                     <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Formulário pedirá nome e série antes das perguntas</p>
                   </div>
                   <button onClick={() => setForm(f => ({ ...f, askId: !f.askId }))}
-                    style={{ width: 44, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', background: form.askId ? '#00A896' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
+                    style={{ width: 44, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', background: form.askId ? '#05907B' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
                     <div style={{ position: 'absolute', top: 3, left: form.askId ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
                   </button>
                 </div>
@@ -1925,7 +1925,7 @@ export default function GestorSurveys() {
 
                 <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
                   <button onClick={() => setShowNewModal(false)} style={btn('#F1F5F9', '#374151')}>Cancelar</button>
-                  <button onClick={createSurvey} disabled={!form.title.trim() || saving} style={{ ...btn('#00A896'), opacity: !form.title.trim() || saving ? 0.6 : 1 }}>
+                  <button onClick={createSurvey} disabled={!form.title.trim() || saving} style={{ ...btn('#05907B'), opacity: !form.title.trim() || saving ? 0.6 : 1 }}>
                     {saving ? 'Criando...' : pendingMode === 'custom' ? 'Criar e montar perguntas' : 'Criar pesquisa'}
                   </button>
                 </div>
@@ -1954,7 +1954,7 @@ export default function GestorSurveys() {
                 <ExternalLink size={13} /> Visualizar pesquisa
               </button>
               {editorSurvey.status === 'draft' && (
-                <button onClick={publishEditorSurvey} style={{ ...btn('#00A896'), fontSize: 12 }}>
+                <button onClick={publishEditorSurvey} style={{ ...btn('#05907B'), fontSize: 12 }}>
                   <Send size={13} /> Publicar pesquisa
                 </button>
               )}
@@ -2015,7 +2015,7 @@ export default function GestorSurveys() {
                     const active = questionForm.question_type === t.type
                     return (
                       <button key={t.type} onClick={() => setQuestionForm(q => ({ ...q, question_type: t.type }))}
-                        style={{ padding: '10px 12px', borderRadius: 10, border: `2px solid ${active ? '#00A896' : '#E2E8F0'}`, background: active ? '#E6F7F5' : '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: active ? '#00A896' : '#64748B' }}>
+                        style={{ padding: '10px 12px', borderRadius: 10, border: `2px solid ${active ? '#05907B' : '#E2E8F0'}`, background: active ? '#E6F7F5' : '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: active ? '#05907B' : '#64748B' }}>
                         <Icon size={14} /> {t.label}
                       </button>
                     )
@@ -2059,7 +2059,7 @@ export default function GestorSurveys() {
                       </div>
                     ))}
                     <button onClick={() => setQuestionForm(q => ({ ...q, options: [...q.options, ''] }))}
-                      style={{ fontSize: 12, color: '#00A896', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '4px 0' }}>
+                      style={{ fontSize: 12, color: '#05907B', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '4px 0' }}>
                       + Adicionar opção
                     </button>
                   </div>
@@ -2069,14 +2069,14 @@ export default function GestorSurveys() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#F8FAFC', borderRadius: 10 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Obrigatória</span>
                 <button onClick={() => setQuestionForm(q => ({ ...q, required: !q.required }))}
-                  style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: 'pointer', background: questionForm.required ? '#00A896' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
+                  style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: 'pointer', background: questionForm.required ? '#05907B' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
                   <div style={{ position: 'absolute', top: 2, left: questionForm.required ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
                 </button>
               </div>
 
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button onClick={() => setShowQuestionModal(null)} style={btn('#F1F5F9', '#374151')}>Cancelar</button>
-                <button onClick={saveQuestion} disabled={!questionForm.title.trim()} style={{ ...btn('#00A896'), opacity: !questionForm.title.trim() ? 0.6 : 1 }}>
+                <button onClick={saveQuestion} disabled={!questionForm.title.trim()} style={{ ...btn('#05907B'), opacity: !questionForm.title.trim() ? 0.6 : 1 }}>
                   {showQuestionModal === 'new' ? 'Adicionar pergunta' : 'Salvar pergunta'}
                 </button>
               </div>
@@ -2100,7 +2100,7 @@ export default function GestorSurveys() {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button onClick={() => { navigator.clipboard.writeText(surveyLink(showLinkModal.survey.survey_token)); showToast('Link copiado!') }} style={btn('#00A896')}>
+              <button onClick={() => { navigator.clipboard.writeText(surveyLink(showLinkModal.survey.survey_token)); showToast('Link copiado!') }} style={btn('#05907B')}>
                 <Copy size={15} /> Copiar link
               </button>
               <button onClick={() => setShowLinkModal(null)} style={btn('#F1F5F9', '#374151')}>Fechar</button>

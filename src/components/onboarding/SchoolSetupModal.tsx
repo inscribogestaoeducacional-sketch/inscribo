@@ -356,7 +356,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
         <div style={{ padding: '20px 28px 0', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 9, background: '#00A896', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 9, background: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 13, height: 13, borderRadius: '50%', background: 'white', border: '2px solid rgba(255,255,255,0.4)' }} />
               </div>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Áion Edu</span>
@@ -369,7 +369,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
 
           {/* Barra de progresso — oculta no passo 0 */}
           <div style={{ height: 4, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden', marginBottom: step === 0 ? 4 : 20 }}>
-            <div style={{ height: '100%', width: `${progressPct}%`, background: 'linear-gradient(90deg, #00A896, #0DD3BF)', borderRadius: 999, transition: 'width 0.4s ease' }} />
+            <div style={{ height: '100%', width: `${progressPct}%`, background: 'linear-gradient(90deg, #05907B, #2DCBA4)', borderRadius: 999, transition: 'width 0.4s ease' }} />
           </div>
         </div>
 
@@ -381,7 +381,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
             <div style={{ paddingBottom: 24, paddingTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
               {/* Ícone */}
               <div style={{
-                width: 72, height: 72, borderRadius: 22, background: '#00A896',
+                width: 72, height: 72, borderRadius: 22, background: '#05907B',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 marginBottom: 24, boxShadow: '0 8px 32px rgba(0,168,150,0.25)'
               }}>
@@ -398,7 +398,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
               {/* 3 etapas */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 400, marginBottom: 32 }}>
                 {[
-                  { num: '①', label: 'Dados da escola', desc: '1 minuto', color: '#E6F7F5', numColor: '#00A896' },
+                  { num: '①', label: 'Dados da escola', desc: '1 minuto', color: '#E6F7F5', numColor: '#05907B' },
                   { num: '②', label: 'Histórico de matrículas', desc: '2 minutos', color: '#EDE9FE', numColor: '#8B5CF6' },
                   { num: '③', label: 'Análise pronta', desc: 'Automático', color: '#FEF3C7', numColor: '#F59E0B' },
                 ].map(item => (
@@ -472,7 +472,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                 />
                 <p style={{ margin: '5px 0 0', fontSize: 11, color: '#6b7280' }}>
                   Encontre em:{' '}
-                  <a href="https://inepdata.inep.gov.br" target="_blank" rel="noreferrer" style={{ color: '#00A896' }}>
+                  <a href="https://inepdata.inep.gov.br" target="_blank" rel="noreferrer" style={{ color: '#05907B' }}>
                     inepdata.inep.gov.br
                   </a>
                 </p>
@@ -488,9 +488,9 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                     return (
                       <button key={g} onClick={() => toggleGrade(g)} style={{
                         padding: '7px 8px', borderRadius: 8, fontSize: 11, cursor: 'pointer', textAlign: 'center',
-                        border: active ? '1.5px solid #00A896' : '1px solid #E2E8F0',
+                        border: active ? '1.5px solid #05907B' : '1px solid #E2E8F0',
                         background: active ? '#E6F7F5' : '#F8FAFC',
-                        color: active ? '#00A896' : '#64748B', fontWeight: active ? 600 : 400
+                        color: active ? '#05907B' : '#64748B', fontWeight: active ? 600 : 400
                       }}>
                         {g}
                       </button>
@@ -552,12 +552,12 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                   textAlign: 'center', cursor: loadingFiles ? 'default' : 'pointer',
                   background: '#FAFAFA', marginBottom: 16, transition: 'border-color 0.2s',
                 }}
-                onMouseEnter={e => { if (!loadingFiles) (e.currentTarget as HTMLElement).style.borderColor = '#00A896' }}
+                onMouseEnter={e => { if (!loadingFiles) (e.currentTarget as HTMLElement).style.borderColor = '#05907B' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#CBD5E1' }}
               >
                 {loadingFiles ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                    <Loader2 size={28} color="#00A896" style={{ animation: 'spin 1s linear infinite' }} />
+                    <Loader2 size={28} color="#05907B" style={{ animation: 'spin 1s linear infinite' }} />
                     <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>{fileProgress}</p>
                   </div>
                 ) : (
@@ -578,7 +578,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                       border: `1px solid ${f.error ? '#FECACA' : '#BBF7D0'}`,
                     }}>
                       <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, background: f.error ? '#FFE4E6' : '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {f.error ? <AlertTriangle size={16} color="#F43F5E" /> : <FileText size={16} color="#00A896" />}
+                        {f.error ? <AlertTriangle size={16} color="#F43F5E" /> : <FileText size={16} color="#05907B" />}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</p>
@@ -609,7 +609,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
           {step === 3 && (
             <div style={{ paddingBottom: 24, textAlign: 'center' }}>
               <div style={{ width: 64, height: 64, borderRadius: 20, background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '8px auto 20px' }}>
-                <Check size={32} color="#00A896" strokeWidth={2.5} />
+                <Check size={32} color="#05907B" strokeWidth={2.5} />
               </div>
               <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 8 }}>
                 {editMode ? 'Configurações atualizadas!' : 'Escola configurada!'}
@@ -621,7 +621,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
               {successFiles.length > 0 && latestFile ? (
                 <div style={{ background: '#F0FDF9', border: '1px solid #BBF7D0', borderRadius: 14, padding: '20px 24px', textAlign: 'left', marginBottom: 20 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                    <Sparkles size={16} color="#00A896" style={{ marginTop: 2 }} />
+                    <Sparkles size={16} color="#05907B" style={{ marginTop: 2 }} />
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>A IA já analisou o padrão da sua escola</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -666,7 +666,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
           <div>
             {step === 0 && (
               <button onClick={() => setStep(1)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '11px 26px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '11px 26px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
                 Começar configuração <ChevronRight size={15} />
               </button>
             )}
@@ -675,21 +675,21 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
               <button onClick={() => {
                 if (!canAdvanceStep1) { setError('Preencha cidade e estado para continuar.'); return }
                 setError(null); setStep(2)
-              }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: canAdvanceStep1 ? '#00A896' : '#CBD5E1', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: canAdvanceStep1 ? 'pointer' : 'not-allowed' }}>
+              }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: canAdvanceStep1 ? '#05907B' : '#CBD5E1', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: canAdvanceStep1 ? 'pointer' : 'not-allowed' }}>
                 Continuar <ChevronRight size={14} />
               </button>
             )}
 
             {step === 2 && (
               <button onClick={() => setStep(3)} disabled={loadingFiles}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: loadingFiles ? 'not-allowed' : 'pointer', opacity: loadingFiles ? 0.6 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: loadingFiles ? 'not-allowed' : 'pointer', opacity: loadingFiles ? 0.6 : 1 }}>
                 {successFiles.length > 0 ? 'Continuar' : 'Pular por enquanto'} <ChevronRight size={14} />
               </button>
             )}
 
             {step === 3 && (
               <button onClick={handleFinish} disabled={saving}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
                 {saving
                   ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Salvando...</>
                   : editMode ? <>Salvar alterações <ChevronRight size={14} /></> : <>Ir para o painel <ChevronRight size={14} /></>

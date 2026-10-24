@@ -73,7 +73,7 @@ function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, na
           )}
         </div>
         {unreadCount > 0 && (
-          <button onClick={markAllRead} style={{ fontSize: 11, color: '#00A896', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
+          <button onClick={markAllRead} style={{ fontSize: 11, color: '#05907B', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
             Marcar todas como lidas
           </button>
         )}
@@ -168,12 +168,12 @@ export default function NotificationBell({ institutionId, isSuperAdmin = false }
         style={{
           width: 38, height: 38, borderRadius: 12,
           background: open ? '#E6F7F5' : '#F0FDFB',
-          border: open ? '1.5px solid #00A896' : '0.5px solid #D1FAE5',
+          border: open ? '1.5px solid #05907B' : '0.5px solid #D1FAE5',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'pointer', position: 'relative', transition: 'all 0.15s',
         }}
       >
-        <svg width="16" height="16" fill="none" stroke={open ? '#00A896' : '#64748B'} strokeWidth="1.8" viewBox="0 0 24 24">
+        <svg width="16" height="16" fill="none" stroke={open ? '#05907B' : '#64748B'} strokeWidth="1.8" viewBox="0 0 24 24">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>

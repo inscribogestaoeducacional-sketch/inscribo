@@ -55,14 +55,14 @@ export default function SendPlanBuilder({ form, onChange, total, limits, onPlan 
               onClick={() => set({ weekdays: form.weekdays.map((v, j) => (j === i ? !v : v)) })}
               style={{
                 padding: '6px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                border: `1.5px solid ${form.weekdays[i] ? '#00A896' : '#E2E8F0'}`, background: form.weekdays[i] ? '#E6F7F5' : '#fff', color: form.weekdays[i] ? '#007A6E' : '#64748b',
+                border: `1.5px solid ${form.weekdays[i] ? '#05907B' : '#E2E8F0'}`, background: form.weekdays[i] ? '#E6F7F5' : '#fff', color: form.weekdays[i] ? '#00695F' : '#64748b',
               }}>{d}</button>
           ))}
         </div>
       </div>
 
       <div>
-        <label style={labelStyle}>Mensagens por dia: <b style={{ color: '#007A6E' }}>{form.cap}</b></label>
+        <label style={labelStyle}>Mensagens por dia: <b style={{ color: '#00695F' }}>{form.cap}</b></label>
         <input type="range" min={10} max={Math.max(10, daily)} step={10} value={Math.min(form.cap, daily)} style={{ width: '100%' }}
           onChange={e => set({ cap: Number(e.target.value) })} aria-label="Mensagens por dia" />
         <p style={hintStyle}>Limite da escola, definido pela Áion: até {daily.toLocaleString('pt-BR')} por dia e {hourly.toLocaleString('pt-BR')} por hora.</p>
@@ -73,7 +73,7 @@ export default function SendPlanBuilder({ form, onChange, total, limits, onPlan 
       </div>
 
       {plan.valid && last ? (
-        <div style={{ background: '#E6F7F5', border: '1px solid #99E0D7', borderRadius: 12, padding: '11px 13px', color: '#065F52', lineHeight: 1.6, fontSize: 13 }}>
+        <div style={{ background: '#E6F7F5', border: '1px solid #99E0D7', borderRadius: 12, padding: '11px 13px', color: '#00695F', lineHeight: 1.6, fontSize: 13 }}>
           <b>{total.toLocaleString('pt-BR')} contatos</b> ÷ <b>{plan.capDay} por dia</b> = <b>{plan.days.length} dia{plan.days.length > 1 ? 's' : ''} de envio</b>.<br />
           De <b>{fmtDay(plan.days[0].date)}</b> até <b>{fmtDay(last.date)}</b>, entre <b>{form.winStart}</b> e <b>{form.winEnd}</b>
           {form.spread && <>, cerca de <b>{perHourTxt} mensagens por hora</b> (uma a cada ~{everyMin} min)</>}.

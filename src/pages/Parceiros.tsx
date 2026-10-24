@@ -48,7 +48,7 @@ export default function Parceiros() {
           <div style={{ position: 'relative', zIndex: 1, maxWidth: 760, margin: '0 auto' }}>
             <div className="tag-d" style={{ display: 'inline-flex', marginBottom: 24 }}>Programa de parceiros</div>
             <h1 className="s-title" style={{ fontSize: 'clamp(38px,5vw,64px)', color: '#fff', marginBottom: 20 }}>
-              Seja um parceiro<br /><span style={{ color: '#0DD3BF' }}>ÁION EDU</span>
+              Seja um parceiro<br /><span style={{ color: '#2DCBA4' }}>ÁION EDU</span>
             </h1>
             <p style={{ fontSize: 18, color: 'rgba(255,255,255,.72)', maxWidth: 600, margin: '0 auto', lineHeight: 1.8 }}>
               Leve a plataforma mais completa de campanhas de matrícula para escolas de todo o Brasil — e construa uma receita recorrente sólida.
@@ -62,12 +62,12 @@ export default function Parceiros() {
             <div style={{ textAlign: 'center', marginBottom: 56 }}>
               <div className="tag-g" style={{ marginBottom: 20 }}>Por que ser parceiro</div>
               <h2 className="s-title" style={{ fontSize: 'clamp(28px,3.5vw,44px)', color: '#111827', marginBottom: 14 }}>
-                Construa um negócio recorrente com a<br /><span style={{ color: '#0DD3BF' }}>plataforma certa</span>
+                Construa um negócio recorrente com a<br /><span style={{ color: '#2DCBA4' }}>plataforma certa</span>
               </h2>
             </div>
             <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24 }}>
               {[
-                { Icon: IcTrendUp, color: '#00A896', bg: '#E6F7F5', title: 'Receita recorrente', desc: 'Comissão mensal por cada escola ativa na plataforma. Quanto mais você cresce, mais você ganha — sem teto.' },
+                { Icon: IcTrendUp, color: '#05907B', bg: '#E6F7F5', title: 'Receita recorrente', desc: 'Comissão mensal por cada escola ativa na plataforma. Quanto mais você cresce, mais você ganha — sem teto.' },
                 { Icon: IcUsers, color: '#6366F1', bg: '#EDE9FE', title: 'Suporte completo', desc: 'Treinamento, materiais de venda, apoio comercial e consultoria da nossa equipe em cada negociação.' },
                 { Icon: IcShield, color: '#EA580C', bg: '#FFF7ED', title: 'Marca reconhecida', desc: 'Parceiro oficial de uma plataforma certificada Meta e reconhecida no mercado educacional brasileiro.' },
               ].map((b, i) => (
@@ -113,7 +113,7 @@ export default function Parceiros() {
         </section>
 
         {/* Formulário */}
-        <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C,#00A896)', position: 'relative', overflow: 'hidden' }}>
+        <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C,#05907B)', position: 'relative', overflow: 'hidden' }}>
           <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
           <div style={{ maxWidth: 640, margin: '0 auto', position: 'relative', zIndex: 1 }}>
             <div style={{ textAlign: 'center', marginBottom: 44 }}>

@@ -55,7 +55,7 @@ export default function SchoolUpdateModal({
               href={update.media_url}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ display: 'inline-block', marginTop: 14, fontSize: 13, color: '#00A896', fontWeight: 600, textDecoration: 'none' }}
+              style={{ display: 'inline-block', marginTop: 14, fontSize: 13, color: '#05907B', fontWeight: 600, textDecoration: 'none' }}
             >
               Ver mídia →
             </a>
@@ -70,7 +70,7 @@ export default function SchoolUpdateModal({
           {footer ?? (
             <button
               onClick={onClose}
-              style={{ width: '100%', padding: '12px 0', background: '#00A896', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              style={{ width: '100%', padding: '12px 0', background: '#05907B', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
             >
               Ok, entendi
             </button>

@@ -53,7 +53,7 @@ export default function LeadsReport({ institutionId, institutionName }: { instit
             <Kpi label="LEADS NO PERÍODO" value={d.total} color="#6366F1" now={d.total} before={d.anterior.total} />
             <Kpi label="AGENDARAM VISITA" value={agend} color="#8B5CF6" sub={`${pc(agend, d.total)} dos leads`} />
             <Kpi label="VISITARAM" value={vis} color="#F59E0B" sub={`${pc(vis, agend)} de quem agendou`} />
-            <Kpi label="MATRICULADOS" value={e.enrolled ?? 0} color="#00A896" now={e.enrolled ?? 0} before={d.anterior.matriculados} sub={`${pc(e.enrolled ?? 0, d.total)} dos leads`} />
+            <Kpi label="MATRICULADOS" value={e.enrolled ?? 0} color="#05907B" now={e.enrolled ?? 0} before={d.anterior.matriculados} sub={`${pc(e.enrolled ?? 0, d.total)} dos leads`} />
             <Kpi label="PERDIDOS" value={e.lost ?? 0} color="#B91C1C" now={e.lost ?? 0} before={d.anterior.perdidos} invert sub={`${pc(e.lost ?? 0, d.total)} dos leads`} />
           </KpiGrid>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -78,7 +78,7 @@ export default function LeadsReport({ institutionId, institutionName }: { instit
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Visitas dos leads</div>
               <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 8 }}>Visitas marcadas no período: {vis2.total} (período anterior: {vis2.anterior_total})</div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-                {[['Realizadas', vis2.realizadas, '#00A896'], ['Faltaram', vis2.faltaram, '#EF4444'], ['Canceladas', vis2.canceladas, '#94A3B8'], ['Ainda agendadas', vis2.agendadas_futuras, '#6366F1'], ['Viraram matrícula', vis2.matriculados_apos_visita, '#F59E0B']].map(([l, n, c]) => <div key={String(l)} style={{ flex: '1 1 120px', border: '1px solid #E3E8F0', borderRadius: 12, padding: '8px 12px' }}><div style={{ fontSize: 11, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase' }}>{l}</div><div style={{ fontSize: 22, fontWeight: 800, color: String(c) }}>{n}</div></div>)}
+                {[['Realizadas', vis2.realizadas, '#05907B'], ['Faltaram', vis2.faltaram, '#EF4444'], ['Canceladas', vis2.canceladas, '#94A3B8'], ['Ainda agendadas', vis2.agendadas_futuras, '#6366F1'], ['Viraram matrícula', vis2.matriculados_apos_visita, '#F59E0B']].map(([l, n, c]) => <div key={String(l)} style={{ flex: '1 1 120px', border: '1px solid #E3E8F0', borderRadius: 12, padding: '8px 12px' }}><div style={{ fontSize: 11, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase' }}>{l}</div><div style={{ fontSize: 22, fontWeight: 800, color: String(c) }}>{n}</div></div>)}
               </div>
               {(vis2.sem_baixa ?? 0) > 0 && <div style={{ fontSize: 12.5, color: '#B45309', fontWeight: 700, marginBottom: 8 }}>{vis2.sem_baixa} visita{vis2.sem_baixa === 1 ? '' : 's'} do período já passou e ainda está sem baixa.</div>}
               {(vis2.por_motivo?.length ?? 0) > 0 && <div style={{ marginBottom: 10 }}><div style={{ fontSize: 12, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 }}>Por que não aconteceram</div>{vis2.por_motivo!.map((m, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '3px 0', borderBottom: '1px solid #F1F5F4' }}><span>{m.motivo} <span style={{ color: '#94A3B8' }}>· {m.situacao}</span></span><b>{m.n}</b></div>)}</div>}

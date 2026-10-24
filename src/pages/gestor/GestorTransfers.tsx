@@ -413,10 +413,10 @@ export default function GestorTransfers() {
         <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 34, height: 34, borderRadius: 10, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ArrowRightLeft size={16} color="#00A896" />
+              <ArrowRightLeft size={16} color="#05907B" />
             </div>
             <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Transferências</h1>
-            <span style={{ background: '#E6F7F5', color: '#00A896', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{total}</span>
+            <span style={{ background: '#E6F7F5', color: '#05907B', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{total}</span>
           </div>
         </div>
 
@@ -469,7 +469,7 @@ export default function GestorTransfers() {
         {/* FAB */}
         {isAdmin && (
           <button onClick={() => setShowNewModal(true)}
-            style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Plus size={26} />
           </button>
         )}
@@ -499,7 +499,7 @@ export default function GestorTransfers() {
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={closeForm} style={{ flex: 1, padding: '12px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 14, color: '#64748B', cursor: 'pointer', fontWeight: 500, minHeight: 48 }}>Cancelar</button>
                 <button onClick={handleSaveForm} disabled={savingForm}
-                  style={{ flex: 1, padding: '12px', borderRadius: 9, border: 'none', background: '#00A896', color: 'white', fontSize: 14, fontWeight: 600, cursor: savingForm ? 'not-allowed' : 'pointer', minHeight: 48 }}>
+                  style={{ flex: 1, padding: '12px', borderRadius: 9, border: 'none', background: '#05907B', color: 'white', fontSize: 14, fontWeight: 600, cursor: savingForm ? 'not-allowed' : 'pointer', minHeight: 48 }}>
                   {savingForm ? 'Salvando...' : editingTransfer ? 'Salvar' : 'Registrar'}
                 </button>
               </div>
@@ -545,7 +545,7 @@ export default function GestorTransfers() {
         actions={
           <button
             onClick={() => { setForm(EMPTY_FORM); setEditingTransfer(null); setShowNewModal(true) }}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#007A6E', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#00695F', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
             <Plus size={15} /> Nova transferência
           </button>
         } />
@@ -598,13 +598,13 @@ export default function GestorTransfers() {
         ) : transfers.length === 0 ? (
           <div style={{ padding: '48px 24px', textAlign: 'center' }}>
             <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <ArrowRightLeft size={24} color="#00A896" />
+              <ArrowRightLeft size={24} color="#05907B" />
             </div>
             <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Nenhuma transferência registrada</p>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: '#64748b', maxWidth: 440, marginInline: 'auto', lineHeight: 1.6 }}>
               Quando uma família solicitar transferência, registre aqui para acompanhar e entender os motivos reais com auxílio da IA.
             </p>
-            <button onClick={() => setShowNewModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={() => setShowNewModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, background: '#05907B', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               <Plus size={14} /> Registrar primeira transferência
             </button>
           </div>
@@ -862,7 +862,7 @@ export default function GestorTransfers() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
               <button onClick={closeForm} style={{ padding: '8px 16px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, color: '#64748B', cursor: 'pointer', fontWeight: 500 }}>Cancelar</button>
               <button onClick={handleSaveForm} disabled={savingForm}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9, border: 'none', background: '#00A896', color: 'white', fontSize: 13, fontWeight: 600, cursor: savingForm ? 'not-allowed' : 'pointer', opacity: savingForm ? 0.7 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9, border: 'none', background: '#05907B', color: 'white', fontSize: 13, fontWeight: 600, cursor: savingForm ? 'not-allowed' : 'pointer', opacity: savingForm ? 0.7 : 1 }}>
                 {savingForm ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Salvando...</> : <><ChevronRight size={13} /> {editingTransfer ? 'Salvar' : 'Registrar'}</>}
               </button>
             </div>
@@ -1078,7 +1078,7 @@ function DiagnosisView({ transfer, onUpdateStatus, onGenerateDiagnosis, isGenera
               <span style={{ fontSize: 12, fontWeight: 700, color: '#1e2d6b' }}>{confidencePct}%</span>
             </div>
             <div style={{ height: 8, background: '#e2e8f0', borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${confidencePct}%`, background: confidencePct >= 70 ? 'linear-gradient(90deg,#00A896,#0DD3BF)' : 'linear-gradient(90deg,#F59E0B,#FCD34D)', borderRadius: 99 }} />
+              <div style={{ height: '100%', width: `${confidencePct}%`, background: confidencePct >= 70 ? 'linear-gradient(90deg,#05907B,#2DCBA4)' : 'linear-gradient(90deg,#F59E0B,#FCD34D)', borderRadius: 99 }} />
             </div>
           </div>
         )}

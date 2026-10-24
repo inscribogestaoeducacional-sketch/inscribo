@@ -66,7 +66,7 @@ export function ContactsSummary({ kpi, origin, onOrigin, counts, attention, onAt
           })}
           {c.api_resp > 0 && (
             <button type="button" onClick={() => onAttention(attention === 'api' ? null : 'api')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', background: '#F0FDFB', color: '#007A6E', border: '1.5px solid #99F6E4' }}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', background: '#F0FDFB', color: '#00695F', border: '1.5px solid #99F6E4' }}>
               <Plug size={12} />{c.api_resp.toLocaleString('pt-BR')} da integração
             </button>
           )}
@@ -128,7 +128,7 @@ export function ActionsMenu({ items, light }: { items: { label: string; hint?: s
           return (
             <button key={it.label} type="button" className="ld-row" onClick={() => { setOpen(false); it.onClick() }}
               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 10px', border: 'none', background: 'transparent', borderRadius: 10, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
-              <span style={{ width: 32, height: 32, borderRadius: 10, background: '#F0FDFB', color: BRAND.primaryDark ?? '#007A6E', display: 'grid', placeItems: 'center', flexShrink: 0 }}><Icon size={15} /></span>
+              <span style={{ width: 32, height: 32, borderRadius: 10, background: '#F0FDFB', color: BRAND.primaryDark ?? '#00695F', display: 'grid', placeItems: 'center', flexShrink: 0 }}><Icon size={15} /></span>
               <span>
                 <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>{it.label}</span>
                 {it.hint && <span style={{ display: 'block', fontSize: 11.5, color: '#5B6B86' }}>{it.hint}</span>}
@@ -152,7 +152,7 @@ export function FiltersButton({ fields, onClear }: { fields: FilterField[]; onCl
     <>
       <button ref={ref} type="button" onClick={() => setOpen(o => !o)} aria-haspopup="dialog" aria-expanded={open}
         style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
-          background: active.length ? '#F0FDFA' : '#fff', color: active.length ? '#007A6E' : BRAND.ink, border: `1.5px solid ${active.length ? BRAND.primary : '#E2E8F0'}` }}>
+          background: active.length ? '#F0FDFA' : '#fff', color: active.length ? '#00695F' : BRAND.ink, border: `1.5px solid ${active.length ? BRAND.primary : '#E2E8F0'}` }}>
         <SlidersHorizontal size={14} /> Filtros
         {active.length > 0 && <span style={{ background: BRAND.primary, color: '#fff', borderRadius: 999, minWidth: 18, height: 18, padding: '0 5px', fontSize: 11, display: 'grid', placeItems: 'center' }}>{active.length}</span>}
       </button>
@@ -190,9 +190,9 @@ export function ActiveChips({ fields }: { fields: FilterField[] }) {
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       {act.map(f => (
-        <span key={f.key} className="ld-in" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 6px 4px 10px', borderRadius: 999, background: '#F0FDFA', border: '1px solid #99F6E4', color: '#007A6E', fontSize: 12, fontWeight: 700 }}>
+        <span key={f.key} className="ld-in" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 6px 4px 10px', borderRadius: 999, background: '#F0FDFA', border: '1px solid #99F6E4', color: '#00695F', fontSize: 12, fontWeight: 700 }}>
           {f.label}: {f.options.find(o => o.value === f.value)?.label ?? f.value}
-          <button type="button" onClick={() => f.onChange('all')} aria-label={`Remover filtro ${f.label}`} style={{ border: 'none', background: 'rgba(0,122,110,.12)', color: '#007A6E', borderRadius: 999, width: 18, height: 18, display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}><X size={11} /></button>
+          <button type="button" onClick={() => f.onChange('all')} aria-label={`Remover filtro ${f.label}`} style={{ border: 'none', background: 'rgba(0,122,110,.12)', color: '#00695F', borderRadius: 999, width: 18, height: 18, display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}><X size={11} /></button>
         </span>
       ))}
     </div>

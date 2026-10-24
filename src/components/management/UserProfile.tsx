@@ -85,7 +85,7 @@ export default function UserProfile() {
   const tabActive: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 6,
     padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
-    fontSize: 13, fontWeight: 700, background: '#E6F7F5', color: '#00A896',
+    fontSize: 13, fontWeight: 700, background: '#E6F7F5', color: '#05907B',
   }
   const tabInactive: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 6,
@@ -174,7 +174,7 @@ export default function UserProfile() {
                 <button
                   type="submit"
                   disabled={loading}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 12, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 12, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}
                 >
                   <Save size={13} />
                   {loading ? 'Salvando...' : 'Salvar Alterações'}
@@ -213,7 +213,7 @@ export default function UserProfile() {
                 <button
                   type="submit"
                   disabled={loading}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 12, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 12, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}
                 >
                   <Lock size={13} />
                   {loading ? 'Alterando...' : 'Alterar Senha'}

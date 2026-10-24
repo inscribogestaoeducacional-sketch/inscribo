@@ -71,7 +71,7 @@ const CSS = `
   transition: border-color .18s, box-shadow .18s, background .18s;
 }
 .lf-inp:focus {
-  border-color: #00A896;
+  border-color: #05907B;
   background: #fff;
   box-shadow: 0 0 0 4px rgba(0,168,150,.1);
 }
@@ -80,7 +80,7 @@ const CSS = `
 
 .lf-btn {
   width: 100%; height: 50px;
-  background: linear-gradient(135deg, #00523C, #00A896);
+  background: linear-gradient(135deg, #00523C, #05907B);
   color: #fff; border: none; border-radius: 12px;
   font-size: 15px; font-weight: 800;
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -207,9 +207,9 @@ export default function LoginForm() {
                 {/* Esqueceu */}
                 <div style={{ textAlign:'right', marginTop:-4 }}>
                   <button type="button" onClick={() => { setView('forgot'); setFEmail(email); setFError('') }}
-                    style={{ background:'none', border:'none', cursor:'pointer', fontSize:12, fontWeight:600, color:'#00A896', padding:0, transition:'color .15s' }}
+                    style={{ background:'none', border:'none', cursor:'pointer', fontSize:12, fontWeight:600, color:'#05907B', padding:0, transition:'color .15s' }}
                     onMouseEnter={e => (e.currentTarget.style.color='#00523C')}
-                    onMouseLeave={e => (e.currentTarget.style.color='#00A896')}
+                    onMouseLeave={e => (e.currentTarget.style.color='#05907B')}
                   >
                     Esqueceu a senha?
                   </button>
@@ -286,9 +286,9 @@ export default function LoginForm() {
                 Verifique sua caixa de entrada em<br />
                 <strong style={{ color:'#111827' }}>{fEmail}</strong>
               </p>
-              <button onClick={() => { setView('login'); setFEmail('') }} style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, fontWeight:700, color:'#00A896', display:'inline-flex', alignItems:'center', gap:5, transition:'color .15s' }}
+              <button onClick={() => { setView('login'); setFEmail('') }} style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, fontWeight:700, color:'#05907B', display:'inline-flex', alignItems:'center', gap:5, transition:'color .15s' }}
                 onMouseEnter={e => (e.currentTarget.style.color='#00523C')}
-                onMouseLeave={e => (e.currentTarget.style.color='#00A896')}
+                onMouseLeave={e => (e.currentTarget.style.color='#05907B')}
               >
                 <ArrowLeft size={14} /> Voltar para o login
               </button>

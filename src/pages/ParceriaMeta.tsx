@@ -87,10 +87,10 @@ export default function ParceriaMeta() {
               </div>
             </div>
             <div className="tag-d" style={{ marginBottom: 24, display: 'inline-flex', animation: 'fadeIn .8s ease both' }}>
-              <IcShield size={13} color="#0DD3BF" /> Parceria oficial de integração WhatsApp
+              <IcShield size={13} color="#2DCBA4" /> Parceria oficial de integração WhatsApp
             </div>
             <h1 className="s-title" style={{ fontSize: 'clamp(38px,5.5vw,68px)', color: '#fff', marginBottom: 24, animation: 'fadeUp .9s ease .1s both', lineHeight: 1.05 }}>
-              Áion Edu é parceira<br />oficial da <span style={{ color: '#0DD3BF' }}>Meta</span>
+              Áion Edu é parceira<br />oficial da <span style={{ color: '#2DCBA4' }}>Meta</span>
             </h1>
             <p style={{ fontSize: 18, color: 'rgba(255,255,255,.75)', maxWidth: 620, margin: '0 auto 40px', lineHeight: 1.8, animation: 'fadeUp .9s ease .2s both' }}>
               O WhatsApp da sua escola conectado pela API Oficial WhatsApp Business — número homologado, templates aprovados e zero risco de bloqueio.
@@ -108,7 +108,7 @@ export default function ParceriaMeta() {
             <div ref={r1} style={{ textAlign: 'center', marginBottom: 60 }}>
               <div className="tag-g" style={{ marginBottom: 20 }}>Por que isso importa</div>
               <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 16 }}>
-                WhatsApp oficial não é modismo.<br />É <span style={{ color: '#0DD3BF' }}>segurança pro número da escola</span>
+                WhatsApp oficial não é modismo.<br />É <span style={{ color: '#2DCBA4' }}>segurança pro número da escola</span>
               </h2>
               <p style={{ fontSize: 16, color: '#4B5563', maxWidth: 620, margin: '0 auto', lineHeight: 1.8 }}>
                 Ferramentas não oficiais simulam o WhatsApp Web e colocam o número da instituição em risco constante. A API Oficial da Meta elimina esse risco desde a raiz.
@@ -136,7 +136,7 @@ export default function ParceriaMeta() {
             <div ref={r2} style={{ textAlign: 'center', marginBottom: 60 }}>
               <div className="tag-g" style={{ marginBottom: 20 }}>Como funciona na prática</div>
               <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 16 }}>
-                Benefícios que já estão<br /><span style={{ color: '#0DD3BF' }}>na plataforma, hoje</span>
+                Benefícios que já estão<br /><span style={{ color: '#2DCBA4' }}>na plataforma, hoje</span>
               </h2>
               <p style={{ fontSize: 16, color: '#4B5563', maxWidth: 560, margin: '0 auto', lineHeight: 1.8 }}>
                 Nada disso é promessa futura. É o que a sua escola já usa dentro do painel Áion Edu.
@@ -167,11 +167,11 @@ export default function ParceriaMeta() {
               <img src={META_LOGO} alt="Meta" style={{ height: 26, filter: 'brightness(0) invert(1)' }} />
             </div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 999, padding: '7px 18px', marginBottom: 28 }}>
-              <IcShield size={14} color="#0DD3BF" />
+              <IcShield size={14} color="#2DCBA4" />
               <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.9)', letterSpacing: '.06em', textTransform: 'uppercase' }}>Parceiro Oficial de Integração WhatsApp</span>
             </div>
             <h2 className="s-title" style={{ fontSize: 'clamp(28px,3.5vw,44px)', color: '#fff', marginBottom: 20 }}>
-              Uma parceria que sustenta<br /><span style={{ color: '#0DD3BF' }}>a confiança da sua operação</span>
+              Uma parceria que sustenta<br /><span style={{ color: '#2DCBA4' }}>a confiança da sua operação</span>
             </h2>
             <p style={{ fontSize: 16, color: 'rgba(255,255,255,.72)', maxWidth: 600, margin: '0 auto 40px', lineHeight: 1.8 }}>
               Ser parceira oficial de integração WhatsApp da Meta significa número oficial homologado, atendimento centralizado de toda a equipe, histórico preservado e zero risco de bloqueio — tudo dentro das normas oficiais da plataforma.
@@ -179,7 +179,7 @@ export default function ParceriaMeta() {
             <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
               {[{ Icon: IcShield, label: 'Conta verificada Meta' }, { Icon: IcCheck, label: 'API Oficial WhatsApp Business' }, { Icon: IcUsers, label: 'Multi-atendente centralizado' }].map((b, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', padding: '10px 20px', borderRadius: 999 }}>
-                  <b.Icon size={15} color="#0DD3BF" />
+                  <b.Icon size={15} color="#2DCBA4" />
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{b.label}</span>
                 </div>
               ))}
@@ -188,7 +188,7 @@ export default function ParceriaMeta() {
         </section>
 
         {/* CTA final */}
-        <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 50%,#00A896 100%)', position: 'relative', overflow: 'hidden' }}>
+        <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 50%,#05907B 100%)', position: 'relative', overflow: 'hidden' }}>
           <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
           <div ref={r4} style={{ maxWidth: 640, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
             <div className="tag-d" style={{ marginBottom: 20, display: 'inline-flex' }}>Vamos conversar?</div>

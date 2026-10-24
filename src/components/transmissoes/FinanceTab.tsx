@@ -82,7 +82,7 @@ export default function FinanceTab({ institutionId }: { institutionId: string })
   }, [institutionId]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!loading) loadSummary() }, [period]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Loader2 size={28} color="#00A896" className="animate-spin" /></div>
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Loader2 size={28} color="#05907B" className="animate-spin" /></div>
 
   const s = summary || {}
   const total = Number(statement[0]?.total_count || 0)
@@ -137,7 +137,7 @@ export default function FinanceTab({ institutionId }: { institutionId: string })
                       <td style={{ ...tdStyle, color: '#64748b' }}>{fmtDate(p.due_date)}</td>
                       <td style={{ ...tdStyle, textAlign: 'right' }}>
                         {open && p.asaas_charge_url && (
-                          <a href={p.asaas_charge_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                          <a href={p.asaas_charge_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 9, background: '#05907B', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                             <ExternalLink size={13} /> Pagar agora
                           </a>
                         )}

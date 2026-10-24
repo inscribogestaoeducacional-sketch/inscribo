@@ -25,7 +25,7 @@ export default class HubErrorBoundary extends React.Component<Props, State> {
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="rounded-lg bg-[#00A896] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          className="rounded-lg bg-[#05907B] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
         >
           Recarregar
         </button>

@@ -103,7 +103,7 @@ export default function IntegrationsTab({ institutionId, onToast, section, onSec
   if (!installed) {
     return (
       <div style={{ ...card, maxWidth: 640 }}>
-        <h3 style={h3}><Database size={16} color="#00A896" /> Dados dos alunos</h3>
+        <h3 style={h3}><Database size={16} color="#05907B" /> Dados dos alunos</h3>
         <p style={hint}>A base de alunos ainda não foi instalada neste ambiente. Esta tela passa a funcionar depois que a atualização do banco for aplicada.</p>
       </div>
     )
@@ -209,7 +209,7 @@ function ManualAggregateCard({ institutionId, onToast }: { institutionId: string
 
   return (
     <div style={card}>
-      <h3 style={h3}><Database size={16} color="#00A896" /> Lançamento manual por série</h3>
+      <h3 style={h3}><Database size={16} color="#05907B" /> Lançamento manual por série</h3>
       <p style={hint}>
         Para quem ainda não tem integração: digite os números de cada série. Cada vez que salva, fica guardado um <strong>retrato</strong> com a data
         escolhida; atualizar toda semana já forma a curva de rematrícula. Corrigir um número grava um retrato novo (o anterior fica no histórico).
@@ -233,7 +233,7 @@ function ManualAggregateCard({ institutionId, onToast }: { institutionId: string
         </p>
       )}
       {loadingGrades ? <Loader2 size={18} className="animate-spin" /> : gradeLevels.length === 0 ? (
-        <p style={hint}>Cadastre as séries em <a href="/settings?tab=escola" style={{ color: '#00A896', fontWeight: 600 }}>Configurações → Escola → Séries</a> antes de lançar.</p>
+        <p style={hint}>Cadastre as séries em <a href="/settings?tab=escola" style={{ color: '#05907B', fontWeight: 600 }}>Configurações → Escola → Séries</a> antes de lançar.</p>
       ) : (
         <div style={{ overflowX: 'auto', border: '1px solid #F1F5F9', borderRadius: 12 }}>
           <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: 860, width: '100%' }}>
@@ -309,7 +309,7 @@ function BaseSettingsCard({ institutionId, onToast }: { institutionId: string; o
 
   return (
     <div style={{ ...card, maxWidth: 640 }}>
-      <h3 style={h3}><Database size={16} color="#00A896" /> Ajustes da rematrícula</h3>
+      <h3 style={h3}><Database size={16} color="#05907B" /> Ajustes da rematrícula</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
         {/* fonte principal e ERP: escolhidos no campo "De onde vêm os dados dos alunos?" — aqui só se mantêm os valores gravados */}
         <label style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Ano sendo rematriculado<br />

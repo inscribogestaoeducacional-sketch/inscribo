@@ -140,7 +140,7 @@ export default function WhatsappReport({ institutionId, institutionName }: { ins
             <Kpi label="CONVERSAS" value={d.total} color="#25D366" now={d.total} before={d.anterior.total} />
             <Kpi label="COM ATENDENTE" value={d.com_atendente} color="#6366F1" sub={`${d.total ? Math.round(d.com_atendente / d.total * 100) : 0}% das conversas`} />
             <Kpi label="MENSAGENS RECEBIDAS" value={d.msgs_recebidas.toLocaleString('pt-BR')} color="#0EA5E9" sub="das famílias" />
-            <Kpi label="ENVIADAS POR PESSOAS" value={d.msgs_enviadas_humano.toLocaleString('pt-BR')} color="#00A896" sub={`${d.msgs_enviadas_robo.toLocaleString('pt-BR')} pelo robô`} />
+            <Kpi label="ENVIADAS POR PESSOAS" value={d.msgs_enviadas_humano.toLocaleString('pt-BR')} color="#05907B" sub={`${d.msgs_enviadas_robo.toLocaleString('pt-BR')} pelo robô`} />
             <Kpi label="SATISFAÇÃO" value={satPct(d.satisfacao_media) != null ? `${satPct(d.satisfacao_media)}%` : '—'} color="#F59E0B" now={satPct(d.satisfacao_media) ?? undefined} before={satPct(d.anterior.satisfacao) ?? undefined} sub={`nota ${String(d.satisfacao_media ?? '—').replace('.', ',')} de 3 · ${d.avaliacoes} avaliações`} />
           </KpiGrid>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

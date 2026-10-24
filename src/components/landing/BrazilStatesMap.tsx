@@ -535,8 +535,8 @@ export interface StateSchoolsEntry {
   cities: { city: string; schools: string[] }[]
 }
 
-const FILL_ACTIVE = '#0DD3BF'
-const FILL_HOVER  = '#00A896'
+const FILL_ACTIVE = '#2DCBA4'
+const FILL_HOVER  = '#05907B'
 const FILL_IDLE   = '#E2E8F0'
 
 export default function BrazilStatesMap({ data }: { data: Record<string, StateSchoolsEntry> }) {
@@ -595,7 +595,7 @@ export default function BrazilStatesMap({ data }: { data: Record<string, StateSc
           background: '#00301F', color: '#fff', borderRadius: 12, padding: '12px 16px',
           boxShadow: '0 16px 40px rgba(0,0,0,.35)', pointerEvents: 'none', maxWidth: 240,
         }}>
-          <p style={{ fontSize: 13, fontWeight: 800, color: '#0DD3BF', marginBottom: 6 }}>{UF_NAMES[hover.uf] || hover.uf}</p>
+          <p style={{ fontSize: 13, fontWeight: 800, color: '#2DCBA4', marginBottom: 6 }}>{UF_NAMES[hover.uf] || hover.uf}</p>
           {hoverEntry.cities.map((c, i) => (
             <div key={i} style={{ marginBottom: i < hoverEntry.cities.length - 1 ? 6 : 0 }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{c.city}</p>

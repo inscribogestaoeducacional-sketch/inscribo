@@ -682,7 +682,7 @@ export default function ContactCard({
         {displayPhone && <p className="text-sm text-[#64748B] mt-0.5">{displayPhone}</p>}
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           {ctInfo && (
-            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#E6F7F5] text-[#00A896]">
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#E6F7F5] text-[#05907B]">
               {ctInfo.icon} {ctInfo.label}
             </span>
           )}
@@ -729,7 +729,7 @@ export default function ContactCard({
         <button key={t.key} onClick={() => setTab(t.key)}
           className={`flex-shrink-0 px-4 py-3 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap ${
             tab === t.key
-              ? 'border-[#00A896] text-[#1A2B4A]'
+              ? 'border-[#05907B] text-[#1A2B4A]'
               : 'border-transparent text-[#94A3B8] hover:text-[#1A2B4A]'
           }`}>
           {t.label}
@@ -741,7 +741,7 @@ export default function ContactCard({
   const footerEl = tab === 'dados' ? (
     <div className="flex-shrink-0 px-6 py-4 border-t border-[#E2E8F0] space-y-2">
       <button onClick={handleSave} disabled={saving}
-        className="w-full bg-[#00A896] text-white font-semibold py-3 rounded-lg hover:bg-[#008f81] disabled:opacity-50 transition-colors">
+        className="w-full bg-[#05907B] text-white font-semibold py-3 rounded-lg hover:bg-[#008f81] disabled:opacity-50 transition-colors">
         {saving ? 'Salvando...' : 'Salvar alterações'}
       </button>
       <button onClick={onClose}
@@ -759,7 +759,7 @@ export default function ContactCard({
 
   const spinnerEl = (
     <div className="flex-1 flex flex-col items-center justify-center gap-3">
-      <div className="w-8 h-8 border-2 border-[#00A896] border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-[#05907B] border-t-transparent rounded-full animate-spin" />
       <p className="text-sm text-[#94A3B8]">Carregando...</p>
     </div>
   )
@@ -781,8 +781,8 @@ export default function ContactCard({
                   onClick={() => handleContactTypeChange(ct.key)}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left ${
                     form.contact_type === ct.key
-                      ? 'border-2 border-[#00A896] bg-[#E6F7F5] text-[#00A896]'
-                      : 'border border-[#E2E8F0] bg-white text-[#64748B] hover:border-[#00A896] hover:text-[#00A896]'
+                      ? 'border-2 border-[#05907B] bg-[#E6F7F5] text-[#05907B]'
+                      : 'border border-[#E2E8F0] bg-white text-[#64748B] hover:border-[#05907B] hover:text-[#05907B]'
                   }`}>
                   <span>{ct.icon}</span><span>{ct.label}</span>
                 </button>
@@ -797,23 +797,23 @@ export default function ContactCard({
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">Nome completo</label>
                 <input value={form.responsible_name} onChange={e => setForm(f => ({ ...f, responsible_name: e.target.value }))}
-                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
+                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">CPF</label>
                 <input value={form.cpf} onChange={e => setForm(f => ({ ...f, cpf: e.target.value }))}
                   placeholder="000.000.000-00"
-                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
+                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">Telefone / WhatsApp</label>
                 <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
+                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">E-mail</label>
                 <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
+                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none" />
               </div>
             </div>
           </div>
@@ -830,12 +830,12 @@ export default function ContactCard({
             <div>
               <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do aluno</label>
               <input value={form.student_name} onChange={e => setForm(f => ({ ...f, student_name: e.target.value }))}
-                className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
+                className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none" />
             </div>
             <div>
               <label className="block text-xs font-medium text-[#64748B] mb-1">Série/Ano</label>
               <select value={form.grade_interest} onChange={e => setForm(f => ({ ...f, grade_interest: e.target.value }))}
-                className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none">
+                className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#05907B] outline-none">
                 <option value="">Selecionar...</option>
                 {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
@@ -843,7 +843,7 @@ export default function ContactCard({
             <div>
               <label className="block text-xs font-medium text-[#64748B] mb-1">Turno</label>
               <select value={form.shift} onChange={e => setForm(f => ({ ...f, shift: e.target.value }))}
-                className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none">
+                className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#05907B] outline-none">
                 <option value="">Selecionar...</option>
                 {TURNS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -851,7 +851,7 @@ export default function ContactCard({
             <div>
               <label className="block text-xs font-medium text-[#64748B] mb-1">Origem</label>
               <select value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
-                className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none">
+                className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#05907B] outline-none">
                 <option value="">Selecionar...</option>
                 {withCurrent(schoolSources, form.source).map(o => <option key={o} value={o}>{o}</option>)}
               </select>
@@ -860,7 +860,7 @@ export default function ContactCard({
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">{unitCfg.label}</label>
                 <select value={form.unit_id} onChange={e => setForm(f => ({ ...f, unit_id: e.target.value }))}
-                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none">
+                  className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#05907B] outline-none">
                   <option value="">Sem {unitCfg.label.toLowerCase()}</option>
                   {unitOptionsFor(unitCfg, form.unit_id).map(u => <option key={u.id} value={u.id}>{u.name}{u.active ? '' : ' (desativada)'}</option>)}
                 </select>
@@ -883,14 +883,14 @@ export default function ContactCard({
                     {cf.type === 'select' ? (
                       <select value={customFieldValues[cf.id] || ''}
                         onChange={e => setCustomFieldValues(prev => ({ ...prev, [cf.id]: e.target.value }))}
-                        className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none">
+                        className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#05907B] outline-none">
                         <option value="">Selecionar...</option>
                         {(cf.options || []).map((o: string) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : (
                       <input type={cf.type || 'text'} value={customFieldValues[cf.id] || ''}
                         onChange={e => setCustomFieldValues(prev => ({ ...prev, [cf.id]: e.target.value }))}
-                        className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
+                        className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none" />
                     )}
                   </div>
                 ))}
@@ -907,16 +907,16 @@ export default function ContactCard({
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               {form.tags.map(tag => (
-                <span key={tag} className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E6F7F5] text-[#00A896]">
+                <span key={tag} className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E6F7F5] text-[#05907B]">
                   {tag}
                   <button onClick={() => setForm(f => ({ ...f, tags: f.tags.filter(t => t !== tag) }))}
-                    className="text-[#00A896] hover:text-[#dc2626] leading-none">×</button>
+                    className="text-[#05907B] hover:text-[#dc2626] leading-none">×</button>
                 </span>
               ))}
             </div>
             <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={handleTagKeyDown}
               placeholder="Digite e pressione Enter para adicionar tag"
-              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
+              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none" />
           </div>
 
           {/* Pesquisas de satisfação */}
@@ -999,9 +999,9 @@ export default function ContactCard({
           <div>
             <textarea value={newNote} onChange={e => setNewNote(e.target.value)}
               placeholder="Adicionar anotação..." rows={3}
-              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none resize-none" />
+              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none resize-none" />
             <button onClick={handleAddNote} disabled={savingNote || !newNote.trim()}
-              className="mt-2 w-full bg-[#00A896] text-white font-semibold py-2.5 rounded-lg hover:bg-[#008f81] disabled:opacity-50 transition-colors text-sm">
+              className="mt-2 w-full bg-[#05907B] text-white font-semibold py-2.5 rounded-lg hover:bg-[#008f81] disabled:opacity-50 transition-colors text-sm">
               {savingNote ? 'Salvando...' : 'Adicionar anotação'}
             </button>
           </div>
@@ -1014,7 +1014,7 @@ export default function ContactCard({
               <div key={n.id} className="p-3 bg-[#F8FAFB] rounded-xl border border-[#E2E8F0]">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-[#E6F7F5] flex items-center justify-center text-[10px] font-bold text-[#00A896] flex-shrink-0">
+                    <div className="w-6 h-6 rounded-full bg-[#E6F7F5] flex items-center justify-center text-[10px] font-bold text-[#05907B] flex-shrink-0">
                       {initials(n.author_name || 'U')}
                     </div>
                     <span className="text-xs font-semibold text-[#1A2B4A]">{n.author_name}</span>
@@ -1025,7 +1025,7 @@ export default function ContactCard({
                       aqui é só pra nem mostrar o botão de quem não pode usar. */}
                   {isOwn && !isEditing && (
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => startEditNote(n)} className="p-1 text-[#94A3B8] hover:text-[#00A896] transition-colors">
+                      <button onClick={() => startEditNote(n)} className="p-1 text-[#94A3B8] hover:text-[#05907B] transition-colors">
                         <Pencil size={12} />
                       </button>
                       <button onClick={() => handleDeleteNote(n.id)} className="p-1 text-[#94A3B8] hover:text-[#dc2626] transition-colors">
@@ -1037,10 +1037,10 @@ export default function ContactCard({
                 {isEditing ? (
                   <div className="space-y-2">
                     <textarea value={editingNoteText} onChange={e => setEditingNoteText(e.target.value)} rows={3}
-                      className="w-full px-3 py-2 text-sm bg-white border border-[#E2E8F0] rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none resize-none" />
+                      className="w-full px-3 py-2 text-sm bg-white border border-[#E2E8F0] rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#05907B] outline-none resize-none" />
                     <div className="flex gap-2">
                       <button onClick={handleSaveNoteEdit} disabled={savingNoteEdit || !editingNoteText.trim()}
-                        className="text-xs font-semibold text-white bg-[#00A896] px-3 py-1.5 rounded-lg hover:bg-[#008f81] disabled:opacity-50">
+                        className="text-xs font-semibold text-white bg-[#05907B] px-3 py-1.5 rounded-lg hover:bg-[#008f81] disabled:opacity-50">
                         {savingNoteEdit ? 'Salvando...' : 'Salvar'}
                       </button>
                       <button onClick={() => { setEditingNoteId(null); setEditingNoteText('') }}
@@ -1120,7 +1120,7 @@ export default function ContactCard({
             </p>
           ) : loadingT ? (
             <div className="flex justify-center py-12">
-              <div className="w-6 h-6 border-2 border-[#00A896] border-t-transparent rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-[#05907B] border-t-transparent rounded-full animate-spin" />
             </div>
           ) : transfers.length > 0 ? (
             <>
@@ -1154,7 +1154,7 @@ export default function ContactCard({
                 )
               })}
               <button onClick={() => setShowTForm(v => !v)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-[#CBD5E1] rounded-lg text-sm text-[#94A3B8] font-medium hover:border-[#00A896] hover:text-[#00A896] transition-colors">
+                className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-[#CBD5E1] rounded-lg text-sm text-[#94A3B8] font-medium hover:border-[#05907B] hover:text-[#05907B] transition-colors">
                 <Plus size={13} /> Registrar nova transferência
               </button>
             </>
@@ -1178,12 +1178,12 @@ export default function ContactCard({
                 <div>
                   <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do aluno *</label>
                   <input value={tForm.studentName} onChange={e => setTForm(f => ({ ...f, studentName: e.target.value }))}
-                    className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
+                    className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#64748B] mb-1">Série *</label>
                   <select value={tForm.grade} onChange={e => setTForm(f => ({ ...f, grade: e.target.value }))}
-                    className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none">
+                    className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#05907B] outline-none">
                     <option value="">Selecionar...</option>
                     {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
@@ -1191,12 +1191,12 @@ export default function ContactCard({
                 <div>
                   <label className="block text-xs font-medium text-[#64748B] mb-1">Motivo informado</label>
                   <input value={tForm.statedReason} onChange={e => setTForm(f => ({ ...f, statedReason: e.target.value }))}
-                    className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
+                    className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#64748B] mb-1">Observações internas</label>
                   <textarea value={tForm.internalNotes} onChange={e => setTForm(f => ({ ...f, internalNotes: e.target.value }))} rows={3}
-                    className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none resize-none" />
+                    className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#05907B] outline-none resize-none" />
                 </div>
                 {tError && <p className="text-xs text-[#DC2626]">{tError}</p>}
                 <div className="flex gap-2 justify-end">

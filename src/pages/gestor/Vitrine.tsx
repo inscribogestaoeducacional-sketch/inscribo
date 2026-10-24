@@ -578,7 +578,7 @@ export default function Vitrine() {
     : incomplete > 0 ? { tone: 'warn', text: incomplete === 1 ? '1 bloco incompleto' : `${incomplete} blocos incompletos`, click: true }
     : { tone: 'idle', text: 'Tudo salvo', click: false }
   const SAVE_TONE: Record<string, React.CSSProperties> = {
-    error: { background: '#FEF2F2', color: '#DC2626' }, saving: { background: '#E6F7F5', color: '#00A896' },
+    error: { background: '#FEF2F2', color: '#DC2626' }, saving: { background: '#E6F7F5', color: '#05907B' },
     warn: { background: '#FEF3C7', color: '#D97706' }, saved: { background: '#D1FAE5', color: '#059669' }, idle: { background: '#F1F5F9', color: '#64748B' },
   }
 
@@ -588,8 +588,8 @@ export default function Vitrine() {
   const previewDoc = previewHtml + `<style>
 [data-pb]{cursor:pointer;outline:2px solid transparent;outline-offset:4px;border-radius:14px;transition:outline-color .2s ease}
 [data-pb]:hover{outline-color:rgba(0,168,150,.45)}
-${selectedPreviewId ? `[data-pb="${selectedPreviewId.replace(/[^a-zA-Z0-9-]/g, '')}"]{outline:2px solid #00A896!important;position:relative}
-[data-pb="${selectedPreviewId.replace(/[^a-zA-Z0-9-]/g, '')}"]::before{content:'Editando';position:absolute;top:-11px;right:10px;z-index:5;font:700 10px/1 -apple-system,'Segoe UI',sans-serif;letter-spacing:.02em;background:#00A896;color:#fff;padding:4px 8px;border-radius:999px}` : ''}
+${selectedPreviewId ? `[data-pb="${selectedPreviewId.replace(/[^a-zA-Z0-9-]/g, '')}"]{outline:2px solid #05907B!important;position:relative}
+[data-pb="${selectedPreviewId.replace(/[^a-zA-Z0-9-]/g, '')}"]::before{content:'Editando';position:absolute;top:-11px;right:10px;z-index:5;font:700 10px/1 -apple-system,'Segoe UI',sans-serif;letter-spacing:.02em;background:#05907B;color:#fff;padding:4px 8px;border-radius:999px}` : ''}
 </style><script>(function(){document.addEventListener('click',function(e){var el=e.target&&e.target.closest&&e.target.closest('[data-pb]');if(!el)return;e.preventDefault();e.stopPropagation();parent.postMessage({vitrinePick:el.getAttribute('data-pb')},'*')},true);
 ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreviewId.replace(/[^a-zA-Z0-9-]/g, '')}"]');if(s){var r=s.getBoundingClientRect(),se=document.scrollingElement||document.documentElement;se.scrollTop+=r.top-(innerHeight-r.height)/2}` : ''}})();</script>`
 
@@ -638,7 +638,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
   ]
   const hdrBtn = (primary?: boolean): React.CSSProperties => ({
     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 11, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-    border: primary ? 'none' : '1px solid rgba(255,255,255,.4)', background: primary ? '#fff' : 'rgba(255,255,255,.16)', color: primary ? '#007A6E' : '#fff',
+    border: primary ? 'none' : '1px solid rgba(255,255,255,.4)', background: primary ? '#fff' : 'rgba(255,255,255,.16)', color: primary ? '#00695F' : '#fff',
   })
   const flagKey = (k: string) => `vitrine:${institutionId}:${k}`
   function setFlag(k: 'qr' | 'bio') {
@@ -698,9 +698,9 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
         .vit-icon{transition:background .15s ease,color .15s ease}
         .vit-icon:hover{background:#F1F5F9!important;color:#1e293b!important}
         .vit-gap{position:relative;height:12px;display:flex;align-items:center}
-        .vit-gap::before{content:'';position:absolute;left:18px;right:18px;height:2px;border-radius:2px;background:#00A896;opacity:0;transform:scaleX(.4);transition:all .2s cubic-bezier(0.4,0,0.2,1)}
+        .vit-gap::before{content:'';position:absolute;left:18px;right:18px;height:2px;border-radius:2px;background:#05907B;opacity:0;transform:scaleX(.4);transition:all .2s cubic-bezier(0.4,0,0.2,1)}
         .vit-gap:hover::before{opacity:.35;transform:none}
-        .vit-gap button{position:absolute;left:50%;z-index:2;width:24px;height:24px;border-radius:50%;border:1px solid #00A896;background:#fff;color:#00A896;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transform:translateX(-50%) scale(.6);transition:all .18s cubic-bezier(0.4,0,0.2,1)}
+        .vit-gap button{position:absolute;left:50%;z-index:2;width:24px;height:24px;border-radius:50%;border:1px solid #05907B;background:#fff;color:#05907B;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transform:translateX(-50%) scale(.6);transition:all .18s cubic-bezier(0.4,0,0.2,1)}
         .vit-gap:hover button,.vit-gap button:focus-visible{opacity:1;transform:translateX(-50%) scale(1)}
         .vit-btn{transition:all .18s cubic-bezier(0.4,0,0.2,1)}
         .vit-btn:hover:not(:disabled){box-shadow:0 4px 16px rgba(0,168,150,0.10),0 2px 4px rgba(0,0,0,0.04);transform:translateY(-1px)}
@@ -780,9 +780,9 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                 background: sel ? '#fff' : 'transparent', color: sel ? '#1e2d6b' : '#64748b',
                 boxShadow: sel ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
               }}>
-                <t.Icon size={15} color={sel ? '#00A896' : '#94a3b8'} /> {t.label}
+                <t.Icon size={15} color={sel ? '#05907B' : '#94a3b8'} /> {t.label}
                 {t.count !== undefined && (
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, background: sel ? '#E6F7F5' : '#E2E8F0', color: sel ? '#00A896' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{t.count}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, background: sel ? '#E6F7F5' : '#E2E8F0', color: sel ? '#05907B' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{t.count}</span>
                 )}
               </button>
             )
@@ -835,7 +835,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                   </div>
                   {blocks.length > 0 && (
                     <button type="button" onClick={() => setShowPicker(true)} disabled={blocks.length >= VITRINE_MAX_BLOCKS} className="vit-btn"
-                      style={{ ...btn, border: '1px solid #00A896', background: '#00A896', color: '#fff', boxShadow: '0 4px 14px rgba(0,168,150,0.25)' }}>
+                      style={{ ...btn, border: '1px solid #05907B', background: '#05907B', color: '#fff', boxShadow: '0 4px 14px rgba(0,168,150,0.25)' }}>
                       <Plus size={15} /> Adicionar bloco
                     </button>
                   )}
@@ -843,7 +843,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                 {blocks.length === 0 ? (
                   <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: '48px 28px', textAlign: 'center', boxShadow: DS.shadowSm }}>
                     <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                      <Store size={24} color="#00A896" />
+                      <Store size={24} color="#05907B" />
                     </div>
                     <p style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1e2d6b', letterSpacing: '-0.01em' }}>Monte a página da escola</p>
                     <p style={{ margin: '0 0 20px', fontSize: 13, color: '#64748b', maxWidth: 440, marginInline: 'auto', lineHeight: 1.6 }}>
@@ -859,13 +859,13 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                         )
                       })}
                       <button type="button" onClick={() => setShowPicker(true)} className="vit-btn"
-                        style={{ ...btn, border: '1px solid #00A896', background: '#00A896', color: '#fff', boxShadow: '0 4px 14px rgba(0,168,150,0.25)' }}>
+                        style={{ ...btn, border: '1px solid #05907B', background: '#05907B', color: '#fff', boxShadow: '0 4px 14px rgba(0,168,150,0.25)' }}>
                         <Plus size={15} /> Outros blocos
                       </button>
                     </div>
                     <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
                       <button type="button" onClick={() => goTab('appearance')} className="vit-ghost"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 600, color: '#00A896', cursor: 'pointer' }}>
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 600, color: '#05907B', cursor: 'pointer' }}>
                         <LayoutTemplate size={15} /> Ou comece com um modelo pronto
                       </button>
                     </div>
@@ -911,7 +911,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
             <aside aria-label="Prévia da página" style={{ position: 'sticky', top: headerH + 16, flex: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#64748b' }}>
-                  <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: '#00A896', boxShadow: '0 0 0 3px #E6F7F5' }} /> Prévia ao vivo
+                  <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: '#05907B', boxShadow: '0 0 0 3px #E6F7F5' }} /> Prévia ao vivo
                 </span>
                 <div role="radiogroup" aria-label="Tamanho da prévia" style={{ display: 'flex', gap: 2, background: '#F1F5F9', borderRadius: 999, padding: 3 }}>
                   {([{ v: 'mobile' as const, label: 'Celular', Icon: Smartphone }, { v: 'desktop' as const, label: 'Computador', Icon: Monitor }]).map(({ v, label, Icon }) => (
@@ -924,7 +924,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
                 </div>
                 {hasAnimation && (
                   <button type="button" onClick={playAnimation} className="vit-btn"
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 999, border: '1px solid #D1FAE5', background: '#F0FDFB', fontSize: 12, fontWeight: 600, color: '#00A896', cursor: 'pointer' }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 999, border: '1px solid #D1FAE5', background: '#F0FDFB', fontSize: 12, fontWeight: 600, color: '#05907B', cursor: 'pointer' }}>
                     <Play size={12} /> Ver animação
                   </button>
                 )}
@@ -966,7 +966,7 @@ ${selectedPreviewId ? `var s=document.querySelector('[data-pb="${selectedPreview
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
               <button type="button" onClick={() => setScheduleDraft(null)} className="vit-btn" style={btn}>Cancelar</button>
               <button type="button" disabled={!!err || scheduleSaving} onClick={saveSchedule} className="vit-btn"
-                style={{ ...btn, border: 'none', background: err ? '#E2E8F0' : '#00A896', color: err ? '#94a3b8' : '#fff', cursor: err ? 'not-allowed' : 'pointer', boxShadow: err ? 'none' : '0 4px 14px rgba(0,168,150,0.25)' }}>
+                style={{ ...btn, border: 'none', background: err ? '#E2E8F0' : '#05907B', color: err ? '#94a3b8' : '#fff', cursor: err ? 'not-allowed' : 'pointer', boxShadow: err ? 'none' : '0 4px 14px rgba(0,168,150,0.25)' }}>
                 {scheduleSaving ? 'Salvando…' : 'Salvar agenda'}
               </button>
             </div>

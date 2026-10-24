@@ -257,7 +257,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#00A896] outline-none"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#05907B] outline-none"
             placeholder="Buscar colega..."
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -268,7 +268,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex justify-center py-10">
-            <div className="w-6 h-6 border-2 border-[#00A896] border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[#05907B] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filteredColleagues.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-10 px-4">
@@ -281,7 +281,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
             <button key={c.id} onClick={() => openConversation(c.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-gray-50 transition-colors ${active ? 'bg-[#E6F7F5]' : 'hover:bg-gray-50'}`}>
               <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
-                style={{ background: 'linear-gradient(135deg, #00A896, #0DD3BF)' }}>
+                style={{ background: 'linear-gradient(135deg, #05907B, #2DCBA4)' }}>
                 {initialsOf(c.full_name)}
               </div>
               <div className="flex-1 min-w-0">
@@ -325,7 +325,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
             </button>
           )}
           <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, #00A896, #0DD3BF)' }}>
+            style={{ background: 'linear-gradient(135deg, #05907B, #2DCBA4)' }}>
             {initialsOf(activeColleague.full_name)}
           </div>
           <div className="flex-1 min-w-0">
@@ -342,7 +342,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
           {loadingThread ? (
             <div className="flex justify-center py-10">
-              <div className="w-6 h-6 border-2 border-[#00A896] border-t-transparent rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-[#05907B] border-t-transparent rounded-full animate-spin" />
             </div>
           ) : messages.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-10">Nenhuma mensagem ainda — diga oi 👋</p>
@@ -351,7 +351,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
             return (
               <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words ${
-                  mine ? 'bg-[#00A896] text-white rounded-br-sm' : 'bg-white border border-gray-200 text-[#1A2B4A] rounded-bl-sm'
+                  mine ? 'bg-[#05907B] text-white rounded-br-sm' : 'bg-white border border-gray-200 text-[#1A2B4A] rounded-bl-sm'
                 }`}>
                   {m.content}
                   <div className={`text-[10px] mt-1 text-right ${mine ? 'text-white/70' : 'text-gray-400'}`}>
@@ -365,14 +365,14 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
 
         <div className="p-2.5 border-t border-gray-100 bg-white flex items-center gap-2 flex-shrink-0">
           <input
-            className="flex-1 px-3.5 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#00A896] outline-none min-w-0"
+            className="flex-1 px-3.5 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#05907B] outline-none min-w-0"
             placeholder="Escreva uma mensagem..."
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
           />
           <button onClick={handleSend} disabled={!draft.trim() || sending}
-            className="w-9 h-9 rounded-xl bg-[#00A896] text-white flex items-center justify-center disabled:opacity-40 flex-shrink-0">
+            className="w-9 h-9 rounded-xl bg-[#05907B] text-white flex items-center justify-center disabled:opacity-40 flex-shrink-0">
             <Send size={15} />
           </button>
         </div>
