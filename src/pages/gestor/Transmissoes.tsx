@@ -8,6 +8,7 @@
 // Function broadcast-campaigns; aqui só se lê (RLS) e se chama o backend.
 // Visual segue CaptacaoInteligente.tsx.
 // =============================================================================
+import { PillTabs, useTabSwipe } from '../../components/mobile/PillTabs'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Send, Plus, Wallet, Radio, AlertTriangle, RefreshCw, CheckCheck, Eye, MessageCircle, TrendingUp, TrendingDown, CalendarClock, Pause, CreditCard, ChevronRight } from 'lucide-react'
@@ -24,6 +25,7 @@ import CampaignWizard from '../../components/transmissoes/CampaignWizard'
 import CampaignDetail from '../../components/transmissoes/CampaignDetail'
 
 type Tab = 'campaigns' | 'templates' | 'suppressions'
+const TR_TABS: [string, string][] = [['campaigns', 'Campanhas'], ['templates', 'Templates'], ['suppressions', 'Não recebem']]
 
 const TEAL = '#05907B', TEAL_D = '#00695F', NAVY = '#1A2B4A', LINE = '#E3E8F0'
 const fmt = (n: number) => n.toLocaleString('pt-BR')
@@ -126,8 +128,9 @@ export default function Transmissoes() {
   })
   const segWrap: React.CSSProperties = { display: 'flex', gap: 3, background: '#fff', border: `1px solid ${LINE}`, borderRadius: 12, padding: 3, width: 'fit-content', maxWidth: '100%', overflowX: 'auto' }
 
+  const swipeProps = useTabSwipe(TR_TABS.map(t => t[0]), tab, id => setTab(id as Tab), mobile)
   return (
-    <div style={{ padding: mobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: '#F5FAF9' }}>
+    <div {...swipeProps} style={{ padding: mobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: '#F5FAF9' }}>
       <style>{LEADS_CSS}</style>
       <PageHeader
         icon={Send}
@@ -168,7 +171,7 @@ export default function Transmissoes() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'repeat(2, minmax(0,1fr))' : 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+        <div className={mobile ? 'aion-snap' : undefined} style={{ display: 'grid', gridTemplateColumns: mobile ? undefined : 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
           {kp.map((k, i) => {
             const Icon = k.icon
             return (
@@ -186,11 +189,12 @@ export default function Transmissoes() {
           })}
         </div>
 
+        {mobile ? <PillTabs tabs={TR_TABS} value={tab} onChange={id => setTab(id as Tab)} /> : (
         <div style={segWrap} role="tablist">
-          {([{ k: 'campaigns' as const, l: 'Campanhas' }, { k: 'templates' as const, l: 'Templates' }, { k: 'suppressions' as const, l: 'Não recebem' }]).map(x => (
-            <button key={x.k} role="tab" aria-selected={tab === x.k} onClick={() => setTab(x.k)} style={seg(tab === x.k)}>{x.l}</button>
+          {TR_TABS.map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k as Tab)} style={seg(tab === k)}>{l}</button>
           ))}
-        </div>
+        </div>)}
 
         {tab === 'campaigns' && (
           <>
