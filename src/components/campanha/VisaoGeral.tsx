@@ -97,7 +97,7 @@ export default function VisaoGeral(p: Props) {
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+      <div className="aion-snap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
         {kpis.map(([t, v, m, c, bc]) => (
           <div key={t} style={card}><div style={{ fontSize: 28, fontWeight: 800, color: c, lineHeight: 1.1 }}><CountUp value={v} /></div>
             <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>{t}{t === 'Pré-matriculados' ? ` · faltam ${m} para a meta` : ` · meta ${m}`}</div><Bar v={v} max={m} c={bc} /></div>

@@ -10,7 +10,7 @@
 //   mês a mês    = pelo jeito que a escola matriculou nos anos anteriores
 // Escola sem histórico (sem integração nem planilha): digita os números base e o sistema usa uma
 // curva padrão, marcada como "estimativa".
-import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet, LogOut, Link2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -101,6 +101,9 @@ export default function CampanhaMatriculas() {
   const [showLink, setShowLink] = useState(false)
   const [step, setStep] = useState(1)
   const [reloadKey, setReloadKey] = useState(0)
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => { const h = () => setIsMobile(window.innerWidth < 768); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h) }, [])
+  const swipeRef = useRef<{ x: number; y: number } | null>(null)
   const [geralKind, setGeralKind] = useState<'novos' | 'rematriculas'>('novos')
   const [report, setReport] = useState<Report | null>(null)
   const [reportAt, setReportAt] = useState<string | null>(null)
@@ -340,7 +343,17 @@ export default function CampanhaMatriculas() {
   }
 
   const st = STATUS_LABEL[cycle?.status ?? 'draft'] ?? STATUS_LABEL.draft
-  const tabBtn = (id: Tab, label: string, Icon: typeof LayoutGrid) => (
+  const TAB_LIST: [Tab, string, typeof LayoutGrid][] = [
+    ['geral', 'Visão geral', LayoutGrid], ['funil', 'Funil', Filter], ['novatos', 'Novatos', Users], ['rematricula', 'Rematrícula', RefreshCw],
+    ['invest', 'Investimento', Wallet], ['serie', 'Séries e turmas', Layers], ['matriculometro', 'Matriculômetro', Flag], ['saidas', 'Saídas', LogOut], ['relatorio', 'Relatório', Sparkles],
+  ]
+  const tabBtn = (id: Tab, label: string, Icon: typeof LayoutGrid) => isMobile ? (
+    <button key={id} type="button" role="tab" aria-selected={tab === id} className="aion-tap" onClick={() => setTab(id)} style={{
+      flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, border: tab === id ? 'none' : `1px solid ${BRAND.line}`, borderRadius: 999, padding: '8px 14px', cursor: 'pointer', fontFamily: 'inherit',
+      fontSize: 13, fontWeight: 800, background: tab === id ? 'var(--aion-grad)' : '#fff', color: tab === id ? '#fff' : BRAND.muted,
+      boxShadow: tab === id ? '0 8px 18px -10px rgba(0,122,110,.8)' : 'none',
+    }}><Icon size={14} />{label}</button>
+  ) : (
     <button key={id} onClick={() => setTab(id)} style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, flex: '1 1 0', whiteSpace: 'nowrap', padding: '9px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
       fontSize: 12.5, fontWeight: 700, background: tab === id ? '#fff' : 'transparent', color: tab === id ? BRAND.primaryDark : BRAND.muted,
@@ -349,7 +362,18 @@ export default function CampanhaMatriculas() {
   )
 
   return (
-    <div style={{ padding: 24, maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ padding: 24, maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}
+      onTouchStart={e => { swipeRef.current = (e.target as Element).closest('.aion-snap, .aion-hscroll, table, input, select, textarea') ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+      onTouchEnd={e => {
+        const s0 = swipeRef.current; swipeRef.current = null
+        if (!s0 || !isMobile) return
+        const dx = e.changedTouches[0].clientX - s0.x, dy = e.changedTouches[0].clientY - s0.y
+        if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6) return
+        const i = TAB_LIST.findIndex(t => t[0] === tab)
+        if (i < 0) return
+        const n = TAB_LIST[Math.max(0, Math.min(TAB_LIST.length - 1, i + (dx < 0 ? 1 : -1)))][0]
+        if (n !== tab) { setTab(n); window.scrollTo?.({ top: 0 }) }
+      }}>
       <PageHeader icon={Flag} title="Campanha de Matrículas"
         subtitle={cycle ? `${cycle.label ?? `Campanha ${targetYear}`}${cycle.start_date ? ` · ${cycle.start_date.split('-').reverse().join('/')} a ${(cycle.end_date ?? '').split('-').reverse().join('/')}` : ''}${dayInfo ? ` · dia ${dayInfo.day} de ${dayInfo.total}` : ''}` : ''}
         actions={<>
@@ -375,17 +399,15 @@ export default function CampanhaMatriculas() {
         </div>
       )}
 
-      <div style={{ display: 'inline-flex', gap: 4, background: '#EEF3F2', borderRadius: 14, padding: 5, width: '100%', boxSizing: 'border-box', overflowX: 'auto' }}>
-        {tabBtn('geral', 'Visão geral', LayoutGrid)}
-        {tabBtn('funil', 'Funil', Filter)}
-        {tabBtn('novatos', 'Novatos', Users)}
-        {tabBtn('rematricula', 'Rematrícula', RefreshCw)}
-        {tabBtn('invest', 'Investimento', Wallet)}
-        {tabBtn('serie', 'Séries e turmas', Layers)}
-        {tabBtn('matriculometro', 'Matriculômetro', Flag)}
-        {tabBtn('saidas', 'Saídas', LogOut)}
-        {tabBtn('relatorio', 'Relatório', Sparkles)}
-      </div>
+      {isMobile ? (
+        <div className="aion-hscroll" role="tablist" style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -12px', padding: '2px 12px', position: 'sticky', top: 0, zIndex: 20, background: 'linear-gradient(#F5FAF9 70%, rgba(245,250,249,0))' }}>
+          {TAB_LIST.map(([id, l, I]) => tabBtn(id, l, I))}
+        </div>
+      ) : (
+        <div style={{ display: 'inline-flex', gap: 4, background: '#EEF3F2', borderRadius: 14, padding: 5, width: '100%', boxSizing: 'border-box', overflowX: 'auto' }}>
+          {TAB_LIST.map(([id, l, I]) => tabBtn(id, l, I))}
+        </div>
+      )}
 
       {loading && <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, color: BRAND.muted }}><Loader2 size={16} className="animate-spin" /> Carregando…</div>}
 
