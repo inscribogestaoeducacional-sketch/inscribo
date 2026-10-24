@@ -1341,6 +1341,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [showPlusSheet, setShowPlusSheet] = useState(false)
 
   const [windowExpired, setWindowExpired] = useState(false)
+  // Relógio de 1 minuto: atualiza os avisos de "janela fechando" sem recarregar
+  const [, setMinuteTick] = useState(0)
+  useEffect(() => { const t = setInterval(() => setMinuteTick(v => v + 1), 60000); return () => clearInterval(t) }, [])
+  // Quanto falta (ms) pra janela de 24h fechar; null = já fechou / sem mensagem do cliente
+  const windowLeftMs = (c?: { last_customer_message_at?: string } | null): number | null => {
+    if (!c?.last_customer_message_at) return null
+    const left = 24 * 3600000 - (Date.now() - new Date(c.last_customer_message_at).getTime())
+    return left > 0 ? left : null
+  }
+  const fmtLeft = (ms: number) => { const m = Math.max(1, Math.round(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m} min` }
+  const WINDOW_WARN_MS = 3 * 3600000
 
   // Meta API state
   const [metaConfig, setMetaConfig] = useState<{ phone_id: string; token: string } | null>(null)
@@ -3174,6 +3185,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = isStale ? '#FFEDD5' : isFree ? '#FEF3C7' : '#F8FAFC' }}
         onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isStale ? '#FFF7ED' : isFree ? '#FFFBEB' : 'transparent' }}
       >
+        {(() => {
+          const left = conv.isGroup || conv.status === 'closed' ? null : windowLeftMs(conv)
+          if (left === null || left > WINDOW_WARN_MS) return null
+          const urgent = left <= 3600000
+          return <span style={{ position: 'absolute', right: GUTTER, bottom: 7, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 99, fontSize: 10.5, fontWeight: 800, background: urgent ? '#FFE4E6' : '#FEF3C7', color: urgent ? '#BE123C' : '#B45309' }}>⏳ {fmtLeft(left)}</span>
+        })()}
         {/* Avatar com ring colorido quando ativo */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <div style={{
@@ -4719,7 +4736,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
       {/* Lightbox */}
       {lightboxUrl && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setLightboxUrl(null)}>
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4" style={{ zIndex: 1300 }} onClick={() => setLightboxUrl(null)}>
           <button className="absolute top-4 right-4 text-white/70 hover:text-white">
             <X className="w-6 h-6" />
           </button>
@@ -4729,7 +4746,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
       {/* New Conversation Modal */}
       {showNewConvModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4" style={{ zIndex: 1300 }}>
           <div className="bg-white rounded-2xl p-6 w-80 shadow-2xl border border-[#E2E8F0]">
             <h3 className="text-sm font-bold text-[#1A2B4A] mb-4">Nova Conversa</h3>
             <input
@@ -4808,7 +4825,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
       {/* Client Modal (placeholder) */}
       {showClientModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4" style={{ zIndex: 1300 }}>
           <div className="bg-white rounded-2xl p-6 w-80 shadow-2xl border border-[#E2E8F0]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-[#1A2B4A]">Marcar como Cliente</h3>
@@ -5639,6 +5656,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               </div>
             )}
 
+            {/* Lembrete: janela de 24h fechando (últimas 3h) */}
+            {!windowExpired && activeConv && activeConv.status !== 'closed' && (() => {
+              const left = windowLeftMs(activeConv)
+              if (left === null || left > WINDOW_WARN_MS) return null
+              const urgent = left <= 3600000
+              return (
+                <div className="wa-banner" style={{ background: urgent ? '#FFF1F2' : '#FFFBEB', border: `1px solid ${urgent ? '#FDA4AF' : '#FCD34D'}`, borderRadius: 12, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>⏳</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: urgent ? '#BE123C' : '#92400E', margin: 0 }}>Janela fecha em {fmtLeft(left)}</p>
+                    <p className="wa-banner-desc" style={{ fontSize: 11, color: urgent ? '#9F1239' : '#B45309', margin: '1px 0 0' }}>Depois disso só dá para falar com um template.</p>
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* 24h window expired overlay */}
             {windowExpired && recorderState === 'idle' ? (
               <div className="wa-banner" style={{ background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -5936,7 +5969,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
       {/* Template Modal */}
       {showTemplateModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4" style={{ zIndex: 1300 }}>
           <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-[#1A2B4A]">Enviar Template WhatsApp</h3>
@@ -6018,7 +6051,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       )}
 
       {showScheduleModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4" style={{ zIndex: 1300 }}>
           <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-[#1A2B4A]">Agendar Mensagem</h3>
