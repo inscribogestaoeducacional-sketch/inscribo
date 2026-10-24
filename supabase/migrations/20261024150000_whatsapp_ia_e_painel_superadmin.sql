@@ -1,0 +1,4 @@
+-- Aplicado no banco em 2026-10-24 (migrations whatsapp_ia_escrita_uso, whatsapp_usage_detail_superadmin,
+-- whatsapp_usage_detail_categoria_por_texto). Cria: wa_ai_usage, whatsapp_conversations.ai_summary/ai_summary_at,
+-- wa_ai_consume, wa_ai_add_tokens, whatsapp_ai_usage_by_school, whatsapp_usage_detail, whatsapp_failure_reasons, _tpl_category.
+-- Definições no banco (pg_get_functiondef).
