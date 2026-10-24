@@ -4375,7 +4375,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!activeId || !effectiveInstitutionId) return
     const convId = activeId
     const rJid   = rawJid(convId)
-    const previousStatus = conversationsRef.current.find(c => c.id === convId)?.status
+    const previousConv = conversationsRef.current.find(c => c.id === convId)
+    const previousStatus = previousConv?.status
+    // A pesquisa de satisfação é mensagem livre: só pode sair com a janela de 24h aberta
+    const windowWasOpen = !!previousConv?.last_customer_message_at && Date.now() - new Date(previousConv.last_customer_message_at).getTime() < 24 * 3600000
 
     // 1. Guard all Realtime events for this JID before any async operation
     CLOSING_IDS.add(rJid)
@@ -4420,7 +4423,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }, 10000)
 
     // 5. Send satisfaction survey if enabled
-    if (flowConfig?.satisfaction_survey_enabled) {
+    if (flowConfig?.satisfaction_survey_enabled && windowWasOpen && previousStatus !== 'closed') {
       const to = rJid.replace(/@.*/, '').replace(/\D/g, '')
       const surveyMsg = flowConfig.satisfaction_message || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊'
       try {
