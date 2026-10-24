@@ -3054,9 +3054,29 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     return () => clearInterval(interval)
   }, [activeConv?.last_customer_message_at, activeId])
 
-  const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
+  const totalUnread = conversations.reduce((s, c) => s + (c.status === 'closed' ? 0 : c.unreadCount), 0)
 
-  const naoLidas = conversations.filter(c => !c.isGroup && (c.unreadCount || 0) > 0).length
+  const naoLidas = conversations.filter(c => !c.isGroup && c.status !== 'closed' && (c.unreadCount || 0) > 0).length
+
+  // Abertas sem movimento há 3 dias+ (o atendimento acabou, só ninguém marcou como concluído)
+  const staleOpenConvs = conversations.filter(c => !c.isGroup && c.status === 'open' && Date.now() - c.lastTime.getTime() > 72 * 3600000)
+  const [concludingStale, setConcludingStale] = useState(false)
+  const concludeStale = async () => {
+    if (!effectiveInstitutionId || !staleOpenConvs.length) return
+    if (!window.confirm(`Concluir ${staleOpenConvs.length} conversas sem movimento há mais de 3 dias? Se o cliente escrever de novo, ela reabre sozinha.`)) return
+    setConcludingStale(true)
+    const ids = staleOpenConvs.map(c => c.id)
+    const rjids = staleOpenConvs.map(c => rawJid(c.id))
+    const payload = { status: 'closed', bot_active: false, unread_count: 0, closed_at: new Date().toISOString() }
+    const [a, b] = await Promise.all([
+      supabase.from('whatsapp_conversations').update(payload).eq('institution_id', effectiveInstitutionId).in('remote_jid', rjids).eq('status', 'open').select('id'),
+      supabase.from('whatsapp_conversations').update(payload).eq('institution_id', effectiveInstitutionId).in('remote_jid', rjids.map(j => `${j}@s.whatsapp.net`)).eq('status', 'open').select('id'),
+    ])
+    const done = (a.data?.length ?? 0) + (b.data?.length ?? 0)
+    setConversations(prev => prev.map(c => ids.includes(c.id) ? { ...c, status: 'closed' as ConvStatus, unreadCount: 0, bot_active: false } : c))
+    setConcludingStale(false)
+    if (done === 0) setSendError('Não foi possível concluir — só quem vê todas as conversas pode fazer isso.')
+  }
 
   // Fila de "aguardando": sem atendente e status waiting — visível a todos os
   // atendentes da instituição (RLS já garante isso; aqui é só organização visual).
@@ -3348,7 +3368,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               )}
 
               {/* Unread badge */}
-              {conv.unreadCount > 0 && (
+              {conv.unreadCount > 0 && conv.status !== 'closed' && (
                 <span style={{
                   background: '#05907B', color: 'white',
                   fontSize: 10, fontWeight: 700,
@@ -4374,7 +4394,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     // filteredMyConvs/RLS e "sumir" da aba Concluídas.
     setConversations(prev => prev.map(c =>
       c.id === convId
-        ? { ...c, status: 'closed' as ConvStatus, bot_active: false }
+        ? { ...c, status: 'closed' as ConvStatus, bot_active: false, unreadCount: 0 }
         : c
     ))
     setActiveId(null)
@@ -4997,6 +5017,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Conversation list */}
           <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
+            {canSeeAll && staleOpenConvs.length > 0 && statusFilter !== 'concluido' && (
+              <div style={{ margin: `8px ${GUTTER}px`, padding: '10px 12px', borderRadius: 12, background: '#FFFBEB', border: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: '#92400E' }}>{staleOpenConvs.length} conversas abertas sem movimento há 3 dias+</p>
+                  <p style={{ margin: '1px 0 0', fontSize: 11, color: '#B45309' }}>Provavelmente já acabaram e ninguém marcou como concluída.</p>
+                </div>
+                <button onClick={concludeStale} disabled={concludingStale} className="aion-tap" style={{ flexShrink: 0, border: 'none', borderRadius: 9, background: '#F59E0B', color: '#fff', fontWeight: 800, fontSize: 12, padding: '8px 12px', cursor: 'pointer', opacity: concludingStale ? .6 : 1 }}>{concludingStale ? 'Concluindo…' : 'Concluir todas'}</button>
+              </div>
+            )}
             {listIsEmpty ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, textAlign: 'center', padding: '0 16px' }}>
                 <p style={{ fontSize: 12, color: '#94A3B8' }}>Nenhuma conversa encontrada</p>

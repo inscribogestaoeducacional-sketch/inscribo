@@ -1245,7 +1245,7 @@ export class DatabaseService {
     // closed_at — usado pelo webhook (item A) pra saber se uma mensagem nova
     // chegou pouco depois do encerramento (reabre silenciosamente, sem
     // repetir boas-vindas/menu) ou muito depois (trata como atendimento novo).
-    const payload = { status: 'closed', bot_active: false, closed_at: new Date().toISOString() }
+    const payload = { status: 'closed', bot_active: false, unread_count: 0, closed_at: new Date().toISOString() }
 
     // Always update both formats in parallel — DB may have either form (legacy + current)
     const [r1, r2] = await Promise.all([
