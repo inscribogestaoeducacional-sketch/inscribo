@@ -1,3 +1,4 @@
+import PageHeader from '../../components/ui/PageHeader'
 import React, { useState, useEffect, useRef } from 'react'
 import {
   ArrowRightLeft, Plus, Copy, ExternalLink, Sparkles, Eye,
@@ -540,24 +541,14 @@ export default function GestorTransfers() {
       )}
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ArrowRightLeft size={18} color="#00A896" />
-            </div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Transferências</h1>
-          </div>
-          <p style={{ margin: 0, fontSize: 13, color: '#64748b', paddingLeft: 46 }}>
-            Gerencie solicitações de transferência e entenda os motivos reais
-          </p>
-        </div>
-        <button
-          onClick={() => { setForm(EMPTY_FORM); setEditingTransfer(null); setShowNewModal(true) }}
-          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, border: 'none', background: '#00A896', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-          <Plus size={15} /> Nova transferência
-        </button>
-      </div>
+      <PageHeader icon={ArrowRightLeft} title="Transferências" subtitle="Gerencie solicitações de transferência e entenda os motivos reais"
+        actions={
+          <button
+            onClick={() => { setForm(EMPTY_FORM); setEditingTransfer(null); setShowNewModal(true) }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#007A6E', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
+            <Plus size={15} /> Nova transferência
+          </button>
+        } />
 
       {activeTab === 'active' && <SaidasActivesoft institutionId={institutionId} onRegister={(name, grade) => { setForm({ ...EMPTY_FORM, studentName: name, grade }); setEditingTransfer(null); setShowNewModal(true) }} />}
 
@@ -581,11 +572,11 @@ export default function GestorTransfers() {
       {/* ── KPI cards (aba Ativos) ─────────────────────────────────────────── */}
       {activeTab === 'active' && (
       loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14 }}>
           {[...Array(4)].map((_, i) => <div key={i} style={{ height: 90, borderRadius: 14, background: '#fff', border: '1px solid #e2e8f0' }} className="animate-pulse" />)}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14 }}>
           <KpiCard label="Total"                value={fmt(total)}         icon={<ArrowRightLeft size={18} color="#DC2626" />} bg="#FEE2E2" />
           <KpiCard label="Este mês"             value={fmt(thisMonth)}     icon={<Clock size={18} color="#D97706" />}          bg="#FEF3C7" />
           <KpiCard label="Aguardando pesquisa"  value={fmt(pending)}       icon={<AlertTriangle size={18} color="#64748B" />}  bg="#F1F5F9" />

@@ -1,3 +1,4 @@
+import PageHeader from '../ui/PageHeader'
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -800,28 +801,18 @@ export default function UserManagement() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Users size={18} color="#3B82F6" />
-          </div>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Usuários</h1>
-            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Controle de acesso e permissões</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={loadUsers} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
-            <RefreshCw size={13} /> Atualizar
+      <PageHeader icon={Users} title="Usuários" subtitle="Controle de acesso e permissões"
+        actions={<>
+          <button onClick={loadUsers} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <RefreshCw size={14} /> Atualizar
           </button>
-          <button onClick={() => { setEditingUser(null); setShowModal(true) }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={() => { setEditingUser(null); setShowModal(true) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#007A6E', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
             <Plus size={15} /> Novo Usuário
           </button>
-        </div>
-      </div>
+        </>} />
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
         {[
           { label: 'Total', value: stats.total, color: '#3B82F6', bg: '#DBEAFE', Icon: Users },
           { label: 'Ativos', value: stats.active, color: '#16a34a', bg: '#D1FAE5', Icon: CheckCircle },

@@ -1,3 +1,4 @@
+import PageHeader from '../../components/ui/PageHeader'
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -1317,7 +1318,7 @@ export default function GestorSurveys() {
     const nps = isDefault ? npsFromScores(responses.map(respondentOverallScore10)) : 0
 
     return (
-      <div style={{ padding: 24, background: '#f8f9fb', minHeight: '100%' }}>
+      <div style={{ padding: 'clamp(12px, 3vw, 24px)', background: '#f8f9fb', minHeight: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
           <button onClick={() => setViewingSurvey(null)} style={{ ...btn('#F1F5F9', '#374151'), padding: '8px 14px' }}>
             ← Voltar
@@ -1428,7 +1429,7 @@ export default function GestorSurveys() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               {/* Cards de métricas */}
-              <div style={{ display: 'grid', gridTemplateColumns: isDefault ? 'repeat(4, 1fr)' : '1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isDefault ? 'repeat(auto-fit, minmax(180px, 1fr))' : '1fr', gap: 16 }}>
                 <div style={cardCompact}>
                   <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Respostas</p>
                   <p style={{ fontSize: 28, fontWeight: 900, color: '#1A2B4A', margin: 0 }}>{tableTotalCount}</p>
@@ -1751,27 +1752,19 @@ export default function GestorSurveys() {
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <ClipboardList size={18} color="#F97316" />
-          </div>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Pesquisas de Satisfação</h1>
-            <p style={{ fontSize: 13, color: '#94a3b8', margin: '2px 0 0' }}>Entenda o que as famílias pensam e antecipe rematrículas</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <button onClick={createStaffSurvey} disabled={saving} style={{ ...btn('#fff'), color: '#00796B', border: '1.5px solid #00A896' }}>
-            <Users size={16} /> Pesquisa dos colaboradores
-          </button>
-          <button onClick={openNewModal} style={btn('#00A896')}>
-            <Plus size={16} /> Nova pesquisa
-          </button>
-        </div>
+      <div style={{ marginBottom: 20 }}>
+        <PageHeader icon={ClipboardList} title="Pesquisas de Satisfação" subtitle="Entenda o que as famílias pensam e antecipe rematrículas"
+          actions={<>
+            <button onClick={createStaffSurvey} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <Users size={16} /> Pesquisa dos colaboradores
+            </button>
+            <button onClick={openNewModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#007A6E', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
+              <Plus size={16} /> Nova pesquisa
+            </button>
+          </>} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 24 }}>
         {kpis.map(k => (
           <div key={k.label} style={card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
