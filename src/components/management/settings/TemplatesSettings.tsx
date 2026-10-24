@@ -28,7 +28,7 @@ export default function TemplatesSettings({ institutionId }: { institutionId: st
   const onEdit = (t: TemplateRow, duplicate: boolean) => setRequest(r => ({ n: r.n + 1, template: t, duplicate }))
   const [rows, setRows] = useState<TemplateRow[]>([])
   const [loading, setLoading] = useState(true)
-  const reload = async () => { setLoading(true); try { setRows(await loadTemplates(institutionId)) } catch (e) { console.error('[Modelos]', e) } setLoading(false) }
+  const reload = async () => { setLoading(true); try { setRows(await loadTemplates(institutionId, { all: true })) } catch (e) { console.error('[Modelos]', e) } setLoading(false) }
   useEffect(() => { reload() }, [institutionId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mensagens de visita que o sistema envia sozinho: o modelo padrão de cada uma e a escolha da escola.
@@ -61,7 +61,7 @@ export default function TemplatesSettings({ institutionId }: { institutionId: st
 
   const visible = rows.filter(t => t.institution_id === null || (t.available_contexts || []).length > 0 || t.status !== 'not_submitted')
   const sorted = visible
-  const padrao = sorted.filter(t => t.institution_id === null)
+  const padrao = sorted.filter(t => t.institution_id === null && !(TEMPLATE_SLOT_KEYS as string[]).includes(t.name))
   const own = sorted.filter(t => t.institution_id !== null)
 
   const item = (t: TemplateRow) => {

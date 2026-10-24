@@ -31,7 +31,7 @@ export interface TemplateRow {
   visible: boolean
 }
 
-export async function loadTemplates(institutionId: string): Promise<TemplateRow[]> {
+export async function loadTemplates(institutionId: string, opts?: { all?: boolean }): Promise<TemplateRow[]> {
   // RLS já devolve só os da Áion + os desta escola.
   const [{ data: defs, error }, { data: sts }] = await Promise.all([
     supabase.from('template_definitions')
@@ -44,7 +44,7 @@ export async function loadTemplates(institutionId: string): Promise<TemplateRow[
   if (error) throw error
   const byDef = new Map(((sts || []) as any[]).map(s => [s.template_definition_id, s]))
   return ((defs || []) as any[])
-    .filter(d => d.institution_id === institutionId || (d.available_contexts || []).includes('broadcast'))
+    .filter(d => opts?.all || d.institution_id === institutionId || (d.available_contexts || []).includes('broadcast'))
     .map(d => {
       const s = byDef.get(d.id)
       return {
