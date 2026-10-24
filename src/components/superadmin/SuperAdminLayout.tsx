@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { syncMissingDefaultTemplates } from '../../lib/submitDefaultTemplates'
 import { useAlertNotifications } from '../../hooks/useAlertNotifications'
 import AlertNotificationList from '../layout/AlertNotificationList'
 import {
@@ -103,6 +104,7 @@ function NotifIcon({ type }: { type: string }) {
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
+  useEffect(() => { syncMissingDefaultTemplates() }, [])
   const location = useLocation()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
