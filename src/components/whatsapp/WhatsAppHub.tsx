@@ -4867,23 +4867,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 <Plus style={{ width: 16, height: 16 }} />
               </button>
             </div>
-            <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 10 }}>
-              {([
-                { label: 'Na fila', n: filteredWaitingConvs.length, hot: filteredWaitingConvs.length > 0, go: () => document.getElementById('wa-sec-fila')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
-                { label: 'Minhas', n: filteredMyConvs.length, hot: false, go: () => document.getElementById('wa-sec-minhas')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
-                { label: 'Não lidas', n: naoLidas, hot: naoLidas > 0, go: () => setReadFilter(readFilter === 'unread' ? 'all' : 'unread') },
-                { label: 'Paradas', n: filteredStaleConvs.length, hot: false, go: () => document.getElementById('wa-sec-paradas')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
-              ]).map(c => (
-                <button key={c.label} type="button" onClick={c.go}
-                  style={{ border: '1px solid rgba(255,255,255,.26)', background: c.label === 'Não lidas' && readFilter === 'unread' ? '#fff' : 'rgba(255,255,255,.14)', color: c.label === 'Não lidas' && readFilter === 'unread' ? '#007A6E' : '#fff', borderRadius: 12, padding: '6px 4px 7px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', transition: 'background .15s, transform .15s' }}
-                  onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-1px)')} onMouseLeave={e => (e.currentTarget.style.transform = 'none')}>
-                  <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                    {c.n}{c.hot && <span style={{ width: 7, height: 7, borderRadius: 99, background: '#FCA5A5', boxShadow: '0 0 0 3px rgba(252,165,165,.35)' }} />}
-                  </div>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, opacity: .92, marginTop: 1 }}>{c.label}</div>
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Search */}
