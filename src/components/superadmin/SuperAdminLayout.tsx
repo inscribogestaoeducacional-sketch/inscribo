@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { syncMissingDefaultTemplates } from '../../lib/submitDefaultTemplates'
 import { useAlertNotifications } from '../../hooks/useAlertNotifications'
 import AlertNotificationList from '../layout/AlertNotificationList'
+import { AppDock, MenuSheet, BottomSheet, SheetRow, ProfileHero, PageAnim, goTo, useIsMobile, DOCK_SPACE } from '../mobile/MobileShell'
 import {
   Home, Building2, DollarSign, FileText, Settings,
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
@@ -115,6 +116,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   )
   const [profileOpen, setProfileOpen]     = useState(false)
   const [notifOpen,   setNotifOpen]       = useState(false)
+  const [menuOpen,    setMenuOpen]        = useState(false)
   // Central de notificações (queda/silêncio do WhatsApp) — notification_alerts
   const { alerts, unread: alertsUnread, markRead: markAlertsRead } = useAlertNotifications()
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -261,6 +263,81 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
           </div>
         )}
       </Link>
+    )
+  }
+
+
+  // ── Celular: mesma cara de aplicativo da escola (barra de baixo + menu em folha) ──
+  const isMobile = useIsMobile()
+  if (isMobile) {
+    const ico = (it: MenuItem) => PH_ICON[it.icon.displayName || ''] || it.icon
+    const wanted = isConsultant
+      ? CONSULTANT_MENU
+      : ['/super-admin', '/super-admin/crm', '/super-admin/schools', '/super-admin/financial'].map(pp => ADMIN_MENU_FLAT.find(m => m.path === pp)!).filter(Boolean)
+    const inbox = isConsultant ? undefined : ADMIN_MENU_FLAT.find(m => m.path === '/super-admin/aion-inbox')
+    const bar = wanted.slice(0, inbox ? 3 : 4)
+    const onBar = (m: MenuItem) => bar.includes(m) || m === inbox
+    const act = (m: MenuItem) => isActive(m.path, m.exact)
+    const go = (to: string) => { setMenuOpen(false); setProfileOpen(false); setNotifOpen(false); if (to !== location.pathname) goTo(navigate, to) }
+    const groups = (isConsultant ? [{ title: 'Menu', items: CONSULTANT_MENU }] : ADMIN_GROUPS).map((g, gi) => ({
+      title: g.title,
+      modules: g.items.filter(m => !onBar(m)).map(m => ({ key: m.path, label: m.label, Icon: ico(m) as any, tint: gi, active: act(m), badge: m.path === '/super-admin/crm' ? overdueFollowups : 0, onPress: () => go(m.path) })),
+    })).filter(g => g.modules.length)
+    const onDock = ADMIN_MENU_FLAT.concat(CONSULTANT_MENU).some(m => onBar(m) && act(m))
+    const empty = notifications.length === 0 && overdueFollowups === 0 && todayMeetings === 0 && alerts.length === 0
+    return (
+      <div className="h-viewport" style={{ display: 'flex', flexDirection: 'column', width: '100vw', overflow: 'hidden', background: 'var(--bg-page)' }}>
+        <header className="aion-topbar" style={{ height: 58, background: '#fff', borderBottom: '0.5px solid #D1FAE5', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10, flexShrink: 0 }}>
+          <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 34, width: 'auto', maxWidth: 140, objectFit: 'contain', minWidth: 0 }} />
+          <span style={{ fontSize: 10.5, fontWeight: 800, color: '#00695F', background: '#E6F7F5', borderRadius: 999, padding: '3px 9px', flexShrink: 0 }}>{isConsultant ? 'Consultor' : 'Admin Geral'}</span>
+          <button type="button" aria-label="Notificações" className="aion-tap" onClick={() => { setNotifOpen(true); setProfileOpen(false) }}
+            style={{ marginLeft: 'auto', position: 'relative', width: 38, height: 38, borderRadius: 12, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <Bell size={18} />
+            {totalBadge > 0 && <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, padding: '0 4px', borderRadius: 99, background: '#F43F5E', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{totalBadge > 99 ? '99+' : totalBadge}</span>}
+          </button>
+          <button type="button" aria-label="Meu perfil" className="aion-tap" onClick={() => { setProfileOpen(true); setNotifOpen(false) }}
+            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--aion-grad)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>{initials}</button>
+        </header>
+        <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)', paddingBottom: DOCK_SPACE }}>
+          <PageAnim pathKey={location.pathname}>{children}</PageAnim>
+        </main>
+        <AppDock
+          items={bar.map(m => ({ key: m.path, label: m.label.replace('CRM Comercial', 'CRM').replace('Minhas Escolas', 'Escolas'), Icon: ico(m) as any, active: act(m) && !menuOpen, badge: m.path === '/super-admin/crm' ? overdueFollowups : undefined, onPress: () => go(m.path) }))}
+          center={inbox ? { key: inbox.path, label: 'Inbox', Icon: ico(inbox) as any, active: act(inbox) && !menuOpen, onPress: () => go(inbox.path) } : undefined}
+          menuOpen={menuOpen} menuActive={!onDock} onMenu={() => setMenuOpen(v => !v)} />
+        <MenuSheet open={menuOpen} onClose={() => setMenuOpen(false)} groups={groups} />
+        <BottomSheet open={notifOpen} onClose={() => setNotifOpen(false)} label="Notificações" height="82dvh">
+          <div style={{ padding: '4px 16px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {(unread > 0 || alertsUnread > 0) && <button type="button" onClick={markAllRead} className="aion-tap" style={{ alignSelf: 'flex-end', border: 'none', background: 'none', color: '#05907B', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Marcar tudo como lido</button>}
+            <AlertNotificationList alerts={alerts} onMarkRead={markAlertsRead} onNavigate={() => setNotifOpen(false)} />
+            {overdueFollowups > 0 && <SheetRow Icon={AlertCircle} label={`${overdueFollowups} follow-up${overdueFollowups > 1 ? 's' : ''} vencido${overdueFollowups > 1 ? 's' : ''} no CRM`} hint="Ver no CRM" onPress={() => go('/super-admin/crm')} />}
+            {todayMeetings > 0 && <SheetRow Icon={AlertCircle} label={`${todayMeetings} reunião${todayMeetings > 1 ? 'ões' : ''} hoje`} hint="Ver em Escolas" onPress={() => go('/super-admin/schools')} />}
+            {notifications.map(n => (
+              <div key={n.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: '#fff', border: '1px solid #E8EDF5', borderRadius: 16, padding: '12px 14px' }}>
+                <NotifIcon type={n.type} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>{n.title}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 12.5, color: '#64748B', lineHeight: 1.4 }}>{n.message}</p>
+                  <p style={{ margin: '4px 0 0', fontSize: 11, color: '#94A3B8' }}>{new Date(n.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+                {!n.read && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#05907B', marginTop: 6, flexShrink: 0 }} />}
+              </div>
+            ))}
+            {empty && <div style={{ textAlign: 'center', padding: '40px 0', color: '#94A3B8' }}><Bell size={30} style={{ margin: '0 auto 8px', opacity: .4 }} /><p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Tudo em dia</p></div>}
+          </div>
+        </BottomSheet>
+        <BottomSheet open={profileOpen} onClose={() => setProfileOpen(false)} label="Meu perfil">
+          <div style={{ padding: '4px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <ProfileHero avatar={<span style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--aion-grad)', color: '#fff', fontSize: 20, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials}</span>}
+              name={user?.full_name || 'Admin'} line1={user?.email || ''} line2={isConsultant ? 'Consultor' : 'Admin Geral'} />
+            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #E3E8F0', overflow: 'hidden' }}>
+              <SheetRow Icon={UserCog} label="Meu perfil" hint="Dados e senha" onPress={() => go('/super-admin/profile')} />
+              {!isConsultant && <SheetRow Icon={Settings} label="Configurações" hint="Ajustes da plataforma" onPress={() => go('/super-admin/settings')} />}
+              <SheetRow Icon={LogOut} label="Sair do sistema" danger onPress={handleLogout} />
+            </div>
+          </div>
+        </BottomSheet>
+      </div>
     )
   }
 

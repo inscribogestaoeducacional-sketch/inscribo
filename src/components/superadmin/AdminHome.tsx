@@ -242,7 +242,7 @@ export default function AdminHome() {
         )}
 
         {/* KPIs principais */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="aion-snap grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="MRR este mês"      value={fmtBRL(mrr)}        sub={`Projeção: ${fmtBRL(mrrProjected)}`}      icon={DollarSign}  grad="from-green-500 to-emerald-600" loading={loading} onClick={() => navigate('/super-admin/financial')} />
           <KpiCard label="Escolas ativas"    value={activeSchools}      sub={`${pendingSchools} pendente${pendingSchools !== 1 ? 's' : ''}`} icon={Building2}   grad="from-cyan-500 to-blue-600"    loading={loading} onClick={() => navigate('/super-admin/schools')} />
           <KpiCard label="Leads ativos"      value={activeLeads}        sub={`MRR pipeline: ${fmtBRL(mrrPipelineCRM)}`} icon={TrendingUp}  grad="from-indigo-500 to-violet-600" loading={loading} onClick={() => navigate('/super-admin/crm')} />
@@ -250,7 +250,7 @@ export default function AdminHome() {
         </div>
 
         {/* KPIs secundários */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="aion-snap grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Total escolas"     value={institutions.length}  icon={Building2}  grad="from-slate-500 to-gray-600"    loading={loading} />
           <KpiCard label="Reuniões hoje"     value={todayMeetings.length} sub={todayMeetings.length > 0 ? todayMeetings[0]?.title : undefined} icon={Calendar}   grad={todayMeetings.length > 0 ? "from-cyan-500 to-teal-500" : "from-gray-400 to-gray-500"} loading={loading} onClick={() => navigate('/super-admin/schools')} />
           <KpiCard label="Follow-ups vencidos" value={overdueLeads.length} icon={Clock}     grad={overdueLeads.length > 0 ? "from-amber-500 to-orange-500" : "from-gray-400 to-gray-500"} loading={loading} onClick={() => navigate('/super-admin/crm')} />

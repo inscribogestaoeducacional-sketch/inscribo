@@ -711,7 +711,7 @@ export default function AdminCRM() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="aion-snap grid grid-cols-2 lg:grid-cols-5 gap-4">
           {[
             { label: 'Total leads',  value: kpis.total,   icon: TrendingUp, color: 'text-blue-600',    bg: 'bg-blue-50'    },
             { label: 'Em andamento', value: kpis.active,  icon: Clock,      color: 'text-cyan-600',    bg: 'bg-cyan-50'    },

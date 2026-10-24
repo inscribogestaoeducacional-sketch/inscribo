@@ -1631,7 +1631,7 @@ export default function AdminFinancial() {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 overflow-x-auto">
+        <div className="aion-hscroll flex border-b border-gray-200 overflow-x-auto">
           {[
             { id: 'overview'    as Tab, label: 'Visão Geral' },
             { id: 'revenue'     as Tab, label: `Receitas (${revenueRows.length})` },
@@ -1654,7 +1654,7 @@ export default function AdminFinancial() {
           <div className="space-y-6">
 
             {/* Texto dinâmico */}
-            <div className="bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-100 rounded-2xl p-6">
+            <div className="rounded-2xl p-6" style={{ background: '#F0FDFB', border: '1px solid #D1FAE5' }}>
               <p className="text-sm text-gray-700 leading-relaxed">
                 Em <strong className="capitalize">{periodLabel}</strong>, a Áion faturou <strong>{fmtBRL(receitaPeriodo)}</strong>,
                 {' '}teve custos de <strong>{fmtBRL(custosPeriodo)}</strong> (incluindo {fmtBRL(commissionsTotal)} em comissões),
@@ -1664,7 +1664,7 @@ export default function AdminFinancial() {
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="aion-snap grid grid-cols-2 lg:grid-cols-3 gap-4">
               {[
                 { label: 'Receita do período', value: fmtBRL(receitaPeriodo), sub: `Projeção recorrente: ${fmtBRL(mrrProjected)}`, icon: DollarSign, grad: 'from-green-500 to-emerald-600' },
                 { label: 'Custos do período',   value: fmtBRL(custosPeriodo),  sub: 'fixos + variáveis + comissões',            icon: AlertTriangle, grad: 'from-red-500 to-rose-600' },
@@ -1896,7 +1896,7 @@ export default function AdminFinancial() {
               <span>Custos fixos/recorrentes (tabela abaixo) refletem a configuração <strong>atual</strong> — sem data de início/fim, não variam com o período selecionado. Só as saídas manuais respeitam o período.</span>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="aion-snap grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { label: 'Custos/mês (recorrente)', value: fmtBRL(platformCostsMonthly), sub: 'custos fixos ativos', grad: 'from-red-500 to-rose-600', icon: DollarSign },
                 { label: 'Saídas manuais (período)', value: fmtBRL(manualSaidasPeriod.reduce((s, e) => s + (e.amount || 0), 0)), sub: 'lançamentos avulsos', grad: 'from-orange-500 to-red-500', icon: AlertTriangle },

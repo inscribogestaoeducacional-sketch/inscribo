@@ -1547,7 +1547,7 @@ export default function AdminSchools() {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="aion-snap grid grid-cols-2 lg:grid-cols-5 gap-4">
           {[
             { label: 'Total',      value: stats.total,     filter: 'all',       color: 'border-gray-200' },
             { label: 'Ativas',     value: stats.active,    filter: 'active',    color: 'border-green-200' },
