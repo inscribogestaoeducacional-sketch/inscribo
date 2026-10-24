@@ -40,8 +40,11 @@ export default function LeadSequenceCard({ institutionId, leadId, phone, leadSta
   const due = (days: number) => new Date(Date.now() + days * DAY).toISOString()
   const left = Math.max(0, SEQ_MAX_STEPS - sentTotal)
 
+  // Voltando à sequência: continua do passo seguinte ao último já enviado, sem repetir mensagem.
+  const startStep = enr ? Math.min(enr.step, steps.length) : 0
+  const exhausted = startStep >= steps.length
   const enroll = () => run(async () => {
-    const { error } = await supabase.from('lead_sequence_enrollments').insert({ institution_id: institutionId, lead_id: leadId, phone, status: 'active', step: 0, started_by: userId || null, next_due_at: due(steps[0].days) })
+    const { error } = await supabase.from('lead_sequence_enrollments').insert({ institution_id: institutionId, lead_id: leadId, phone, status: 'active', step: startStep, started_by: userId || null, next_due_at: due(steps[startStep].days) })
     if (error) throw new Error(error.code === '23505' ? 'Este lead já está na sequência.' : error.message)
   })
   const upd = (patch: Record<string, any>) => run(async () => { const { error } = await supabase.from('lead_sequence_enrollments').update(patch).eq('id', enr!.id); if (error) throw error })
@@ -88,9 +91,9 @@ export default function LeadSequenceCard({ institutionId, leadId, phone, leadSta
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {enr && ended[enr.status] && <div style={{ fontSize: 12, color: '#64748B' }}>{ended[enr.status]}</div>}
           {closedLead ? <div style={{ fontSize: 12, color: '#64748B' }}>Lead {leadStatus === 'enrolled' ? 'matriculado' : 'perdido'}: não entra na sequência.</div>
-            : left <= 0 ? <div style={{ fontSize: 12, color: '#64748B' }}>Este lead já recebeu as {SEQ_MAX_STEPS} mensagens da sequência.</div>
+            : left <= 0 || exhausted ? <div style={{ fontSize: 12, color: '#64748B' }}>Este lead já recebeu todas as mensagens da sequência.</div>
             : <>
-              <div style={{ fontSize: 12, color: '#64748B' }}>Para lead que parou de responder: {steps.length} {steps.length === 1 ? 'mensagem' : 'mensagens'}, a primeira {steps[0].days === 1 ? 'em 1 dia' : `em ${steps[0].days} dias`}.</div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>{startStep > 0 ? `Continua do passo ${startStep + 1} de ${steps.length}, sem repetir o que já foi enviado.` : `Para lead que parou de responder: ${steps.length} ${steps.length === 1 ? 'mensagem' : 'mensagens'}.`} A próxima sai {steps[startStep].days === 1 ? 'em 1 dia' : `em ${steps[startStep].days} dias`}.</div>
               <button style={{ ...btn('#fff'), background: BRAND.primary, border: 'none', alignSelf: 'flex-start' }} disabled={busy} onClick={enroll}><Repeat size={13} /> Colocar na sequência</button>
             </>}
         </div>
