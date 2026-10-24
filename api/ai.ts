@@ -505,17 +505,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { conversationId } = payload as { conversationId?: string }
       if (!conversationId) return res.status(400).json({ error: 'conversationId é obrigatório' })
-      const { data: conv } = await supa.from('whatsapp_conversations')
-        .select('id, institution_id, last_message_at, ai_summary, ai_summary_at')
-        .eq('id', conversationId).maybeSingle()
+      // A tela pode mandar o id interno (uuid) ou o número/JID da conversa.
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId)
+      const baseSel = 'id, institution_id, remote_jid, last_message_at, ai_summary, ai_summary_at'
+      const convQ = isUuid
+        ? supa.from('whatsapp_conversations').select(baseSel).eq('id', conversationId).maybeSingle()
+        : supa.from('whatsapp_conversations').select(baseSel).eq('institution_id', caller.institutionId)
+            .eq('remote_jid', conversationId.split('@')[0]).maybeSingle()
+      const { data: conv } = await convQ
       if (!conv || conv.institution_id !== caller.institutionId) return res.status(403).json({ error: 'Conversa não encontrada.' })
       if (conv.ai_summary && conv.ai_summary_at && (!conv.last_message_at || new Date(conv.ai_summary_at) >= new Date(conv.last_message_at))) {
         return res.json({ result: conv.ai_summary, cached: true })
       }
       const { data: msgs } = await supa.from('whatsapp_messages')
         .select('content, from_me, message_type, created_at')
-        .eq('conversation_id', conversationId).eq('institution_id', caller.institutionId)
-        .order('created_at', { ascending: false }).limit(30)
+        .eq('remote_jid', conv.remote_jid).eq('institution_id', caller.institutionId)
+        .order('timestamp', { ascending: false }).limit(30)
       const lines = (msgs ?? []).reverse()
         .filter(m => m.content && !['reaction'].includes(String(m.message_type)))
         .map(m => `${m.from_me ? 'Escola' : 'Família'}: ${String(m.content).replace(/\s+/g, ' ').slice(0, 280)}`)
@@ -523,7 +528,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const system = 'Você resume conversas de WhatsApp entre uma escola particular e uma família. Em português do Brasil, em até 4 frases curtas e sem markdown: o que a família quer (série, turno, valores, visita), o que já foi respondido e qual é o próximo passo. Não invente nada que não esteja na conversa.'
       const out = await callClaudeFast(system, lines.join('\n').slice(0, 7000), 260)
       await supa.rpc('wa_ai_add_tokens', { p_inst: caller.institutionId, p_user: caller.userId, p_kind: kind, p_in: out.inTok, p_out: out.outTok })
-      await supa.from('whatsapp_conversations').update({ ai_summary: out.text, ai_summary_at: new Date().toISOString() }).eq('id', conversationId)
+      await supa.from('whatsapp_conversations').update({ ai_summary: out.text, ai_summary_at: new Date().toISOString() }).eq('id', conv.id)
       return res.json({ result: out.text })
     }
 
