@@ -1,6 +1,6 @@
 // Configurações > WhatsApp > Sequência para lead sem resposta.
-// A escola liga, escolhe até 5 passos (dias sem resposta + modelo aprovado) e o horário de envio.
-// O disparo roda sozinho no servidor (função lead-sequence, a cada 15 minutos).
+// A escola liga, escolhe até 5 passos (dias depois do passo anterior + modelo aprovado) e o horário.
+// Quem entra na sequência é colocado pelo atendente/gestor na conversa; o envio roda no servidor (lead-sequence, a cada 15 min).
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Clock, Repeat, ListChecks } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
@@ -11,8 +11,8 @@ import { SEQ_DEFAULT_STEPS, SEQ_MAX_STEPS, seqVarKind, type SeqStep } from '../.
 import { Card, Title, Switch, SaveButton, GhostButton, NowNote, WarnNote, input, label, hint } from './ui'
 
 const DAYS = [['Dom', 0], ['Seg', 1], ['Ter', 2], ['Qua', 3], ['Qui', 4], ['Sex', 5], ['Sáb', 6]] as const
-type Cfg = { enabled: boolean; steps: SeqStep[]; send_from: number; send_to: number; weekdays: number[]; daily_cap: number; max_age_days: number }
-const DEFAULTS: Cfg = { enabled: false, steps: SEQ_DEFAULT_STEPS, send_from: 8, send_to: 19, weekdays: [1, 2, 3, 4, 5, 6], daily_cap: 100, max_age_days: 30 }
+type Cfg = { enabled: boolean; steps: SeqStep[]; send_from: number; send_to: number; weekdays: number[]; daily_cap: number }
+const DEFAULTS: Cfg = { enabled: false, steps: SEQ_DEFAULT_STEPS, send_from: 8, send_to: 19, weekdays: [1, 2, 3, 4, 5, 6], daily_cap: 100 }
 const bubble = { background: '#D9FDD3', borderRadius: 10, padding: '8px 10px', fontSize: 12.5, color: '#111B21', whiteSpace: 'pre-wrap' as const, lineHeight: 1.45, boxShadow: '0 1px 1px rgba(0,0,0,.08)' }
 
 export default function LeadSequenceSettings({ institutionId }: { institutionId: string }) {
@@ -28,7 +28,7 @@ export default function LeadSequenceSettings({ institutionId }: { institutionId:
       const { data, error } = await supabase.from('lead_sequence_config').select('*').eq('institution_id', institutionId).maybeSingle()
       if (error) { setReady(false); return }
       setReady(true)
-      if (data) setCfg({ enabled: !!data.enabled, steps: Array.isArray(data.steps) && data.steps.length ? data.steps : SEQ_DEFAULT_STEPS, send_from: data.send_from, send_to: data.send_to, weekdays: data.weekdays || [], daily_cap: data.daily_cap, max_age_days: data.max_age_days ?? 30 })
+      if (data) setCfg({ enabled: !!data.enabled, steps: Array.isArray(data.steps) && data.steps.length ? data.steps : SEQ_DEFAULT_STEPS, send_from: data.send_from, send_to: data.send_to, weekdays: data.weekdays || [], daily_cap: data.daily_cap })
       try { setTemplates(await loadTemplates(institutionId, { all: true })) } catch { /* lista fica vazia */ }
       const since = new Date(Date.now() - 30 * 86400000).toISOString()
       const { data: logs } = await supabase.from('lead_sequence_log').select('lead_id, status').eq('institution_id', institutionId).gte('sent_at', since)
@@ -47,12 +47,12 @@ export default function LeadSequenceSettings({ institutionId }: { institutionId:
   const byName = (n: string) => options.find(o => o.name === n)
 
   const setStep = (i: number, patch: Partial<SeqStep>) => setCfg(c => ({ ...c, steps: c.steps.map((s, j) => j === i ? { ...s, ...patch } : s) }))
-  const valid = cfg.steps.length > 0 && cfg.steps.every(s => s.days >= 1 && s.template) && cfg.steps.every((s, i) => i === 0 || s.days > cfg.steps[i - 1].days) && cfg.send_to > cfg.send_from && cfg.weekdays.length > 0
+  const valid = cfg.steps.length > 0 && cfg.steps.every(s => s.days >= 1 && s.template) && cfg.send_to > cfg.send_from && cfg.weekdays.length > 0
 
   const save = async () => {
     setSaving(true); setSaved(false)
     const { data: { user } } = await supabase.auth.getUser()
-    const { error } = await supabase.from('lead_sequence_config').upsert({ institution_id: institutionId, enabled: cfg.enabled, steps: cfg.steps, send_from: cfg.send_from, send_to: cfg.send_to, weekdays: cfg.weekdays, daily_cap: cfg.daily_cap, max_age_days: cfg.max_age_days, max_attempts: SEQ_MAX_STEPS, updated_at: new Date().toISOString(), updated_by: user?.id || null }, { onConflict: 'institution_id' })
+    const { error } = await supabase.from('lead_sequence_config').upsert({ institution_id: institutionId, enabled: cfg.enabled, steps: cfg.steps, send_from: cfg.send_from, send_to: cfg.send_to, weekdays: cfg.weekdays, daily_cap: cfg.daily_cap, updated_at: new Date().toISOString(), updated_by: user?.id || null }, { onConflict: 'institution_id' })
     setSaving(false)
     if (error) { alert('Não foi possível salvar: ' + error.message); return }
     setSaved(true); setTimeout(() => setSaved(false), 2500)
@@ -70,14 +70,14 @@ export default function LeadSequenceSettings({ institutionId }: { institutionId:
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Sequência para lead sem resposta</div>
-              <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 2 }}>Quando um lead para de responder, o sistema manda até {SEQ_MAX_STEPS} mensagens, uma de cada vez, com o modelo que você escolher.</div>
+              <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 2 }}>Você ou o atendente coloca o lead na sequência dentro da conversa do WhatsApp. O sistema manda até {SEQ_MAX_STEPS} mensagens, uma de cada vez, com o modelo que você escolher.</div>
             </div>
             <Switch on={cfg.enabled} onChange={v => setCfg({ ...cfg, enabled: v })} labelText="Ligar a sequência" />
           </div>
         </Card>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, opacity: cfg.enabled ? 1 : 0.6 }}>
           <Card>
-            <Title Icon={Repeat} title="Os passos" help="Cada passo conta os dias desde a última mensagem do lead. Cada passo precisa ter mais dias que o anterior." />
+            <Title Icon={Repeat} title="Os passos" help="O 1º passo conta os dias desde que o lead foi colocado na sequência. Os demais contam os dias depois do passo anterior." />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {cfg.steps.map((s, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', background: '#F8FAFC', border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 10 }}>
@@ -116,8 +116,6 @@ export default function LeadSequenceSettings({ institutionId }: { institutionId:
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 14 }}>
               <label style={{ ...label, margin: 0 }}>No máximo por dia</label>
               <select style={{ ...input, width: 110 }} value={cfg.daily_cap} onChange={e => setCfg({ ...cfg, daily_cap: parseInt(e.target.value) })}>{[25, 50, 100, 200, 300].map(n => <option key={n} value={n}>{n} envios</option>)}</select>
-              <label style={{ ...label, margin: 0 }}>Ignorar leads parados há mais de</label>
-              <select style={{ ...input, width: 110 }} value={cfg.max_age_days} onChange={e => setCfg({ ...cfg, max_age_days: parseInt(e.target.value) })}>{[14, 30, 60, 90].map(n => <option key={n} value={n}>{n} dias</option>)}</select>
             </div>
           </Card>
           <Card>
@@ -125,7 +123,7 @@ export default function LeadSequenceSettings({ institutionId }: { institutionId:
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: BRAND.muted, lineHeight: 1.7 }}>
               <li>No máximo {SEQ_MAX_STEPS} mensagens por lead, nunca mais de uma por dia.</li>
               <li>Para assim que o lead responde. A conversa volta para a equipe.</li>
-              <li>Só leads em andamento. Matriculados, perdidos e números bloqueados ou descadastrados ficam de fora.</li>
+              <li>Matriculados, perdidos e números bloqueados ou descadastrados saem da sequência sozinhos.</li>
               <li>Se a equipe falou com o lead nas últimas 24 horas, o sistema espera.</li>
               <li>Cada mensagem enviada aparece na conversa do lead.</li>
             </ul>
@@ -136,7 +134,7 @@ export default function LeadSequenceSettings({ institutionId }: { institutionId:
           <SaveButton text="Salvar sequência" saving={saving} saved={saved} disabled={!valid} onClick={save} />
           <GhostButton onClick={() => setCfg({ ...DEFAULTS, enabled: cfg.enabled })}>Voltar ao padrão</GhostButton>
         </div>
-        {!valid && <p style={hint}>Confira os passos: cada um precisa de um modelo e de mais dias que o anterior, e marque pelo menos um dia de envio.</p>}
+        {!valid && <p style={hint}>Confira os passos: cada um precisa de um modelo e de pelo menos 1 dia, e marque pelo menos um dia de envio.</p>}
       </div>
     </div>
   )

@@ -2,7 +2,7 @@
 export const SEQ_MAX_STEPS = 5
 export type SeqStep = { days: number; template: string }
 export const SEQ_DEFAULT_STEPS: SeqStep[] = [
-  { days: 3, template: 'reativacao2' }, { days: 7, template: 'ainda_da_tempo' }, { days: 14, template: 'escassez_ultima_chamada' },
+  { days: 3, template: 'reativacao2' }, { days: 4, template: 'ainda_da_tempo' }, { days: 7, template: 'escassez_ultima_chamada' },
 ]
 /** O que o sistema sabe preencher numa variável do modelo (pelo rótulo cadastrado). */
 export function seqVarKind(label: string | undefined | null): 'responsavel' | 'escola' | 'aluno' | 'atendente' | null {

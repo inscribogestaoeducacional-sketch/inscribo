@@ -10,6 +10,7 @@ import {
 import { BRAND, GRAD } from '../../lib/brand'
 import { supabase } from '../../lib/supabase'
 import { normalizeBrazilianInput } from '../../lib/phone'
+import LeadSequenceCard from './LeadSequenceCard'
 
 export type PanelTab = 'details' | 'family' | 'history'
 type ConvStatus = 'waiting' | 'open' | 'closed'
@@ -343,6 +344,8 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
             )}
         </div>
       )}
+
+      {!isGroup && conv.lead_id && lead && <LeadSequenceCard institutionId={p.institutionId} leadId={conv.lead_id} phone={conv.phone} leadStatus={lead.status} userId={p.currentUserId} />}
 
       <div className="ld-in" style={card}>
         <Head icon={<StickyNote size={15} />} title="Anotações da equipe" extra={p.notes.length ? <span style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, background: BRAND.softer, borderRadius: 999, padding: '1px 8px' }}>{p.notes.length}</span> : undefined} />
