@@ -15,7 +15,7 @@ export const PRESENCE: Record<Presence, { label: string; color: string; desc: st
   ocupado: { label: 'Ocupado', color: '#DC2626', desc: 'Não recebe conversas novas automáticas — está atendendo' },
   ausente: { label: 'Ausente', color: '#F59E0B', desc: 'Não recebe conversas novas — almoço, reunião ou fora' },
 }
-const GRAD = 'linear-gradient(135deg, #065F52 0%, #00897B 52%, #14B8A6 100%)'
+const GRAD = 'var(--aion-grad)'
 const title: React.CSSProperties = { fontSize: 11, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', padding: '6px 8px 4px' }
 const rowCss: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '9px 8px', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', background: 'transparent', textDecoration: 'none', fontSize: 13.5, fontWeight: 600, color: BRAND.ink }
 

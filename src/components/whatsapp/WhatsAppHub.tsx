@@ -4848,7 +4848,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         <div style={{ width: isMobile ? '100%' : 320, flexShrink: 0, display: isMobile && mobilePanel === 'chat' ? 'none' : 'flex', flexDirection: 'column', background: '#FFFFFF', borderRight: '1px solid #D1FAE5', overflow: 'hidden' }}>
 
           {/* Header: faixa em degradê com os 4 contadores clicáveis (levam direto à seção) */}
-          <div style={{ flexShrink: 0, position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg, #065F52 0%, #00897B 52%, #14B8A6 100%)', color: '#fff', padding: `12px ${GUTTER}px 12px` }}>
+          <div style={{ flexShrink: 0, position: 'relative', overflow: 'hidden', background: 'var(--aion-grad)', color: '#fff', padding: `12px ${GUTTER}px 12px` }}>
             <span aria-hidden style={{ position: 'absolute', width: 170, height: 170, right: -50, top: -95, borderRadius: 999, background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,.22), rgba(255,255,255,.04) 60%, transparent 70%)', pointerEvents: 'none' }} />
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>

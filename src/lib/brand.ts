@@ -22,5 +22,5 @@ export const BRAND = {
   dangerSoft: '#FEF2F2',
 } as const
 
-export const GRAD = 'linear-gradient(135deg, #065F52 0%, #00897B 52%, #14B8A6 100%)'
+export const GRAD = 'var(--aion-grad)'
 export const SHADOW = '0 1px 2px rgba(26,43,74,.04), 0 4px 16px rgba(26,43,74,.05)'

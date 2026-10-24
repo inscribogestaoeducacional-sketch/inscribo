@@ -18,6 +18,8 @@ html, body { width: 100%; min-height: 100%; }
 
 /* ====== VARIÁVEIS ====== */
 :root {
+  --aion-grad: linear-gradient(135deg, #065F52 0%, #00897B 52%, #14B8A6 100%); /* degradê oficial: uma só fonte */
+  --aion-grad-soft: linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%);
   --bg-page:       #FAFFFE;
   --bg-surface:    #FFFFFF;
   --bg-teal-soft:  #F0FDFB;
