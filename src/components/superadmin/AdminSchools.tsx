@@ -1,4 +1,5 @@
 // src/components/superadmin/AdminSchools.tsx
+import { submitDefaultTemplates } from '../../lib/submitDefaultTemplates'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, WHATSAPP_PHONE_COLUMNS } from '../../lib/supabase'
@@ -1008,6 +1009,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
 
       // Criar templates padrão no WABA da escola
       await createDefaultTemplates(effectiveWabaId)
+      await submitDefaultTemplates(inst.id)
 
       setWaSaved(true)
       await loadWaConfig()

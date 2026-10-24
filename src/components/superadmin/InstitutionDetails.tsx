@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
+import { submitDefaultTemplates } from '../../lib/submitDefaultTemplates'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase, INSTITUTION_COLUMNS } from '../../lib/supabase'
 import { platformAdmin } from '../../lib/platformAdmin'
@@ -1044,6 +1045,7 @@ export default function InstitutionDetails() {
 
       // Criar templates padrão no WABA da escola
       await createDefaultTemplates(effectiveWabaId)
+      await submitDefaultTemplates(id)
 
       showToast('WhatsApp configurado e verificado!')
       loadAll()
