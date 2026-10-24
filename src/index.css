@@ -439,3 +439,11 @@ main table tbody tr:last-child td { border-bottom: none; }
 }
 
 @keyframes aionSearchIn { from { opacity: 0; transform: translateX(24px) } to { opacity: 1; transform: none } }
+
+/* Barra lateral (computador): o quadradinho da logo gira ao abrir/fechar e o nome sai de dentro dele */
+.aion-sb-open { animation: aionSbOpen .7s cubic-bezier(.22,1,.36,1) both }
+.aion-sb-close { animation: aionSbClose .6s cubic-bezier(.22,1,.36,1) both }
+.aion-sb-name { width: 74px; height: 34px; flex-shrink: 0; background: url(/aion-logo-name.png) -9.3px -7.9px / 89.4px 50.3px no-repeat; animation: aionSbName .6s .12s cubic-bezier(.22,1,.36,1) both }
+@keyframes aionSbOpen { from { transform: rotate(-360deg) scale(.6) } to { transform: none } }
+@keyframes aionSbClose { from { transform: rotate(360deg) scale(.6) } to { transform: none } }
+@keyframes aionSbName { from { clip-path: inset(0 100% 0 0); opacity: 0; transform: translateX(-26px) } to { clip-path: inset(0 0 0 0); opacity: 1; transform: none } }

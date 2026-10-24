@@ -214,7 +214,10 @@ export default function Sidebar() {
       {/* Logo + toggle */}
       {expanded ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px 12px', flexShrink: 0 }}>
-          <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 36, width: 'auto', objectFit: 'contain', maxWidth: 150 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <img className="aion-sb-icon aion-sb-open" src="/aion-logo-icon.png" alt="Áion" style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 10, flexShrink: 0 }} />
+            <div className="aion-sb-name" role="img" aria-label="Áion Edu" />
+          </div>
           <button onClick={toggle} style={{
             width: 24, height: 24, borderRadius: 6,
             border: '0.5px solid #D1FAE5', background: '#F0FDFB',
@@ -230,7 +233,7 @@ export default function Sidebar() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, paddingBottom: 12, flexShrink: 0, width: '100%' }}>
           {/* Ícone centralizado */}
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '12px 0' }}>
-            <img src="/aion-logo-icon.png" alt="Áion" style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 10 }} />
+            <img className="aion-sb-icon aion-sb-close" src="/aion-logo-icon.png" alt="Áion" style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 10 }} />
           </div>
           {/* Botão de expandir separado abaixo */}
           <button onClick={toggle} style={{
