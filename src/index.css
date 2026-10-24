@@ -290,3 +290,93 @@ main table tbody tr:last-child td { border-bottom: none; }
 [class*="from-cyan-"][class*="to-blue-"] { background-image: var(--aion-grad) !important; }
 .aion-band p, .aion-band span.text-gray-500, .aion-band .text-gray-500, .aion-band .text-gray-400 { color: rgba(255,255,255,.86) !important; }
 .aion-band span[class*="bg-green"], .aion-band span[class*="bg-gray"] { color: #fff !important; background: rgba(255,255,255,.2) !important; }
+/* ── Cara de app no celular (Fase 5c) ─────────────────────────────────── */
+@keyframes aionSheetUp { from { transform: translateY(105%) } to { transform: none } }
+@keyframes aionSheetDown { from { transform: none } to { transform: translateY(105%) } }
+@keyframes aionFadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes aionFadeOut { from { opacity: 1 } to { opacity: 0 } }
+@keyframes aionTileIn { from { opacity: 0; transform: translateY(12px) scale(.94) } to { opacity: 1; transform: none } }
+@keyframes aionFromRight { from { opacity: .4; transform: translateX(40%) } to { opacity: 1; transform: none } }
+@keyframes aionFromLeft { from { opacity: .4; transform: translateX(-30%) } to { opacity: 1; transform: none } }
+@keyframes aionDockPop { 0% { transform: scale(.7) } 60% { transform: scale(1.08) } 100% { transform: scale(1) } }
+@keyframes aionPageIn { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+@keyframes aionPageOut { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-8px) scale(.985) } }
+@keyframes aionSlideOutL { to { opacity: 0; transform: translateX(-22%) } }
+@keyframes aionSlideInR { from { opacity: 0; transform: translateX(28%) } }
+@keyframes aionSlideOutR { to { opacity: 0; transform: translateX(22%) } }
+@keyframes aionSlideInL { from { opacity: 0; transform: translateX(-28%) } }
+.aion-tap { transition: transform .14s ease, opacity .14s ease; -webkit-tap-highlight-color: transparent }
+.aion-tap:active { transform: scale(.93); opacity: .85 }
+/* Celular: resposta ao toque em botões, links e linhas clicáveis (Fase 5c) */
+@media (hover: none) and (pointer: coarse) and (max-width: 767px) {
+  html.aion-touch { -webkit-tap-highlight-color: transparent }
+  html.aion-touch body { overscroll-behavior-y: none } /* sem o "puxar" do navegador: o da AION cuida */
+  html.aion-touch button:not(:disabled):not(.aion-tap):active,
+  html.aion-touch a[href]:not(.aion-tap):active,
+  html.aion-touch [role="button"]:not(.aion-tap):active { transform: scale(.96); filter: brightness(.95); transition: transform .1s ease, filter .1s ease }
+  html.aion-touch .cursor-pointer:not(button):not(a):active,
+  html.aion-touch tr[class*="cursor-pointer"]:active { transform: scale(.985); filter: brightness(.97); transition: transform .1s ease, filter .1s ease }
+}
+.aion-ptr { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 8px); z-index: 1300; opacity: 0; transform: translate(-50%, -60px); pointer-events: none }
+.aion-ptr-ball { position: relative; width: 44px; height: 44px; border-radius: 50%; background: #fff; box-shadow: 0 8px 22px rgba(26,43,74,.22); display: flex; align-items: center; justify-content: center }
+.aion-ptr-ball img { width: 26px; height: 26px; border-radius: 8px; transition: transform .2s }
+.aion-ptr-ring { position: absolute; inset: 3px; border-radius: 50%; border: 2.5px solid #E2E8F0; border-top-color: #05907B; border-right-color: #2DCBA4 }
+.aion-ptr.ready .aion-ptr-ball img { transform: scale(1.12) }
+.aion-ptr.spin .aion-ptr-ring { animation: aionPtrSpin .7s linear infinite }
+@keyframes aionPtrSpin { to { transform: rotate(360deg) } }
+@media (max-width: 767px) {
+  .aion-page-in { animation: aionPageIn .34s cubic-bezier(.2,.9,.25,1) backwards } /* backwards: depois de entrar não fica camada presa (janelas por cima da barra) */
+  .aion-dock { view-transition-name: aion-dock }
+  .aion-mtop { view-transition-name: aion-mtop }
+  ::view-transition-old(root) { animation: aionPageOut .2s ease both }
+  ::view-transition-new(root) { animation: aionPageIn .32s cubic-bezier(.2,.9,.25,1) both }
+  [data-nav="forward"]::view-transition-old(root) { animation: aionSlideOutL .24s ease both }
+  [data-nav="forward"]::view-transition-new(root) { animation: aionSlideInR .32s cubic-bezier(.2,.9,.25,1) both }
+  [data-nav="back"]::view-transition-old(root) { animation: aionSlideOutR .24s ease both }
+  [data-nav="back"]::view-transition-new(root) { animation: aionSlideInL .32s cubic-bezier(.2,.9,.25,1) both }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aion-page-in, .aion-tap:active, html.aion-touch :active { animation: none !important; transform: none !important }
+}
+
+/* Celular: a página só rola para cima e para baixo (pedido do Victor, 22/10).
+   Nada empurra a tela para o lado, mesmo que algum bloco seja mais largo. */
+@media (max-width: 767px) {
+  html, body { overflow-x: hidden; max-width: 100vw; overscroll-behavior-x: none }
+  main { overflow-x: hidden; overscroll-behavior-x: none }
+  #root { overflow-x: hidden }
+}
+
+/* Celular: tabelas viram cartões e faixas de botões quebram linha
+   (src/lib/mobileLayout.ts põe as classes e os nomes das colunas). */
+@media (max-width: 767px) {
+  table.aion-rt { display: block !important; width: 100% !important; min-width: 0 !important; border: 0 !important; background: transparent !important }
+  table.aion-rt > thead, table.aion-rt > colgroup { display: none !important }
+  table.aion-rt > tbody, table.aion-rt > tfoot { display: flex !important; flex-direction: column; gap: 10px; width: 100% }
+  table.aion-rt > tfoot { margin-top: 10px }
+  table.aion-rt tr {
+    display: grid !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr); column-gap: 12px; row-gap: 8px;
+    background: #fff !important; border: 1px solid #E3E8F0 !important; border-radius: 18px; padding: 12px 14px !important;
+    box-shadow: 0 1px 2px rgba(26,43,74,.04), 0 4px 14px rgba(26,43,74,.05); height: auto !important
+  }
+  table.aion-rt td, table.aion-rt th {
+    display: block !important; width: auto !important; min-width: 0 !important; max-width: none !important; padding: 0 !important; border: 0 !important;
+    text-align: left !important; white-space: normal !important; overflow-wrap: anywhere; font-size: 13.5px; background: transparent !important; position: static !important
+  }
+  table.aion-rt td::before {
+    content: attr(data-label); display: block; font-size: 11px; font-weight: 700; color: #94A3B8;
+    text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px
+  }
+  table.aion-rt td[data-label=""]::before { display: none }
+  table.aion-rt td:first-child, table.aion-rt td[data-wide] { grid-column: 1 / -1; font-size: 15px }
+  table.aion-rt td:first-child::before { display: none }
+  table.aion-rt td:empty { display: none !important }
+  /* linha de "nenhum resultado" ocupa o cartão todo */
+  table.aion-rt td[data-wide]::before { display: none }
+  /* coluna de ações (sem título) fica embaixo, à direita */
+  table.aion-rt td:last-child[data-label=""]:not(:first-child) { grid-column: 1 / -1; display: flex !important; justify-content: flex-end; gap: 6px; flex-wrap: wrap }
+  .aion-wrap { flex-wrap: wrap !important; overflow-x: visible !important; row-gap: 6px }
+  .aion-wrap > * { flex-shrink: 1 !important }
+}
+/* Telas com botão redondo "+" no celular: espaço no fim para ele não cobrir o último item. */
+@media (max-width: 767px) { main:has(.aion-fab) > div { padding-bottom: 76px } }

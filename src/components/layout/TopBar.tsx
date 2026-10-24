@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Menu, Network, ChevronDown } from 'lucide-react'
+import { Network, ChevronDown } from 'lucide-react'
 import NotificationBell from './NotificationBell'
 import ConversationNotifier from './ConversationNotifier'
 import UserMenu from './UserMenu'
@@ -85,16 +85,6 @@ export default function TopBar() {
       display: 'flex', alignItems: 'center',
       padding: '0 16px', gap: 12, flexShrink: 0,
     }}>
-      {/* Hambúrguer — mobile only */}
-      {isMobile && (
-        <button
-          onClick={() => (window as any).__toggleMobileSidebar?.()}
-          style={{ padding: 8, borderRadius: 8, border: 'none', background: 'none', cursor: 'pointer', color: '#1A2B4A', display: 'flex', alignItems: 'center', flexShrink: 0 }}
-        >
-          <Menu size={22} />
-        </button>
-      )}
-
       {/* Search */}
       <div style={{ flex: 1, maxWidth: isMobile ? 'none' : 440, position: 'relative' }}>
         <input

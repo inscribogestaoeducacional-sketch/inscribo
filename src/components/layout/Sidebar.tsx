@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
+import { AppDock, MenuSheet, SheetRow, goTo } from '../mobile/MobileShell'
+import { DockEditor, useUnreadChats } from '../mobile/NavExtras'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
-import { X } from 'lucide-react'
+import { X, SlidersHorizontal, LayoutGrid } from 'lucide-react'
 import {
   House, Funnel, AddressBook, WhatsappLogo, CalendarCheck, Megaphone, Storefront, PaperPlaneTilt, Flag,
-  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List,
+  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle,
 } from '@phosphor-icons/react'
 import type { Icon as PhIcon } from '@phosphor-icons/react'
 
@@ -73,6 +76,7 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
 
 export default function Sidebar() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { isModuleEnabled } = usePermissions()
   // Sem contadores no menu: a central de notificações terá o seu próprio lugar.
@@ -83,6 +87,13 @@ export default function Sidebar() {
   })
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [dockEdit, setDockEdit] = useState(false)
+  const [myDock, setMyDock] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (!user?.id) return
+    supabase.from('users').select('dock_shortcuts').eq('id', user.id).maybeSingle().then(({ data }) => setMyDock(((data as any)?.dock_shortcuts as string[] | null) ?? null))
+  }, [user?.id])
+  const unreadChats = useUnreadChats(user?.institution_id, user?.id, isMobile && isModuleEnabled("whatsapp"), location.pathname)
 
   useEffect(() => {
     const handler = () => {
@@ -94,6 +105,7 @@ export default function Sidebar() {
     return () => window.removeEventListener('resize', handler)
   }, [])
 
+  useEffect(() => { setMobileOpen(false) }, [location.pathname, location.search])
   useEffect(() => {
     ;(window as any).__toggleMobileSidebar = () => setMobileOpen(v => !v)
     return () => { delete (window as any).__toggleMobileSidebar }
@@ -124,97 +136,52 @@ export default function Sidebar() {
   const TAB_PATHS = ['/home', '/atendente', '/leads', '/whatsapp', '/visits']
   const tabItems = navItems.filter(i => TAB_PATHS.includes(i.path)).slice(0, 4)
 
-  // ── Mobile drawer ───────────────────────────────────────────────────────────
+  // ── Celular: cara de aplicativo (barra de baixo com o WhatsApp no meio + menu em folha) ──
   if (isMobile) {
+    const wa = navItems.find(i => i.path === '/whatsapp')
+    const choices = navItems.filter(i => i !== wa)
+    const slots = wa ? 3 : 4
+    const PRIORITY = ['/home', '/atendente', '/leads', '/visits', '/contacts', '/campanha', '/captacao', '/transmissoes']
+    const suggested: NavItem[] = []
+    for (const p of PRIORITY) { if (suggested.length >= slots) break; const e = choices.find(x => x.path === p); if (e && !suggested.includes(e)) suggested.push(e) }
+    for (const e of choices) { if (suggested.length >= slots) break; if (!suggested.includes(e)) suggested.push(e) }
+    const mine = (myDock || []).map(id => choices.find(e => e.path === id)).filter(Boolean) as NavItem[]
+    const picked = mine.length ? mine.slice(0, slots) : suggested
+    const isAct = (e: NavItem) => location.pathname === e.path || location.pathname.startsWith(e.path + '/')
+    const SHORT: Record<string, string> = { '/campanha': 'Campanha', '/base-alunos': 'Alunos', '/transferencias': 'Transf.', '/transmissoes': 'Envios' }
+    const label = (e: NavItem) => SHORT[e.path] || e.label
+    const go = (to: string) => { setMobileOpen(false); if (to !== location.pathname + location.search) goTo(navigate, to) }
+    const onBar = (e: NavItem) => picked.includes(e) || e === wa
+    const groups = Array.from(new Set(navItems.map(i => i.group || 'Principal'))).map((g, gi) => ({
+      title: g,
+      modules: navItems.filter(i => (i.group || 'Principal') === g && !onBar(i)).map(i => ({
+        key: i.path, label: i.label, short: label(i) !== i.label ? label(i) : undefined, Icon: i.Icon as any, tint: gi, active: isAct(i), onPress: () => go(i.path),
+      })),
+    })).filter(g => g.modules.length)
+    const onDock = picked.some(isAct) || (!!wa && isAct(wa))
+    const saveDock = async (ids: string[]) => {
+      const v = ids.length ? ids : null
+      const { error } = await supabase.rpc('set_my_dock', { p_ids: v })
+      if (error) { window.alert(`Não foi possível salvar: ${error.message}`); return }
+      setMyDock(v); setDockEdit(false)
+    }
     return (
       <>
-        {mobileOpen && (
-          <div
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40 }}
-            onClick={() => setMobileOpen(false)}
-          />
-        )}
-        <aside className="h-viewport" style={{
-          position: 'fixed', left: 0, top: 0, zIndex: 50,
-          width: 240, background: '#FFFFFF', borderRight: '0.5px solid #D1FAE5',
-          display: 'flex', flexDirection: 'column', alignItems: 'stretch',
-          padding: '12px 10px', gap: 2, overflowY: 'auto', overflowX: 'hidden',
-          transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
-          transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)',
-        }}>
-          {/* Logo + fechar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px 12px', flexShrink: 0 }}>
-            <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 36, objectFit: 'contain', maxWidth: 150 }} />
-            <button onClick={() => setMobileOpen(false)} style={{
-              width: 28, height: 28, borderRadius: 8,
-              border: '0.5px solid #D1FAE5', background: '#F0FDFB',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: '#05907B',
-            }}>
-              <X size={14} />
-            </button>
-          </div>
-
-          {/* Nav */}
-          {navEntries.map(entry => {
-            if ('header' in entry) return groupHeader(entry.header)
-            const item = entry
-            const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
-            const Icon = item.Icon
-            const badgeCount = badgeCountByPath[item.path] || 0
-            const showBadge = badgeCount > 0
-            return (
-              <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: item.group ? '9px 10px 9px 20px' : '9px 10px', width: '100%', height: 44, borderRadius: 12,
-                background: active ? GRAD : 'transparent', boxShadow: active ? '0 10px 20px -12px #05907B' : 'none',
-                border: '1.5px solid transparent',
-                textDecoration: 'none', boxSizing: 'border-box', flexShrink: 0, position: 'relative',
-              }}>
-                <NavTile item={item} active={active} />
-                <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#FFFFFF' : '#475569', whiteSpace: 'nowrap', overflow: 'hidden', flex: 1 }}>
-                  {item.label}
-                </span>
-                {showBadge && (
-                  <div style={{ minWidth: 16, height: 16, borderRadius: 999, background: '#F43F5E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: 'white', padding: '0 4px' }}>
-                    {badgeCount > 9 ? '9+' : badgeCount}
-                  </div>
-                )}
-              </Link>
-            )
-          })}
-
-        </aside>
-
-        {/* Barra de abas flutuante (celular) */}
-        <nav aria-label="Navegação principal" style={{
-          position: 'fixed', left: 10, right: 10, bottom: 'calc(10px + env(safe-area-inset-bottom))', zIndex: 30,
-          background: '#fff', border: '1px solid #E3E8F0', borderRadius: 24,
-          boxShadow: '0 16px 36px -16px rgba(5,144,123,.5)',
-          display: 'flex', justifyContent: 'space-around', padding: 6,
-        }}>
-          {tabItems.map(item => {
-            const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
-            const Icon = item.Icon
-            return (
-              <Link key={item.path} to={item.path} aria-label={item.label} style={{
-                flex: 1, maxWidth: 76, height: 48, borderRadius: 16, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', gap: 1, textDecoration: 'none',
-                background: active ? GRAD : 'transparent', transition: 'background .2s',
-              }}>
-                <Icon size={22} weight={active ? 'fill' : 'duotone'} color={active ? '#fff' : '#05907B'} />
-                <span style={{ fontSize: 9.5, fontWeight: 700, color: active ? '#fff' : '#5B6B86' }}>{item.label === 'Início' ? 'Início' : item.label.split(' ')[0]}</span>
-              </Link>
-            )
-          })}
-          <button onClick={() => setMobileOpen(true)} aria-label="Mais opções" style={{
-            flex: 1, maxWidth: 76, height: 48, borderRadius: 16, border: 'none', background: 'transparent', cursor: 'pointer',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
-          }}>
-            <List size={22} weight="duotone" color="#05907B" />
-            <span style={{ fontSize: 9.5, fontWeight: 700, color: '#5B6B86' }}>Mais</span>
-          </button>
-        </nav>
+        <AppDock
+          items={picked.map(e => ({ key: e.path, label: label(e), Icon: e.Icon as any, active: isAct(e) && !mobileOpen, onPress: () => go(e.path) }))}
+          center={wa ? { key: wa.path, label: 'WhatsApp', Icon: wa.Icon as any, active: isAct(wa) && !mobileOpen, badge: unreadChats, onPress: () => go(wa.path) } : undefined}
+          menuOpen={mobileOpen} menuActive={!onDock} onMenu={() => setMobileOpen(v => !v)} />
+        <MenuSheet open={mobileOpen} onClose={() => setMobileOpen(false)} groups={groups}
+          action={<button onClick={() => { setMobileOpen(false); setDockEdit(true) }} className="aion-tap"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 999, border: '1px solid #E3E8F0', background: '#fff', color: '#05907B', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>
+            <SlidersHorizontal size={14} /> Editar barra</button>}
+          footer={<div style={{ background: '#fff', borderRadius: 20, border: '1px solid #E3E8F0', overflow: 'hidden', marginTop: 4 }}>
+            <SheetRow Icon={SlidersHorizontal} label="Personalizar a barra" hint="Escolha os atalhos da barra de baixo" onPress={() => { setMobileOpen(false); setDockEdit(true) }} />
+            <SheetRow Icon={UserCircle} label="Meu perfil" hint="Dados, senha e status" onPress={() => go('/profile')} />
+          </div>} />
+        <DockEditor open={dockEdit} onClose={() => setDockEdit(false)} value={picked.map(e => e.path)}
+          options={choices.map(e => ({ id: e.path, label: label(e), Icon: e.Icon as any }))}
+          centerLabel={wa ? 'WhatsApp' : null} CenterIcon={wa?.Icon as any} MenuIcon={LayoutGrid} onSave={saveDock} />
       </>
     )
   }
