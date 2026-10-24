@@ -230,6 +230,11 @@ export default function CaptacaoOverview(props: {
     { k: 'enr', label: 'Matrículas', v: cur.enr, p: old.enr, icon: GraduationCap, color: TEAL_D, bg: '#E6F7F5' },
   ]
 
+  const [tab, setTab] = useState<'resumo' | 'captacoes' | 'comparar'>('resumo')
+  const TABS3: ['resumo' | 'captacoes' | 'comparar', string][] = [['resumo', 'Resumo'], ['captacoes', `Captações (${list.length})`], ['comparar', 'Comparar']]
+  const swipeRef = React.useRef<{ x: number; y: number } | null>(null)
+  const show = (t: 'resumo' | 'captacoes' | 'comparar') => !mobile || tab === t
+
   const hdrBtn = (primary?: boolean): React.CSSProperties => ({
     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 11, fontSize: 13, fontWeight: 700,
     cursor: 'pointer', border: primary ? 'none' : '1px solid rgba(255,255,255,.4)',
@@ -259,18 +264,39 @@ export default function CaptacaoOverview(props: {
         </div>
       )}
 
+      {mobile && !loading && triggers.length > 0 && (
+        <div className="aion-hscroll" role="tablist" style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -12px', padding: '2px 12px', position: 'sticky', top: 0, zIndex: 20, background: 'linear-gradient(#F5FAF9 70%, rgba(245,250,249,0))' }}>
+          {TABS3.map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={tab === k} type="button" className="aion-tap" onClick={() => setTab(k)}
+              style={{ flexShrink: 0, border: tab === k ? 'none' : `1px solid ${LINE}`, background: tab === k ? 'var(--aion-grad)' : '#fff', color: tab === k ? '#fff' : '#5B6B86', fontWeight: 800, fontSize: 13, padding: '8px 15px', borderRadius: 999, fontFamily: 'inherit', cursor: 'pointer', boxShadow: tab === k ? '0 8px 18px -10px rgba(0,122,110,.8)' : 'none' }}>{l}</button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'contents' }}
+        onTouchStart={e => { swipeRef.current = (e.target as Element).closest('.aion-snap, .aion-hscroll, table') ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+        onTouchEnd={e => {
+          const s0 = swipeRef.current; swipeRef.current = null
+          if (!s0 || !mobile) return
+          const dx = e.changedTouches[0].clientX - s0.x, dy = e.changedTouches[0].clientY - s0.y
+          if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6) return
+          const i = TABS3.findIndex(t => t[0] === tab)
+          const n = TABS3[Math.max(0, Math.min(TABS3.length - 1, i + (dx < 0 ? 1 : -1)))][0]
+          if (n !== tab) { setTab(n); window.scrollTo?.({ top: 0 }) }
+        }}>
+
       {/* período */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      {show('resumo') && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div style={segWrap}>
           {[...(campaign ? [{ key: 'campanha' as const, label: campaign.label }] : []), ...PERIODS].map(p => (
             <button key={p.key} onClick={() => { setTouched(true); setPeriod(p.key) }} style={seg(period === p.key)}>{p.label}</button>
           ))}
         </div>
         <span style={{ fontSize: 12, color: '#94a3b8' }}>Comparado ao período anterior de mesma duração</span>
-      </div>
+      </div>}
 
       {/* alertas */}
-      {alerts.length > 0 && (
+      {show('resumo') && alerts.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {alerts.map(a => {
             const on = alertFilter?.key === a.key
@@ -291,7 +317,7 @@ export default function CaptacaoOverview(props: {
       )}
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'repeat(2, minmax(0,1fr))' : 'repeat(5, minmax(0,1fr))', gap: 12 }}>
+      {show('resumo') && <div className={mobile ? 'aion-snap' : undefined} style={{ display: 'grid', gridTemplateColumns: mobile ? undefined : 'repeat(5, minmax(0,1fr))', gap: 12 }}>
         {kp.map((k, i) => {
           const Icon = k.icon
           const d = k.p >= 0 ? delta(k.v, k.p) : null
@@ -299,7 +325,7 @@ export default function CaptacaoOverview(props: {
           const on = pickable && metric === k.m
           return (
             <button key={k.k} className="ld-kpi ld-in" data-on={on ? 1 : 0} onClick={() => pickable && setMetric(k.m!)}
-              style={{ background: '#fff', border: `1.5px solid ${on ? TEAL : LINE}`, borderRadius: 16, padding: '13px 14px', animationDelay: `${i * 40}ms`, cursor: pickable ? 'pointer' : 'default', gridColumn: mobile && i === 4 ? 'span 2' : undefined }}>
+              style={{ background: '#fff', border: `1.5px solid ${on ? TEAL : LINE}`, borderRadius: 16, padding: '13px 14px', animationDelay: `${i * 40}ms`, cursor: pickable ? 'pointer' : 'default', }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 28, height: 28, borderRadius: 9, background: k.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={15} color={k.color} /></span>
                 <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{k.label}</span>
@@ -312,10 +338,10 @@ export default function CaptacaoOverview(props: {
             </button>
           )
         })}
-      </div>
+      </div>}
 
       {/* gráfico */}
-      <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '14px 14px 8px' }}>
+      {show('resumo') && <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '14px 14px 8px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
             {metric === 'hits' ? 'Acionamentos' : 'Conversas'} por {chart.length > 0 && Math.ceil((range.end.getTime() - range.start.getTime()) / 86400000) > 120 ? 'semana' : 'dia'}
@@ -337,10 +363,10 @@ export default function CaptacaoOverview(props: {
             </ResponsiveContainer>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* lista */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      {show('captacoes') && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: NAVY }}>Suas captações ({list.length})</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {triggers.length > 5 && (
@@ -356,9 +382,9 @@ export default function CaptacaoOverview(props: {
             ))}
           </div>
         </div>
-      </div>
+      </div>}
 
-      {loading ? (
+      {show('captacoes') && (loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
           {[...Array(3)].map((_, i) => <div key={i} className="animate-pulse" style={{ height: 150, borderRadius: 16, background: '#fff', border: `1px solid ${LINE}` }} />)}
         </div>
@@ -420,16 +446,16 @@ export default function CaptacaoOverview(props: {
             )
           })}
         </div>
-      )}
+      ))}
 
       {/* tabela comparativa */}
-      {triggers.length > 0 && (
+      {show('comparar') && triggers.length > 0 && (
         <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, overflow: 'hidden' }}>
-          <button onClick={() => setShowTable(v => !v)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+          <button onClick={() => setShowTable(v => !v)} style={{ width: '100%', display: mobile ? 'none' : 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
             <span style={{ fontSize: 14, fontWeight: 800, color: NAVY }}>Comparar captações</span>
             <ChevronRight size={16} color="#64748b" style={{ transform: showTable ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }} />
           </button>
-          {showTable && (
+          {(showTable || mobile) && (
             <div style={{ borderTop: '1px solid #F1F5F9' }}>
               <p style={{ margin: 0, padding: '10px 16px 0', fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
                 Acionamentos e conversas contam todo match no período. Contatos, leads, visitas e matrículas usam o <strong>primeiro toque</strong> — cada contato conta só para a captação que o trouxe primeiro, então a soma nunca passa do total real.
@@ -471,6 +497,8 @@ export default function CaptacaoOverview(props: {
           )}
         </div>
       )}
+
+      </div>
 
       {selected && (
         <Detail
