@@ -7,8 +7,8 @@ import { normalizeBrazilianInput } from '../../lib/phone'
 import * as XLSX from 'xlsx'
 import {
   Users, BookUser, Search, Phone, Download, Upload, FileText, Plus,
-  RefreshCw, MessageSquare, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight,
-  GitMerge, Settings2, Trash2, Tag as TagIcon, X, Loader2, CheckCircle2, AlertCircle,
+  MessageSquare, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight,
+  Settings2, Trash2, Tag as TagIcon, X, Loader2, CheckCircle2, AlertCircle,
 } from 'lucide-react'
 import ContactProfile, { UnifiedContact } from './ContactProfile'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
@@ -17,8 +17,9 @@ import DuplicateContactsModal from './DuplicateContactsModal'
 import CustomFieldsAdminModal from './CustomFieldsAdminModal'
 import ContactImportDialog from './ContactImportDialog'
 import PageHeader from '../ui/PageHeader'
+import { ContactsSummary, ActionsMenu, FiltersButton, ActiveChips, type FilterField } from './ContactsToolbar'
 import { LEADS_CSS } from '../leads/LeadsAttention'
-import { ContactsAttentionStrip, ContactsResolvePanel, useContactsAttention, type ContactAttentionKey } from './ContactsAttention'
+import { ContactsResolvePanel, useContactsAttention, type ContactAttentionKey } from './ContactsAttention'
 
 // ─── Constants ───────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
@@ -271,6 +272,8 @@ export default function ContactsModule() {
   const [profileContact,  setProfileContact]  = useState<UnifiedContact | null>(null)
   const [zoomedPhoto,     setZoomedPhoto]     = useState<string | null>(null)
   const [showExportModal, setShowExportModal] = useState(false)
+  // Exportar só os contatos marcados na tabela (null = exportar por filtros do modal)
+  const [exportIds, setExportIds] = useState<string[] | null>(null)
   const [exportFields,    setExportFields]    = useState<Record<ExportFieldKey, boolean>>({
     responsible_name: true, student_name: true, phone: true, email: true,
     grade: true, type: true, tags: true, last_contact: true, created_at: true, status: true,
@@ -703,6 +706,7 @@ export default function ContactsModule() {
   // ── Export modal: live count ──────────────────────────────
   useEffect(() => {
     if (!showExportModal) return
+    if (exportIds) { setExportCount(exportIds.length); setExportFetching(false); return }
     const timer = setTimeout(async () => {
       if (!mountedRef.current) return
       setExportFetching(true)
@@ -732,7 +736,7 @@ export default function ContactsModule() {
     }, 300)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showExportModal, exportFilterOrigin, exportFilterStatus, exportFilterGrade, exportSearch])
+  }, [showExportModal, exportIds, exportFilterOrigin, exportFilterStatus, exportFilterGrade, exportSearch])
 
   // ── Handlers ─────────────────────────────────────────────
   function handleLoadMore() {
@@ -839,6 +843,16 @@ export default function ContactsModule() {
       : 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, school_relation, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
 
     const allRows: any[] = []
+    if (exportIds) {
+      for (let i = 0; i < exportIds.length; i += 200) {
+        const { data, error } = await supabase.from('whatsapp_contacts').select(selectStr)
+          .eq('institution_id', institutionId).in('id', exportIds.slice(i, i + 200))
+        if (error) throw error
+        allRows.push(...(data || []))
+        if (mountedRef.current) setExportProgress(allRows.length)
+      }
+      return allRows.map(mapContact)
+    }
     let from = 0
     while (true) {
       let q = supabase
@@ -929,24 +943,44 @@ export default function ContactsModule() {
     setShowNewContact(true)
   }
   const openExport = () => {
+    setExportIds(null)
     setExportFilterOrigin('all'); setExportFilterStatus('all')
     setExportFilterGrade('all'); setExportSearch('')
     setExportProgress(0)
     setShowExportModal(true)
   }
 
-  const kpiDefs = [
-    { label: 'Total',    count: kpiCounts.total,   filterVal: 'all',     icon: '👥', activeColor: '#3B82F6', activeBg: '#DBEAFE', idleBg: '#EFF6FF' },
-    { label: 'Leads',    count: kpiCounts.lead,    filterVal: 'lead',    icon: '🎯', activeColor: '#7C3AED', activeBg: '#C4B5FD', idleBg: '#EDE9FE' },
-    { label: 'Clientes', count: kpiCounts.client,  filterVal: 'client',  icon: '🏫', activeColor: '#065F46', activeBg: '#A7F3D0', idleBg: '#D1FAE5' },
-    { label: 'WhatsApp', count: kpiCounts.unknown, filterVal: 'unknown', icon: '💬', activeColor: '#D97706', activeBg: '#FDE68A', idleBg: '#FEF3C7' },
+  const filterFields: FilterField[] = [
+    { key: 'status', label: 'Etapa do lead', value: filterStatus, onChange: setFilterStatus,
+      options: [{ value: 'all', label: 'Todas as etapas' }, ...Object.entries(statusConfig).map(([v, c]) => ({ value: v, label: c.label }))] },
+    { key: 'rel', label: 'Relação com a escola', value: filterRelation, onChange: setFilterRelation,
+      options: [{ value: 'all', label: 'Todas' }, { value: 'aluno', label: 'Aluno' }, { value: 'pre_matriculado', label: 'Pré-matriculado' }, { value: 'ex_aluno', label: 'Ex-aluno' }, { value: 'transferido', label: 'Transferido' }, { value: 'none', label: 'Sem relação' }] },
+    ...(grades.length ? [{ key: 'grade', label: 'Série', value: filterGrade, onChange: setFilterGrade,
+      options: [{ value: 'all', label: 'Todas as séries' }, ...grades.map(g => ({ value: g, label: g }))] }] : []),
+    ...(availTagsFilter.length ? [{ key: 'tag', label: 'Etiqueta', value: filterTag, onChange: setFilterTag,
+      options: [{ value: 'all', label: 'Todas as etiquetas' }, ...availTagsFilter.map(x => ({ value: x.name, label: x.name }))] }] : []),
+    ...(availCampaigns.length ? [{ key: 'camp', label: 'Campanha de origem', value: filterCampaign, onChange: setFilterCampaign,
+      options: [{ value: 'all', label: 'Todas as campanhas' }, ...availCampaigns.map(x => ({ value: x.id, label: x.name }))] }] : []),
   ]
+  const actionItems = [
+    { label: 'Importar planilha', hint: 'Traga contatos de um CSV ou Excel', Icon: Upload, onClick: openImport },
+    { label: 'Exportar contatos', hint: 'Com filtros e campos à sua escolha', Icon: Download, onClick: openExport },
+    { label: 'Campos personalizados', hint: 'Informações extras da sua escola', Icon: Settings2, onClick: () => setShowCustomFields(true) },
+  ]
+
+  const openExportSelected = () => {
+    setExportIds(Array.from(selectedIds))
+    setExportFilterOrigin('all'); setExportFilterStatus('all'); setExportFilterGrade('all'); setExportSearch('')
+    setExportProgress(0)
+    setShowExportModal(true)
+  }
+
 
   // ── Sortable header ───────────────────────────────────────
   const SortTh = ({ col, label, width }: { col: string; label: string; width?: number | string }) => (
     <th
       onClick={() => handleSortClick(col)}
-      style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: sortCol === col ? '#3B82F6' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', width }}
+      style={{ background: '#F5FAF9', padding: '11px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: sortCol === col ? '#007A6E' : '#5B6B86', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E3E8F0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', width }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {label}
@@ -1025,10 +1059,11 @@ export default function ContactsModule() {
       onClick={e => { if (e.target === e.currentTarget) setShowExportModal(false) }}>
       <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>Exportar contatos</h2>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>{exportIds ? `Exportar ${exportIds.length} selecionado${exportIds.length === 1 ? '' : 's'}` : 'Exportar contatos'}</h2>
           <button onClick={() => setShowExportModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 22, lineHeight: 1 }}>✕</button>
         </div>
 
+        {!exportIds && (<>
         {/* ── Filtros independentes ── */}
         <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Filtros de exportação</p>
         <div style={{ position: 'relative', marginBottom: 8 }}>
@@ -1056,6 +1091,8 @@ export default function ContactsModule() {
           <option value="all">Todas as séries</option>
           {GRADES_LIST.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
+
+        </>)}
 
         {/* ── Contador ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#F0FDFA', borderRadius: 9, marginBottom: 18, border: '1px solid #CCFBF1' }}>
@@ -1207,12 +1244,6 @@ export default function ContactsModule() {
 
   // ─── MOBILE LAYOUT ────────────────────────────────────────
   if (isMobile) {
-    const originFilters = [
-      { value: 'all',     label: 'Todos' },
-      { value: 'lead',    label: 'Leads' },
-      { value: 'client',  label: 'Clientes' },
-      { value: 'unknown', label: 'Novos' },
-    ]
     return (
       <>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
@@ -1220,10 +1251,10 @@ export default function ContactsModule() {
           <style>{LEADS_CSS}</style>
           <div style={{ padding: '12px 12px 0', flexShrink: 0 }}>
             <PageHeader compact icon={BookUser} title="Contatos" subtitle={`${kpiCounts.total.toLocaleString('pt-BR')} contatos`}
-              actions={<button onClick={openImport} style={hdrBtn()}><Upload size={13} /> Importar</button>} />
+              actions={<ActionsMenu items={actionItems} />} />
           </div>
           <div style={{ padding: '10px 12px 0', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <ContactsAttentionStrip counts={attCounts} active={attention} onPick={setAttention} />
+            <ContactsSummary compact kpi={kpiCounts} origin={filterOrigin} onOrigin={setFilterOrigin} counts={attCounts} attention={attention} onAttention={setAttention} />
             {attention && (
               <ContactsResolvePanel kind={attention} institutionId={institutionId} counts={attCounts}
                 onClose={() => setAttention(null)}
@@ -1245,14 +1276,6 @@ export default function ContactsModule() {
 
           {/* Origin filter chips */}
           <div style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', gap: 6, scrollbarWidth: 'none' }}>
-            {originFilters.map(({ value, label }) => (
-              <button key={value} onClick={() => setFilterOrigin(value)}
-                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-                  background: filterOrigin === value ? '#3B82F6' : '#F0F9FF',
-                  color:      filterOrigin === value ? '#fff'    : '#64748B' }}>
-                {label}
-              </button>
-            ))}
             {/* Status filter chip row */}
             {Object.entries(statusConfig).map(([value, cfg]) => (
               <button key={value} onClick={() => setFilterStatus(filterStatus === value ? 'all' : value)}
@@ -1262,23 +1285,6 @@ export default function ContactsModule() {
                 {cfg.label}
               </button>
             ))}
-          </div>
-
-          {/* KPIs 2×2 — clickable */}
-          <div style={{ padding: '12px 16px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flexShrink: 0 }}>
-            {kpiDefs.map(k => {
-              const active = filterOrigin === k.filterVal
-              return (
-                <button key={k.label} onClick={() => setFilterOrigin(k.filterVal)}
-                  style={{ background: active ? k.activeBg : '#fff', borderRadius: 12, border: `1.5px solid ${active ? k.activeColor : '#E2E8F0'}`, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
-                  <span style={{ fontSize: 22 }}>{k.icon}</span>
-                  <div>
-                    <p style={{ fontSize: 18, fontWeight: 800, color: active ? k.activeColor : '#1A2B4A', margin: 0, lineHeight: 1 }}>{k.count}</p>
-                    <p style={{ fontSize: 11, color: active ? k.activeColor : '#94A3B8', margin: '2px 0 0', fontWeight: 500 }}>{k.label}</p>
-                  </div>
-                </button>
-              )
-            })}
           </div>
 
           {/* Contact list */}
@@ -1358,14 +1364,10 @@ export default function ContactsModule() {
           subtitle={`${kpiCounts.total.toLocaleString('pt-BR')} contatos · leads e WhatsApp unificados`}
           actions={<>
             <button onClick={openNewContact} style={hdrBtn(true)}><Plus size={14} /> Novo contato</button>
-            <button onClick={openImport} style={hdrBtn()}><Upload size={14} /> Importar planilha</button>
-            <button onClick={openExport} disabled={loading} style={{ ...hdrBtn(), opacity: (loading || contacts.length === 0) ? 0.55 : 1 }}><Download size={14} /> Exportar ({contacts.length})</button>
-            <button onClick={() => { load(); refreshAttention() }} disabled={loading} style={hdrBtn()}><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar</button>
-            <button onClick={() => setShowDuplicates(true)} style={hdrBtn()}><GitMerge size={14} /> Duplicados</button>
-            <button onClick={() => setShowCustomFields(true)} style={hdrBtn()}><Settings2 size={14} /> Campos personalizados</button>
+            <ActionsMenu items={actionItems} />
           </>} />
 
-        <ContactsAttentionStrip counts={attCounts} active={attention} onPick={setAttention} />
+        <ContactsSummary kpi={kpiCounts} origin={filterOrigin} onOrigin={setFilterOrigin} counts={attCounts} attention={attention} onAttention={setAttention} />
         {attention && (
           <ContactsResolvePanel kind={attention} institutionId={institutionId} counts={attCounts}
             onClose={() => setAttention(null)}
@@ -1375,84 +1377,26 @@ export default function ContactsModule() {
             toast={(m, t) => showToast(m, t === 'success')} />
         )}
 
-        {/* KPI cards — clicáveis, destacam o ativo */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-          {kpiDefs.map((k, i) => {
-            const active = filterOrigin === k.filterVal
-            return (
-              <button key={k.label} className="ld-kpi ld-in" data-on={active ? '1' : '0'} onClick={() => setFilterOrigin(active ? 'all' : k.filterVal)}
-                style={{ animationDelay: `${i * 50}ms`, background: active ? k.activeBg : '#fff', borderRadius: 14, border: `${active ? 2 : 1}px solid ${active ? k.activeColor : '#E3E8F0'}`, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 24 }}>{k.icon}</span>
-                <span>
-                  <span style={{ display: 'block', fontSize: 26, fontWeight: 800, lineHeight: 1.1, color: active ? k.activeColor : '#1A2B4A' }}>{k.count}</span>
-                  <span style={{ display: 'block', fontSize: 12, color: active ? k.activeColor : '#5B6B86', fontWeight: 600 }}>{k.label}</span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
-
         {/* Busca + filtros — tudo numa linha só. Busca com largura travada
             (não cresce, encolhe até um piso) + selects com largura fixa e
             compacta (flexShrink:0 — não espremem, o texto corta com
             reticências se precisar) + nowrap. overflow-x:auto é só rede de
             segurança pra janelas de desktop bem estreitas — em 1366/1440/
             1920px tudo cabe sem precisar de scroll. */}
-        <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 10, alignItems: 'center', overflowX: 'auto', paddingBottom: 2 }}>
-          <div style={{ position: 'relative', flex: '0 1 260px', minWidth: 160, flexShrink: 1 }}>
-            <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por nome, telefone ou turma..."
-              style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px 9px 36px', outline: 'none', width: '100%', color: '#1A2B4A', boxSizing: 'border-box' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 420, minWidth: 180 }}>
+              <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar por nome, telefone ou turma..."
+                style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px 9px 36px', outline: 'none', width: '100%', color: '#1A2B4A', boxSizing: 'border-box' }} />
+            </div>
+            <FiltersButton fields={filterFields} onClear={clearFilters} />
+            <span style={{ marginLeft: 'auto', fontSize: 12.5, color: '#5B6B86', fontWeight: 600 }}>
+              {total.toLocaleString('pt-BR')} {total === 1 ? 'contato' : 'contatos'}{hasFilters ? ' neste filtro' : ''}
+            </span>
           </div>
-          <select value={filterOrigin} onChange={e => setFilterOrigin(e.target.value)}
-            style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A', flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <option value="all">Todos os tipos</option>
-            <option value="lead">Leads</option>
-            <option value="client">Clientes</option>
-            <option value="unknown">Desconhecidos</option>
-          </select>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            style={{ border: `1.5px solid ${filterStatus !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterStatus !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterStatus !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterStatus !== 'all' ? 600 : 400, flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <option value="all">Todos os status</option>
-            {Object.entries(statusConfig).map(([value, cfg]) => <option key={value} value={value}>{cfg.label}</option>)}
-          </select>
-          <select value={filterRelation} onChange={e => setFilterRelation(e.target.value)}
-            style={{ border: `1.5px solid ${filterRelation !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterRelation !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A', flexShrink: 0, width: 150 }}>
-            <option value="all">Todas as relações</option>
-            <option value="aluno">Aluno</option>
-            <option value="pre_matriculado">Pré-matriculado</option>
-            <option value="ex_aluno">Ex-aluno</option>
-            <option value="transferido">Transferido</option>
-            <option value="none">Sem relação</option>
-          </select>
-          {grades.length > 0 && (
-            <select value={filterGrade} onChange={e => setFilterGrade(e.target.value)}
-              style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A', flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              <option value="all">Todas as séries</option>
-              {grades.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-          )}
-          {availTagsFilter.length > 0 && (
-            <select value={filterTag} onChange={e => setFilterTag(e.target.value)}
-              style={{ border: `1.5px solid ${filterTag !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterTag !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterTag !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterTag !== 'all' ? 600 : 400, flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              <option value="all">Todas as etiquetas</option>
-              {availTagsFilter.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-            </select>
-          )}
-          {availCampaigns.length > 0 && (
-            <select value={filterCampaign} onChange={e => setFilterCampaign(e.target.value)} title="Campanha de origem (Captação Inteligente)"
-              style={{ border: `1.5px solid ${filterCampaign !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterCampaign !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterCampaign !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterCampaign !== 'all' ? 600 : 400, flexShrink: 0, width: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              <option value="all">Todas as campanhas</option>
-              {availCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          )}
-          {hasFilters && (
-            <button onClick={clearFilters}
-              style={{ border: '1.5px solid #FCA5A5', borderRadius: 10, fontSize: 13, background: '#FEF2F2', padding: '9px 14px', outline: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
-              Limpar filtros
-            </button>
-          )}
+          <ActiveChips fields={filterFields} />
         </div>
 
         {/* Barra de ação em massa (item 3) — só aparece com seleção ativa */}
@@ -1468,6 +1412,10 @@ export default function ContactsModule() {
                   {selectingAllFilter ? 'Buscando...' : `Selecionar todos os ${total} deste filtro`}
                 </button>
               )}
+              <button onClick={openExportSelected}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: '1px solid #5EEAD4', borderRadius: 9, background: '#fff', color: '#0F766E', cursor: 'pointer' }}>
+                <Download size={12} /> Exportar
+              </button>
               <button onClick={() => { setBulkTagNames([]); setShowBulkTagModal(true) }}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', cursor: 'pointer' }}>
                 <TagIcon size={12} /> Aplicar etiqueta
@@ -1494,11 +1442,11 @@ export default function ContactsModule() {
             100% — reduzir o zoom "encolhia" o conteúdo todo e o botão
             reaparecia. Largura fixa pra Ações garante que ela nunca é
             espremida, independente do tamanho do nome/subtítulo. */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'auto' }}>
+        <div className="ld-in" style={{ background: '#fff', borderRadius: 16, border: '1px solid #E3E8F0', overflow: 'auto', boxShadow: '0 1px 2px rgba(26,43,74,.04)' }}>
           <table style={{ width: '100%', minWidth: 1020, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead>
               <tr>
-                <th style={{ background: '#f8fafc', padding: '10px 12px', borderBottom: '1px solid #e2e8f0', width: 36 }}>
+                <th style={{ background: '#F5FAF9', padding: '10px 12px', borderBottom: '1px solid #E3E8F0', width: 36 }}>
                   <input type="checkbox"
                     checked={contacts.length > 0 && selectedIds.size === contacts.length}
                     onChange={toggleSelectAllLoaded}
@@ -1507,11 +1455,11 @@ export default function ContactsModule() {
                 <SortTh col="name"         label="Contato" />
                 <SortTh col="phone"        label="Telefone"       width={130} />
                 <SortTh col="type"         label="Tipo"           width={100} />
-                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', width: 120 }}>Relação</th>
-                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', width: 90 }}>Série</th>
+                <th style={{ background: '#F5FAF9', padding: '11px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#5B6B86', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E3E8F0', width: 120 }}>Relação</th>
+                <th style={{ background: '#F5FAF9', padding: '11px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#5B6B86', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E3E8F0', whiteSpace: 'nowrap', width: 90 }}>Série</th>
                 <SortTh col="last_seen_at" label="Último contato" width={120} />
                 <SortTh col="created_at"   label="Adicionado em"  width={120} />
-                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', width: 240 }}>Ações</th>
+                <th style={{ background: '#F5FAF9', padding: '11px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#5B6B86', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E3E8F0', whiteSpace: 'nowrap', width: 240 }}>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -1524,13 +1472,11 @@ export default function ContactsModule() {
                   </td>
                 </tr>
               ) : (
-                contacts.map(c => {
+                contacts.map((c, idx) => {
                   const cfg = typeCfg(c.contact_type)
                   return (
-                    <tr key={c.id} onClick={() => setProfileContact(c)}
-                      style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                    <tr key={c.id} className="ld-row ld-in" onClick={() => setProfileContact(c)}
+                      style={{ borderBottom: '1px solid #EEF2F1', cursor: 'pointer', animationDelay: `${Math.min(idx, 12) * 20}ms` }}>
                       <td style={{ padding: '12px 12px' }} onClick={e => e.stopPropagation()}>
                         <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleSelect(c.id)} style={{ cursor: 'pointer' }} />
                       </td>
