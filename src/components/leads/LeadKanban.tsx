@@ -1512,7 +1512,7 @@ export default function LeadKanban() {
         </div>
 
         {/* Status chips */}
-        <div style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', gap: 6, scrollbarWidth: 'none' }}>
+        <div className="aion-hscroll" style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', flexWrap: 'nowrap', gap: 6, scrollbarWidth: 'none' }}>
           {[{ value: '', label: 'Todos' }, ...Object.entries(statusConfig).map(([v, c]) => ({ value: v, label: c.label }))].map(({ value, label }) => (
             <button key={value} onClick={() => setFilterStatus(value)}
               style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
@@ -1524,7 +1524,7 @@ export default function LeadKanban() {
         </div>
 
         {/* Lead list */}
-        <div style={{ flex: 1, overflowY: 'auto', marginTop: 10 }}>
+        <div style={{ flex: 1, overflowY: 'auto', marginTop: 10, padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {mobileLeads.length === 0 ? (
             <div style={{ padding: '40px 16px', textAlign: 'center' }}>
               <p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhum lead encontrado</p>
@@ -1537,7 +1537,7 @@ export default function LeadKanban() {
             const siblings = familySiblingsMap.get(lead.id)
             return (
               <div key={lead.id} onClick={() => selectMode ? toggleSelected([lead.id]) : cardActions.onEdit(lead)}
-                style={{ padding: '14px 16px', background: selectMode && selectedIds.has(lead.id) ? '#EEF2FF' : '#fff', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: 12, cursor: 'pointer', alignItems: 'center' }}>
+                className="aion-tap wa-row" style={{ padding: '12px 14px', background: selectMode && selectedIds.has(lead.id) ? '#EEF2FF' : '#fff', border: '1px solid #E3E8F0', borderRadius: 18, boxShadow: '0 1px 2px rgba(26,43,74,.04)', flexShrink: 0, display: 'flex', gap: 12, cursor: 'pointer', alignItems: 'center' }}>
                 {selectMode && <input type="checkbox" readOnly checked={selectedIds.has(lead.id)} style={{ width: 18, height: 18, accentColor: '#4F46E5', flexShrink: 0 }} aria-label="Selecionado" />}
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: cfg?.accent ?? '#6b7280', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff' }}>
                   {(lead.responsible_name || '?').charAt(0).toUpperCase()}

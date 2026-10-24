@@ -76,7 +76,7 @@ export function AttentionStrip({ counts, active, onPick }: { counts: StripCounts
     { key: 'incomplete', label: 'Dados incompletos', value: counts.incomplete, sub: 'sem série, origem ou atendente', color: '#5B6B86', icon: ClipboardList },
   ]
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(168px,1fr))', gap: 12 }}>
+    <div className="aion-snap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(168px,1fr))', gap: 12 }}>
       {items.map((it, i) => {
         const on = active === it.key
         const Icon = it.icon
