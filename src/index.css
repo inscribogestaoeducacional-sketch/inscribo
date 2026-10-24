@@ -208,3 +208,23 @@ h1,h2,h3,h4,h5,h6 { color: var(--color-navy); }
 * { -webkit-tap-highlight-color: transparent; }
 button, a { touch-action: manipulation; }
 input, select, textarea { font-size: max(16px, 1em); }
+
+/* ── Tabelas do sistema: visual único (cabeçalho suave, linhas com destaque e entrada animada).
+   Estilos inline de cada tela continuam valendo; isto cobre o que não tem estilo próprio. ── */
+@keyframes aion-row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+main table thead th {
+  background: #F5FAF9; color: #5B6B86; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; padding: 11px 16px; text-align: left; border-bottom: 1px solid #E3E8F0; white-space: nowrap;
+}
+main table tbody td { padding: 11px 16px; border-bottom: 1px solid #EEF3F2; font-size: 13px; color: #1A2B4A; }
+main table tbody tr { transition: background .15s; animation: aion-row-in .32s cubic-bezier(.22,1,.36,1) backwards; }
+main table tbody tr:nth-child(2) { animation-delay: .02s } main table tbody tr:nth-child(3) { animation-delay: .04s }
+main table tbody tr:nth-child(4) { animation-delay: .06s } main table tbody tr:nth-child(5) { animation-delay: .08s }
+main table tbody tr:nth-child(6) { animation-delay: .10s } main table tbody tr:nth-child(7) { animation-delay: .12s }
+main table tbody tr:nth-child(8) { animation-delay: .14s } main table tbody tr:nth-child(n+9) { animation-delay: .16s }
+main table tbody tr:hover { background: #F0FDFB; }
+main table tbody tr:last-child td { border-bottom: none; }
+@media (prefers-reduced-motion: reduce) { main table tbody tr { animation: none; } }
+@keyframes ldFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.ld-in { animation: ldFadeUp .35s ease both; }
+@media (prefers-reduced-motion: reduce) { .ld-in { animation: none; } }

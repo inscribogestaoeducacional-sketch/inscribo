@@ -76,21 +76,24 @@ export function AttentionStrip({ counts, active, onPick }: { counts: StripCounts
     { key: 'incomplete', label: 'Dados incompletos', value: counts.incomplete, sub: 'sem série, origem ou atendente', color: '#5B6B86', icon: ClipboardList },
   ]
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(168px,1fr))', gap: 12 }}>
       {items.map((it, i) => {
         const on = active === it.key
         const Icon = it.icon
         return (
           <button key={it.key} type="button" className={`ld-kpi ld-in ${it.alert && !on ? 'ld-alert' : ''}`} data-on={on ? '1' : '0'}
             onClick={() => onPick(on ? null : it.key)} aria-pressed={on} style={{
-              animationDelay: `${i * 50}ms`, background: on ? '#F0FDFB' : '#fff', borderRadius: 14, padding: '10px 12px',
-              border: `${it.alert || on ? 2 : 1}px solid ${on ? '#00A896' : it.alert ? '#EF4444' : '#E3E8F0'}`,
+              animationDelay: `${i * 60}ms`, position: 'relative', overflow: 'hidden', background: on ? `${it.color}0D` : '#fff', borderRadius: 18, padding: '14px 14px 13px',
+              border: `1.5px solid ${on ? it.color : it.alert ? '#FCA5A5' : '#E3E8F0'}`, display: 'flex', flexDirection: 'column', gap: 6,
+              boxShadow: on ? `0 10px 24px -14px ${it.color}` : '0 1px 2px rgba(26,43,74,.04)',
             }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: it.color, textTransform: 'uppercase', letterSpacing: '.02em' }}>
-              <Icon size={13} />{it.label}
+            <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: it.color, opacity: on || it.alert ? 1 : .55 }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: BRAND.ink, lineHeight: 1.2 }}>{it.label}</span>
+              <span style={{ width: 30, height: 30, borderRadius: 10, background: `${it.color}14`, color: it.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={16} /></span>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: it.alert ? '#B91C1C' : '#1A2B4A', lineHeight: 1.2 }}><CountUp value={it.value} /></div>
-            <div style={{ fontSize: 11.5, color: '#5B6B86' }}>{it.sub}</div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: it.alert ? '#B91C1C' : BRAND.ink, lineHeight: 1, letterSpacing: '-.02em' }}><CountUp value={it.value} /></div>
+            <div style={{ fontSize: 11.5, color: BRAND.muted, lineHeight: 1.3 }}>{it.sub}</div>
           </button>
         )
       })}
