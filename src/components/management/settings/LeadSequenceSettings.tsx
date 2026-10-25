@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Clock, Repeat, ListChecks } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { BRAND } from '../../../lib/brand'
-import { loadTemplates, type TemplateRow } from '../../transmissoes/TemplatesPanel'
+import TemplatesPanel, { loadTemplates, type TemplateRow } from '../../transmissoes/TemplatesPanel'
 import { TEMPLATE_SLOT_KEYS } from '../../../lib/templateSlots'
 import { SEQ_DEFAULT_STEPS, SEQ_MAX_STEPS, seqVarKind, type SeqStep } from '../../../lib/leadSequence'
 import { Card, Title, Switch, SaveButton, GhostButton, NowNote, WarnNote, input, label, hint } from './ui'
@@ -21,6 +21,7 @@ export default function LeadSequenceSettings({ institutionId }: { institutionId:
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [newReq, setNewReq] = useState(0)
   const [stats, setStats] = useState<{ sent: number; failed: number; leads: number } | null>(null)
 
   useEffect(() => {
@@ -44,6 +45,8 @@ export default function LeadSequenceSettings({ institutionId }: { institutionId:
     const nums = [...new Set([...(t.body_text || '').matchAll(/\{\{(\d+)\}\}/g)].map(m => m[1]))]
     return nums.every(n => seqVarKind((t.variable_labels || {})[n]))
   }), [templates])
+  const reloadTemplates = async () => { try { setTemplates(await loadTemplates(institutionId, { all: true })) } catch { /* mantém a lista */ } }
+  const waiting = templates.filter(t => t.institution_id === institutionId && t.status !== 'approved' && t.status !== 'rejected').length
   const byName = (n: string) => options.find(o => o.name === n)
 
   const setStep = (i: number, patch: Partial<SeqStep>) => setCfg(c => ({ ...c, steps: c.steps.map((s, j) => j === i ? { ...s, ...patch } : s) }))
@@ -98,6 +101,12 @@ export default function LeadSequenceSettings({ institutionId }: { institutionId:
             <div style={{ marginTop: 12 }}>
               <GhostButton disabled={cfg.steps.length >= SEQ_MAX_STEPS} onClick={() => setCfg(c => ({ ...c, steps: [...c.steps, { days: (c.steps[c.steps.length - 1]?.days || 0) + 7, template: options[0]?.name || '' }] }))}><Plus size={14} /> Adicionar passo ({cfg.steps.length}/{SEQ_MAX_STEPS})</GhostButton>
             </div>
+            <div style={{ marginTop: 12, padding: 12, borderRadius: 14, background: '#F8FAFC', border: `1px solid ${BRAND.line}` }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: BRAND.ink }}>Quer uma mensagem sua?</div>
+              <div style={{ fontSize: 12.5, color: BRAND.muted, margin: '4px 0 10px', lineHeight: 1.5 }}>Crie o modelo aqui mesmo. A Meta analisa (de minutos a 24 horas) e, quando aprovar, ele aparece na lista de cada passo. Use as variáveis de nome do responsável, escola ou aluno.{waiting > 0 ? ` Aguardando a Meta: ${waiting}.` : ''}</div>
+              <GhostButton onClick={() => setNewReq(n => n + 1)}><Plus size={14} /> Criar modelo</GhostButton>
+            </div>
+            <TemplatesPanel institutionId={institutionId} hideLists request={newReq ? { n: newReq } : undefined} onChanged={reloadTemplates} />
             {options.length === 0 && <div style={{ marginTop: 10 }}><WarnNote>Nenhum modelo aprovado e compatível ainda. Os modelos precisam estar aprovados na Meta e usar só nome do responsável, escola ou aluno.</WarnNote></div>}
           </Card>
           <Card>
