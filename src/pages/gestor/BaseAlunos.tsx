@@ -12,45 +12,22 @@
 //   período  = pela data da matrícula (a que o sistema da escola informa; sem ela, a data em que o aluno
 //              apareceu pela primeira vez; pré-matrícula sem data fica fora de qualquer período)
 import { PillTabs, useTabSwipe } from '../../components/mobile/PillTabs'
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
-import { GraduationCap, Loader2, Search, CheckCircle2, Undo2, Download, MessageCircle, ClipboardCheck, LayoutGrid, Users, Layers, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { GraduationCap, Loader2, Search, LayoutGrid, Users, Layers, ClipboardCheck, UserCheck, Hourglass, AlertCircle, LogOut } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Navigate } from 'react-router-dom'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
 import { useActiveCampaignYear } from '../../lib/activeCampaign'
 import PageHeader from '../../components/ui/PageHeader'
-import { BRAND, SHADOW } from '../../lib/brand'
-
-type Row = {
-  student_id: string; registration_code: string | null; student_name: string; guardian_name: string | null; guardian_phone: string | null
-  category: string; origin: 'rematricula' | 'novato' | 'ex_aluno' | null; state: 'matriculado' | 'pre_matriculado' | null
-  grade_id: string | null; grade_name: string | null; grade_sort: number | null; prev_grade: string | null; cur_status_text: string | null
-  enrolled_on: string | null; date_is_estimate: boolean | null; erp_new: boolean | null
-  declared_note: string | null; declared_at: string | null; origins: string[] | null
-}
-type PanelRow = {
-  grade_level_id: string; grade_name: string; sort_order: number; is_terminal: boolean
-  base_prev_year: number; reenrolled: number; reenrolled_declared: number; pending: number; left_school: number
-  new_students: number; returning_students: number; graduates: number; capacity: number | null; pre_enrolled: number
-}
-type Head = {
-  grade_level_id: string; grade_name: string; sort_order: number; studying: number; left_school: number; concluded: number
-  prev_studying: number; prev_left: number; secretary_count: number | null
-}
-type Info = { last_seen: string | null; sources: string[] | null; pre_counts: boolean }
-type Tab = 'geral' | 'alunos' | 'serie' | 'conferencia'
-type Period = 'all' | 'month' | 'last' | 'custom'
-type Group = 'todos' | 'matriculados' | 'pre' | 'faltam' | 'saiu' | 'concluinte'
-
-const ORIGIN_LABEL: Record<string, string> = { rematricula: 'Rematrícula', novato: 'Novato', ex_aluno: 'Ex-aluno que voltou' }
-const ORIGIN_COLOR: Record<string, string> = { rematricula: '#059669', novato: '#2563EB', ex_aluno: '#0EA5E9' }
-const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
-
-const card: CSSProperties = { background: '#fff', borderRadius: 16, border: `1px solid ${BRAND.line}`, padding: 20, boxShadow: SHADOW }
-const input: CSSProperties = { padding: '8px 11px', borderRadius: 10, border: `1.5px solid ${BRAND.line}`, fontSize: 13, outline: 'none', color: BRAND.ink, boxSizing: 'border-box', fontFamily: 'inherit', background: '#fff' }
-const th: CSSProperties = { padding: '9px 10px', color: BRAND.muted, fontWeight: 700, fontSize: 12, textAlign: 'right', whiteSpace: 'nowrap' }
-const td: CSSProperties = { padding: '9px 10px', fontSize: 13, color: BRAND.ink, textAlign: 'right' }
+import HeaderAction from '../../components/mobile/HeaderAction'
+import { BRAND } from '../../lib/brand'
+import StudentSheet from '../../components/base/StudentSheet'
+import {
+  ORIGIN_LABEL, baseCard, fmtDate, stateLabel,
+  type Row, type PanelRow, type Head, type Info, type Tab, type Period, type Group,
+} from '../../components/base/baseShared'
+import { ConferenceView, GeralView, KpiStrip, PeriodBar, ProgressCard, SerieView, StudentsView } from '../../components/base/BaseViews'
 
 const now = new Date()
 const todaySP = now.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
@@ -66,6 +43,9 @@ function periodRange(p: Period, from: string, to: string): [string, string] | nu
   if (p === 'last') { const py = m === 1 ? y - 1 : y, pm = m === 1 ? 12 : m - 1; return [`${py}-${pad(pm)}-01`, `${py}-${pad(pm)}-31`] }
   return [from || '0000-01-01', to || '9999-12-31']
 }
+
+const BA_TABS: [string, string, any][] = [['geral', 'Visão geral', LayoutGrid], ['alunos', 'Alunos', Users], ['serie', 'Por série', Layers], ['conferencia', 'Conferência', ClipboardCheck]]
+const PERIOD_NOTE = 'O período usa a data da matrícula. Pré-matrícula não tem data no sistema da escola: só aparece em “Todo o período”.'
 
 export default function BaseAlunos() {
   const { user } = useAuth()
@@ -87,6 +67,7 @@ export default function BaseAlunos() {
   const [q, setQ] = useState('')
   const [limit, setLimit] = useState(100)
   const [busyId, setBusyId] = useState('')
+  const [sheetId, setSheetId] = useState('')
   const [capDraft, setCapDraft] = useState<Record<string, string>>({})
   const [headDraft, setHeadDraft] = useState<Record<string, string>>({})
   const moduleOn = useBaseModuleEnabled(institutionId)
@@ -246,473 +227,130 @@ export default function BaseAlunos() {
     URL.revokeObjectURL(a.href)
   }
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
-  const BA_TABS: [string, string, any][] = [['geral', 'Visão geral', LayoutGrid], ['alunos', 'Alunos', Users], ['serie', 'Por série', Layers], ['conferencia', 'Conferência', ClipboardCheck]]
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => {
+    const f = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', f)
+    return () => window.removeEventListener('resize', f)
+  }, [])
   const swipeProps = useTabSwipe(BA_TABS.map(t => t[0]), tab, id => setTab(id as Tab), isMobile)
   if (moduleOn === false) return <Navigate to="/" replace />
   const hasData = rows.length > 0
   const sourceText = (info?.sources ?? []).map(o => o === 'activesoft' ? 'Activesoft' : 'planilha enviada pela escola').join(' e ')
   const upd = info?.last_seen ? new Date(info.last_seen).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }) : ''
 
-  return (
-    <div {...swipeProps} style={{ padding: isMobile ? '12px 12px 24px' : '24px 28px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader icon={GraduationCap} title="Base de alunos"
-        subtitle={<>Rematrícula {year}: alunos de {year - 1} cruzados com {year}{sourceText ? <> · dados da {sourceText}{upd ? `, atualizados em ${upd}` : ''}</> : null}</>}
-        actions={
-          <label style={{ fontSize: 12, color: 'rgba(255,255,255,.9)', fontWeight: 700 }}>Ano&nbsp;
-            <select value={year} onChange={e => setYear(Number(e.target.value))} style={{ ...input, padding: '6px 10px', borderColor: 'transparent' }}>
-              {[thisYear - 1, thisYear, thisYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </label>
-        } />
+  // rematriculados = vieram pela rematrícula no sistema + os que a escola marcou à mão
+  const remCount = rows.filter(r => r.origin === 'rematricula' && r.state === 'matriculado').length + rows.filter(r => r.category === 'rematriculado_declarado').length
+  const reconcileParts = [
+    { label: 'rematriculados', n: remCount, color: '#059669' },
+    { label: 'pré-matriculados', n: rows.filter(r => r.origin === 'rematricula' && r.state === 'pre_matriculado').length, color: '#7C3AED' },
+    { label: 'ainda faltam', n: counts.faltam, color: '#D97706' },
+    { label: 'saíram', n: totals.left, color: '#DC2626' },
+    { label: 'concluintes', n: totals.conc, color: '#64748B' },
+  ]
+  const goGroup = (g: Group) => { setGroup(g); setGrade(''); setQ(''); setTab('alunos'); window.scrollTo?.({ top: 0 }) }
+  const openGrade = (id: string) => { setGrade(id); setGroup('todos'); setQ(''); setTab('alunos'); window.scrollTo?.({ top: 0 }) }
+  const sheetRow = sheetId ? rows.find(r => r.student_id === sheetId) ?? null : null
+  const focusSearch = () => {
+    setTab('alunos')
+    setTimeout(() => { const el = document.getElementById('base-busca') as HTMLInputElement | null; el?.scrollIntoView?.({ block: 'center' }); el?.focus() }, 80)
+  }
 
-      {isMobile && <PillTabs tabs={BA_TABS} value={tab} onChange={id => setTab(id as Tab)} />}
-      {!isMobile && <div role="tablist" style={{ display: 'inline-flex', gap: 2, background: '#EEF3F2', borderRadius: 14, padding: 4, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
-        {([['geral', 'Visão geral', LayoutGrid], ['alunos', 'Alunos', Users], ['serie', 'Por série', Layers], ['conferencia', 'Conferência', ClipboardCheck]] as const).map(([id, label, Icon]) => {
-          const active = tab === id
-          return (
-            <button key={id} role="tab" aria-selected={active} onClick={() => setTab(id)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 10, border: 'none', fontFamily: 'inherit', fontSize: 13.5,
-                fontWeight: active ? 800 : 600, color: active ? BRAND.primaryDark : BRAND.muted, background: active ? '#fff' : 'transparent',
-                boxShadow: active ? '0 1px 3px rgba(26,43,74,.1)' : 'none', cursor: 'pointer' }}>
-              <Icon size={15} />{label}
-            </button>
-          )
-        })}
-      </div>}
-
-      {error && <div style={{ ...card, color: '#B91C1C', background: BRAND.dangerSoft, borderColor: '#FECACA', fontSize: 13 }}>{error}</div>}
-
-      {loading ? <div style={card}><Loader2 size={18} className="animate-spin" /></div> : !hasData && !error ? (
-        <div style={card}>
-          <p style={{ fontSize: 14, color: BRAND.text, margin: 0, lineHeight: 1.6 }}>
-            Ainda não há alunos de {year - 1} ou {year} nesta base.{' '}
-            {canEdit
-              ? <>Conecte o sistema da escola em <a href="/settings?tab=integracoes" style={{ color: BRAND.primary, fontWeight: 700 }}>Configurações → Integrações</a>.</>
-              : <>Peça ao administrador ou gestor da escola para conectar o sistema da escola.</>}
-          </p>
-        </div>
-      ) : hasData && (
-        <>
-          {tab !== 'conferencia' ? (
-            <PeriodBar period={period} setPeriod={setPeriod} from={from} to={to} setFrom={setFrom} setTo={setTo} note={tab === 'conferencia' ? '' : 'O período usa a data da matrícula. Pré-matrícula não tem data no sistema da escola: só aparece em “Todo o período”.'} />
-          ) : null}
-
-          {tab === 'geral' && (
-            <>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                <Big label="matriculados" value={counts.mat} color="#059669"
-                  sub={`${counts.matBy.rematricula} rematrículas · ${counts.matBy.novato} novatos · ${counts.matBy.ex_aluno} ex-alunos que voltaram`} />
-                <Big label="pré-matriculados" value={counts.pre} color="#7C3AED" sub={preCounts ? 'contados junto com os matriculados' : 'reservaram vaga, ainda não matriculados'} />
-                <Big label="ainda faltam" value={counts.faltam} color="#D97706" sub={`dos ${totals.base} que seguem na base de ${year - 1}`} />
-                <Big label="saíram" value={totals.left} color="#DC2626" sub={`transferidos ou cancelados`} />
-              </div>
-
-              <div style={card}>
-                <SectionTitle>De onde vêm os alunos de {year}</SectionTitle>
-                <table style={{ borderCollapse: 'collapse', width: '100%', maxWidth: 640 }}>
-                  <thead>
-                    <tr style={{ background: '#F8FAFC' }}>
-                      <th style={{ ...th, textAlign: 'left' }}>Origem</th>
-                      <th style={th}>Matriculados</th>
-                      <th style={th}>Pré-matriculados</th>
-                      <th style={th}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(['rematricula', 'novato', 'ex_aluno'] as const).map(o => (
-                      <tr key={o} style={{ borderTop: '1px solid #F1F5F9' }}>
-                        <td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>
-                          <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 99, background: ORIGIN_COLOR[o], marginRight: 8 }} />
-                          {ORIGIN_LABEL[o]}
-                        </td>
-                        <td style={td}>{counts.matOnly[o] || '–'}</td>
-                        <td style={td}>{counts.preOnly[o] || '–'}</td>
-                        <td style={{ ...td, fontWeight: 800 }}>{counts.matOnly[o] + counts.preOnly[o] || '–'}</td>
-                      </tr>
-                    ))}
-                    <tr style={{ borderTop: `2px solid ${BRAND.line}` }}>
-                      <td style={{ ...td, textAlign: 'left', fontWeight: 800 }}>Total</td>
-                      <td style={{ ...td, fontWeight: 800 }}>{counts.matOnly.rematricula + counts.matOnly.novato + counts.matOnly.ex_aluno}</td>
-                      <td style={{ ...td, fontWeight: 800 }}>{counts.preOnly.rematricula + counts.preOnly.novato + counts.preOnly.ex_aluno}</td>
-                      <td style={{ ...td, fontWeight: 800 }}>{counts.mat + counts.pre}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <p style={{ fontSize: 12, color: BRAND.muted, margin: '12px 0 0', lineHeight: 1.55 }}>
-                  <b>Novato</b> nunca estudou na escola. <b>Ex-aluno que voltou</b> já estudou aqui antes, mas não estava na escola em {year - 1}.
-                  {counts.estimated > 0 && <> Em {counts.estimated} aluno(s) a data da matrícula é estimada (primeira vez que apareceram no sistema).</>}
-                </p>
-              </div>
-
-              <div style={card}>
-                <SectionTitle>E os {totals.all} alunos de {year - 1}?</SectionTitle>
-                <Reconcile parts={[
-                  { label: 'rematriculados', n: rows.filter(r => r.origin === 'rematricula' && r.state === 'matriculado').length + rows.filter(r => r.category === 'rematriculado_declarado').length, color: '#059669' },
-                  { label: 'pré-matriculados', n: rows.filter(r => r.origin === 'rematricula' && r.state === 'pre_matriculado').length, color: '#7C3AED' },
-                  { label: 'ainda faltam', n: counts.faltam, color: '#D97706' },
-                  { label: 'saíram', n: totals.left, color: '#DC2626' },
-                  { label: 'concluintes', n: totals.conc, color: '#64748B' },
-                ]} total={totals.all} />
-              </div>
-
-              <div style={card}>
-                <SectionTitle>Matrículas por mês</SectionTitle>
-                <MonthChart months={months} />
-              </div>
-
-              <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 18px' }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: BRAND.ink }}>Pré-matrícula conta como matriculado?</div>
-                  <div style={{ fontSize: 12, color: BRAND.muted }}>
-                    Cada escola escolhe. Hoje: {preCounts ? 'Sim, soma nos matriculados.' : 'Não, aparece separada como “pré-matriculado”.'}
-                  </div>
-                </div>
-                {canEdit && (
-                  <div style={{ display: 'flex', border: `1.5px solid ${BRAND.line}`, borderRadius: 10, overflow: 'hidden', fontSize: 13 }}>
-                    {[false, true].map(v => (
-                      <button key={String(v)} onClick={() => { if (preCounts !== v) setPreCounts(v) }}
-                        style={{ padding: '7px 16px', border: 0, cursor: 'pointer', fontFamily: 'inherit', background: preCounts === v ? BRAND.primary : '#fff', color: preCounts === v ? '#fff' : BRAND.text, fontWeight: 700 }}>
-                        {v ? 'Sim' : 'Não'}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {tab === 'alunos' && (
-            <div style={card}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                {([['matriculados', 'Matriculados', '#059669'], ['pre', 'Pré-matriculados', '#7C3AED'], ['faltam', 'Ainda faltam', '#D97706'],
-                   ['saiu', 'Saíram', '#DC2626'], ['concluinte', 'Concluintes', '#64748B'], ['todos', 'Todos', BRAND.primaryDark]] as [Group, string, string][]).map(([k, label, color]) => (
-                  <button key={k} onClick={() => setGroup(k)}
-                    style={{ padding: '6px 12px', borderRadius: 999, border: '1px solid ' + (group === k ? color : BRAND.line), fontFamily: 'inherit',
-                      background: group === k ? color : '#fff', color: group === k ? '#fff' : BRAND.text, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-                    {label} ({groupCount[k]})
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-                <div style={{ position: 'relative' }}>
-                  <Search size={14} style={{ position: 'absolute', left: 10, top: 11, color: BRAND.faint }} />
-                  <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar por nome, responsável ou matrícula" style={{ ...input, paddingLeft: 30, width: 320 }} />
-                </div>
-                {grade && (
-                  <button onClick={() => setGrade('')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 999, border: `1px solid ${BRAND.softLine}`, background: BRAND.soft, color: BRAND.primaryDark, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {panel.find(p => p.grade_level_id === grade)?.grade_name} <X size={13} />
-                  </button>
-                )}
-                <span style={{ fontSize: 12, color: BRAND.faint }}>{shown.length} aluno(s)</span>
-                <button onClick={exportCsv} disabled={shown.length === 0}
-                  style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 10, border: `1px solid ${BRAND.line}`, background: '#fff', color: BRAND.text, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  <Download size={14} /> Baixar planilha (CSV)
-                </button>
-              </div>
-              {group === 'faltam' && (
-                <p style={{ fontSize: 12, color: BRAND.muted, margin: '0 0 10px', lineHeight: 1.55 }}>
-                  Quem estava na escola em {year - 1} e ainda não aparece em {year}. Se a família já confirmou e o sistema da escola ainda não mostra,
-                  use “Marcar rematriculado”; a marcação some sozinha quando o sistema trouxer o aluno.
-                </p>
-              )}
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 820 }}>
-                  <thead>
-                    <tr style={{ background: '#F8FAFC' }}>
-                      <th style={{ ...th, textAlign: 'left' }}>Aluno</th>
-                      <th style={{ ...th, textAlign: 'left' }}>Responsável</th>
-                      <th style={{ ...th, textAlign: 'left' }}>Série</th>
-                      <th style={{ ...th, textAlign: 'left' }}>Origem</th>
-                      <th style={{ ...th, textAlign: 'left' }}>Situação</th>
-                      <th style={{ ...th, textAlign: 'left' }}>Matrícula em</th>
-                      <th style={th}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {shown.slice(0, limit).map(r => (
-                      <tr key={r.student_id} style={{ borderTop: '1px solid #F1F5F9' }}>
-                        <td style={{ ...td, textAlign: 'left' }}>
-                          <div style={{ fontWeight: 700 }}>{r.student_name}</div>
-                          <div style={{ fontSize: 11.5, color: BRAND.faint }}>Matrícula {r.registration_code || '–'}</div>
-                        </td>
-                        <td style={{ ...td, textAlign: 'left' }}>
-                          {r.guardian_name || '–'}
-                          {r.guardian_phone && <div style={{ fontSize: 12, color: BRAND.muted }}>{fmtPhone(r.guardian_phone)}</div>}
-                        </td>
-                        <td style={{ ...td, textAlign: 'left', fontSize: 12.5 }}>{r.grade_name || '–'}</td>
-                        <td style={{ ...td, textAlign: 'left' }}>
-                          {r.origin ? <Badge color={ORIGIN_COLOR[r.origin]}>{ORIGIN_LABEL[r.origin]}</Badge> : <span style={{ color: BRAND.faint }}>–</span>}
-                        </td>
-                        <td style={{ ...td, textAlign: 'left' }}>
-                          {r.state === 'pre_matriculado' ? <Badge color="#7C3AED">Pré-matriculado</Badge>
-                            : r.state === 'matriculado' ? <Badge color="#059669">Matriculado</Badge>
-                            : r.category === 'a_rematricular' ? <Badge color="#D97706">Ainda falta</Badge>
-                            : r.category === 'saiu' ? <Badge color="#DC2626">Saiu</Badge>
-                            : r.category === 'concluinte' ? <Badge color="#64748B">Concluinte</Badge> : '–'}
-                        </td>
-                        <td style={{ ...td, textAlign: 'left', fontSize: 12.5 }}>
-                          {r.enrolled_on ? <>{fmtDate(r.enrolled_on)}{r.date_is_estimate && <span title="Data estimada: primeira vez que o aluno apareceu no sistema" style={{ color: BRAND.faint }}> ~</span>}</> : '–'}
-                        </td>
-                        <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                          {r.category === 'a_rematricular' && r.guardian_phone && (
-                            <a href={`https://wa.me/${waNumber(r.guardian_phone)}`} target="_blank" rel="noreferrer" title="Chamar no WhatsApp"
-                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, marginRight: 6, borderRadius: 8, border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D' }}>
-                              <MessageCircle size={15} />
-                            </a>
-                          )}
-                          {r.category === 'a_rematricular' && canEdit && (
-                            <button onClick={() => mark(r, true)} disabled={busyId === r.student_id}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BRAND.softLine}`, background: BRAND.softer, color: BRAND.primaryDark, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                              {busyId === r.student_id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Marcar rematriculado
-                            </button>
-                          )}
-                          {r.category === 'rematriculado_declarado' && canEdit && (
-                            <button onClick={() => mark(r, false)} disabled={busyId === r.student_id}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BRAND.line}`, background: '#fff', color: BRAND.muted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                              {busyId === r.student_id ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />} Desfazer
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {shown.length === 0 && (
-                      <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: BRAND.faint, padding: 22 }}>Nenhum aluno nesta lista.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              {shown.length > limit && (
-                <button onClick={() => setLimit(l => l + 200)} style={{ marginTop: 12, padding: '8px 14px', borderRadius: 10, border: `1px solid ${BRAND.line}`, background: '#fff', color: BRAND.text, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  Mostrar mais ({shown.length - limit} restantes)
-                </button>
-              )}
-            </div>
-          )}
-
-          {tab === 'serie' && (
-            <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 760 }}>
-                <thead>
-                  <tr style={{ background: '#F8FAFC' }}>
-                    <th style={{ ...th, textAlign: 'left', paddingLeft: 18 }}>Série em {year}</th>
-                    <th style={th}>Alunos em {year - 1}</th>
-                    <th style={th}>Matriculados</th>
-                    <th style={th}>Pré-matric.</th>
-                    <th style={th}>Ainda faltam</th>
-                    <th style={th}>Vagas</th>
-                    <th style={{ ...th, paddingRight: 18 }}>Livres</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {panel.filter(r => r.base_prev_year + r.pending + r.pre_enrolled + r.reenrolled + r.new_students + r.returning_students + r.graduates > 0 || r.capacity != null).map(r => {
-                    const g = byGrade.get(r.grade_level_id) ?? { mat: 0, pre: 0, faltam: 0 }
-                    const occ = g.mat + g.pre
-                    return (
-                      <tr key={r.grade_level_id} onClick={() => { setGrade(r.grade_level_id); setGroup('todos'); setTab('alunos') }}
-                        style={{ borderTop: '1px solid #F1F5F9', cursor: 'pointer' }} title="Ver os alunos desta série">
-                        <td style={{ ...td, textAlign: 'left', fontWeight: 700, paddingLeft: 18 }}>
-                          {r.grade_name}{r.is_terminal && <span style={{ fontSize: 11, color: BRAND.faint, fontWeight: 500 }}> · série final</span>}
-                        </td>
-                        <td style={td}>{r.base_prev_year || '–'}</td>
-                        <td style={{ ...td, color: '#059669', fontWeight: 700 }}>{g.mat || '–'}</td>
-                        <td style={{ ...td, color: g.pre ? '#7C3AED' : undefined, fontWeight: g.pre ? 700 : 400 }}>{g.pre || '–'}</td>
-                        <td style={{ ...td, color: g.faltam ? '#D97706' : undefined, fontWeight: g.faltam ? 800 : 400 }}>{g.faltam || '–'}</td>
-                        <td style={td} onClick={e => e.stopPropagation()}>
-                          {canEdit ? (
-                            <input inputMode="numeric" aria-label={`Vagas ${r.grade_name}`}
-                              value={capDraft[r.grade_level_id] ?? (r.capacity == null ? '' : String(r.capacity))}
-                              onChange={e => setCapDraft(d => ({ ...d, [r.grade_level_id]: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-                              onBlur={() => saveCap(r)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                              placeholder="–" style={{ ...input, width: 64, textAlign: 'right', padding: '5px 8px' }} />
-                          ) : (r.capacity ?? '–')}
-                        </td>
-                        <td style={{ ...td, paddingRight: 18, color: r.capacity != null && occ > r.capacity ? '#DC2626' : undefined }}>
-                          {r.capacity == null ? '–' : r.capacity - occ}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {tab === 'conferencia' && (
-            <Conference head={head} draft={headDraft} setDraft={setHeadDraft} save={saveHead} canEdit={canEdit} year={thisYear} />
-          )}
-        </>
-      )}
-    </div>
+  const yearSelect = (
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'rgba(255,255,255,.92)', fontWeight: 800 }}>Ano
+      <select value={year} onChange={e => setYear(Number(e.target.value))} aria-label="Ano da rematrícula"
+        style={{ minHeight: 36, padding: '6px 10px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, outline: 'none' }}>
+        {[thisYear - 1, thisYear, thisYear + 1].map(y => <option key={y} value={y} style={{ color: BRAND.ink }}>{y}</option>)}
+      </select>
+    </label>
   )
-}
+  const periodBar = tab !== 'conferencia' ? (
+    <PeriodBar mobile={isMobile} period={period} setPeriod={setPeriod} from={from} to={to} setFrom={setFrom} setTo={setTo} note={PERIOD_NOTE} />
+  ) : null
 
-function stateLabel(r: Row) {
-  return r.state === 'pre_matriculado' ? 'Pré-matriculado' : r.state === 'matriculado' ? 'Matriculado'
-    : r.category === 'a_rematricular' ? 'Ainda falta' : r.category === 'saiu' ? 'Saiu' : r.category === 'concluinte' ? 'Concluinte' : ''
-}
-
-function PeriodBar({ period, setPeriod, from, to, setFrom, setTo, note }: {
-  period: Period; setPeriod: (p: Period) => void; from: string; to: string; setFrom: (s: string) => void; setTo: (s: string) => void; note: string
-}) {
-  const chips: [Period, string][] = [['all', 'Todo o período'], ['month', 'Este mês'], ['last', 'Mês passado'], ['custom', 'Escolher datas']]
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      {chips.map(([k, label]) => (
-        <button key={k} onClick={() => setPeriod(k)}
-          style={{ padding: '6px 13px', borderRadius: 999, border: '1px solid ' + (period === k ? BRAND.primary : BRAND.line), fontFamily: 'inherit',
-            background: period === k ? BRAND.soft : '#fff', color: period === k ? BRAND.primaryDark : BRAND.text, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-          {label}
-        </button>
-      ))}
-      {period === 'custom' && (
-        <>
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={input} aria-label="De" />
-          <span style={{ fontSize: 12, color: BRAND.muted }}>até</span>
-          <input type="date" value={to} onChange={e => setTo(e.target.value)} style={input} aria-label="Até" />
-        </>
-      )}
-      {note && period !== 'all' && <span style={{ fontSize: 12, color: BRAND.faint }}>{note}</span>}
-    </div>
+  const strip = (
+    <KpiStrip items={[
+      { label: 'Matriculados', value: counts.mat, color: '#059669', icon: UserCheck, onClick: () => goGroup('matriculados'),
+        sub: isMobile ? 'toque para ver a lista' : `${counts.matBy.rematricula} rematrículas · ${counts.matBy.novato} novatos · ${counts.matBy.ex_aluno} ex-alunos que voltaram` },
+      { label: 'Pré-matriculados', value: counts.pre, color: '#7C3AED', icon: Hourglass, onClick: () => goGroup('pre'),
+        sub: preCounts ? 'contados junto com os matriculados' : 'reservaram vaga, ainda não matriculados' },
+      { label: 'Ainda faltam', value: counts.faltam, color: '#D97706', icon: AlertCircle, alert: counts.faltam > 0, onClick: () => goGroup('faltam'), sub: `dos ${totals.base} que seguem na base de ${year - 1}` },
+      { label: 'Saíram', value: totals.left, color: '#DC2626', icon: LogOut, onClick: () => goGroup('saiu'), sub: 'transferidos ou cancelados' },
+    ]} />
   )
-}
 
-function Reconcile({ parts, total }: { parts: { label: string; n: number; color: string }[]; total: number }) {
-  const sum = parts.reduce((s, p) => s + p.n, 0)
-  const denom = Math.max(total, sum, 1)
-  return (
-    <div>
-      <div style={{ display: 'flex', height: 14, borderRadius: 99, overflow: 'hidden', background: '#EEF3F2' }}>
-        {parts.map(p => p.n > 0 && <div key={p.label} title={`${p.label}: ${p.n}`} style={{ width: `${(p.n / denom) * 100}%`, background: p.color }} />)}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', marginTop: 12 }}>
-        {parts.map(p => (
-          <div key={p.label} style={{ fontSize: 13, color: BRAND.text }}>
-            <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 99, background: p.color, marginRight: 6 }} />
-            <b style={{ color: BRAND.ink }}>{p.n}</b> {p.label}
-          </div>
-        ))}
-      </div>
-      <p style={{ fontSize: 12, margin: '10px 0 0', color: sum === total ? BRAND.success : BRAND.warn, fontWeight: 600 }}>
-        {sum === total ? `A conta fecha: ${sum} de ${total}.` : `Somam ${sum}, a base tem ${total}: ${Math.abs(total - sum)} aluno(s) de diferença (conferir na aba Alunos).`}
+  const body = loading ? (
+    <div style={{ ...baseCard, display: 'flex', justifyContent: 'center', padding: 28 }}><Loader2 size={20} className="animate-spin" color={BRAND.primary} /></div>
+  ) : !hasData && !error ? (
+    <div style={baseCard}>
+      <p style={{ fontSize: 14, color: BRAND.text, margin: 0, lineHeight: 1.6 }}>
+        Ainda não há alunos de {year - 1} ou {year} nesta base.{' '}
+        {canEdit
+          ? <>Conecte o sistema da escola em <a href="/settings?tab=integracoes" style={{ color: BRAND.primary, fontWeight: 700 }}>Configurações → Integrações</a>.</>
+          : <>Peça ao administrador ou gestor da escola para conectar o sistema da escola.</>}
       </p>
     </div>
-  )
-}
+  ) : hasData && (
+    <>
+      {!(isMobile && tab === 'alunos') && periodBar}
 
-function MonthChart({ months }: { months: { mat: number; pre: number }[] }) {
-  const max = Math.max(1, ...months.map(m => m.mat + m.pre))
-  const any = months.some(m => m.mat + m.pre > 0)
-  if (!any) return <p style={{ fontSize: 13, color: BRAND.muted, margin: 0 }}>Ainda não há matrículas com data para mostrar.</p>
+      {tab === 'geral' && (
+        <>
+          <ProgressCard year={year} rem={remCount} pre={reconcileParts[1].n} faltam={counts.faltam} base={totals.base} onFaltam={() => goGroup('faltam')} />
+          {strip}
+          <GeralView mobile={isMobile} year={year} counts={counts} parts={reconcileParts} totalAll={totals.all} preCounts={preCounts}
+            canEdit={canEdit} setPreCounts={setPreCounts} months={months} />
+        </>
+      )}
+
+      {tab === 'alunos' && (
+        <StudentsView mobile={isMobile} year={year} shown={shown} limit={limit} setLimit={setLimit} group={group} setGroup={setGroup} groupCount={groupCount}
+          grade={grade} setGrade={setGrade} panel={panel} q={q} setQ={setQ} canEdit={canEdit} busyId={busyId} mark={mark} onOpen={r => setSheetId(r.student_id)} exportCsv={exportCsv} periodSlot={isMobile ? periodBar : null} />
+      )}
+
+      {tab === 'serie' && (
+        <SerieView mobile={isMobile} year={year} panel={panel} byGrade={byGrade} canEdit={canEdit} capDraft={capDraft} setCapDraft={setCapDraft} saveCap={saveCap} openGrade={openGrade} />
+      )}
+
+      {tab === 'conferencia' && (
+        <ConferenceView mobile={isMobile} head={head} draft={headDraft} setDraft={setHeadDraft} save={saveHead} canEdit={canEdit} year={thisYear} />
+      )}
+    </>
+  )
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 150, paddingTop: 8 }}>
-      {months.map((m, i) => (
-        <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%', gap: 4 }}>
-          <div style={{ fontSize: 11, color: BRAND.muted, fontWeight: 700 }}>{m.mat + m.pre || ''}</div>
-          <div style={{ width: '100%', maxWidth: 34, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: `${((m.mat + m.pre) / max) * 100}%`, minHeight: m.mat + m.pre ? 3 : 0 }}>
-            {m.pre > 0 && <div style={{ flex: m.pre, background: '#C4B5FD', borderRadius: '5px 5px 0 0' }} />}
-            {m.mat > 0 && <div style={{ flex: m.mat, background: '#10B981', borderRadius: m.pre ? 0 : '5px 5px 0 0' }} />}
-          </div>
-          <div style={{ fontSize: 11, color: BRAND.faint }}>{MONTHS[i]}</div>
+    <div {...swipeProps} style={{ padding: isMobile ? '12px 12px 110px' : '24px 28px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: isMobile ? 12 : 16 }}>
+      <PageHeader compact={isMobile} icon={GraduationCap} title="Base de alunos"
+        subtitle={isMobile ? `Rematrícula ${year}: alunos de ${year - 1} × ${year}` : <>Rematrícula {year}: alunos de {year - 1} cruzados com {year}{sourceText ? <> · dados da {sourceText}{upd ? `, atualizados em ${upd}` : ''}</> : null}</>}
+        actions={<>
+          {hasData && <HeaderAction primary icon={Search} label="Buscar aluno" onClick={focusSearch} />}
+          {yearSelect}
+        </>} />
+      {isMobile && sourceText && (
+        <div style={{ fontSize: 12, color: BRAND.muted, lineHeight: 1.45, marginTop: -4 }}>Dados da {sourceText}{upd ? `, atualizados em ${upd}` : ''}.</div>
+      )}
+
+      {isMobile ? <PillTabs tabs={BA_TABS} value={tab} onChange={id => setTab(id as Tab)} /> : (
+        <div role="tablist" style={{ display: 'inline-flex', gap: 2, background: '#EEF3F2', borderRadius: 14, padding: 4, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
+          {BA_TABS.map(([id, label, Icon]) => {
+            const active = tab === id
+            return (
+              <button key={id} role="tab" aria-selected={active} onClick={() => setTab(id as Tab)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 10, border: 'none', fontFamily: 'inherit', fontSize: 13.5,
+                  fontWeight: active ? 800 : 600, color: active ? BRAND.primaryDark : BRAND.muted, background: active ? '#fff' : 'transparent',
+                  boxShadow: active ? '0 1px 3px rgba(26,43,74,.1)' : 'none', cursor: 'pointer' }}>
+                <Icon size={15} />{label}
+              </button>
+            )
+          })}
         </div>
-      ))}
-    </div>
-  )
-}
+      )}
 
-function Conference({ head, draft, setDraft, save, canEdit, year }: {
-  head: Head[]; draft: Record<string, string>; setDraft: (f: (d: Record<string, string>) => Record<string, string>) => void
-  save: (h: Head) => void; canEdit: boolean; year: number
-}) {
-  const rows = head.filter(h => h.studying + h.left_school + h.concluded + h.prev_studying + h.prev_left > 0)
-  const totalStudying = rows.reduce((s, h) => s + h.studying, 0)
-  const totalLeft = rows.reduce((s, h) => s + h.left_school, 0)
-  const totalPrevLeft = rows.reduce((s, h) => s + h.prev_left, 0)
-  const totalPrevBase = rows.reduce((s, h) => s + h.prev_studying + h.prev_left, 0)
-  const rate = totalStudying + totalLeft ? totalLeft / (totalStudying + totalLeft) : 0
-  const prevRate = totalPrevBase ? totalPrevLeft / totalPrevBase : 0
-  const low = prevRate > 0.02 && rate < prevRate / 2
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={card}>
-        <SectionTitle>Conferir com a secretaria · {year}</SectionTitle>
-        <p style={{ fontSize: 13, color: BRAND.text, margin: '0 0 6px', lineHeight: 1.6 }}>
-          O sistema da escola mostra <b>{totalStudying}</b> alunos cursando. Nem sempre isso é o número real: aluno que saiu e ainda não foi baixado continua aparecendo.
-          Peça à secretaria quantos alunos há em cada série e digite abaixo; a diferença mostra onde conferir.
-        </p>
-        {low && (
-          <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: BRAND.warnSoft, border: '1px solid #FDE68A', color: BRAND.warn, fontSize: 13, lineHeight: 1.5 }}>
-            Atenção: neste ano saíram {(rate * 100).toFixed(1)}% dos alunos; no ano passado foram {(prevRate * 100).toFixed(1)}%. Pode haver aluno que já saiu e continua “cursando” no sistema.
-          </div>
-        )}
-      </div>
-      <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 720 }}>
-          <thead>
-            <tr style={{ background: '#F8FAFC' }}>
-              <th style={{ ...th, textAlign: 'left', paddingLeft: 18 }}>Série</th>
-              <th style={th}>Cursando no sistema</th>
-              <th style={th}>Secretaria diz</th>
-              <th style={th}>Diferença</th>
-              <th style={th}>Saíram no ano</th>
-              <th style={{ ...th, paddingRight: 18 }}>Saíram no ano passado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(h => {
-              const sec = h.secretary_count
-              const diff = sec == null ? null : h.studying - sec
-              return (
-                <tr key={h.grade_level_id} style={{ borderTop: '1px solid #F1F5F9' }}>
-                  <td style={{ ...td, textAlign: 'left', fontWeight: 700, paddingLeft: 18 }}>{h.grade_name}</td>
-                  <td style={td}>{h.studying || '–'}</td>
-                  <td style={td}>
-                    {canEdit ? (
-                      <input inputMode="numeric" aria-label={`Secretaria ${h.grade_name}`}
-                        value={draft[h.grade_level_id] ?? (sec == null ? '' : String(sec))}
-                        onChange={e => setDraft(d => ({ ...d, [h.grade_level_id]: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-                        onBlur={() => save(h)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                        placeholder="–" style={{ ...input, width: 72, textAlign: 'right', padding: '5px 8px' }} />
-                    ) : (sec ?? '–')}
-                  </td>
-                  <td style={{ ...td, fontWeight: 800, color: diff == null ? BRAND.faint : diff === 0 ? BRAND.success : BRAND.warn }}>
-                    {diff == null ? '–' : diff === 0 ? 'bate' : diff > 0 ? `+${diff} no sistema` : `${diff} no sistema`}
-                  </td>
-                  <td style={td}>{h.left_school || '–'}</td>
-                  <td style={{ ...td, paddingRight: 18 }}>{h.prev_left || '–'}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
+      {error && <div style={{ ...baseCard, color: '#B91C1C', background: BRAND.dangerSoft, borderColor: '#FECACA', fontSize: 13 } as CSSProperties}>{error}</div>}
 
-function SectionTitle({ children }: { children: ReactNode }) {
-  return <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 12 }}>{children}</div>
-}
-function Badge({ color, children }: { color: string; children: ReactNode }) {
-  return <span style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: color + '1A', color }}>{children}</span>
-}
+      {body}
 
-const fmtDate = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
-const waNumber = (p: string) => { const d = p.replace(/\D/g, ''); return d.length <= 11 ? '55' + d : d }
-// 5583999990000 → (83) 99999-0000; o resto como veio
-function fmtPhone(p: string) {
-  const d = p.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')
-  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
-  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
-  return p
-}
-
-function Big({ label, value, color, sub }: { label: string; value: number; color: string; sub?: string }) {
-  return (
-    <div style={{ ...card, padding: '16px 18px', minWidth: 190, flex: '1 1 190px' }}>
-      <div style={{ fontSize: 30, fontWeight: 800, color, letterSpacing: '-.02em', lineHeight: 1.1 }}>{value}</div>
-      <div style={{ fontSize: 13, color: BRAND.ink, fontWeight: 700, marginTop: 2 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11.5, color: BRAND.faint, marginTop: 3, lineHeight: 1.4 }}>{sub}</div>}
+      {sheetRow && <StudentSheet row={sheetRow} year={year} canEdit={canEdit} busy={busyId === sheetRow.student_id} onClose={() => setSheetId('')} onMark={mark} />}
     </div>
   )
 }
