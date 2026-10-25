@@ -1,0 +1,242 @@
+import type { Lesson } from '../academy'
+import { go, info, click, fill, done } from './helpers'
+
+// Textos escritos lendo o código de cada tela (nomes de botões e abas idênticos aos da tela).
+export const LESSONS_A: Lesson[] = [
+  // ───────── INÍCIO ─────────
+  {
+    key: 'ini_gestor', module: 'inicio', title: 'Ler o seu painel de Início', minutes: 3, managerOnly: true, to: '/home', routes: ['/home'],
+    summary: 'Ver em um minuto o que precisa de você hoje e como as matrículas estão indo.',
+    steps: [
+      'Abra Início. No banner verde você vê o bom dia e a visão geral do período.',
+      'Troque o período no banner: Hoje, 7 dias, Este mês, Ano ou Campanha. Todos os números abaixo acompanham.',
+      'Em "Precisa de você agora" ficam só as pendências: famílias esperando a escola, conversas na fila, pagamentos em atraso, rematrículas pendentes e leads sem responsável. Toque no cartão para resolver na tela certa.',
+      'Em "Resultados do período" estão Matrículas, Leads novos, Conversão, Tempo até matricular e Valor em matrículas, comparados com o período anterior.',
+      'No celular, deslize ou toque nas abas Resumo, Matrículas, Atendimento, Captação e Finanças.',
+    ],
+    tip: 'Comece o dia por "Precisa de você agora": se estiver vazio, a escola está em dia.',
+    tour: [
+      go('/home', 'Este é o seu painel de Início. Vou mostrar onde ficam as informações mais importantes.'),
+      info('Aqui você troca o período: Hoje, 7 dias, Este mês, Ano ou Campanha.', { tour: 'home-periodo' }, 'Este botão aparece no banner verde, em cima.'),
+      info('Em "Precisa de você agora" ficam só as pendências. Toque em um cartão para resolver na tela certa.', { text: 'Precisa de você agora' }),
+      info('Aqui estão os resultados do período, comparados com o período anterior.', { text: 'Resultados do período' }),
+      info('No celular, estas abas separam o painel em partes: Resumo, Matrículas, Atendimento, Captação e Finanças.', { tour: 'home-abas' }, 'No computador, tudo aparece junto na mesma tela.'),
+      done('Você já sabe ler o painel de Início.'),
+    ],
+  },
+  {
+    key: 'ini_atendente', module: 'inicio', title: 'Ver o que pede ação agora', minutes: 2, attendantOnly: true, to: '/atendente', routes: ['/atendente'],
+    summary: 'Seu painel mostra quem espera resposta, seus lembretes e suas visitas.',
+    steps: [
+      'Abra Início. O banner mostra as matrículas do mês e quantas coisas pedem ação agora.',
+      'Em "Preciso agir agora" ficam: Famílias esperando, Sem retorno da família, Lembretes vencidos, Visitas sem baixa e Conversas não lidas. Toque no cartão para ir direto à lista.',
+      'Em "Fazer agora", toque em "Responder" para abrir a conversa da família que está esperando.',
+      'Em "Meus lembretes", toque em "Retomar" para abrir o lead e fazer o contato combinado.',
+      'No celular use as abas Agora, Meu mês, Atendimento e Agenda.',
+    ],
+    tip: 'Zere "Famílias esperando" primeiro: é a família que já escreveu e ainda não teve resposta.',
+    tour: [
+      go('/atendente', 'Este é o seu Início. Aqui aparece o que está esperando por você.'),
+      info('Estes cartões mostram o que pede ação: famílias esperando, lembretes vencidos, visitas sem baixa e conversas não lidas.', { text: 'Preciso agir agora' }),
+      info('Em "Fazer agora" ficam as famílias que escreveram e esperam resposta. O botão "Responder" abre a conversa.', { text: 'Fazer agora' }),
+      info('Em "Meus lembretes" ficam os retornos combinados com cada família.', { text: 'Meus lembretes' }, 'Quando você não tem lembretes, este bloco mostra que está tudo em dia.'),
+      info('No celular, estas abas separam o painel: Agora, Meu mês, Atendimento e Agenda.', { tour: 'home-abas' }, 'No computador, tudo aparece junto na mesma tela.'),
+      done('Sempre que abrir a Áion, comece por aqui.'),
+    ],
+  },
+
+  // ───────── LEADS ─────────
+  {
+    key: 'ld_novo', module: 'leads', title: 'Cadastrar um lead novo', minutes: 3, to: '/leads', routes: ['/leads'],
+    summary: 'Registrar uma família interessada com os dados que importam para o funil.',
+    steps: [
+      'Abra Leads e toque em "Novo lead" no banner verde.',
+      'Em "Dados do Responsável", preencha "Nome completo *" e "Telefone / WhatsApp *". O sistema avisa se o telefone já existe.',
+      'Em "Nome do aluno *", escreva o aluno e escolha a "Série de interesse" e o "Turno" (Manhã, Tarde ou Integral).',
+      'Em "Informações do Lead", escolha a "Origem" (de onde a família veio) e o "Responsável (atendente)".',
+      'Se quiser, defina o "Próximo follow-up" e a "Temperatura" (Quente, Morno ou Frio).',
+      'Toque em "Criar Lead" para salvar. O lead entra na etapa "Novo" do funil.',
+    ],
+    tip: 'Sempre escolha a Origem: é ela que mostra, nos relatórios, quais anúncios e indicações trazem matrícula.',
+    tour: [
+      go('/leads', 'Esta é a tela de Leads, o funil das famílias interessadas.'),
+      click('Toque em "Novo lead" para cadastrar uma família.', { button: 'Novo lead' }),
+      fill('Digite o nome completo do responsável.', { label: 'Nome completo *', in: 'modal' }),
+      fill('Digite o telefone com WhatsApp.', { label: 'Telefone / WhatsApp *', in: 'modal' }),
+      fill('Digite o nome do aluno.', { label: 'Nome do aluno *', in: 'modal' }),
+      info('Escolha a série de interesse do aluno.', { label: 'Série de interesse', in: 'modal' }),
+      info('Em "Origem" você diz de onde a família veio. Isso alimenta os relatórios.', { label: 'Origem', in: 'modal' }, 'O campo Origem fica mais abaixo, em "Informações do Lead".'),
+      info('Para salvar, você toca em "Criar Lead". Nesta aula eu não salvo, para não criar um lead de teste.', { button: 'Criar Lead', in: 'modal' }),
+      done('Agora você sabe cadastrar um lead.'),
+    ],
+  },
+  {
+    key: 'ld_funil', module: 'leads', title: 'Acompanhar o lead no funil', minutes: 3, to: '/leads', routes: ['/leads'],
+    summary: 'Mover o lead de etapa conforme a conversa avança, até a matrícula.',
+    steps: [
+      'Abra Leads. No computador o funil aparece como "Quadro" (colunas por etapa) ou "Lista". No celular, os leads aparecem em lista e as etapas viram atalhos no alto.',
+      'As etapas são: Novo, Em Contato, Visita Agendada, Visitou, Proposta, Matriculado e Perdido. Sua escola pode ter renomeado algumas.',
+      'No celular, toque na etapa (por exemplo "Em Contato") para ver só os leads dela. Use "Todos" para voltar.',
+      'Toque no lead para abrir a ficha. Em "Funil de Status", escolha a etapa em que ele está agora.',
+      'No computador, você também pode arrastar o cartão de uma coluna para outra.',
+      'Em "Registrar atividade", anote o que aconteceu (Ligação, Email, WhatsApp, Presencial ou Outro). A nota fica visível para toda a equipe.',
+    ],
+    tip: 'Atualize a etapa na hora: o funil só ajuda a escola se estiver de acordo com a realidade.',
+    tour: [
+      go('/leads', 'Aqui está o funil de leads. Cada lead fica em uma etapa, de "Novo" até "Matriculado".'),
+      info('Estes são os filtros por etapa. Toque em uma etapa para ver só os leads dela.', { tour: 'leads-etapas' }, 'No computador, as etapas aparecem como colunas do quadro.'),
+      info('Cada cartão é uma família. Toque nele para abrir a ficha e mudar a etapa em "Funil de Status".', { tour: 'lead-card' }, 'Quando houver leads, cada família aparece como um cartão.'),
+      info('Dentro da ficha, "Registrar atividade" guarda ligações, mensagens e visitas no histórico do lead.', undefined),
+      done('Mantenha a etapa sempre atualizada.'),
+    ],
+  },
+  {
+    key: 'ld_filtros', module: 'leads', title: 'Achar leads com busca e filtros', minutes: 2, to: '/leads', routes: ['/leads'],
+    summary: 'Buscar por nome e filtrar por atendente, etapa, origem, série e período.',
+    steps: [
+      'Abra Leads e escreva o nome em "Buscar por nome...".',
+      'Toque em "Meus leads" para ver só os seus. Toque de novo para ver todos.',
+      'Toque em "Filtros". Escolha Atendente, Etapa, Temperatura, Origem, Série, Turno e Período (Hoje, Esta semana, Este mês, Este ano ou Personalizado).',
+      'Toque em "Aplicar". Quando há filtro ligado, aparece um pontinho em "Filtros".',
+      'Toque em "Limpar" para voltar a ver todos os leads.',
+    ],
+    tip: 'Use "Sem responsável" no filtro de atendente para achar leads que ninguém assumiu.',
+    tour: [
+      go('/leads', 'Vamos achar leads mais rápido.'),
+      fill('Digite aqui parte do nome para buscar.', { css: 'input[placeholder="Buscar por nome..."]' }),
+      info('"Meus leads" mostra só os leads que são seus.', { button: 'Meus leads' }, 'Se você não vê "Meus leads", abra o menu e volte para Leads.'),
+      click('Toque em "Filtros" para escolher atendente, etapa, origem, série e período.', { button: 'Filtros' }),
+      info('Escolha o que quiser e toque em "Aplicar". "Limpar" tira todos os filtros.', { button: 'Aplicar', in: 'modal' }, 'Se o painel de filtros fechou, toque em "Filtros" de novo.'),
+      done('Você já sabe filtrar os leads.'),
+    ],
+  },
+  {
+    key: 'ld_atencao', module: 'leads', title: 'Responder quem está esperando', minutes: 2, to: '/leads', routes: ['/leads'],
+    summary: 'Usar a faixa de atenção para achar famílias sem resposta, visitas e dados incompletos.',
+    steps: [
+      'Abra Leads. No alto há cinco cartões que também funcionam como botões.',
+      '"Sem resposta nossa" são as famílias que escreveram e esperam a escola. "Sem retorno da família" são as que a escola respondeu e não voltaram.',
+      '"Visitas da semana" e "Matrículas no mês" mostram a agenda e os resultados.',
+      '"Dados incompletos" mostra leads sem série, origem ou atendente.',
+      'Toque em um cartão: a lista abaixo filtra só aqueles leads. Toque de novo para soltar.',
+    ],
+    tip: 'Comece sempre por "Sem resposta nossa": é a família que já deu o primeiro passo.',
+    tour: [
+      go('/leads', 'Estes cartões no alto mostram onde a escola precisa agir.'),
+      info('"Sem resposta nossa" mostra as famílias que escreveram e ainda esperam uma resposta.', { text: 'Sem resposta nossa' }, 'Se este cartão não aparece, a tela ainda está carregando.'),
+      info('"Dados incompletos" mostra leads sem série, origem ou atendente.', { text: 'Dados incompletos' }),
+      done('Toque em qualquer cartão para filtrar a lista.'),
+    ],
+  },
+  {
+    key: 'ld_lembrete', module: 'leads', title: 'Definir um lembrete de retorno', minutes: 2, to: '/leads', routes: ['/leads'],
+    summary: 'Combinar uma data para retomar o contato com a família.',
+    steps: [
+      'Abra Leads e toque no lead.',
+      'Em "Próximo follow-up", escolha a data do retorno.',
+      'No computador, no cartão do lead, o sininho "Definir/editar lembrete" abre a janela "Definir lembrete", com "Data do follow-up *" e "Nota (opcional)". Toque em "Salvar".',
+      'Quando a data chega, o lead aparece em "Meus lembretes" no seu Início, com o botão "Retomar".',
+    ],
+    tip: 'Escreva na nota o que combinou ("ligar depois da reunião de pais"). Quem retomar saberá o contexto.',
+    tour: [
+      go('/leads', 'Vamos ver como combinar um retorno com a família.'),
+      info('Abra qualquer lead tocando nele. Lá dentro fica o campo "Próximo follow-up".', { tour: 'lead-card' }, 'Quando você tiver leads, toque em um deles.'),
+      info('Quando a data chega, o lead aparece em "Meus lembretes" no seu Início.', undefined),
+      done('Combine sempre uma data de retorno ao fim de cada contato.'),
+    ],
+  },
+  {
+    key: 'ld_perdido', module: 'leads', title: 'Marcar um lead como perdido', minutes: 2, to: '/leads', routes: ['/leads'],
+    summary: 'Registrar o motivo quando a família desiste, para a escola aprender com isso.',
+    steps: [
+      'Abra o lead e, em "Funil de Status", escolha "Perdido".',
+      'Escolha o motivo na lista (por exemplo "Valor da mensalidade alto" ou "Escolheu outra escola").',
+      'Toque em "Confirmar perda". O motivo entra nos relatórios.',
+      'Se a família voltar, abra o lead e escolha outra etapa.',
+    ],
+    tip: 'Seja honesto no motivo. É ele que mostra à gestão onde a escola perde famílias.',
+    tour: [
+      go('/leads', 'Vou mostrar onde fica a etapa "Perdido". Nesta aula eu não marco nenhum lead como perdido.'),
+      info('Cada lead tem a etapa "Perdido" no "Funil de Status", dentro da ficha. Ao escolhê-la, o sistema pede o motivo.', { tour: 'leads-etapas' }, 'Abra um lead para ver "Funil de Status".'),
+      done('Marcar a perda com motivo ajuda a escola a melhorar.'),
+    ],
+  },
+
+  // ───────── VISITAS ─────────
+  {
+    key: 'vi_agendar', module: 'visitas', title: 'Agendar uma visita', minutes: 2, to: '/visits', routes: ['/visits'],
+    summary: 'Marcar o dia e a hora em que a família vai conhecer a escola.',
+    steps: [
+      'Abra Visitas e toque em "Nova visita" no banner verde.',
+      'Em "Lead *", busque a família por nome ou telefone e toque nela.',
+      'Escolha a "Data *" e o "Horário *". Se quiser, escreva uma observação.',
+      'Toque em "Agendar Visita". O lead passa para "Visita Agendada" e, se a escola ligou, a família recebe confirmação e lembrete pelo WhatsApp.',
+      'Também dá para agendar direto do lead ou da conversa do WhatsApp, em "Agendar visita".',
+    ],
+    tip: 'Confirme a visita com a família um dia antes. Visita confirmada falta muito menos.',
+    tour: [
+      go('/visits', 'Esta é a agenda de visitas da escola.'),
+      click('Toque em "Nova visita" para marcar uma.', { button: 'Nova visita' }),
+      fill('Busque a família pelo nome ou telefone.', { css: 'input[placeholder="Buscar por nome ou telefone..."]', in: 'modal' }, 'Se não há leads cadastrados, cadastre um em Leads primeiro.'),
+      info('Escolha a data da visita.', { label: 'Data *', in: 'modal' }),
+      info('Escolha o horário.', { label: 'Horário *', in: 'modal' }),
+      info('Para marcar, você toca em "Agendar Visita". Nesta aula eu não marco nada de verdade.', { button: 'Agendar Visita', in: 'modal' }),
+      done('Agora você sabe agendar uma visita.'),
+    ],
+  },
+  {
+    key: 'vi_baixa', module: 'visitas', title: 'Dar baixa em uma visita', minutes: 2, to: '/visits', routes: ['/visits'],
+    summary: 'Dizer se a visita aconteceu, a família faltou ou foi cancelada.',
+    steps: [
+      'Abra Visitas. O cartão "Sem baixa" mostra as visitas que já passaram e ninguém registrou o resultado.',
+      'Toque no cartão "Sem baixa" para ver a lista.',
+      'Na visita, em "A visita aconteceu?", escolha "Aconteceu", "Faltou" ou "Cancelada".',
+      'Se não aconteceu, escolha o motivo (é obrigatório) e toque em "Salvar baixa".',
+      'Se a visita aconteceu, o lead avança para "Visitou".',
+    ],
+    tip: 'Dar baixa no mesmo dia mantém o funil e o comparecimento corretos.',
+    tour: [
+      go('/visits', 'Aqui você dá baixa nas visitas que já aconteceram.'),
+      info('"Sem baixa" mostra as visitas que já passaram e ainda não têm resultado. Toque nele para ver a lista.', { text: 'Sem baixa' }),
+      info('Em cada visita, você escolhe "Aconteceu", "Faltou" ou "Cancelada". Nesta aula eu só mostro, não dou baixa em nada.', undefined),
+      done('Dê baixa nas visitas todo dia.'),
+    ],
+  },
+  {
+    key: 'vi_confirmar', module: 'visitas', title: 'Confirmar visitas e ver a agenda', minutes: 2, to: '/visits', routes: ['/visits'],
+    summary: 'Usar Hoje, Sem confirmação e as visões Mês, Semana e Lista.',
+    steps: [
+      'Abra Visitas. No banner, troque a visão entre "Mês", "Semana" e "Lista".',
+      'O cartão "Hoje" mostra as visitas do dia e quantas já confirmaram.',
+      'O cartão "Sem confirmação" mostra as visitas dos próximos 7 dias que a família ainda não confirmou.',
+      'Em cada visita, toque em "Conversa" para falar com a família e em "Ver lead" para abrir a ficha.',
+      'O cartão "Comparecimento" mostra, no mês, quantas famílias vieram.',
+    ],
+    tip: 'Ligue para as visitas em "Sem confirmação" no dia anterior.',
+    tour: [
+      go('/visits', 'Esta é a agenda de visitas.'),
+      info('Aqui você troca a visão: Mês, Semana ou Lista.', { tour: 'visitas-visao' }, 'Estes botões ficam no banner verde, em cima.'),
+      info('"Hoje" mostra as visitas do dia e quantas já confirmaram.', { text: 'Hoje' }),
+      info('"Sem confirmação" mostra as visitas dos próximos dias que a família ainda não confirmou.', { text: 'Sem confirmação' }),
+      done('Com a agenda em dia, a visita acontece.'),
+    ],
+  },
+  {
+    key: 'vi_motivos', module: 'visitas', title: 'Ajustar os motivos de não realização', minutes: 2, managerOnly: true, to: '/visits', routes: ['/visits'],
+    summary: 'Escolher os motivos que a equipe usa quando a visita não acontece e ligar a confirmação automática.',
+    steps: [
+      'Abra Visitas e toque no ícone "Motivos de não realização" no banner.',
+      'Em "Quando a família faltou" e "Quando a visita foi cancelada", veja a lista de motivos.',
+      'Para criar um motivo, escreva em "Novo motivo" e toque em "Adicionar".',
+      'Para voltar à lista original, toque em "Voltar ao padrão".',
+      'Ligue ou desligue "Enviar confirmação e lembrete pelo WhatsApp ao agendar".',
+    ],
+    tour: [
+      go('/visits', 'Aqui o gestor ajusta os motivos usados nas baixas das visitas.'),
+      click('Toque neste ícone para abrir "Configurar visitas".', { css: 'button[title="Motivos de não realização"]' }, 'Este ícone só aparece para quem pode editar as visitas.', true),
+      info('Aqui ficam os motivos de falta e de cancelamento. Dá para adicionar os seus.', { text: 'Configurar visitas', in: 'modal' }),
+      info('Esta chave liga o envio automático de confirmação e lembrete pelo WhatsApp.', { text: 'Enviar confirmação e lembrete pelo WhatsApp ao agendar', in: 'modal' }),
+      done('Os motivos agora combinam com a realidade da sua escola.'),
+    ],
+  },
+]

@@ -30,7 +30,7 @@ const ITEMS: Item[] = [
   { Icon: Repeat, name: 'Transferências', text: 'Saídas, pesquisa de saída e relatório no padrão novo.' },
   { Icon: ClipboardList, name: 'Pesquisas', text: 'Criar, editar perguntas e ver respostas, tudo refeito. Inclui a pesquisa de satisfação dos colaboradores.', gestorOnly: true },
   { Icon: UserCog, name: 'Usuários', text: 'Cadastro de equipe e permissões em telas novas.', gestorOnly: true },
-  { Icon: Plug, name: 'Integrações', text: 'Novidade: agora a Áion se integra com o Activesoft, e outras integrações virão depois. Também dá para enviar a planilha de alunos ou lançar a base por série. Para liberar na sua escola, fale com a nossa equipe.', gestorOnly: true },
+  { Icon: Plug, name: 'Integrações', text: 'Novidade: agora a Áion se integra com o Activesoft, e outras integrações virão depois. Também dá para enviar a planilha de alunos ou lançar a base por série. Informe abaixo qual sistema sua escola usa, ou fale com a nossa equipe.', gestorOnly: true },
   { Icon: Settings, name: 'Configurações', text: 'Todas as abas refeitas para o celular.', gestorOnly: true },
 ]
 
@@ -60,6 +60,9 @@ export default function NewLookGate() {
   const [pushMsg, setPushMsg] = useState('')
   const [pushOn, setPushOn] = useState(false)
   const [canInstall, setCanInstall] = useState(canPromptInstall())
+  const [erp, setErp] = useState('')
+  const [erpSaved, setErpSaved] = useState(false)
+  const [erpBusy, setErpBusy] = useState(false)
 
   const isGestor = user?.role === 'admin' || user?.role === 'manager'
 
@@ -70,6 +73,7 @@ export default function NewLookGate() {
     supabase.rpc('release_gate', { p_release: NEW_LOOK_RELEASE, p_cutoff: CUTOFF }).then(({ data, error }) => {
       if (alive && !error && data === true) setShow(true)
     })
+    supabase.rpc('school_erp_get').then(({ data }) => { if (alive && typeof data === 'string' && data) { setErp(data); setErpSaved(true) } })
     pushState().then(s => { if (alive) setPushOn(s === 'ativo') }).catch(() => {})
     return () => { alive = false }
   }, [user?.id, user?.user_type, user?.institution_id])
@@ -93,6 +97,13 @@ export default function NewLookGate() {
     setSaving(false)
     if (error) { setPushMsg('Não consegui registrar agora. Confira a internet e tente de novo.'); return }
     setShow(false)
+  }
+
+  const saveErp = async () => {
+    setErpBusy(true)
+    const { error } = await supabase.rpc('school_erp_declare', { p_name: erp })
+    setErpBusy(false)
+    if (!error) setErpSaved(true)
   }
 
   const activate = async () => {
@@ -149,6 +160,18 @@ export default function NewLookGate() {
                   </div>
                 </div>
               ))}
+              {isGestor && (
+                <div style={{ ...card, borderColor: '#BFE9E1', background: BRAND.soft }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink }}>Qual sistema de gestão (ERP) a sua escola usa?</div>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.45, color: '#475569', margin: '4px 0 10px' }}>Assim sabemos com qual sistema integrar. Se preferir, é só falar com a nossa equipe.</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input value={erp} onChange={e => { setErp(e.target.value); setErpSaved(false) }} placeholder="Ex.: Activesoft, Scitus, Sponte…"
+                      style={{ flex: 1, minWidth: 0, height: 44, padding: '0 12px', borderRadius: 12, border: `1px solid ${BRAND.line}`, fontSize: 16, color: BRAND.ink, background: '#fff', fontFamily: 'inherit' }} />
+                    <button type="button" onClick={saveErp} disabled={erpBusy || !erp.trim() || erpSaved}
+                      style={{ height: 44, padding: '0 16px', borderRadius: 12, border: 'none', background: erpSaved ? '#059669' : 'var(--aion-grad)', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', opacity: !erp.trim() ? .5 : 1 }}>{erpSaved ? 'Salvo' : erpBusy ? '…' : 'Salvar'}</button>
+                  </div>
+                </div>
+              )}
             </>
           )}
 

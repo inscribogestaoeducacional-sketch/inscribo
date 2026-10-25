@@ -6,6 +6,7 @@ import PageTitle from './components/PageTitle'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider, usePermissions } from './contexts/PermissionsContext'
 import { supabase } from './lib/supabase'
+import TourPlayer from './components/academy/TourPlayer'
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 import LoginForm    from './components/auth/LoginForm'
@@ -372,6 +373,7 @@ function AppContent() {
         <NewLookGate />
         {isGestor && user.institution_id && <GestorUpdatePopup institutionId={user.institution_id} />}
         <InternalChatWidget />
+        <TourPlayer />
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <StageLabelsGate institutionId={user.institution_id}>
           <ScreenErrorBoundary>
