@@ -16,6 +16,8 @@ export const NEW_LOOK_RELEASE = 'cara-nova-2026-10'
 const START_AT = new Date('2026-10-26T00:00:00-03:00').getTime()
 // Contas da equipe Áion que veem o comunicado já hoje, para teste (confirmação só local, não grava no banco)
 const TEST_EMAILS = ['victor.patos52@gmail.com', 'victoralmeida.a@hotmail.com', 'victorprojeto90@gmail.com', 'victorcema@aion.com', 'admin@inscribo.com']
+const isStaff = (u?: { user_type?: string; email?: string } | null) =>
+  !!u && (u.user_type === 'admin_geral' || u.user_type === 'consultant' || TEST_EMAILS.includes((u.email || '').toLowerCase()) || (u.email || '').toLowerCase().endsWith('@aionedu.com.br'))
 const CUTOFF = '2026-10-26' // só escolas criadas antes desta data (escolas novas não veem)
 
 type Item = { Icon: React.ElementType; name: string; text: string; gestorOnly?: boolean }
@@ -68,13 +70,13 @@ export default function NewLookGate() {
   const [erpSaved, setErpSaved] = useState(false)
   const [erpBusy, setErpBusy] = useState(false)
 
-  const isGestor = preview || user?.user_type === 'admin_geral' || TEST_EMAILS.includes((user?.email || '').toLowerCase()) || user?.role === 'admin' || user?.role === 'manager'
+  const isGestor = preview || isStaff(user) || user?.role === 'admin' || user?.role === 'manager'
 
   useEffect(() => {
     if (!user?.id) return
     if (preview) { setShow(true); return }
     // Equipe Áion (admin geral): vê o comunicado já hoje, para teste; a confirmação fica só neste navegador
-    if (user.user_type === 'admin_geral' || TEST_EMAILS.includes((user.email || '').toLowerCase())) {
+    if (isStaff(user)) {
       let done = false
       try { done = localStorage.getItem('aion-caranova-teste') === '1' } catch { /* sem storage */ }
       if (!done) setShow(true)
