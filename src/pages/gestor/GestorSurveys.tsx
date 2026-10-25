@@ -1583,35 +1583,182 @@ export default function GestorSurveys() {
     )
   }
 
+  // Editor de perguntas (compartilhado entre celular e computador)
+  const editorModalsEl = (
+    <>
+      {/* Modal editor de perguntas (pesquisa custom) */}
+      {editorSurvey && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto', padding: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div>
+                <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>{editorSurvey.title}</h2>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
+                  {editorSurvey.status === 'draft' ? 'Rascunho — publique quando as perguntas estiverem prontas' : 'Pesquisa ativa'}
+                </p>
+              </div>
+              <button onClick={closeEditor} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
+              <button onClick={() => window.open(surveyLink(editorSurvey.survey_token), '_blank')} style={{ ...btn('#F1F5F9', '#374151'), fontSize: 12 }}>
+                <ExternalLink size={13} /> Visualizar pesquisa
+              </button>
+              {editorSurvey.status === 'draft' && (
+                <button onClick={publishEditorSurvey} style={{ ...btn('#05907B'), fontSize: 12 }}>
+                  <Send size={13} /> Publicar pesquisa
+                </button>
+              )}
+            </div>
+
+            {loadingEditor ? (
+              <p style={{ textAlign: 'center', color: '#94A3B8', padding: 32 }}>Carregando...</p>
+            ) : (
+              <>
+                <DndContext sensors={dndSensors} onDragEnd={handleQuestionDragEnd}>
+                  <SortableContext items={editorQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                      {editorQuestions.map(q => (
+                        <SortableQuestionRow key={q.id} question={q} onEdit={() => openQuestionForm(q)} onDelete={() => deleteQuestion(q.id)} />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+
+                {editorQuestions.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '16px', background: '#F8FAFC', borderRadius: 10, border: '1px dashed #E2E8F0', marginBottom: 12 }}>
+                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Nenhuma pergunta ainda. Adicione ao menos uma para publicar.</p>
+                  </div>
+                )}
+
+                <button onClick={() => openQuestionForm('new')} style={{ ...btn('#F0FDF4', '#16A34A'), border: '1px solid #BBF7D0', padding: '8px 14px', fontSize: 12, marginBottom: 20 }}>
+                  <Plus size={13} /> Adicionar pergunta
+                </button>
+
+                <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 16 }}>
+                  <label style={labelStyle}>URL de redirecionamento após resposta (opcional)</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input value={redirectDraft} onChange={e => setRedirectDraft(e.target.value)} placeholder='https://...' style={{ ...inputStyle, flex: 1 }} />
+                    <button onClick={saveRedirectUrl} style={btn('#F1F5F9', '#374151')}>Salvar</button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal adicionar/editar pergunta */}
+      {showQuestionModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 480, padding: 28, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>{showQuestionModal === 'new' ? 'Nova pergunta' : 'Editar pergunta'}</h3>
+              <button onClick={() => setShowQuestionModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={18} /></button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={labelStyle}>Tipo de pergunta</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {QUESTION_TYPES.map(t => {
+                    const Icon = t.icon
+                    const active = questionForm.question_type === t.type
+                    return (
+                      <button key={t.type} onClick={() => setQuestionForm(q => ({ ...q, question_type: t.type }))}
+                        style={{ padding: '10px 12px', borderRadius: 10, border: `2px solid ${active ? '#05907B' : '#E2E8F0'}`, background: active ? '#E6F7F5' : '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: active ? '#05907B' : '#64748B' }}>
+                        <Icon size={14} /> {t.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Título da pergunta *</label>
+                <input value={questionForm.title} onChange={e => setQuestionForm(q => ({ ...q, title: e.target.value }))} placeholder='Ex: Como você avalia a comunicação da escola?' style={inputStyle} />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Descrição / subtítulo (opcional)</label>
+                <input value={questionForm.description} onChange={e => setQuestionForm(q => ({ ...q, description: e.target.value }))} placeholder='Contexto adicional para a pergunta' style={inputStyle} />
+              </div>
+
+              {(questionForm.question_type === 'scale' || questionForm.question_type === 'nps') && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={labelStyle}>Label mínimo</label>
+                    <input value={questionForm.min_label} onChange={e => setQuestionForm(q => ({ ...q, min_label: e.target.value }))} placeholder={questionForm.question_type === 'nps' ? 'Nada provável' : 'Péssimo'} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Label máximo</label>
+                    <input value={questionForm.max_label} onChange={e => setQuestionForm(q => ({ ...q, max_label: e.target.value }))} placeholder={questionForm.question_type === 'nps' ? 'Muito provável' : 'Ótimo'} style={inputStyle} />
+                  </div>
+                </div>
+              )}
+
+              {questionForm.question_type === 'multiple_choice' && (
+                <div>
+                  <label style={labelStyle}>Opções (mínimo 2)</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {questionForm.options.map((opt, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 6 }}>
+                        <input value={opt} onChange={e => { const opts = [...questionForm.options]; opts[i] = e.target.value; setQuestionForm(q => ({ ...q, options: opts })) }} placeholder={`Opção ${i + 1}`} style={{ ...inputStyle, flex: 1 }} />
+                        {questionForm.options.length > 2 && (
+                          <button onClick={() => setQuestionForm(q => ({ ...q, options: q.options.filter((_, fi) => fi !== i) }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CBD5E1' }}><X size={14} /></button>
+                        )}
+                      </div>
+                    ))}
+                    <button onClick={() => setQuestionForm(q => ({ ...q, options: [...q.options, ''] }))}
+                      style={{ fontSize: 12, color: '#05907B', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '4px 0' }}>
+                      + Adicionar opção
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#F8FAFC', borderRadius: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Obrigatória</span>
+                <button onClick={() => setQuestionForm(q => ({ ...q, required: !q.required }))}
+                  style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: 'pointer', background: questionForm.required ? '#05907B' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
+                  <div style={{ position: 'absolute', top: 2, left: questionForm.required ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowQuestionModal(null)} style={btn('#F1F5F9', '#374151')}>Cancelar</button>
+                <button onClick={saveQuestion} disabled={!questionForm.title.trim()} style={{ ...btn('#05907B'), opacity: !questionForm.title.trim() ? 0.6 : 1 }}>
+                  {showQuestionModal === 'new' ? 'Adicionar pergunta' : 'Salvar pergunta'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </>
+  )
+
   // ─── MOBILE ───────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9', paddingBottom: 96 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9' }}>
         {toast && (
           <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: '#1A2B4A', color: 'white', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Check size={14} /> {toast}
           </div>
         )}
 
-        {/* Header */}
-        <div style={{ padding: '16px 16px 8px', background: '#fff', borderBottom: '1px solid #E2E8F0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ClipboardList size={18} color="#F97316" />
-              </div>
-              <div>
-                <p style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Pesquisas</p>
-                <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{active} ativa{active !== 1 ? 's' : ''}</p>
-              </div>
-            </div>
-          </div>
+        <div style={{ padding: '12px 12px 0' }}>
+          <PageHeader compact icon={ClipboardList} title="Pesquisas" subtitle={`${active} ativa${active !== 1 ? 's' : ''}`}
+            actions={<button onClick={createStaffSurvey} disabled={saving} className="aion-tap" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <Users size={14} /> Colaboradores
+            </button>} />
         </div>
 
-        {/* KPIs 2x2 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 16px' }}>
+        <div className="aion-snap" style={{ display: 'grid', gap: 10, margin: '12px 0 4px' }}>
           {kpis.map(k => (
-            <div key={k.label} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: '1px solid #E2E8F0' }}>
+            <div key={k.label} className="ld-card" style={{ background: '#fff', borderRadius: 16, padding: '12px 14px', border: '1px solid #E3E8F0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: k.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <k.Icon size={15} color={k.color} />
@@ -1626,7 +1773,7 @@ export default function GestorSurveys() {
         </div>
 
         {/* Survey list */}
-        <div style={{ flex: 1, padding: '0 0 16px' }}>
+        <div style={{ flex: 1, padding: '8px 0 100px' }}>
           {loading ? (
             <p style={{ textAlign: 'center', color: '#94A3B8', padding: 32, fontSize: 14 }}>Carregando...</p>
           ) : surveys.length === 0 ? (
@@ -1638,7 +1785,7 @@ export default function GestorSurveys() {
             const isActive = s.status === 'active'
             const scoreable = responses.filter(r => typeof r.answers?.satisfaction === 'number')
             return (
-              <div key={s.id} style={{ padding: '14px 16px', background: '#fff', borderRadius: 14, margin: '0 16px 10px', border: '1px solid #E2E8F0' }}>
+              <div key={s.id} className="ld-card" style={{ padding: '14px 16px', background: '#fff', borderRadius: 18, margin: '0 12px 10px', border: '1px solid #E3E8F0', boxShadow: '0 1px 2px rgba(26,43,74,.04)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                   <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, flex: 1, paddingRight: 8 }}>{s.title}</p>
                   <span style={{
@@ -1675,6 +1822,18 @@ export default function GestorSurveys() {
                     </button>
                   )}
                 </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  {s.survey_mode === 'custom' && (
+                    <button onClick={() => openEditor(s)} className="aion-tap"
+                      style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #E3E8F0', background: '#fff', color: '#475569', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}>
+                      Editar perguntas
+                    </button>
+                  )}
+                  <button onClick={() => deleteSurvey(s.id, s.response_count ?? 0)} className="aion-tap"
+                    style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #FECACA', background: '#fff', color: '#DC2626', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}>
+                    Excluir
+                  </button>
+                </div>
               </div>
             )
           })}
@@ -1682,7 +1841,7 @@ export default function GestorSurveys() {
 
         {/* FAB */}
         <button
-          onClick={openNewModal}
+          onClick={openNewModal} className="aion-fab" aria-label="Nova pesquisa"
           style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}
         >
           <Plus size={24} />
@@ -1714,6 +1873,8 @@ export default function GestorSurveys() {
             </div>
           </div>
         )}
+
+        {editorModalsEl}
 
         {/* Link Modal */}
         {showLinkModal && (
@@ -1935,155 +2096,7 @@ export default function GestorSurveys() {
         </div>
       )}
 
-      {/* Modal editor de perguntas (pesquisa custom) */}
-      {editorSurvey && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto', padding: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div>
-                <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>{editorSurvey.title}</h2>
-                <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
-                  {editorSurvey.status === 'draft' ? 'Rascunho — publique quando as perguntas estiverem prontas' : 'Pesquisa ativa'}
-                </p>
-              </div>
-              <button onClick={closeEditor} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
-              <button onClick={() => window.open(surveyLink(editorSurvey.survey_token), '_blank')} style={{ ...btn('#F1F5F9', '#374151'), fontSize: 12 }}>
-                <ExternalLink size={13} /> Visualizar pesquisa
-              </button>
-              {editorSurvey.status === 'draft' && (
-                <button onClick={publishEditorSurvey} style={{ ...btn('#05907B'), fontSize: 12 }}>
-                  <Send size={13} /> Publicar pesquisa
-                </button>
-              )}
-            </div>
-
-            {loadingEditor ? (
-              <p style={{ textAlign: 'center', color: '#94A3B8', padding: 32 }}>Carregando...</p>
-            ) : (
-              <>
-                <DndContext sensors={dndSensors} onDragEnd={handleQuestionDragEnd}>
-                  <SortableContext items={editorQuestions.map(q => q.id)} strategy={verticalListSortingStrategy}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                      {editorQuestions.map(q => (
-                        <SortableQuestionRow key={q.id} question={q} onEdit={() => openQuestionForm(q)} onDelete={() => deleteQuestion(q.id)} />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-
-                {editorQuestions.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '16px', background: '#F8FAFC', borderRadius: 10, border: '1px dashed #E2E8F0', marginBottom: 12 }}>
-                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Nenhuma pergunta ainda. Adicione ao menos uma para publicar.</p>
-                  </div>
-                )}
-
-                <button onClick={() => openQuestionForm('new')} style={{ ...btn('#F0FDF4', '#16A34A'), border: '1px solid #BBF7D0', padding: '8px 14px', fontSize: 12, marginBottom: 20 }}>
-                  <Plus size={13} /> Adicionar pergunta
-                </button>
-
-                <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 16 }}>
-                  <label style={labelStyle}>URL de redirecionamento após resposta (opcional)</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input value={redirectDraft} onChange={e => setRedirectDraft(e.target.value)} placeholder='https://...' style={{ ...inputStyle, flex: 1 }} />
-                    <button onClick={saveRedirectUrl} style={btn('#F1F5F9', '#374151')}>Salvar</button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Modal adicionar/editar pergunta */}
-      {showQuestionModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 480, padding: 28, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>{showQuestionModal === 'new' ? 'Nova pergunta' : 'Editar pergunta'}</h3>
-              <button onClick={() => setShowQuestionModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={18} /></button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={labelStyle}>Tipo de pergunta</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {QUESTION_TYPES.map(t => {
-                    const Icon = t.icon
-                    const active = questionForm.question_type === t.type
-                    return (
-                      <button key={t.type} onClick={() => setQuestionForm(q => ({ ...q, question_type: t.type }))}
-                        style={{ padding: '10px 12px', borderRadius: 10, border: `2px solid ${active ? '#05907B' : '#E2E8F0'}`, background: active ? '#E6F7F5' : '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: active ? '#05907B' : '#64748B' }}>
-                        <Icon size={14} /> {t.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label style={labelStyle}>Título da pergunta *</label>
-                <input value={questionForm.title} onChange={e => setQuestionForm(q => ({ ...q, title: e.target.value }))} placeholder='Ex: Como você avalia a comunicação da escola?' style={inputStyle} />
-              </div>
-
-              <div>
-                <label style={labelStyle}>Descrição / subtítulo (opcional)</label>
-                <input value={questionForm.description} onChange={e => setQuestionForm(q => ({ ...q, description: e.target.value }))} placeholder='Contexto adicional para a pergunta' style={inputStyle} />
-              </div>
-
-              {(questionForm.question_type === 'scale' || questionForm.question_type === 'nps') && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <label style={labelStyle}>Label mínimo</label>
-                    <input value={questionForm.min_label} onChange={e => setQuestionForm(q => ({ ...q, min_label: e.target.value }))} placeholder={questionForm.question_type === 'nps' ? 'Nada provável' : 'Péssimo'} style={inputStyle} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Label máximo</label>
-                    <input value={questionForm.max_label} onChange={e => setQuestionForm(q => ({ ...q, max_label: e.target.value }))} placeholder={questionForm.question_type === 'nps' ? 'Muito provável' : 'Ótimo'} style={inputStyle} />
-                  </div>
-                </div>
-              )}
-
-              {questionForm.question_type === 'multiple_choice' && (
-                <div>
-                  <label style={labelStyle}>Opções (mínimo 2)</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {questionForm.options.map((opt, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 6 }}>
-                        <input value={opt} onChange={e => { const opts = [...questionForm.options]; opts[i] = e.target.value; setQuestionForm(q => ({ ...q, options: opts })) }} placeholder={`Opção ${i + 1}`} style={{ ...inputStyle, flex: 1 }} />
-                        {questionForm.options.length > 2 && (
-                          <button onClick={() => setQuestionForm(q => ({ ...q, options: q.options.filter((_, fi) => fi !== i) }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CBD5E1' }}><X size={14} /></button>
-                        )}
-                      </div>
-                    ))}
-                    <button onClick={() => setQuestionForm(q => ({ ...q, options: [...q.options, ''] }))}
-                      style={{ fontSize: 12, color: '#05907B', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '4px 0' }}>
-                      + Adicionar opção
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#F8FAFC', borderRadius: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Obrigatória</span>
-                <button onClick={() => setQuestionForm(q => ({ ...q, required: !q.required }))}
-                  style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: 'pointer', background: questionForm.required ? '#05907B' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
-                  <div style={{ position: 'absolute', top: 2, left: questionForm.required ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowQuestionModal(null)} style={btn('#F1F5F9', '#374151')}>Cancelar</button>
-                <button onClick={saveQuestion} disabled={!questionForm.title.trim()} style={{ ...btn('#05907B'), opacity: !questionForm.title.trim() ? 0.6 : 1 }}>
-                  {showQuestionModal === 'new' ? 'Adicionar pergunta' : 'Salvar pergunta'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {editorModalsEl}
 
       {/* Modal link gerado */}
       {showLinkModal && (
