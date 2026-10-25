@@ -4268,6 +4268,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           continue
         }
 
+        // ── Cliente editou/apagou uma mensagem: atualiza a original, não cria linha nova ──
+        if ((msg.type as string) === 'edit' || (msg.type as string) === 'revoke') {
+          const m: any = msg
+          const isEdit = m.type === 'edit'
+          const origId = (isEdit ? m.edit?.original_message_id : m.revoke?.original_message_id) || m.context?.id
+          if (origId) {
+            const newText = isEdit
+              ? (m.edit?.message?.text?.body || m.edit?.message?.image?.caption || m.edit?.message?.video?.caption || m.edit?.message?.document?.caption || '')
+              : ''
+            const content = isEdit
+              ? (newText ? `${newText} (editada)` : '✏️ Mensagem editada pelo cliente')
+              : '🗑️ Mensagem apagada pelo cliente'
+            const { data: upd } = await supabase
+              .from('whatsapp_messages')
+              .update({ content })
+              .eq('message_id', origId)
+              .eq('institution_id', institutionId)
+              .select('id')
+            // Se a original não existe aqui (ex.: anterior ao sistema), cai no fluxo normal e vira aviso.
+            if (upd && upd.length) {
+              console.log('[WEBHOOK]', m.type, 'on', origId)
+              continue
+            }
+          }
+        }
+
         const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
         const contactName = profileName(value.contacts?.[0]?.profile?.name) || remoteJid
         console.log('[WEBHOOK] institutionId:', institutionId)
