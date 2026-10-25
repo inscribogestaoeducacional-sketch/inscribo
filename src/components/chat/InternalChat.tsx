@@ -17,6 +17,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Send, Search, MessageSquare, X, ArrowLeft } from 'lucide-react'
+import AskAi from '../academy/AskAi'
 
 interface Colleague {
   id: string
@@ -70,6 +71,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
   const [previews, setPreviews]       = useState<Record<string, ConversationPreview>>({})
   const [loading, setLoading]         = useState(true)
   const [search, setSearch]           = useState('')
+  const [askTab, setAskTab]           = useState(false)
   const [activeId, setActiveId]       = useState<string | null>(null)
   const [messages, setMessages]       = useState<InternalMessage[]>([])
   const [loadingThread, setLoadingThread] = useState(false)
@@ -383,7 +385,18 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
   if (compact) {
     return (
       <div className="flex flex-col h-full bg-white">
-        {!activeColleague ? listContent : conversationContent(true)}
+        {!activeColleague && (
+          <div role="tablist" className="flex gap-1 p-2 border-b border-gray-100 flex-shrink-0 bg-white items-center">
+            <button role="tab" aria-selected={!askTab} onClick={() => setAskTab(false)}
+              className={`flex-1 h-9 rounded-xl text-sm font-bold ${!askTab ? 'bg-[#E6F7F5] text-[#00695F]' : 'text-gray-500'}`}>Colegas</button>
+            <button role="tab" aria-selected={askTab} onClick={() => setAskTab(true)}
+              className={`flex-1 h-9 rounded-xl text-sm font-bold ${askTab ? 'bg-[#E6F7F5] text-[#00695F]' : 'text-gray-500'}`}>Tire suas dúvidas</button>
+            {askTab && onClose && (
+              <button onClick={onClose} aria-label="Fechar" className="p-1 text-gray-400 hover:text-[#1A2B4A] rounded-lg"><X className="w-4 h-4" /></button>
+            )}
+          </div>
+        )}
+        {!activeColleague && askTab ? <div className="flex-1 min-h-0"><AskAi compact onNavigate={onClose} /></div> : !activeColleague ? listContent : conversationContent(true)}
       </div>
     )
   }

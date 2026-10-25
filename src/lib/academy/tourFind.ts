@@ -59,7 +59,7 @@ function controlFor(labelEl: Element): HTMLElement | null {
     if (sib.matches(CONTROL)) return sib as HTMLElement
     const c = sib.querySelector<HTMLElement>(CONTROL)
     if (c) return c
-    if (sib.matches('button') && i === 0) return sib as HTMLElement
+    if (i === 0 && (sib.matches('button') || sib.matches('[role=radiogroup], [role=group]') || sib.querySelector('button, [role=radio]'))) return sib as HTMLElement
   }
   // o rótulo e o campo são irmãos dentro de um mesmo bloco
   const p = labelEl.parentElement
@@ -67,6 +67,9 @@ function controlFor(labelEl: Element): HTMLElement | null {
     const c = p.querySelector<HTMLElement>(CONTROL)
     if (c) return c
   }
+  // rótulo de um grupo de botões (ex.: canal): o bloco que vem logo depois dele
+  const nx = labelEl.nextElementSibling
+  if (nx instanceof HTMLElement) return nx
   return null
 }
 

@@ -7,6 +7,9 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider, usePermissions } from './contexts/PermissionsContext'
 import { supabase } from './lib/supabase'
 import TourPlayer from './components/academy/TourPlayer'
+import HelpPanel from './components/academy/HelpPanel'
+import Academia from './pages/Academia'
+import AdminSupport from './components/superadmin/AdminSupport'
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 import LoginForm    from './components/auth/LoginForm'
@@ -331,6 +334,7 @@ function AppContent() {
         <Route path="/super-admin/transmissoes/precos" element={<AdminBroadcastPricing />} />
         <Route path="/super-admin/settings"           element={<AdminSettings />} />
         <Route path="/super-admin/updates"           element={<AdminUpdates />} />
+        <Route path="/super-admin/support"           element={<AdminSupport />} />
         <Route path="/super-admin/whatsapp"          element={<AdminWhatsApp />} />
         <Route path="/super-admin/whatsapp-templates" element={<AdminWhatsAppTemplates />} />
         <Route path="/super-admin/aion-inbox"         element={<AdminAionInbox />} />
@@ -377,6 +381,7 @@ function AppContent() {
         {isGestor && user.institution_id && <GestorUpdatePopup institutionId={user.institution_id} />}
         <InternalChatWidget />
         <TourPlayer />
+        <HelpPanel />
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <StageLabelsGate institutionId={user.institution_id}>
           <ScreenErrorBoundary>
@@ -404,6 +409,7 @@ function AppContent() {
             <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><UserManagement /></ProtectedRoute>} />
             {/* Fase 6.2: gestor também abre; cada item é filtrado por perfil em lib/settingsAccess.ts */}
             <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin','manager']}><SystemSettings /></ProtectedRoute>} />
+            <Route path="/academia"     element={<Academia />} />
             <Route path="/profile"      element={<UserProfile />} />
             <Route path="/setup"        element={<InitialSetup />} />
             <Route path="/login"        element={<Navigate to={schoolDefault} replace />} />

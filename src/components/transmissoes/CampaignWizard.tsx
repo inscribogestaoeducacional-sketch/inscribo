@@ -382,9 +382,9 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
 
         {/* ── 1. Template ── */}
         {step === 0 && (templates.length === 0 ? (
-          <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Nenhum template aprovado ainda. Crie um na aba <strong>Templates</strong> e aguarde a aprovação da Meta.</p>
+          <p data-tour="wizard-template" style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Nenhum template aprovado ainda. Crie um na aba <strong>Templates</strong> e aguarde a aprovação da Meta.</p>
         ) : (
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div data-tour="wizard-template" style={{ display: 'grid', gap: 8 }}>
             {templates.map(t => {
               const sel = t.id === templateId
               const cat = t.approved_category || t.category

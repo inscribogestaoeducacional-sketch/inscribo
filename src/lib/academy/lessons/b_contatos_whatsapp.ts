@@ -115,6 +115,7 @@ export const LESSONS_B: Lesson[] = [
     tip: 'Respostas rápidas são ótimas para valores, documentos da matrícula e endereço. Sempre releia antes de enviar.',
     tour: [
       go('/whatsapp', 'Respostas rápidas aparecem dentro de uma conversa.'),
+      click('Primeiro, toque numa conversa para abri-la.', { tour: 'wa-conversa' }, 'Ainda não há conversas para abrir.', true),
       info('Neste campo, escreva "/" para abrir as respostas rápidas da escola.', { tour: 'wa-escrever' }, 'Abra uma conversa para ver o campo de mensagem.', true),
       done('Quem usa respostas rápidas atende muito mais rápido.'),
     ],
@@ -149,6 +150,7 @@ export const LESSONS_B: Lesson[] = [
     tip: 'Antes de passar, deixe uma "Anotação da equipe" na ficha explicando o caso.',
     tour: [
       go('/whatsapp', 'Para passar uma conversa, abra a ficha da família.'),
+      click('Primeiro, toque numa conversa para abri-la.', { tour: 'wa-conversa' }, 'Ainda não há conversas para abrir.', true),
       info('Dentro da conversa, o "i" abre a ficha. Lá, "Quem atende" mostra quem atende e deixa trocar.', { css: 'button[title="Informações do contato"]' }, 'Abra uma conversa para ver este botão.', true),
       done('Nesta aula eu não passo nenhuma conversa de verdade.'),
     ],
@@ -165,6 +167,7 @@ export const LESSONS_B: Lesson[] = [
     tip: 'Concluir no fim do atendimento deixa a fila limpa e libera a avaliação do atendimento, se a escola usa.',
     tour: [
       go('/whatsapp', 'Concluir fica na ficha da conversa.'),
+      click('Primeiro, toque numa conversa para abri-la.', { tour: 'wa-conversa' }, 'Ainda não há conversas para abrir.', true),
       info('Dentro da conversa, o "i" abre a ficha, e lá ficam os botões "Concluir" e "Sair". Nesta aula eu não concluo nada.', { css: 'button[title="Informações do contato"]' }, 'Abra uma conversa para ver este botão.', true),
       done('Conclua sempre que o assunto acabar.'),
     ],
@@ -181,6 +184,7 @@ export const LESSONS_B: Lesson[] = [
     tip: 'Todo contato que pergunta sobre matrícula deve virar lead. Sem lead, a família some do funil.',
     tour: [
       go('/whatsapp', 'O bloco "No funil" fica na ficha da conversa.'),
+      click('Primeiro, toque numa conversa para abri-la.', { tour: 'wa-conversa' }, 'Ainda não há conversas para abrir.', true),
       info('Dentro da conversa, o "i" abre a ficha. Lá, em "No funil", você cria ou liga um lead.', { css: 'button[title="Informações do contato"]' }, 'Abra uma conversa para ver este botão.', true),
       done('Lead ligado é família acompanhada.'),
     ],

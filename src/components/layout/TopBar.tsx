@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Network, ChevronDown, MessageSquare, HelpCircle, GraduationCap } from 'lucide-react'
+import { Network, ChevronDown, MessageSquare, HelpCircle } from 'lucide-react'
 import NotificationBell from './NotificationBell'
 import ConversationNotifier from './ConversationNotifier'
 import UserMenu from './UserMenu'
 import InstallAppCard from './InstallAppCard'
 import { syncPushOwner, touchSeen } from '../../lib/push'
+import { HELP_OPEN_EVENT } from '../../lib/academy/academy'
 
 // Seletor de instituição — troca a instituição ativa (ver
 // AuthContext.switchInstitution) sem precisar logout/login. Aparece pra
@@ -73,7 +74,8 @@ export default function TopBar() {
   const goSearch = () => { const q = search.trim(); if (q) { navigate(`/contacts?search=${encodeURIComponent(q)}`); setSearch('') } }
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
-  const [helpOpen, setHelpOpen] = useState(false)
+  // O "?" abre o painel de ajuda (HelpPanel): aulas da tela, "Fazer comigo" e dúvidas
+  const openHelp = () => window.dispatchEvent(new CustomEvent(HELP_OPEN_EVENT))
   const [teamUnread, setTeamUnread] = useState(0)
   useEffect(() => {
     const h = (e: Event) => setTeamUnread((e as CustomEvent<number>).detail || 0)
@@ -108,26 +110,10 @@ export default function TopBar() {
       {isMobile && (
         <>
           <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 34, width: 'auto', maxWidth: 150, objectFit: 'contain', flexShrink: 1, minWidth: 0 }} />
-          <button type="button" aria-label="Ajuda" className="aion-tap" onClick={() => setHelpOpen(true)}
+          <button type="button" aria-label="Ajuda" data-tour="topbar-ajuda" className="aion-tap" onClick={openHelp}
             style={{ marginLeft: 'auto', width: 38, height: 38, borderRadius: 12, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <HelpCircle size={19} />
           </button>
-          {helpOpen && (
-            <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(15,23,42,.35)' }} onClick={() => setHelpOpen(false)} />
-              <div style={{ position: 'fixed', left: 12, right: 12, top: 66, zIndex: 61, background: '#fff', borderRadius: 18, border: '1px solid #E3E8F0', boxShadow: '0 16px 48px rgba(15,23,42,.22)', padding: 18, animation: 'aionSearchIn .2s ease-out' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: 12, background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GraduationCap size={20} /></div>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#1A2B4A' }}>Academia Áion Edu</div>
-                    <div style={{ fontSize: 12, color: '#64748B' }}>Em breve</div>
-                  </div>
-                </div>
-                <p style={{ fontSize: 13.5, lineHeight: 1.5, color: '#475569', margin: '0 0 14px' }}>Aqui vão ficar os tutoriais em vídeo e passo a passo de cada tela. Enquanto isso, fale com a gente pelo WhatsApp que ajudamos você.</p>
-                <button type="button" onClick={() => setHelpOpen(false)} style={{ width: '100%', height: 44, borderRadius: 12, border: 'none', background: '#05907B', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Entendi</button>
-              </div>
-            </>
-          )}
         </>
       )}
 
@@ -163,6 +149,14 @@ export default function TopBar() {
             style={{ position: 'relative', width: 38, height: 38, borderRadius: 12, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <MessageSquare size={18} />
             {teamUnread > 0 && <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, padding: '0 4px', borderRadius: 99, background: '#F43F5E', color: '#fff', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>{teamUnread > 9 ? '9+' : teamUnread}</span>}
+          </button>
+        )}
+
+        {/* Computador: o "?" de ajuda fica ao lado do sino */}
+        {!isMobile && (
+          <button type="button" aria-label="Ajuda" title="Ajuda" data-tour="topbar-ajuda" className="aion-tap" onClick={openHelp}
+            style={{ width: 38, height: 38, borderRadius: 12, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <HelpCircle size={19} />
           </button>
         )}
 

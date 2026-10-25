@@ -10,7 +10,7 @@ import { useBaseModuleEnabled } from '../../lib/baseModule'
 import { X, SlidersHorizontal, LayoutGrid, MessageSquare } from 'lucide-react'
 import {
   House, Funnel, AddressBook, WhatsappLogo, CalendarCheck, Megaphone, Storefront, PaperPlaneTilt, Flag,
-  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle,
+  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle, BookOpenText,
 } from '@phosphor-icons/react'
 import type { Icon as PhIcon } from '@phosphor-icons/react'
 
@@ -44,7 +44,8 @@ const NAV_CFG: NavItem[] = [
   { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFEDD5', iconColor: '#F97316', Icon: ClipboardText,  roles: ['admin','manager'], module: 'pesquisas',  group: 'Análise' },
   // Administração
   { path: '/users',           label: 'Usuários',        iconBg: '#E0E7FF', iconColor: '#4F46E5', Icon: UsersThree,      roles: ['admin'], module: 'usuarios',      group: 'Administração' },
-  { path: '/settings',        label: 'Configurações',   iconBg: '#E2E8F0', iconColor: '#334155', Icon: GearSix,        roles: ['admin','manager'], module: 'configuracoes', group: 'Administração' },
+  { path: '/settings',        label: 'Configurações',   iconBg: '#E2E8F0', iconColor: '#334155', Icon: GearSix,        roles: ['admin','manager'], module: 'configuracoes', group: 'Administração' },  // Ajuda
+  { path: '/academia',        label: 'Academia',        iconBg: '#E6F7F5', iconColor: '#05907B', Icon: BookOpenText,   roles: ['admin','manager','user'], module: 'academia', group: 'Ajuda' },
 ]
 
 function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
