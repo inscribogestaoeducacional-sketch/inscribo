@@ -31,8 +31,8 @@ export function ContactsSummary({ kpi, origin, onOrigin, counts, attention, onAt
   ]
   const shown = pend.filter(p => p.n > 0 || attention === p.key)
   return (
-    <div className="ld-in" style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: compact ? 10 : 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr 1fr' : 'repeat(4, minmax(0,1fr))', gap: 10 }}>
+    <div className="ld-in" style={compact ? { display: 'flex', flexDirection: 'column', gap: 10 } : { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className={compact ? 'aion-snap' : undefined} style={{ display: 'grid', gridTemplateColumns: compact ? undefined : 'repeat(4, minmax(0,1fr))', gap: 10 }}>
         {types.map((t, i) => {
           const on = origin === t.v
           const Icon = t.Icon

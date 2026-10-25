@@ -1,5 +1,6 @@
 import PageHeader from '../../components/ui/PageHeader'
 import { PillTabs } from '../../components/mobile/PillTabs'
+import StatStrip, { cardBtn } from '../../components/mobile/StatStrip'
 import React, { useState, useEffect, useRef } from 'react'
 import {
   ArrowRightLeft, Plus, Copy, ExternalLink, Sparkles, Eye,
@@ -486,12 +487,12 @@ export default function GestorTransfers() {
           {activeTab === 'report' && <SaidasReport institutionId={institutionId} institutionName={user?.institution_name ?? ''} defaultYear={new Date().getFullYear()} />}
 
           {activeTab === 'active' && !loading && (
-            <div className="aion-snap" style={{ display: 'grid', gap: 10 }}>
-              <KpiCard label="Total"               value={fmt(total)}         icon={<ArrowRightLeft size={18} color="#DC2626" />} bg="#FEE2E2" />
-              <KpiCard label="Este mês"            value={fmt(thisMonth)}     icon={<Clock size={18} color="#D97706" />}          bg="#FEF3C7" />
-              <KpiCard label="Aguardando pesquisa" value={fmt(pending)}       icon={<AlertTriangle size={18} color="#64748B" />}  bg="#F1F5F9" />
-              <KpiCard label="Com diagnóstico IA"  value={fmt(withDiagnosis)} icon={<Sparkles size={18} color="#8B5CF6" />}       bg="#EDE9FE" />
-            </div>
+            <StatStrip items={[
+              { label: 'Total', value: total, sub: 'transferências registradas', color: '#DC2626', icon: ArrowRightLeft },
+              { label: 'Este mês', value: thisMonth, sub: 'registradas neste mês', color: '#D97706', icon: Clock },
+              { label: 'Aguardando pesquisa', value: pending, sub: 'ainda sem pesquisa de saída', color: '#5B6B86', icon: AlertTriangle },
+              { label: 'Com diagnóstico IA', value: withDiagnosis, sub: 'motivo real identificado', color: '#8B5CF6', icon: Sparkles },
+            ]} />
           )}
 
           {activeTab === 'active' && (loading ? (
@@ -528,31 +529,31 @@ export default function GestorTransfers() {
                   <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
                     {!t.survey_token && isAdmin && (
                       <button onClick={() => handleGenerateLink(t)} className="aion-tap"
-                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#EDE9FE', color: '#7C3AED', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                        style={cardBtn('ghost')}>
                         Gerar link pesquisa
                       </button>
                     )}
                     {t.survey_token && !t.survey_responses && (
                       <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/survey/${t.survey_token}`); showToast('Link copiado!') }} className="aion-tap"
-                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#FEF3C7', color: '#D97706', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                        style={cardBtn('ghost')}>
                         Copiar link
                       </button>
                     )}
                     {!t.survey_responses && (
                       <button onClick={() => openSend(t)} className="aion-tap"
-                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#D1FAE5', color: '#047857', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                        style={cardBtn('primary')}>
                         Enviar pelo WhatsApp
                       </button>
                     )}
                     {t.survey_responses && !t.ai_diagnosis && isAdmin && (
                       <button onClick={() => handleGenerateDiagnosis(t)} disabled={isGenerating} className="aion-tap"
-                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#EDE9FE', color: '#7C3AED', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44, opacity: isGenerating ? 0.6 : 1 }}>
+                        style={cardBtn('primary', { opacity: isGenerating ? 0.6 : 1 })}>
                         {isGenerating ? 'Gerando...' : 'Gerar diagnóstico IA'}
                       </button>
                     )}
                     {t.ai_diagnosis && (
                       <button onClick={() => setDiagnosisTransfer(t)} className="aion-tap"
-                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#D1FAE5', color: '#065F46', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                        style={cardBtn('primary')}>
                         Ver diagnóstico
                       </button>
                     )}
@@ -581,8 +582,8 @@ export default function GestorTransfers() {
                   </p>
                   {isAdmin && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => handleRestore(t.id)} className="aion-tap" style={{ flex: 1, minHeight: 44, borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#0f766e', cursor: 'pointer' }}>Restaurar</button>
-                      <button onClick={() => handlePermanentDelete(t.id)} className="aion-tap" style={{ flex: 1, minHeight: 44, borderRadius: 10, border: '1px solid #fecaca', background: '#fff5f5', fontSize: 12, fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>Apagar de vez</button>
+                      <button onClick={() => handleRestore(t.id)} className="aion-tap" style={cardBtn('ghost')}>Restaurar</button>
+                      <button onClick={() => handlePermanentDelete(t.id)} className="aion-tap" style={cardBtn('danger')}>Apagar de vez</button>
                     </div>
                   )}
                 </div>

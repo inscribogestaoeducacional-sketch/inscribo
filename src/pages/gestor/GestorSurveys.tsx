@@ -1,3 +1,4 @@
+import StatStrip, { cardBtn } from '../../components/mobile/StatStrip'
 import PageHeader from '../../components/ui/PageHeader'
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -1756,20 +1757,8 @@ export default function GestorSurveys() {
             </button>} />
         </div>
 
-        <div className="aion-snap" style={{ display: 'grid', gap: 10, margin: '12px 0 4px' }}>
-          {kpis.map(k => (
-            <div key={k.label} className="ld-card" style={{ background: '#fff', borderRadius: 16, padding: '12px 14px', border: '1px solid #E3E8F0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: k.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <k.Icon size={15} color={k.color} />
-                </div>
-                <div>
-                  <p style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0, lineHeight: 1 }}>{k.value}</p>
-                  <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', lineHeight: 1.2 }}>{k.label}</p>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div style={{ margin: '12px 12px 4px' }}>
+          <StatStrip items={kpis.map(k => ({ label: k.label, value: k.value, sub: '', color: k.color, icon: k.Icon as any }))} />
         </div>
 
         {/* Survey list */}
@@ -1803,20 +1792,20 @@ export default function GestorSurveys() {
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => openResponses(s)}
-                    style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#EFF6FF', color: '#3B82F6', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
+                    style={cardBtn('primary')}
                   >
                     Ver respostas
                   </button>
                   <button
                     onClick={() => copyLink(s.survey_token)}
-                    style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#F0FDF4', color: '#10B981', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
+                    style={cardBtn('ghost')}
                   >
                     Copiar link
                   </button>
                   {isActive && (
                     <button
                       onClick={() => closeSurvey(s.id)}
-                      style={{ padding: '10px 12px', borderRadius: 10, border: 'none', background: '#FEF2F2', color: '#EF4444', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
+                      style={cardBtn('ghost', { flex: '0 0 auto' })}
                     >
                       Encerrar
                     </button>
@@ -1825,12 +1814,12 @@ export default function GestorSurveys() {
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                   {s.survey_mode === 'custom' && (
                     <button onClick={() => openEditor(s)} className="aion-tap"
-                      style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #E3E8F0', background: '#fff', color: '#475569', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}>
+                      style={cardBtn('ghost')}>
                       Editar perguntas
                     </button>
                   )}
                   <button onClick={() => deleteSurvey(s.id, s.response_count ?? 0)} className="aion-tap"
-                    style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #FECACA', background: '#fff', color: '#DC2626', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}>
+                    style={cardBtn('danger')}>
                     Excluir
                   </button>
                 </div>

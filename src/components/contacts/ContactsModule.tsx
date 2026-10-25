@@ -1277,6 +1277,11 @@ export default function ContactsModule() {
           {/* Origin filter chips */}
           <div className="aion-hscroll" style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', flexWrap: 'nowrap', gap: 6, scrollbarWidth: 'none' }}>
             {/* Status filter chip row */}
+            <button onClick={() => setFilterStatus('all')}
+              style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: filterStatus === 'all' ? '#05907B' : '#F0FFF4', color: filterStatus === 'all' ? '#fff' : '#64748B' }}>
+              Todos
+            </button>
             {Object.entries(statusConfig).map(([value, cfg]) => (
               <button key={value} onClick={() => setFilterStatus(filterStatus === value ? 'all' : value)}
                 style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',

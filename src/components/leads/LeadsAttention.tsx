@@ -31,7 +31,7 @@ export function waitLabel(iso: string) {
 }
 
 // Número que "sobe" até o valor (animação leve).
-function CountUp({ value }: { value: number }) {
+export function CountUp({ value }: { value: number }) {
   const [v, setV] = useState(0)
   const from = useRef(0)
   useEffect(() => {
