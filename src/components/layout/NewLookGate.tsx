@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import {
   Sparkles, Smartphone, HelpCircle, ArrowRight, ArrowLeft, Check, Bell, Download,
-  Home, Filter as Funnel, Users, CalendarCheck, MessageCircle, Target, Megaphone, GraduationCap, Repeat, ClipboardList, Settings, UserCog, Flag,
+  Home, Filter as Funnel, Users, CalendarCheck, MessageCircle, Target, Megaphone, GraduationCap, Repeat, ClipboardList, Settings, UserCog, Flag, Plug,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -30,6 +30,7 @@ const ITEMS: Item[] = [
   { Icon: Repeat, name: 'Transferências', text: 'Saídas, pesquisa de saída e relatório no padrão novo.' },
   { Icon: ClipboardList, name: 'Pesquisas', text: 'Criar, editar perguntas e ver respostas, tudo refeito. Inclui a pesquisa de satisfação dos colaboradores.', gestorOnly: true },
   { Icon: UserCog, name: 'Usuários', text: 'Cadastro de equipe e permissões em telas novas.', gestorOnly: true },
+  { Icon: Plug, name: 'Integrações', text: 'Novidade: agora a Áion se integra com o Activesoft, e outras integrações virão depois. Também dá para enviar a planilha de alunos ou lançar a base por série. Para liberar na sua escola, fale com a nossa equipe.', gestorOnly: true },
   { Icon: Settings, name: 'Configurações', text: 'Todas as abas refeitas para o celular.', gestorOnly: true },
 ]
 
