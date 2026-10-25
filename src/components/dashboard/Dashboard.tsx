@@ -70,7 +70,6 @@ export default function Dashboard() {
     matriculasMes: 0,
     taxaConversao: 0,
     cpaAtual: 0,
-    taxaRematricula: 0,
     leadsNovos: 0,
     visitasSemana: 0
   })
@@ -182,7 +181,6 @@ export default function Dashboard() {
         matriculasMes,
         taxaConversao: Math.round(taxaConversao * 10) / 10,
         cpaAtual: Math.round(cpaAtual),
-        taxaRematricula: 92.5,
         leadsNovos,
         visitasSemana
       })
@@ -223,7 +221,7 @@ export default function Dashboard() {
     switch (action) {
       case 'new-lead': navigate('/leads'); break
       case 'schedule-visit': navigate('/visits'); break
-      case 'new-enrollment': navigate('/enrollments'); break
+      case 'new-enrollment': navigate('/campanha'); break
       case 'view-reports': navigate('/reports'); break
     }
   }
@@ -296,7 +294,7 @@ export default function Dashboard() {
       change: calculateChange(kpis.matriculasMes, previousMonthKpis.matriculasMes),
       icon: <GraduationCap className="h-5 w-5 text-purple-600" />,
       iconBg: 'bg-purple-50',
-      onClick: () => navigate('/enrollments')
+      onClick: () => navigate('/campanha')
     },
     {
       title: 'Taxa de Conversão',
@@ -309,17 +307,8 @@ export default function Dashboard() {
     {
       title: 'CPA Atual',
       value: `R$ ${kpis.cpaAtual}`,
-      change: -2.1,
       icon: <DollarSign className="h-5 w-5 text-rose-500" />,
       iconBg: 'bg-rose-50',
-      onClick: () => navigate('/reports')
-    },
-    {
-      title: 'Taxa Rematrícula',
-      value: `${kpis.taxaRematricula}%`,
-      change: 2.1,
-      icon: <RefreshCw className="h-5 w-5 text-[#2DCBA4]" />,
-      iconBg: 'bg-[#2DCBA4]/10',
       onClick: () => navigate('/reports')
     }
   ]
@@ -360,7 +349,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
         {kpiCards.map((kpi, i) => (
           <KPICard key={i} {...kpi} />
         ))}

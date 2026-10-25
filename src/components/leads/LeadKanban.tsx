@@ -1477,7 +1477,7 @@ export default function LeadKanban() {
       return matchesLeadFilters(l, { start: pStart, end: pEnd })
     })
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#F5FAF9' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9' }}>
 
         <div style={{ padding: '12px 12px 0', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <PageHeader compact icon={Users} title="Leads" subtitle={`${mobileLeads.length} no funil`} />
@@ -1524,7 +1524,7 @@ export default function LeadKanban() {
         </div>
 
         {/* Lead list */}
-        <div style={{ flex: 1, overflowY: 'auto', marginTop: 10, padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ marginTop: 10, padding: '0 12px 100px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {mobileLeads.length === 0 ? (
             <div style={{ padding: '40px 16px', textAlign: 'center' }}>
               <p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhum lead encontrado</p>

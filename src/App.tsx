@@ -47,6 +47,7 @@ import LeadKanban        from './components/leads/LeadKanban'
 import VisitCalendar     from './components/calendar/VisitCalendar'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
 import HubErrorBoundary  from './components/whatsapp/HubErrorBoundary'
+import ScreenErrorBoundary from './components/common/ScreenErrorBoundary'
 import CentralRelatorios from './components/relatorios/CentralRelatorios'
 import ClientsModule    from './components/clients/ClientsModule'
 import ContactsModule  from './components/contacts/ContactsModule'
@@ -371,6 +372,7 @@ function AppContent() {
         <InternalChatWidget />
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <StageLabelsGate institutionId={user.institution_id}>
+          <ScreenErrorBoundary>
           <Routes>
             <Route path="/" element={<Navigate to={schoolDefault} replace />} />
             <Route path="/home" element={<RequireRole roles={['admin','manager']}><GestorHome /></RequireRole>} />
@@ -401,6 +403,7 @@ function AppContent() {
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
             <Route path="*"             element={<Navigate to={schoolDefault} replace />} />
           </Routes>
+          </ScreenErrorBoundary>
           </StageLabelsGate>
         </main>
       </div>

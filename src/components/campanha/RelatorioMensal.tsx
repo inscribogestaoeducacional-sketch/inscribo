@@ -135,8 +135,8 @@ export default function RelatorioMensal(p: Props) {
           <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Relatório do mês</div>
           <div style={{ fontSize: 13, color: BRAND.muted, marginTop: 3 }}>Escolha o mês e gere a qualquer momento: placar contra a meta, compensação, funil, investimento e próximos passos. O ideal é gerar no fim do mês e mandar o link por e-mail ao gestor.</div>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <select style={sel} value={month} onChange={e => setMonth(e.target.value)}>{opts.map(m => <option key={m} value={m}>{label(m)}{m === now ? ' (em andamento)' : ''}</option>)}</select>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', maxWidth: '100%' }}>
+          <select style={{ ...sel, maxWidth: '100%' }} value={month} onChange={e => setMonth(e.target.value)}>{opts.map(m => <option key={m} value={m}>{label(m)}{m === now ? ' (em andamento)' : ''}</option>)}</select>
           <button onClick={generate} disabled={busy || !opts.length} style={btn(busy || !opts.length)}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{rows.some(r => r.month === month) ? 'Gerar de novo' : 'Gerar relatório'}</button>
         </div>
       </div>
