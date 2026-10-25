@@ -13,31 +13,25 @@ const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { sta
 
 interface Lesson { key: string; module: string; title: string; summary: string; steps: string[]; tip: string | null; to: string; managerOnly: boolean; adminOnly: boolean; attendantOnly: boolean }
 
-const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-const STOP = new Set(['como', 'para', 'que', 'uma', 'um', 'de', 'do', 'da', 'no', 'na', 'os', 'as', 'eu', 'posso', 'faco', 'fazer', 'onde', 'qual', 'quais', 'com', 'por', 'meu', 'minha', 'esta', 'este', 'isso', 'nao', 'sim'])
 
-async function loadLessons(origin: string | null): Promise<Lesson[]> {
+// origem do site (a mesma de onde a pessoa chamou); só domínios da Áion
+function siteOrigin(origin: string | null): string {
   try {
-    if (!origin) return []
-    const u = new URL(origin)
-    if (u.protocol !== 'https:' || /^(localhost|127\.|10\.|192\.168\.|169\.254\.)/.test(u.hostname)) return []
-    const r = await fetch(`${u.origin}/academy-lessons.json`, { signal: AbortSignal.timeout(5000) })
+    if (origin) {
+      const u = new URL(origin)
+      if (u.protocol === 'https:' && (u.hostname === 'aionedu.com.br' || u.hostname.endsWith('.aionedu.com.br') || u.hostname.endsWith('.vercel.app'))) return u.origin
+    }
+  } catch { /* usa o padrão */ }
+  return 'https://www.aionedu.com.br'
+}
+
+async function loadLessons(base: string): Promise<Lesson[]> {
+  try {
+    const r = await fetch(`${base}/academy-lessons.json`, { signal: AbortSignal.timeout(6000) })
     if (!r.ok) return []
     const j = await r.json()
     return Array.isArray(j?.lessons) ? j.lessons : []
   } catch { return [] }
-}
-
-function pick(lessons: Lesson[], question: string, route: string, manager: boolean, admin: boolean): { l: Lesson; s: number }[] {
-  const words = norm(question).split(/[^a-z0-9]+/).filter(w => w.length > 2 && !STOP.has(w))
-  const ok = lessons.filter(l => (!l.managerOnly || manager) && (!l.adminOnly || admin) && (!l.attendantOnly || !manager))
-  return ok.map(l => {
-    const hay = norm(`${l.title} ${l.summary} ${l.steps.join(' ')}`)
-    let s = 0
-    for (const w of words) if (hay.includes(w)) s += norm(l.title).includes(w) ? 4 : 1
-    if (route && l.to.split('?')[0] === route) s += 2
-    return { l, s }
-  }).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 6)
 }
 
 Deno.serve(async (req) => {
@@ -84,47 +78,12 @@ Deno.serve(async (req) => {
 
   if (used >= DAILY_LIMIT) { await escalate(); return json({ thread_id: threadId, escalated: true, reason: 'limit' }) }
 
-  // cumprimento ou agradecimento: responde com educação (no mesmo período do dia), sem gastar IA
-  {
-    const n = norm(message).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
-    const hr = new Date(Date.now() - 3 * 3600_000).getUTCHours()
-    const periodo = hr < 12 ? 'Bom dia' : hr < 18 ? 'Boa tarde' : 'Boa noite'
-    const nome = (me?.full_name || '').trim().split(/\s+/)[0]
-    const quem = nome ? `, ${nome}` : ''
-    const GREET = /^(oi+|ola|opa|e a[ií]|eai|bom dia|boa tarde|boa noite|hello|hey|tudo bem|tudo bom|oi tudo bem|ola tudo bem|ola bom dia|ola boa tarde|ola boa noite|oi bom dia|oi boa tarde|oi boa noite)( .{0,12})?$/
-    const THANKS = /^(obrigad[oa]|valeu|muito obrigad[oa]|brigad[oa]|obg|ok obrigad[oa]|ok valeu|certo obrigad[oa])( .{0,15})?$/
-    let reply = ''
-    if (THANKS.test(n)) reply = `Por nada${quem}! Se precisar de mais alguma coisa, é só chamar.`
-    else if (n.length <= 30 && GREET.test(n)) {
-      const saud = /bom dia|boa tarde|boa noite/.test(n) ? periodo : 'Olá'
-      reply = `${saud}${quem}! Eu sou a assistente da Academia Áion Edu. Em que posso ajudar? Pode perguntar, por exemplo: "como cadastro um lead?", "como agendo uma visita?" ou "como instalo a Áion no celular?".`
-    }
-    if (reply) {
-      await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: reply })
-      await admin.from('support_threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId)
-      return json({ thread_id: threadId, answer: reply, reason: 'greeting' })
-    }
-  }
+  const base = siteOrigin(req.headers.get('origin'))
+  const lessons = (await loadLessons(base)).filter(l => (!l.managerOnly || manager) && (!l.adminOnly || admRole) && (!l.attendantOnly || !manager))
+  // a assistente conhece TODAS as aulas liberadas para esta pessoa (sem filtro por palavra): ela mesma acha a resposta
+  const knowledge = lessons.map(l => `[${l.key}] ${l.title} (tela: ${l.to})\n${l.summary}\n${l.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}${l.tip ? `\nDica: ${l.tip}` : ''}`).join('\n\n')
 
-  const lessons = await loadLessons(req.headers.get('origin'))
-  // pergunta curta ("e como edito?") é continuação: junta com a pergunta anterior para achar a aula certa
-  let queryText = message
-  if (message.length < 45) {
-    const { data: prevQ } = await admin.from('support_messages').select('body').eq('thread_id', threadId).eq('author_type', 'user').order('created_at', { ascending: false }).range(1, 2)
-    queryText = [message, ...((prevQ ?? []) as { body: string }[]).map(x => x.body)].join(' ')
-  }
-  const scored = pick(lessons, queryText, route, manager, admRole)
-  // sem aula bem parecida com a pergunta a IA não tenta responder (evita resposta inventada) e oferece chamar a equipe
-  if (!scored.length || scored[0].s < 4) {
-    const msg = 'Não achei uma aula sobre isso. Tente perguntar de outro jeito (por exemplo: "como agendo uma visita?") ou chame a equipe da Áion.\n[[EQUIPE]]'
-    await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: msg })
-    await admin.from('support_threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId)
-    return json({ thread_id: threadId, answer: msg, reason: 'weak' })
-  }
-  const chosen = scored.map(x => x.l)
-  const knowledge = chosen.map(l => `AULA "${l.title}" (tela: ${l.to})\n${l.summary}\n${l.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}${l.tip ? `\nDica: ${l.tip}` : ''}`).join('\n\n')
-
-  const { data: hist } = await admin.from('support_messages').select('author_type, body').eq('thread_id', threadId).order('created_at', { ascending: false }).limit(10)
+  const { data: hist } = await admin.from('support_messages').select('author_type, body').eq('thread_id', threadId).order('created_at', { ascending: false }).limit(12)
   const msgs: { role: 'user' | 'assistant'; content: string }[] = []
   for (const m of (hist ?? []).reverse() as { author_type: string; body: string }[]) {
     const role = m.author_type === 'user' ? 'user' : 'assistant'
@@ -134,35 +93,42 @@ Deno.serve(async (req) => {
   while (msgs.length && msgs[0].role !== 'user') msgs.shift()
 
   const nome1 = (me?.full_name || '').trim().split(/\s+/)[0]
-  const system = `Você é a assistente da Academia Áion Edu, o sistema de gestão de matrículas de escolas. Converse como uma colega paciente e simpática, em português do Brasil, com frases curtas e simples, para quem não é de tecnologia${nome1 ? `. A pessoa se chama ${nome1}; use o nome de vez em quando, sem exagero` : ''}.
-Jeito de conversar:
-- Leve em conta o que já foi dito na conversa; se a pessoa perguntar "e depois?" ou "como edito?", continue o assunto.
-- Se a pergunta estiver vaga, faça UMA pergunta curta para entender antes de explicar.
-- Depois de explicar, pergunte se ficou claro ou se quer ajuda com o próximo passo.
-Regras:
-- Use SOMENTE as aulas abaixo. Cite os nomes exatos dos botões e abas entre aspas, como estão nas aulas.
-- Nunca invente botão, tela ou função. Se a resposta não estiver nas aulas, diga que não tem certeza e termine com [[EQUIPE]].
-- Se ajudar, indique a tela com [[TELA:/caminho]] (um por resposta, só caminhos que aparecem nas aulas).
-- Pergunta sobre cobrança, contrato, erro do sistema, dados da escola ou algo que só a equipe resolve: termine com [[EQUIPE]].
-- A pessoa é ${manager ? (admRole ? 'administradora da escola' : 'gestora da escola') : 'atendente da escola'}. Tela atual: ${route || 'não informada'}.
-- No máximo 6 linhas. Não use markdown pesado: sem títulos; pode usar listas numeradas curtas.
+  const hr = new Date(Date.now() - 3 * 3600_000).getUTCHours()
+  const periodo = hr < 12 ? 'manhã (Bom dia)' : hr < 18 ? 'tarde (Boa tarde)' : 'noite (Boa noite)'
+  const stable = `Você é a assistente de IA da Áion Edu, o sistema de gestão de matrículas e atendimento de escolas particulares. Você é o primeiro e principal suporte: a equipe da Áion é pequena e só deve ser chamada em último caso. Resolva você mesma, conversando como um chat de inteligência artificial.
 
-AULAS:
-${knowledge || '(nenhuma aula encontrada para esta pergunta)'}`
+Como conversar:
+- Converse de forma natural, calorosa e paciente, em português do Brasil, com frases curtas e simples, para quem não é de tecnologia. Não repita sua apresentação: apresente-se no máximo uma vez, no início da conversa.
+- Responda cumprimentos e agradecimentos como uma pessoa (se disserem "boa tarde", responda "boa tarde"), e logo ofereça ajuda.
+- Leve em conta tudo o que já foi dito. Se a pessoa disser "e depois?" ou "não achei o botão", continue de onde parou.
+- Se a pergunta estiver vaga, faça UMA pergunta curta para entender o que ela quer fazer, em vez de mandar para a equipe.
+- Dê o passo a passo usando os nomes exatos dos botões, abas e telas como estão no conhecimento abaixo. Se for longo, dê 3 ou 4 passos e pergunte se quer continuar.
+- Depois de explicar, confirme se deu certo ou se a pessoa quer ajuda com o próximo passo. Se algo não funcionou, tente entender o que apareceu na tela dela e ajude a resolver.
+- Sugira a aula da Academia quando ajudar, escrevendo [[AULA:chave]] (a chave fica entre colchetes no conhecimento). Indique a tela com [[TELA:/caminho]] só quando o caminho aparecer no conhecimento. No máximo um de cada por resposta.
+- Respostas de até 8 linhas, sem títulos nem markdown pesado; listas numeradas curtas são bem-vindas.
+- Fale só do uso da Áion Edu. Assuntos fora disso, responda com educação em uma frase e volte ao que você pode ajudar.
+
+O que NUNCA fazer:
+- Nunca invente botão, tela, preço, prazo ou função que não esteja no conhecimento. Se não tiver certeza, diga isso com honestidade.
+- Só chame a equipe quando você realmente tentou ajudar e não conseguiu, ou quando o assunto for cobrança/contrato/plano, erro ou defeito do sistema, acesso ou dados que só a equipe vê, ou pedido de nova função. Nesses casos, explique em uma frase o que vai acontecer e termine a resposta com [[EQUIPE]]. Ao ver [[EQUIPE]] o sistema avisa a equipe automaticamente.
+
+CONHECIMENTO DO SISTEMA (aulas da Academia):
+${knowledge || '(conhecimento indisponível agora: ajude com o que souber e, se não der, termine com [[EQUIPE]])'}`
+  const dynamic = `Sobre esta conversa: agora é ${periodo} em Brasília. A pessoa ${nome1 ? `se chama ${nome1} e ` : ''}é ${manager ? (admRole ? 'administradora da escola' : 'gestora da escola') : 'atendente da escola'}. Tela em que ela está: ${route || 'não informada'}.`
 
   try {
-    // a chave da IA fica no Vercel (a mesma dos relatórios); a função chama /api/ai com a sessão da pessoa
-    const r = await fetch('https://app.aionedu.com.br/api/ai', {
-      method: 'POST', signal: AbortSignal.timeout(25000),
+    const r = await fetch(`${base}/api/ai`, {
+      method: 'POST', signal: AbortSignal.timeout(28000),
       headers: { 'content-type': 'application/json', authorization: authH },
-      body: JSON.stringify({ action: 'wa_help', payload: { system, messages: msgs.length ? msgs : [{ role: 'user', content: message }] } }),
+      body: JSON.stringify({ action: 'wa_help', payload: { system: stable, context: dynamic, messages: msgs.length ? msgs : [{ role: 'user', content: message }] } }),
     })
     if (!r.ok) throw new Error(`ai ${r.status}: ${(await r.text()).slice(0, 300)}`)
     const j = await r.json()
     const text: string = String(j.text ?? '').trim()
     if (!text) throw new Error('vazio')
-    await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: (text.slice(0, 5800) + `\n[[AULA:${chosen[0].key}]]`) })
+    await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: text.slice(0, 5900) })
     await admin.from('support_threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId)
+    if (text.includes('[[EQUIPE]]')) await escalate()
     return json({ thread_id: threadId, answer: text })
   } catch (e) {
     console.error('help-ai', (e as Error).message)

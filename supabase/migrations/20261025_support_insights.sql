@@ -10,11 +10,10 @@ begin
       from support_messages m where m.author_type = 'user' and m.created_at >= since
   ), c as (
     select q.*, case
-        when q.reply like '%[[AULA:%' then 'ia'
-        when q.reply like 'Não achei uma aula%' then 'sem_aula'
-        when q.reply like '%assistente da Academia%' or q.reply like 'Por nada%' then 'cumprimento'
-        when q.reply like 'Chamei a equipe%' or q.reply is null then 'equipe'
-        else 'outro' end as resultado
+        when length(q.body) < 30 and lower(q.body) ~ '^(oi|ola|olá|opa|bom dia|boa tarde|boa noite|obrigad|valeu|tudo bem)' then 'cumprimento'
+        when q.reply is null or q.reply like 'Chamei a equipe%' then 'equipe'
+        when q.reply like '%[[EQUIPE]]%' then 'sem_aula'
+        else 'ia' end as resultado
       from q
   ), w as (
     select word, count(*) n from (
@@ -22,7 +21,7 @@ begin
     ) x where length(word) > 3 and word not in ('como','para','uma','com','que','quero','preciso','posso','fazer','onde','esta','esse','essa','isso','meu','minha','pode','voce','tenho','estou','nao','tambem','sobre','quando','porque','qual','quais','mais','muito','ajuda','duvida','duvidas','sistema','aqui','gostaria','fazer','consigo')
     group by word order by n desc limit 15
   ), a as (
-    select substring(reply from '\[\[AULA:([^\]]+)\]\]') as aula, count(*) n from c where resultado = 'ia' group by 1 order by n desc limit 10
+    select substring(reply from '\[\[AULA:([^\]]+)\]\]') as aula, count(*) n from c where reply like '%[[AULA:%' group by 1 order by n desc limit 10
   )
   select jsonb_build_object(
     'dias', d,

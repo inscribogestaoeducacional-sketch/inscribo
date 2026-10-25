@@ -484,15 +484,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── AJUDA DA ACADEMIA (help-ai): usa a mesma chave do Vercel; limite diário é conferido na função help-ai ──
     if (action === 'wa_help') {
       if (!caller.userId) return res.status(401).json({ error: 'Login obrigatório.' })
-      const { system, messages } = payload as { system?: string; messages?: Array<{ role: string; content: string }> }
+      const { system, context, messages } = payload as { system?: string; context?: string; messages?: Array<{ role: string; content: string }> }
       const msgs = (Array.isArray(messages) ? messages : []).slice(-10)
         .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
         .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }))
-      if (!msgs.length || typeof system !== 'string' || system.length > 30000) return res.status(400).json({ error: 'Pedido inválido.' })
+      if (!msgs.length || typeof system !== 'string' || system.length > 60000) return res.status(400).json({ error: 'Pedido inválido.' })
       const response = await fetch(ANTHROPIC_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: WA_FAST_MODEL, max_tokens: 500, system, messages: msgs }),
+        body: JSON.stringify({
+          model: WA_FAST_MODEL, max_tokens: 700, messages: msgs,
+          // a parte fixa (conhecimento do sistema) fica em cache; só o contexto da pessoa muda
+          system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }, ...(typeof context === 'string' && context ? [{ type: 'text', text: context.slice(0, 1000) }] : [])],
+        }),
       })
       if (!response.ok) return res.status(502).json({ error: `Anthropic ${response.status}` })
       const data = await response.json() as { content?: Array<{ type: string; text?: string }> }
