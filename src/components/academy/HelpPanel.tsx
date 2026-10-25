@@ -51,7 +51,7 @@ export default function HelpPanel() {
   return (
     <div className="m-sheet" role="dialog" aria-modal="true" aria-label="Ajuda" onClick={close}
       style={{ position: 'fixed', inset: 0, zIndex: 1250, background: 'rgba(26,43,74,.38)', display: 'flex', justifyContent: 'flex-end', alignItems: 'stretch' }}>
-      <div data-help-panel onClick={e => e.stopPropagation()} style={{ width: 'min(430px, 100vw)', height: '100%', background: '#F5FAF9', display: 'flex', flexDirection: 'column', boxShadow: '-12px 0 40px rgba(15,23,42,.25)', animation: 'aionHelpIn .25s ease-out' }}>
+      <div data-help-panel onClick={e => e.stopPropagation()} style={{ width: 'min(430px, 100vw)', height: '100dvh', maxHeight: '100%', background: '#F5FAF9', display: 'flex', flexDirection: 'column', boxShadow: '-12px 0 40px rgba(15,23,42,.25)', animation: 'aionHelpIn .25s ease-out' }}>
         <style>{`@keyframes aionHelpIn{from{transform:translateX(30px);opacity:.4}to{transform:none;opacity:1}}`}</style>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'var(--aion-grad)', color: '#fff', flexShrink: 0 }}>
           <span style={{ width: 40, height: 40, borderRadius: 13, background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GraduationCap size={22} color="#fff" /></span>

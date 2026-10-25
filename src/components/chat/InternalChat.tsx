@@ -396,7 +396,7 @@ export default function InternalChat({ onClose, compact = false }: InternalChatP
             )}
           </div>
         )}
-        {!activeColleague && askTab ? <div className="flex-1 min-h-0"><AskAi compact onNavigate={onClose} /></div> : !activeColleague ? listContent : conversationContent(true)}
+        {!activeColleague && askTab ? <div className="flex-1 min-h-0 flex flex-col"><AskAi compact onNavigate={onClose} /></div> : !activeColleague ? listContent : conversationContent(true)}
       </div>
     )
   }

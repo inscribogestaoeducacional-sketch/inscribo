@@ -40,7 +40,7 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
-  const endRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async (id?: string) => {
     if (!user?.id) return
@@ -73,7 +73,7 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
     return () => { supabase.removeChannel(ch) }
   }, [thread?.id, load])
 
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [msgs.length, busy])
+  useEffect(() => { const el = listRef.current; if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight }) }, [msgs.length, busy, thread?.status])
 
   const send = async (raw?: string) => {
     const message = (raw ?? text).trim()
@@ -113,7 +113,7 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
     const mine = m.author_type === 'user'
     const p = mine ? { text: m.body, telas: [] as string[], equipe: false, aula: null as string | null } : parse(m.body)
     return (
-      <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+      <div key={m.id} style={{ display: 'flex', flexShrink: 0, justifyContent: mine ? 'flex-end' : 'flex-start' }}>
         <div style={{ maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: 6, alignItems: mine ? 'flex-end' : 'flex-start' }}>
           {m.author_type === 'staff' && <span style={{ fontSize: 11.5, fontWeight: 800, color: BRAND.primaryDark }}>Equipe Áion</span>}
           <div style={{ padding: '10px 13px', borderRadius: 16, borderBottomRightRadius: mine ? 4 : 16, borderBottomLeftRadius: mine ? 16 : 4, fontSize: 14.5, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
@@ -133,8 +133,8 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: compact ? '#F8FAFC' : 'transparent' }}>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 0', height: '100%', minHeight: 0, overflow: 'hidden', background: compact ? '#F8FAFC' : 'transparent' }}>
+      <div ref={listRef} style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loading ? <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Loader2 size={20} className="animate-spin" color={BRAND.primary} /></div> : (
           <>
             {msgs.length === 0 && (
@@ -153,7 +153,6 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
             {thread && !busy && <button type="button" onClick={resolve} style={{ ...chip, alignSelf: 'center', color: BRAND.success }}><CheckCircle2 size={15} /> Já resolvi, obrigado</button>}
           </>
         )}
-        <div ref={endRef} />
       </div>
       <div style={{ flexShrink: 0, display: 'flex', gap: 8, padding: '10px 12px calc(10px + env(safe-area-inset-bottom))', background: '#fff', borderTop: `1px solid ${BRAND.line}` }}>
         <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} maxLength={2000}
