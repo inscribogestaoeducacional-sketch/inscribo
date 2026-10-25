@@ -19,6 +19,7 @@ export interface ConversationNotification {
   body: string | null
   remote_jid: string | null
   institution_id: string | null
+  url?: string | null
 }
 
 export const CONVERSATION_NOTIFICATION_EVENT = 'aion:conversation-notification'
@@ -46,6 +47,7 @@ export default function ConversationNotifier({ userId }: { userId: string | null
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const openConversation = (n: ConversationNotification) => {
+    if (n.url) { navigate(n.url); return }
     if (!n.remote_jid) { navigate(n.type?.startsWith('visit_') ? '/visits' : '/whatsapp'); return }
     // Mesmo caminho do botão WhatsApp do perfil do contato: o Hub abre a
     // conversa pelo telefone (state.phone), em modo leitura se não for minha.
@@ -89,7 +91,7 @@ export default function ConversationNotifier({ userId }: { userId: string | null
       >
         <div style={{ fontSize: 12, fontWeight: 700, color: '#059669' }}>{toast.title}</div>
         {toast.body && <div style={{ fontSize: 12, color: '#1A2B4A', marginTop: 2 }}>{toast.body}</div>}
-        <div style={{ fontSize: 11, color: '#05907B', fontWeight: 600, marginTop: 4 }}>{toast.type?.startsWith('visit_') && !toast.remote_jid ? 'Abrir visitas' : 'Abrir conversa'}</div>
+        <div style={{ fontSize: 11, color: '#05907B', fontWeight: 600, marginTop: 4 }}>{toast.url ? 'Abrir' : toast.type?.startsWith('visit_') && !toast.remote_jid ? 'Abrir visitas' : 'Abrir conversa'}</div>
       </button>
     </div>
   )

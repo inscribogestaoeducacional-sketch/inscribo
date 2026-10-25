@@ -25,6 +25,7 @@ function Switch({ on, onChange, label, sub }: { on: boolean; onChange: (v: boole
 export default function NotificationPrefs() {
   const [st, setSt] = useState<PushState>('sem_suporte')
   const [prefs, setPrefs] = useState<Prefs | null>(null)
+  const [off, setOff] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
@@ -32,6 +33,7 @@ export default function NotificationPrefs() {
   useEffect(() => {
     refresh()
     supabase.rpc('push_prefs_get').then(({ data }) => { if (data) setPrefs(data as Prefs) })
+    supabase.rpc('push_types_get').then(({ data }) => { if (Array.isArray(data)) setOff(data as string[]) })
     window.addEventListener(PUSH_CHANGED_EVENT, refresh)
     return () => window.removeEventListener(PUSH_CHANGED_EVENT, refresh)
   }, [refresh])
@@ -39,6 +41,11 @@ export default function NotificationPrefs() {
   const save = async (p: Prefs) => {
     setPrefs(p)
     await supabase.rpc('push_prefs_set', { p_new_message: p.new_message, p_transfer: p.transfer, p_daily_reminder: p.daily_reminder })
+  }
+  const setType = async (t: string[], on: boolean) => {
+    const next = on ? off.filter(x => !t.includes(x)) : Array.from(new Set([...off, ...t]))
+    setOff(next)
+    await supabase.rpc('push_types_set', { p_off: next })
   }
   const toggleDevice = async () => {
     setBusy(true); setErr('')
@@ -75,6 +82,12 @@ export default function NotificationPrefs() {
         <div style={{ borderTop: `1px solid ${BRAND.line}`, marginTop: 10, paddingTop: 4 }}>
           <Switch on={prefs.new_message} onChange={v => save({ ...prefs, new_message: v })} label="Mensagem nova de cliente" sub="Quando um cliente escreve numa conversa que é sua" />
           <Switch on={prefs.transfer} onChange={v => save({ ...prefs, transfer: v })} label="Conversa transferida para mim" />
+          <Switch on={!off.includes('lead_new')} onChange={v => setType(['lead_new'], v)} label="Lead novo" sub="Quando chega um lead para você (ou sem responsável, se você é gestor)" />
+          <Switch on={!off.includes('visit_morning')} onChange={v => setType(['visit_morning', 'visit_soon'], v)} label="Visitas do dia" sub="De manhã e logo antes de cada visita" />
+          <Switch on={!off.includes('conversation_taken')} onChange={v => setType(['conversation_taken'], v)} label="Conversa assumida" sub="Quando alguém assume uma conversa sua" />
+          {prefs.can_reminder && (
+            <Switch on={!off.includes('enrolled')} onChange={v => setType(['enrolled'], v)} label="Matrícula confirmada" sub="Quando um lead vira matrícula" />
+          )}
           {prefs.can_reminder && (
             <div style={{ borderTop: `1px solid ${BRAND.line}`, marginTop: 4, paddingTop: 12 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>Lembrete “Dê uma olhadinha na Áion”</div>
