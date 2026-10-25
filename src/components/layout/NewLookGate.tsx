@@ -12,6 +12,8 @@ import { BRAND } from '../../lib/brand'
 import { canPromptInstall, enablePush, isIOS, isStandalone, promptInstall, pushState, pushSupported } from '../../lib/push'
 
 export const NEW_LOOK_RELEASE = 'cara-nova-2026-10'
+// Só passa a aparecer a partir de 26/10/2026 (00h, Fortaleza)
+const START_AT = new Date('2026-10-26T00:00:00-03:00').getTime()
 const CUTOFF = '2026-10-26' // só escolas criadas antes desta data (escolas novas não veem)
 
 type Item = { Icon: React.ElementType; name: string; text: string; gestorOnly?: boolean }
@@ -62,6 +64,7 @@ export default function NewLookGate() {
 
   useEffect(() => {
     if (!user?.id || user.user_type !== 'school_user' || !user.institution_id) return
+    if (Date.now() < START_AT) return
     let alive = true
     supabase.rpc('release_gate', { p_release: NEW_LOOK_RELEASE, p_cutoff: CUTOFF }).then(({ data, error }) => {
       if (alive && !error && data === true) setShow(true)
