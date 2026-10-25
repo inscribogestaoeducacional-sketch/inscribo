@@ -10,6 +10,7 @@ import { supabase } from './lib/supabase'
 // ── Auth ──────────────────────────────────────────────────────────────────
 import LoginForm    from './components/auth/LoginForm'
 import AppWelcome   from './pages/AppWelcome'
+import NewLookGate from './components/layout/NewLookGate'
 import InitialSetup from './components/auth/InitialSetup'
 
 // ── Public pages ──────────────────────────────────────────────────────────
@@ -368,6 +369,7 @@ function AppContent() {
       <Sidebar />
       <div className="h-viewport" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
+        <NewLookGate />
         {isGestor && user.institution_id && <GestorUpdatePopup institutionId={user.institution_id} />}
         <InternalChatWidget />
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>

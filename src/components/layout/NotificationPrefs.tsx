@@ -5,7 +5,10 @@ import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
 import { PUSH_CHANGED_EVENT, disablePush, enablePush, pushState, type PushState } from '../../lib/push'
 
-interface Prefs { new_message: boolean; transfer: boolean; daily_reminder: number; can_reminder: boolean }
+interface Prefs { new_message: boolean; transfer: boolean; daily_reminder: number; can_reminder: boolean; role?: string; quiet_start?: number | null; quiet_end?: number | null }
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i)
+const sel: React.CSSProperties = { padding: '10px 12px', borderRadius: 12, border: `1px solid ${BRAND.line}`, background: BRAND.bg, color: BRAND.ink, fontSize: 14, fontFamily: 'inherit' }
 
 function Switch({ on, onChange, label, sub }: { on: boolean; onChange: (v: boolean) => void; label: string; sub?: string }) {
   return (
@@ -47,6 +50,13 @@ export default function NotificationPrefs() {
     setOff(next)
     await supabase.rpc('push_types_set', { p_off: next })
   }
+  const saveQuiet = async (start: number | null, end: number | null) => {
+    if (!prefs) return
+    // sem início, sem silêncio; com início e sem fim, usa 7h como padrão
+    const e = start == null ? null : (end ?? 7)
+    setPrefs({ ...prefs, quiet_start: start, quiet_end: e })
+    await supabase.rpc('push_quiet_set', { p_start: start, p_end: e })
+  }
   const toggleDevice = async () => {
     setBusy(true); setErr('')
     if (st === 'ativo') await disablePush()
@@ -85,6 +95,13 @@ export default function NotificationPrefs() {
           <Switch on={!off.includes('lead_new')} onChange={v => setType(['lead_new'], v)} label="Lead novo" sub="Quando chega um lead para você (ou sem responsável, se você é gestor)" />
           <Switch on={!off.includes('visit_morning')} onChange={v => setType(['visit_morning', 'visit_soon'], v)} label="Visitas do dia" sub="De manhã e logo antes de cada visita" />
           <Switch on={!off.includes('conversation_taken')} onChange={v => setType(['conversation_taken'], v)} label="Conversa assumida" sub="Quando alguém assume uma conversa sua" />
+          <Switch on={!off.includes('lead_unanswered')} onChange={v => setType(['lead_unanswered'], v)} label="Lead sem resposta" sub="Quando um lead fica mais de 2 horas sem receber mensagem da escola" />
+          {prefs.role === 'admin' && (
+            <Switch on={!off.includes('whatsapp_down')} onChange={v => setType(['whatsapp_down'], v)} label="WhatsApp desconectado" sub="Quando o número da escola cai" />
+          )}
+          {prefs.can_reminder && (
+            <Switch on={!off.includes('exit_survey_answered')} onChange={v => setType(['exit_survey_answered'], v)} label="Pesquisa de saída respondida" sub="Quando uma família responde a pesquisa em Transferências" />
+          )}
           {prefs.can_reminder && (
             <Switch on={!off.includes('enrolled')} onChange={v => setType(['enrolled'], v)} label="Matrícula confirmada" sub="Quando um lead vira matrícula" />
           )}
@@ -103,6 +120,21 @@ export default function NotificationPrefs() {
               </select>
             </div>
           )}
+          <div style={{ borderTop: `1px solid ${BRAND.line}`, marginTop: 4, paddingTop: 12 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>Horário de silêncio</div>
+            <div style={{ fontSize: 12, color: BRAND.muted, margin: '1px 0 8px' }}>Neste período os avisos não tocam no celular; continuam no sino. Horário de Fortaleza.</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <select aria-label="Início do silêncio" value={prefs.quiet_start ?? ''} onChange={e => saveQuiet(e.target.value === '' ? null : Number(e.target.value), prefs.quiet_end ?? null)} style={sel}>
+                <option value="">Sem silêncio</option>
+                {HOURS.map(h => <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>)}
+              </select>
+              <span style={{ fontSize: 13, color: BRAND.muted }}>até</span>
+              <select aria-label="Fim do silêncio" value={prefs.quiet_end ?? ''} disabled={prefs.quiet_start == null} onChange={e => saveQuiet(prefs.quiet_start ?? null, e.target.value === '' ? null : Number(e.target.value))} style={sel}>
+                <option value="">--</option>
+                {HOURS.map(h => <option key={h} value={h}>{String(h).padStart(2, '0')}h</option>)}
+              </select>
+            </div>
+          </div>
         </div>
       )}
     </div>
