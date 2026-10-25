@@ -28,7 +28,7 @@ async function loadLessons(origin: string | null): Promise<Lesson[]> {
   } catch { return [] }
 }
 
-function pick(lessons: Lesson[], question: string, route: string, manager: boolean, admin: boolean): Lesson[] {
+function pick(lessons: Lesson[], question: string, route: string, manager: boolean, admin: boolean): { l: Lesson; s: number }[] {
   const words = norm(question).split(/[^a-z0-9]+/).filter(w => w.length > 2 && !STOP.has(w))
   const ok = lessons.filter(l => (!l.managerOnly || manager) && (!l.adminOnly || admin) && (!l.attendantOnly || !manager))
   return ok.map(l => {
@@ -37,7 +37,7 @@ function pick(lessons: Lesson[], question: string, route: string, manager: boole
     for (const w of words) if (hay.includes(w)) s += norm(l.title).includes(w) ? 4 : 1
     if (route && l.to.split('?')[0] === route) s += 2
     return { l, s }
-  }).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 6).map(x => x.l)
+  }).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 6)
 }
 
 Deno.serve(async (req) => {
@@ -85,7 +85,10 @@ Deno.serve(async (req) => {
   if (used >= DAILY_LIMIT) { await escalate(); return json({ thread_id: threadId, escalated: true, reason: 'limit' }) }
 
   const lessons = await loadLessons(req.headers.get('origin'))
-  const chosen = pick(lessons, message, route, manager, admRole)
+  const scored = pick(lessons, message, route, manager, admRole)
+  // sem aula bem parecida com a pergunta a IA não tenta: chama a equipe (evita resposta inventada)
+  if (!scored.length || scored[0].s < 4) { await escalate(); return json({ thread_id: threadId, escalated: true, reason: 'weak' }) }
+  const chosen = scored.map(x => x.l)
   const knowledge = chosen.map(l => `AULA "${l.title}" (tela: ${l.to})\n${l.summary}\n${l.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}${l.tip ? `\nDica: ${l.tip}` : ''}`).join('\n\n')
 
   const { data: hist } = await admin.from('support_messages').select('author_type, body').eq('thread_id', threadId).order('created_at', { ascending: false }).limit(10)
@@ -120,7 +123,7 @@ ${knowledge || '(nenhuma aula encontrada para esta pergunta)'}`
     const j = await r.json()
     const text: string = String(j.text ?? '').trim()
     if (!text) throw new Error('vazio')
-    await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: text.slice(0, 5900) })
+    await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: (text.slice(0, 5800) + `\n[[AULA:${chosen[0].key}]]`) })
     await admin.from('support_threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId)
     return json({ thread_id: threadId, answer: text })
   } catch (e) {

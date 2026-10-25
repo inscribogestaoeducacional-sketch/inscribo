@@ -21,12 +21,13 @@ const ROUTE_LABEL: Record<string, string> = (() => {
 })()
 
 function parse(body: string) {
-  const telas: string[] = []; let equipe = false
+  const telas: string[] = []; let equipe = false; let aula: string | null = null
   const text = body
     .replace(/\[\[TELA:(\/[a-z0-9\-/]*)\]\]/gi, (_, p) => { if (ROUTE_LABEL[p] && !telas.includes(p)) telas.push(p); return '' })
+    .replace(/\[\[AULA:([a-z0-9_\-.]+)\]\]/gi, (_, k) => { if (LESSONS.some(l => l.key === k)) aula = k; return '' })
     .replace(/\[\[EQUIPE\]\]/g, () => { equipe = true; return '' })
     .trim()
-  return { text, telas, equipe }
+  return { text, telas, equipe, aula: aula as string | null }
 }
 
 export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void; compact?: boolean }) {
@@ -110,7 +111,7 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
 
   const bubble = (m: Msg) => {
     const mine = m.author_type === 'user'
-    const p = mine ? { text: m.body, telas: [] as string[], equipe: false } : parse(m.body)
+    const p = mine ? { text: m.body, telas: [] as string[], equipe: false, aula: null as string | null } : parse(m.body)
     return (
       <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
         <div style={{ maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: 6, alignItems: mine ? 'flex-end' : 'flex-start' }}>
@@ -120,8 +121,15 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
           {p.telas.map(t => (
             <button key={t} type="button" onClick={() => goto(t)} style={chip}><ExternalLink size={14} /> Abrir {ROUTE_LABEL[t]}</button>
           ))}
-          {p.equipe && !escalated && m.id === lastAi?.id && (
-            <button type="button" onClick={callTeam} disabled={busy} style={{ ...chip, background: 'var(--aion-grad)', color: '#fff', border: 'none' }}><LifeBuoy size={14} /> Chamar a equipe</button>
+          {p.aula && (
+            <button type="button" onClick={() => goto(`/academia?aula=${p.aula}`)} style={chip}><ExternalLink size={14} /> Ver a aula: {LESSONS.find(l => l.key === p.aula)?.title}</button>
+          )}
+          {!escalated && m.id === lastAi?.id && !busy && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, color: BRAND.muted, fontWeight: 700 }}>Isso resolveu?</span>
+              <button type="button" onClick={resolve} style={{ ...chip, color: BRAND.success }}><CheckCircle2 size={14} /> Sim, resolveu</button>
+              <button type="button" onClick={callTeam} disabled={busy} style={{ ...chip, background: 'var(--aion-grad)', color: '#fff', border: 'none' }}><LifeBuoy size={14} /> Não, chamar a equipe</button>
+            </div>
           )}
         </div>
       </div>
@@ -146,7 +154,7 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
             {busy && <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: BRAND.muted, fontSize: 13.5 }}><Loader2 size={16} className="animate-spin" /> Pensando…</div>}
             {escalated && <div style={{ padding: '10px 12px', borderRadius: 14, background: BRAND.warnSoft, border: '1px solid #FDE68A', color: '#78350F', fontSize: 13.5, lineHeight: 1.4 }}>A equipe da Áion foi chamada. Você recebe um aviso no celular quando responderem.</div>}
             {err && <div style={{ padding: '10px 12px', borderRadius: 14, background: BRAND.dangerSoft, color: BRAND.danger, fontSize: 13.5 }}>{err}</div>}
-            {thread && !busy && <button type="button" onClick={resolve} style={{ ...chip, alignSelf: 'center', color: BRAND.success }}><CheckCircle2 size={15} /> Já resolvi, obrigado</button>}
+            {thread && !busy && !(lastAi && !escalated) && <button type="button" onClick={resolve} style={{ ...chip, alignSelf: 'center', color: BRAND.success }}><CheckCircle2 size={15} /> Já resolvi, obrigado</button>}
           </>
         )}
         <div ref={endRef} />
