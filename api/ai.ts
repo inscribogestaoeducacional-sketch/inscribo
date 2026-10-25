@@ -481,6 +481,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // ── AJUDA DA ACADEMIA (help-ai): usa a mesma chave do Vercel; limite diário é conferido na função help-ai ──
+    if (action === 'wa_help') {
+      if (!caller.userId) return res.status(401).json({ error: 'Login obrigatório.' })
+      const { system, messages } = payload as { system?: string; messages?: Array<{ role: string; content: string }> }
+      const msgs = (Array.isArray(messages) ? messages : []).slice(-10)
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+        .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }))
+      if (!msgs.length || typeof system !== 'string' || system.length > 30000) return res.status(400).json({ error: 'Pedido inválido.' })
+      const response = await fetch(ANTHROPIC_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: WA_FAST_MODEL, max_tokens: 500, system, messages: msgs }),
+      })
+      if (!response.ok) return res.status(502).json({ error: `Anthropic ${response.status}` })
+      const data = await response.json() as { content?: Array<{ type: string; text?: string }> }
+      return res.json({ text: extractClaudeText(data).trim() })
+    }
+
     // ── WHATSAPP: melhorar texto / resumir conversa (modelo pequeno, limite diário por pessoa) ──
     if (action === 'wa_improve' || action === 'wa_summary') {
       if (!caller.institutionId || !caller.userId) return res.status(401).json({ error: 'Login obrigatório.' })

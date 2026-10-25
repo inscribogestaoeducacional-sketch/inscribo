@@ -1,9 +1,8 @@
 // "Tire suas dúvidas": responde perguntas de uso da Áion Edu com base nas aulas da Academia.
-// Segredos: ANTHROPIC_API_KEY (obrigatório para a IA responder) e ANTHROPIC_WORKSPACE_ID (opcional, vai no cabeçalho anthropic-workspace-id).
-// Sem a chave, a pergunta é gravada e a equipe da Áion é chamada na hora (support_escalate).
+// A IA usa a chave que já existe no Vercel (rota /api/ai, ação wa_help). Se a IA falhar ou passar do limite diário,
+// a pergunta já está gravada e a equipe da Áion é chamada na hora (support_escalate).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const MODEL = 'claude-haiku-4-5-20251001'
 const DAILY_LIMIT = 60
 const CORS = {
   'access-control-allow-origin': '*',
@@ -85,9 +84,6 @@ Deno.serve(async (req) => {
 
   if (used >= DAILY_LIMIT) { await escalate(); return json({ thread_id: threadId, escalated: true, reason: 'limit' }) }
 
-  const key = Deno.env.get('ANTHROPIC_API_KEY')
-  if (!key) { await escalate(); return json({ thread_id: threadId, escalated: true, reason: 'no_key' }) }
-
   const lessons = await loadLessons(req.headers.get('origin'))
   const chosen = pick(lessons, message, route, manager, admRole)
   const knowledge = chosen.map(l => `AULA "${l.title}" (tela: ${l.to})\n${l.summary}\n${l.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}${l.tip ? `\nDica: ${l.tip}` : ''}`).join('\n\n')
@@ -114,16 +110,15 @@ AULAS:
 ${knowledge || '(nenhuma aula encontrada para esta pergunta)'}`
 
   try {
-    const headers: Record<string, string> = { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' }
-    const ws = Deno.env.get('ANTHROPIC_WORKSPACE_ID')
-    if (ws) headers['anthropic-workspace-id'] = ws
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', headers, signal: AbortSignal.timeout(25000),
-      body: JSON.stringify({ model: MODEL, max_tokens: 500, system, messages: msgs.length ? msgs : [{ role: 'user', content: message }] }),
+    // a chave da IA fica no Vercel (a mesma dos relatórios); a função chama /api/ai com a sessão da pessoa
+    const r = await fetch('https://app.aionedu.com.br/api/ai', {
+      method: 'POST', signal: AbortSignal.timeout(25000),
+      headers: { 'content-type': 'application/json', authorization: authH },
+      body: JSON.stringify({ action: 'wa_help', payload: { system, messages: msgs.length ? msgs : [{ role: 'user', content: message }] } }),
     })
-    if (!r.ok) throw new Error(`anthropic ${r.status}`)
+    if (!r.ok) throw new Error(`ai ${r.status}`)
     const j = await r.json()
-    const text: string = (j.content ?? []).map((c: { text?: string }) => c.text || '').join('').trim()
+    const text: string = String(j.text ?? '').trim()
     if (!text) throw new Error('vazio')
     await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: text.slice(0, 5900) })
     await admin.from('support_threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId)
