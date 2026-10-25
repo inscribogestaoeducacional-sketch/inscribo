@@ -1,4 +1,5 @@
 import PageHeader from '../../components/ui/PageHeader'
+import { PillTabs } from '../../components/mobile/PillTabs'
 import React, { useState, useEffect, useRef } from 'react'
 import {
   ArrowRightLeft, Plus, Copy, ExternalLink, Sparkles, Eye,
@@ -465,7 +466,7 @@ export default function GestorTransfers() {
   // ── Mobile early return ───────────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#F5FAF9' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9' }}>
 
         {/* Toast */}
         {toast && (
@@ -474,73 +475,126 @@ export default function GestorTransfers() {
           </div>
         )}
 
-        {/* Header */}
-        <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ArrowRightLeft size={16} color="#05907B" />
-            </div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Transferências</h1>
-            <span style={{ background: '#E6F7F5', color: '#05907B', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{total}</span>
-          </div>
-        </div>
+        <div style={{ padding: '12px 12px 100px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <PageHeader compact icon={ArrowRightLeft} title="Transferências" subtitle={`${total} registradas`} />
 
-        {/* Transfer list */}
-        <div style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}>
-          {loading ? (
+          {activeTab === 'active' && <SaidasActivesoft institutionId={institutionId} onRegister={(name, grade) => { setForm({ ...EMPTY_FORM, studentName: name, grade }); setEditingTransfer(null); setShowNewModal(true) }} />}
+
+          <PillTabs tabs={[['active', `Ativos (${transfers.length})`], ['deleted', `Excluídos (${deletedTransfers.length})`], ['report', 'Relatório']]}
+            value={activeTab} onChange={id => setActiveTab(id as 'active' | 'deleted' | 'report')} />
+
+          {activeTab === 'report' && <SaidasReport institutionId={institutionId} institutionName={user?.institution_name ?? ''} defaultYear={new Date().getFullYear()} />}
+
+          {activeTab === 'active' && !loading && (
+            <div className="aion-snap" style={{ display: 'grid', gap: 10 }}>
+              <KpiCard label="Total"               value={fmt(total)}         icon={<ArrowRightLeft size={18} color="#DC2626" />} bg="#FEE2E2" />
+              <KpiCard label="Este mês"            value={fmt(thisMonth)}     icon={<Clock size={18} color="#D97706" />}          bg="#FEF3C7" />
+              <KpiCard label="Aguardando pesquisa" value={fmt(pending)}       icon={<AlertTriangle size={18} color="#64748B" />}  bg="#F1F5F9" />
+              <KpiCard label="Com diagnóstico IA"  value={fmt(withDiagnosis)} icon={<Sparkles size={18} color="#8B5CF6" />}       bg="#EDE9FE" />
+            </div>
+          )}
+
+          {activeTab === 'active' && (loading ? (
             <div style={{ padding: 40, textAlign: 'center' }}><p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando...</p></div>
           ) : transfers.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center' }}><p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhuma transferência registrada</p></div>
           ) : transfers.map(t => {
             const st = getStatusInfo(t)
             const reasonCfg = t.reason_category ? REASON_MAP[t.reason_category] : null
-            const diag = parseDiagnosis(t.ai_diagnosis)
+            const isCancelled = t.status === 'cancelled'
+            const isGenerating = generatingId === t.id
             return (
-              <div key={t.id} style={{ padding: '14px 16px', background: '#fff', borderBottom: '1px solid #F1F5F9' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.student_name}</p>
-                  <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 999, fontWeight: 600, flexShrink: 0, marginLeft: 8, background: st.bg, color: st.color }}>{st.label}</span>
+              <div key={t.id} className="ld-card" style={{ padding: '14px', background: '#fff', border: '1px solid #E3E8F0', borderRadius: 18, boxShadow: '0 1px 2px rgba(26,43,74,.04)', opacity: isCancelled ? 0.7 : 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, flex: 1, minWidth: 0 }}>{t.student_name}</p>
+                  <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 999, fontWeight: 600, flexShrink: 0, background: st.bg, color: st.color }}>{st.label}</span>
+                  <DropdownMenu
+                    isOpen={openDropdown === t.id}
+                    onToggle={e => { e.stopPropagation(); setOpenDropdown(openDropdown === t.id ? null : t.id) }}
+                    items={[
+                      { icon: <Pencil size={13} />, label: 'Editar', onClick: () => openEdit(t) },
+                      { icon: <History size={13} />, label: 'Ver histórico', onClick: () => setAuditTransferId(t.id) },
+                      ...(isAdmin ? [{ icon: <Trash2 size={13} />, label: 'Excluir', onClick: () => setDeleteId(t.id), danger: true }] : []),
+                    ]}
+                  />
                 </div>
                 <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 4px' }}>{t.course_grade} · {new Date(t.transfer_date).toLocaleDateString('pt-BR')}</p>
                 {t.stated_reason && <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 8px' }}>{t.stated_reason}</p>}
+                {t.status === 'retained' && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 700, background: '#dcfce7', color: '#16a34a', display: 'inline-block', marginRight: 6, marginBottom: 8 }}>Retido ✓</span>}
                 {reasonCfg && (
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 600, background: reasonCfg.bg, color: reasonCfg.color, display: 'inline-block', marginBottom: 8 }}>{reasonCfg.label}</span>
                 )}
-                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  {!t.survey_token && isAdmin && (
-                    <button onClick={() => handleGenerateLink(t)}
-                      style={{ flex: 1, padding: '8px', borderRadius: 8, background: '#EDE9FE', color: '#7C3AED', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
-                      Gerar link pesquisa
-                    </button>
-                  )}
-                  {t.survey_token && !t.ai_diagnosis && (
-                    <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/survey/${t.survey_token}`); showToast('Link copiado!') }}
-                      style={{ flex: 1, padding: '8px', borderRadius: 8, background: '#FEF3C7', color: '#D97706', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
-                      Copiar link
-                    </button>
-                  )}
-                  {!t.survey_responses && t.status !== 'cancelled' && (
-                    <button onClick={() => openSend(t)}
-                      style={{ flex: 1, padding: '8px', borderRadius: 8, background: '#D1FAE5', color: '#047857', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
-                      Enviar pelo WhatsApp
-                    </button>
-                  )}
-                  {t.ai_diagnosis && (
-                    <button onClick={() => setDiagnosisTransfer(t)}
-                      style={{ flex: 1, padding: '8px', borderRadius: 8, background: '#D1FAE5', color: '#065F46', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
-                      Ver diagnóstico
-                    </button>
-                  )}
-                </div>
+                {!isCancelled && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                    {!t.survey_token && isAdmin && (
+                      <button onClick={() => handleGenerateLink(t)} className="aion-tap"
+                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#EDE9FE', color: '#7C3AED', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                        Gerar link pesquisa
+                      </button>
+                    )}
+                    {t.survey_token && !t.survey_responses && (
+                      <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/survey/${t.survey_token}`); showToast('Link copiado!') }} className="aion-tap"
+                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#FEF3C7', color: '#D97706', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                        Copiar link
+                      </button>
+                    )}
+                    {!t.survey_responses && (
+                      <button onClick={() => openSend(t)} className="aion-tap"
+                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#D1FAE5', color: '#047857', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                        Enviar pelo WhatsApp
+                      </button>
+                    )}
+                    {t.survey_responses && !t.ai_diagnosis && isAdmin && (
+                      <button onClick={() => handleGenerateDiagnosis(t)} disabled={isGenerating} className="aion-tap"
+                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#EDE9FE', color: '#7C3AED', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44, opacity: isGenerating ? 0.6 : 1 }}>
+                        {isGenerating ? 'Gerando...' : 'Gerar diagnóstico IA'}
+                      </button>
+                    )}
+                    {t.ai_diagnosis && (
+                      <button onClick={() => setDiagnosisTransfer(t)} className="aion-tap"
+                        style={{ flex: '1 1 140px', padding: '8px', borderRadius: 10, background: '#D1FAE5', color: '#065F46', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                        Ver diagnóstico
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )
-          })}
+          }))}
+
+          {activeTab === 'deleted' && (
+            <>
+              {deletedTransfers.length > 0 && isAdmin && (
+                <button onClick={handlePermanentDeleteAll} className="aion-tap"
+                  style={{ padding: '10px', borderRadius: 12, border: '1px solid #fecaca', background: '#fff5f5', fontSize: 13, fontWeight: 600, color: '#dc2626', cursor: 'pointer', minHeight: 44 }}>
+                  Apagar todos definitivamente
+                </button>
+              )}
+              {deletedTransfers.length === 0 ? (
+                <div style={{ padding: 40, textAlign: 'center' }}><p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhuma transferência excluída.</p></div>
+              ) : deletedTransfers.map(t => (
+                <div key={t.id} style={{ padding: 14, background: '#fff', border: '1px solid #E3E8F0', borderRadius: 18, opacity: 0.85 }}>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{t.student_name}</p>
+                  <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0' }}>{t.course_grade} · {new Date(t.transfer_date).toLocaleDateString('pt-BR')}</p>
+                  <p style={{ fontSize: 12, color: '#94A3B8', margin: '0 0 8px' }}>
+                    {t.deleted_by && <b>{t.deleted_by}</b>}{t.deleted_at && ` em ${new Date(t.deleted_at).toLocaleDateString('pt-BR')}`}
+                  </p>
+                  {isAdmin && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => handleRestore(t.id)} className="aion-tap" style={{ flex: 1, minHeight: 44, borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#0f766e', cursor: 'pointer' }}>Restaurar</button>
+                      <button onClick={() => handlePermanentDelete(t.id)} className="aion-tap" style={{ flex: 1, minHeight: 44, borderRadius: 10, border: '1px solid #fecaca', background: '#fff5f5', fontSize: 12, fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>Apagar de vez</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         {/* FAB */}
         {isAdmin && (
-          <button onClick={() => setShowNewModal(true)}
-            style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={() => { setForm(EMPTY_FORM); setEditingTransfer(null); setShowNewModal(true) }} className="aion-fab" aria-label="Nova transferência"
+            style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Plus size={26} />
           </button>
         )}
