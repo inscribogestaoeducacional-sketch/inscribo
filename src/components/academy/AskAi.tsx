@@ -125,11 +125,7 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
             <button type="button" onClick={() => goto(`/academia?aula=${p.aula}`)} style={chip}><ExternalLink size={14} /> Ver a aula: {LESSONS.find(l => l.key === p.aula)?.title}</button>
           )}
           {!escalated && m.id === lastAi?.id && !busy && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, color: BRAND.muted, fontWeight: 700 }}>Isso resolveu?</span>
-              <button type="button" onClick={resolve} style={{ ...chip, color: BRAND.success }}><CheckCircle2 size={14} /> Sim, resolveu</button>
-              <button type="button" onClick={callTeam} disabled={busy} style={{ ...chip, background: 'var(--aion-grad)', color: '#fff', border: 'none' }}><LifeBuoy size={14} /> Não, chamar a equipe</button>
-            </div>
+            <button type="button" onClick={callTeam} disabled={busy} style={{ ...chip, background: 'transparent', border: 'none', color: BRAND.muted, fontWeight: 700, fontSize: 13, minHeight: 30, padding: '0 4px', textDecoration: 'underline' }}><LifeBuoy size={13} /> Falar com a equipe da Áion</button>
           )}
         </div>
       </div>
@@ -154,7 +150,7 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
             {busy && <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: BRAND.muted, fontSize: 13.5 }}><Loader2 size={16} className="animate-spin" /> Pensando…</div>}
             {escalated && <div style={{ padding: '10px 12px', borderRadius: 14, background: BRAND.warnSoft, border: '1px solid #FDE68A', color: '#78350F', fontSize: 13.5, lineHeight: 1.4 }}>A equipe da Áion foi chamada. Você recebe um aviso no celular quando responderem.</div>}
             {err && <div style={{ padding: '10px 12px', borderRadius: 14, background: BRAND.dangerSoft, color: BRAND.danger, fontSize: 13.5 }}>{err}</div>}
-            {thread && !busy && !(lastAi && !escalated) && <button type="button" onClick={resolve} style={{ ...chip, alignSelf: 'center', color: BRAND.success }}><CheckCircle2 size={15} /> Já resolvi, obrigado</button>}
+            {thread && !busy && <button type="button" onClick={resolve} style={{ ...chip, alignSelf: 'center', color: BRAND.success }}><CheckCircle2 size={15} /> Já resolvi, obrigado</button>}
           </>
         )}
         <div ref={endRef} />
