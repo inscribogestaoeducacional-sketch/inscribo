@@ -124,7 +124,7 @@ export default function AskAi({ onNavigate, compact }: { onNavigate?: () => void
           {p.aula && (
             <button type="button" onClick={() => goto(`/academia?aula=${p.aula}`)} style={chip}><ExternalLink size={14} /> Ver a aula: {LESSONS.find(l => l.key === p.aula)?.title}</button>
           )}
-          {!escalated && m.id === lastAi?.id && !busy && (
+          {!escalated && m.id === lastAi?.id && !busy && msgs.filter(x => x.author_type === 'user').length >= 2 && (
             <button type="button" onClick={callTeam} disabled={busy} style={{ ...chip, background: 'transparent', border: 'none', color: BRAND.muted, fontWeight: 700, fontSize: 13, minHeight: 30, padding: '0 4px', textDecoration: 'underline' }}><LifeBuoy size={13} /> Falar com a equipe da Áion</button>
           )}
         </div>

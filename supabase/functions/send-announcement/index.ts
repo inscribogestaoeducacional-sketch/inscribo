@@ -57,8 +57,10 @@ async function brevo(key: string, to: string, name: string) {
 
 Deno.serve(async (req) => {
   // só quem tem a chave de serviço (o banco) pode disparar
-  const svc = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (!svc || req.headers.get('authorization') !== `Bearer ${svc}`) return new Response('forbidden', { status: 403 })
+  // (o gateway já conferiu a assinatura do JWT; aqui exigimos que seja o papel service_role)
+  let role = ''
+  try { role = JSON.parse(atob((req.headers.get('authorization') || '').replace('Bearer ', '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).role } catch { /* nada */ }
+  if (role !== 'service_role') return new Response('forbidden', { status: 403 })
   const key = Deno.env.get('BREVO_API_KEY')
   if (!key) return new Response(JSON.stringify({ error: 'BREVO_API_KEY ausente' }), { status: 500 })
   const { mode, to } = await req.json().catch(() => ({})) as { mode?: string; to?: string }
