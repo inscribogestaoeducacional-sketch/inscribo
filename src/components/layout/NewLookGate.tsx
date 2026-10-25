@@ -13,7 +13,7 @@ import { canPromptInstall, enablePush, isIOS, isStandalone, promptInstall, pushS
 
 export const NEW_LOOK_RELEASE = 'cara-nova-2026-10'
 // Só passa a aparecer a partir de 26/10/2026 (00h, Fortaleza)
-const START_AT = new Date('2026-10-26T00:00:00-03:00').getTime()
+const START_AT = new Date('2026-10-25T00:00:00-03:00').getTime()
 // Contas da equipe Áion que veem o comunicado já hoje, para teste (confirmação só local, não grava no banco)
 const TEST_EMAILS = ['victor.patos52@gmail.com', 'victoralmeida.a@hotmail.com', 'victorprojeto90@gmail.com', 'victorcema@aion.com', 'admin@inscribo.com']
 const isStaff = (u?: { user_type?: string; email?: string } | null) =>
