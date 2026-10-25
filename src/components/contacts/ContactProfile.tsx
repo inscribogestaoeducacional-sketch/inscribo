@@ -716,23 +716,24 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   ].filter(Boolean) as string[] : []
 
   const tabs = [
-    { key: 'dados',         label: 'Dados',        icon: <User           size={13} /> },
-    { key: 'historico',     label: 'Histórico',    icon: <Clock          size={13} /> },
-    { key: 'notas',         label: 'Anotações',    icon: <FileText       size={13} /> },
-    { key: 'transferencia', label: 'Transferência', icon: <ArrowRightLeft size={13} /> },
-    { key: 'alteracoes',    label: 'Alterações',   icon: <History        size={13} /> },
+    { key: 'dados',         label: 'Dados',        icon: <User           size={15} /> },
+    { key: 'historico',     label: 'Histórico',    icon: <Clock          size={15} /> },
+    { key: 'notas',         label: 'Anotações',    icon: <FileText       size={15} /> },
+    { key: 'transferencia', label: 'Transferência', icon: <ArrowRightLeft size={15} /> },
+    { key: 'alteracoes',    label: 'Alterações',   icon: <History        size={15} /> },
   ] as const
 
   // ── Render ────────────────────────────────────────────────
   return (
     <div
+      className="m-sheet"
       style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
 
         {/* ── Header ──────────────────────────────────────── */}
-        <div style={{ background: `linear-gradient(135deg, ${headerBg1} 0%, ${headerBg2} 100%)`, padding: '20px 24px 16px', flexShrink: 0, position: 'relative' }}>
+        <div style={{ background: `linear-gradient(135deg, ${headerBg1} 0%, ${headerBg2} 100%)`, padding: '20px 24px 16px', flexShrink: 0, position: 'relative', paddingTop: 'max(20px, env(safe-area-inset-top))' }}>
           <button onClick={onClose}
             style={{ position: 'absolute', top: 14, right: 14, background: 'rgba(0,0,0,0.06)', border: 'none', borderRadius: 10, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748B' }}>
             <X size={16} />
@@ -788,19 +789,21 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
         </div>
 
         {/* ── Tabs ───────────────────────────────────────── */}
-        <div style={{ display: 'flex', borderBottom: '1px solid #F1F5F9', background: '#fff', flexShrink: 0, overflowX: 'auto' }}>
-          {tabs.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5, padding: '10px 14px',
-                border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
-                background: 'transparent', transition: 'all 0.15s',
-                color:         tab === t.key ? '#05907B' : '#94A3B8',
-                borderBottom:  tab === t.key ? '2px solid #05907B' : '2px solid transparent',
-              }}>
-              {t.icon} {t.label}
-            </button>
-          ))}
+        <div className="aion-hscroll" role="tablist" style={{ display: 'flex', gap: 8, padding: '10px 14px', borderBottom: '1px solid #F1F5F9', background: '#fff', flexShrink: 0, overflowX: 'auto' }}>
+          {tabs.map(t => {
+            const on = tab === t.key
+            return (
+              <button key={t.key} type="button" role="tab" aria-selected={on} onClick={() => setTab(t.key)}
+                style={{
+                  flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 999,
+                  border: on ? 'none' : '1px solid #E3E8F0', cursor: 'pointer', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', fontFamily: 'inherit',
+                  background: on ? 'var(--aion-grad, #05907B)' : '#fff', color: on ? '#fff' : '#5B6B86',
+                  boxShadow: on ? '0 8px 18px -10px rgba(0,122,110,.8)' : 'none',
+                }}>
+                {t.icon} {t.label}
+              </button>
+            )
+          })}
         </div>
 
         {/* ── Content ─────────────────────────────────────── */}

@@ -444,9 +444,9 @@ function FilterDrawer(props: FilterDrawerProps) {
   const selCls: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', color: '#1A2B4A', background: '#fff', boxSizing: 'border-box' }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1050, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(2px)' }} />
-      <div style={{ position: 'relative', width: '100%', maxWidth: 340, height: '100%', background: '#fff', boxShadow: '-8px 0 32px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1050, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '72px 12px 12px' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.35)', backdropFilter: 'blur(2px)' }} />
+      <div style={{ position: 'relative', width: '100%', maxWidth: 400, maxHeight: 'calc(100dvh - 90px)', background: '#fff', borderRadius: 20, border: '1px solid #E3E8F0', boxShadow: '0 16px 48px rgba(15,23,42,0.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <SlidersHorizontal style={{ width: 16, height: 16, color: '#1A2B4A' }} />

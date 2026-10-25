@@ -459,3 +459,12 @@ main table tbody tr:last-child td { border-bottom: none; }
   .lead-modal * { min-width: 0 }
   .lead-modal-body { padding: 16px 14px 24px !important; overflow-x: hidden !important }
 }
+
+/* Janela em tela cheia no celular (padrão para qualquer modal): <div class="m-sheet" overlay><div painel>… */
+@media (max-width: 767px) {
+  .m-sheet { padding: 0 !important; align-items: stretch !important; justify-content: stretch !important }
+  .m-sheet > div { max-width: 100% !important; width: 100% !important; height: 100% !important; max-height: 100% !important; border-radius: 0 !important; border: none !important; overflow-y: auto }
+  .m-sheet [style*="grid-template-columns"] { grid-template-columns: 1fr !important }
+  .m-sheet input, .m-sheet select, .m-sheet textarea { font-size: 16px !important; max-width: 100% !important }
+  .m-sheet * { min-width: 0 }
+}

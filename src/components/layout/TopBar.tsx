@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Network, ChevronDown, MessageSquare } from 'lucide-react'
+import { Network, ChevronDown, MessageSquare, HelpCircle, GraduationCap } from 'lucide-react'
 import NotificationBell from './NotificationBell'
 import ConversationNotifier from './ConversationNotifier'
 import UserMenu from './UserMenu'
@@ -73,7 +73,7 @@ export default function TopBar() {
   const goSearch = () => { const q = search.trim(); if (q) { navigate(`/contacts?search=${encodeURIComponent(q)}`); setSearch('') } }
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
-  const [searchOpen, setSearchOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [teamUnread, setTeamUnread] = useState(0)
   useEffect(() => {
     const h = (e: Event) => setTeamUnread((e as CustomEvent<number>).detail || 0)
@@ -104,22 +104,29 @@ export default function TopBar() {
       display: 'flex', alignItems: 'center',
       padding: '0 16px', gap: 12, flexShrink: 0, position: 'relative',
     }}>
-      {/* Celular: logo da Áion à esquerda e busca só como lupa (abre ao tocar) */}
+      {/* Celular: logo da Áion à esquerda e ajuda (?) à direita */}
       {isMobile && (
         <>
           <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 34, width: 'auto', maxWidth: 150, objectFit: 'contain', flexShrink: 1, minWidth: 0 }} />
-          <button type="button" aria-label="Buscar contato" className="aion-tap" onClick={() => setSearchOpen(true)}
+          <button type="button" aria-label="Ajuda" className="aion-tap" onClick={() => setHelpOpen(true)}
             style={{ marginLeft: 'auto', width: 38, height: 38, borderRadius: 12, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5" /><path d="m21 21-4.35-4.35" /></svg>
+            <HelpCircle size={19} />
           </button>
-          {searchOpen && (
-            <div style={{ position: 'absolute', inset: 0, zIndex: 5, background: '#fff', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', animation: 'aionSearchIn .22s ease-out' }}>
-              <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { goSearch(); setSearchOpen(false) } }}
-                placeholder="Buscar contato por nome ou telefone"
-                style={{ flex: 1, minWidth: 0, height: 40, padding: '0 16px', background: '#F0FDFB', border: '1.5px solid #05907B', borderRadius: 9999, fontSize: 14, color: '#1A2B4A', outline: 'none' }} />
-              <button type="button" onClick={() => { setSearchOpen(false); setSearch('') }} style={{ border: 'none', background: 'none', color: '#05907B', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
-            </div>
+          {helpOpen && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(15,23,42,.35)' }} onClick={() => setHelpOpen(false)} />
+              <div style={{ position: 'fixed', left: 12, right: 12, top: 66, zIndex: 61, background: '#fff', borderRadius: 18, border: '1px solid #E3E8F0', boxShadow: '0 16px 48px rgba(15,23,42,.22)', padding: 18, animation: 'aionSearchIn .2s ease-out' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 12, background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GraduationCap size={20} /></div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#1A2B4A' }}>Academia Áion Edu</div>
+                    <div style={{ fontSize: 12, color: '#64748B' }}>Em breve</div>
+                  </div>
+                </div>
+                <p style={{ fontSize: 13.5, lineHeight: 1.5, color: '#475569', margin: '0 0 14px' }}>Aqui vão ficar os tutoriais em vídeo e passo a passo de cada tela. Enquanto isso, fale com a gente pelo WhatsApp que ajudamos você.</p>
+                <button type="button" onClick={() => setHelpOpen(false)} style={{ width: '100%', height: 44, borderRadius: 12, border: 'none', background: '#05907B', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Entendi</button>
+              </div>
+            </>
           )}
         </>
       )}

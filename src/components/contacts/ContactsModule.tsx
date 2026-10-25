@@ -1352,6 +1352,20 @@ export default function ContactsModule() {
         {newContactModal}
         {zoomModal}
         {profileModal}
+        {showDuplicates && (
+          <DuplicateContactsModal
+            institutionId={institutionId}
+            currentUserId={user?.id || null}
+            onClose={() => setShowDuplicates(false)}
+            onMerged={() => { load({ reset: true }); refreshKpiCounts() }}
+          />
+        )}
+        {showCustomFields && <CustomFieldsAdminModal institutionId={institutionId} onClose={() => setShowCustomFields(false)} />}
+        {toast && (
+          <div style={{ position: 'fixed', bottom: 96, left: 16, right: 16, zIndex: 1300, background: toast.ok ? '#1A2B4A' : '#DC2626', color: '#fff', padding: '12px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {toast.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}{toast.msg}
+          </div>
+        )}
       </>
     )
   }

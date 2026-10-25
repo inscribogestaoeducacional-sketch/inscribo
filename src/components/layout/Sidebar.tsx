@@ -154,7 +154,7 @@ export default function Sidebar() {
     const mine = (myDock || []).map(id => choices.find(e => e.path === id)).filter(Boolean) as NavItem[]
     const picked = mine.length ? mine.slice(0, slots) : suggested
     const isAct = (e: NavItem) => location.pathname === e.path || location.pathname.startsWith(e.path + '/')
-    const SHORT: Record<string, string> = { '/campanha': 'Campanha', '/base-alunos': 'Alunos', '/transferencias': 'Transf.', '/transmissoes': 'Envios' }
+    const SHORT: Record<string, string> = { '/campanha': 'Campanha', '/base-alunos': 'Alunos', '/transferencias': 'Transf.', '/transmissoes': 'Transmissões' }
     const label = (e: NavItem) => SHORT[e.path] || e.label
     const go = (to: string) => { setMobileOpen(false); if (to !== location.pathname + location.search) goTo(navigate, to) }
     const onBar = (e: NavItem) => picked.includes(e) || e === wa
