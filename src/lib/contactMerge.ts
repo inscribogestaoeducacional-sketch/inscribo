@@ -64,12 +64,21 @@ export function decideSurvivor(contacts: DupContactRow[], hasConversation: Recor
 // instituição, já com has_conversation calculado e a sugestão de sobrevivente
 // — exclui grupos marcados como "ignorar" (whatsapp_contacts_duplicate_ignore).
 export async function findDuplicateGroups(institutionId: string): Promise<DupGroup[]> {
-  const { data: contacts, error } = await supabase
-    .from('whatsapp_contacts')
-    .select('id, institution_id, phone, name, tags, lead_id, type, last_seen_at, created_at')
-    .eq('institution_id', institutionId)
-  if (error) throw error
-  if (!contacts?.length) return []
+  // O Supabase devolve no máximo 1000 linhas por consulta: pagina até acabar
+  // (antes só olhava os 1000 primeiros e deixava de ver duplicados de escolas grandes).
+  const contacts: DupContactRow[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data: page, error } = await supabase
+      .from('whatsapp_contacts')
+      .select('id, institution_id, phone, name, tags, lead_id, type, last_seen_at, created_at')
+      .eq('institution_id', institutionId)
+      .order('id')
+      .range(from, from + 999)
+    if (error) throw error
+    contacts.push(...((page || []) as DupContactRow[]))
+    if (!page || page.length < 1000) break
+  }
+  if (!contacts.length) return []
 
   const byPhone = new Map<string, DupContactRow[]>()
   for (const c of contacts as DupContactRow[]) {
@@ -89,11 +98,17 @@ export async function findDuplicateGroups(institutionId: string): Promise<DupGro
     .eq('institution_id', institutionId)
   const ignoredSet = new Set((ignored || []).map(r => r.norm_phone))
 
-  const { data: convs } = await supabase
-    .from('whatsapp_conversations')
-    .select('remote_jid')
-    .eq('institution_id', institutionId)
-  const convPhones = new Set((convs || []).map(c => (c.remote_jid || '').split('@')[0]))
+  const convPhones = new Set<string>()
+  for (let from = 0; ; from += 1000) {
+    const { data: page } = await supabase
+      .from('whatsapp_conversations')
+      .select('remote_jid')
+      .eq('institution_id', institutionId)
+      .order('id')
+      .range(from, from + 999)
+    for (const c of page || []) convPhones.add((c.remote_jid || '').split('@')[0])
+    if (!page || page.length < 1000) break
+  }
 
   const groups: DupGroup[] = []
   for (const [normPhone, rows] of candidateGroups) {
