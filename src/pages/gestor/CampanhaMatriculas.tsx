@@ -21,6 +21,7 @@ import { BRAND, SHADOW } from '../../lib/brand'
 import { applyCampaignCycle } from '../../lib/campaignApply'
 import { aiFetch } from '../../lib/authHeaders'
 import { NovatosTab, RematriculaTab } from '../../components/campanha/NovatosRematricula'
+import RematriculaManual, { useManualReenroll } from '../../components/campanha/RematriculaManual'
 import Investimento from '../../components/campanha/Investimento'
 import FunilCampanha from '../../components/campanha/FunilCampanha'
 import Matriculometro from '../../components/campanha/Matriculometro'
@@ -312,13 +313,19 @@ export default function CampanhaMatriculas() {
     } finally { setGenBusy(false) }
   }
 
+  // ── rematrícula lançada à mão (só escola sem integração)
+  const manualOn = !!cycle && !loading && !(info?.sources?.length)
+  const manualMonths = useMemo(() => (ed?.months ?? []).map(m => m.m), [ed?.months])
+  const manual = useManualReenroll(institutionId || undefined, targetYear, manualMonths, manualOn)
+  const manualTotal = manualOn && manual.ok ? manual.computed.total : 0
+
   // ── andamento real do ano da campanha (vem da Base de alunos)
   const prog = useMemo(() => {
     const s = (k: keyof PanelRow) => panel.reduce((a, r) => a + ((r[k] as number) || 0), 0)
     const preCounts = !!info?.pre_counts
     const reMat = s('reenrolled') + s('reenrolled_declared'), novos = s('new_students') + s('returning_students'), pre = s('pre_enrolled')
-    return { reMat, novos, pre: preCounts ? 0 : pre, pending: s('pending'), left: s('left_school'), grads: s('graduates'), done: reMat + novos + (preCounts ? pre : 0) }
-  }, [panel, info])
+    return { reMat: reMat + manualTotal, novos, pre: preCounts ? 0 : pre, pending: s('pending'), left: s('left_school'), grads: s('graduates'), done: reMat + manualTotal + novos + (preCounts ? pre : 0) }
+  }, [panel, info, manualTotal])
   const goalTotal = cycle ? (cycle.goal_total ?? ((cycle.goal_reenrollments ?? 0) + (cycle.target_new_students ?? 0))) : 0
   const dayInfo = useMemo(() => {
     if (!cycle?.start_date || !cycle?.end_date) return null
@@ -610,6 +617,8 @@ export default function CampanhaMatriculas() {
 
       {!loading && cycle && tab === 'rematricula' && (
         <RematriculaTab goal={cycle.goal_reenrollments ?? 0} done={prog.reMat} months={ed?.months ?? []} hist={hist?.current ?? null}
+          manualByMonth={manualOn && manual.ok ? manual.computed.byMonth : undefined}
+          manualCard={manualOn && ed && institutionId ? <RematriculaManual institutionId={institutionId} year={targetYear} months={ed.months} scope={manual.scope} basis={manual.basis} entries={manual.entries} ok={manual.ok} computed={manual.computed} onSaved={manual.reload} /> : undefined}
           pre={prog.pre || panel.reduce((a, r) => a + (r.pre_enrolled || 0), 0)} pending={prog.pending}
           bySegment={panel.map(r => ({ name: r.grade_name, pending: r.pending }))} />
       )}

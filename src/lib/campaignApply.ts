@@ -136,13 +136,7 @@ export async function applyCampaignCycle(params: ApplyCampaignCycleParams): Prom
     )
     if (fmErr) throw fmErr
 
-    if ((month.enrollments_returning ?? 0) > 0) {
-      const { error: mrErr } = await supabase.from('monthly_reenrollments').upsert(
-        { institution_id: institutionId, period, target: month.enrollments_returning ?? 0, base_total: currentStudents },
-        { onConflict: 'institution_id,period', ignoreDuplicates: false }
-      )
-      if (mrErr) throw mrErr
-    }
+    // (a meta de rematrícula do mês fica em funnel_metrics/campaign_cycles; a tabela monthly_reenrollments não existe mais)
 
     const { error: mcErr } = await supabase.from('marketing_campaigns').upsert(
       { institution_id: institutionId, month_year: cm ? `${cm.month}-${cm.year}` : `${month.month}-${month.year}`, cpa_target: month.cpa_target },

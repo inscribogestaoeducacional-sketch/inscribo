@@ -1,3 +1,4 @@
+import { computeManual } from '../../components/campanha/RematriculaManual'
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -480,13 +481,19 @@ export default function GestorHome() {
             .is('cancelled_at', null)
             .gte('enrollment_date', `${chartActive.year}-01-01T00:00:00-03:00`)
             .lt('enrollment_date', `${chartActive.year + 1}-01-01T00:00:00-03:00`),
-          supabase.from('monthly_reenrollments').select('period, confirmed')
-            .eq('institution_id', institutionId)
-            .gte('period', `${chartActive.year}-01`)
-            .lte('period', `${chartActive.year}-12`),
+          Promise.all([
+            supabase.from('campaign_reenroll_settings').select('basis').eq('institution_id', institutionId).eq('year', chartActive.year).maybeSingle(),
+            supabase.from('campaign_reenroll_entries').select('period, grade_key, value').eq('institution_id', institutionId).eq('year', chartActive.year),
+          ]),
         ])
         setActiveLeadsData((leadsAtivosRes.data ?? []) as { id: string; updated_at: string }[])
-        setActiveReenrollData((reenrollRes.data ?? []) as { period: string; confirmed: number }[])
+        {
+          const [st, en] = reenrollRes as unknown as [{ data: { basis?: string } | null }, { data: { period: string; grade_key: string; value: number }[] | null }]
+          const rows = en.data ?? []
+          const months = [...new Set(rows.map(r => r.period))].sort()
+          const c = computeManual(rows, st.data?.basis === 'acumulado' ? 'acumulado' : 'mes', months)
+          setActiveReenrollData(Object.entries(c.byMonth).map(([period, confirmed]) => ({ period, confirmed })))
+        }
       } else {
         setActiveLeadsData([])
         setActiveReenrollData([])

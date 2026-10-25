@@ -85,11 +85,12 @@ export function NovatosTab({ institutionId, from, to, rates, goal, done, months,
   )
 }
 
-export function RematriculaTab({ goal, done, months, hist, pre, pending, bySegment }: Common & { pre: number; pending: number; bySegment: { name: string; pending: number }[] }) {
+export function RematriculaTab({ goal, done, months, hist, pre, pending, bySegment, manualByMonth, manualCard }: Common & { pre: number; pending: number; bySegment: { name: string; pending: number }[]; manualByMonth?: Record<string, number>; manualCard?: React.ReactNode }) {
   const navigate = useNavigate()
   const go = (relations: string[]) => navigate('/transmissoes', { state: { relations } })
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {manualCard}
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ ...card, flex: '1 1 260px' }}>{lab('META DE REMATRÍCULA')}{big(done, goal, '#059669')}{bar(goal ? done / goal : 0, '#059669')}
           <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 6 }}>{goal ? Math.round(done / goal * 100) : 0}% · faltam {Math.max(0, goal - done)}</div></div>
@@ -105,7 +106,7 @@ export function RematriculaTab({ goal, done, months, hist, pre, pending, bySegme
           <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Mês a mês: rematrículas meta × feito</div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={{ ...th, textAlign: 'left' }}>Mês</th><th style={th}>Meta</th><th style={th}>Feito</th><th style={th} /></tr></thead>
-            <tbody>{months.map(r => { const feito = actual(hist, r.m, 'rematriculas'); return (
+            <tbody>{months.map(r => { const feito = actual(hist, r.m, 'rematriculas') + (manualByMonth?.[r.m] ?? 0); return (
               <tr key={r.m}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(r.m + '-01')}</td><td style={td}>{r.rematriculas}</td><td style={td}>{feito}</td><td style={td}>{status(feito, r.rematriculas, r.m < thisMonth)}</td></tr>) })}</tbody>
           </table>
           <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0' }}>Entram só os alunos com data de matrícula informada.</p>
