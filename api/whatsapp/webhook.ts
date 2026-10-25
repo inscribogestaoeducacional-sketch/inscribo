@@ -1806,6 +1806,31 @@ async function syncBroadcastRecipientStatus(institutionId: string, status: any):
 // pra nunca disparar bot, fila de atendimento ou contagem de não lida por
 // causa de um evento de sincronização, só de tráfego real de conversa.
 
+// Texto legível para mensagens que não são texto/mídia (contato compartilhado, localização, pedido...).
+// Antes elas ficavam gravadas como o nome do tipo ("[contacts]"), sem dizer nada ao atendente.
+function describeNonText(msg: any): string {
+  const t = msg?.type as string
+  if (t === 'contacts') {
+    const list = (Array.isArray(msg.contacts) ? msg.contacts : []).map((c: any) => {
+      const name = c?.name?.formatted_name || [c?.name?.first_name, c?.name?.last_name].filter(Boolean).join(' ') || 'Contato'
+      const phones = (Array.isArray(c?.phones) ? c.phones : []).map((x: any) => x?.phone || x?.wa_id).filter(Boolean).join(', ')
+      return phones ? `${name} — ${phones}` : name
+    })
+    return list.length ? `👤 Contato compartilhado: ${list.join(' | ')}` : '👤 Contato compartilhado'
+  }
+  if (t === 'location') {
+    const l = msg.location || {}
+    const where = [l.name, l.address].filter(Boolean).join(' — ')
+    const link = l.latitude != null && l.longitude != null ? ` https://www.google.com/maps?q=${l.latitude},${l.longitude}` : ''
+    return `📍 Localização${where ? ': ' + where : ''}${link}`
+  }
+  if (t === 'order') return '🛒 O cliente enviou um pedido do catálogo'
+  if (t === 'system') return 'ℹ️ Aviso do WhatsApp (ex.: o cliente trocou de número)'
+  if (t === 'edit') return '✏️ O cliente editou uma mensagem'
+  if (t === 'revoke') return '🗑️ O cliente apagou uma mensagem'
+  return ''
+}
+
 // Extração de conteúdo por tipo de mensagem, versão independente da usada
 // no fluxo messages (linha ~2806) — deliberadamente não compartilhada, pra
 // não correr nenhum risco de alterar o caminho ao vivo ao generalizá-la.
@@ -1819,6 +1844,7 @@ function extractMessageContent(msg: any): string {
     msg.button?.text ||
     msg.interactive?.button_reply?.title ||
     msg.interactive?.list_reply?.title ||
+    describeNonText(msg) ||
     `[${msg.type || 'mensagem'}]`
   )
 }
@@ -3564,7 +3590,7 @@ async function processAionMessage({
     const contentText =
       msgType === 'unsupported'
         ? '📎 Este tipo de conteúdo não pode ser recebido pelo WhatsApp Business (ex: visualização única, enquete, sticker restrito) — peça para reenviarem como texto, imagem ou documento comum.'
-        : (interactiveTitle || text)
+        : (interactiveTitle || text || describeNonText(msg))
 
     const queue = await detectAionQueue(rawPhone, supabase)
 
@@ -4400,7 +4426,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const isNewConversation = !existingConv || existingConv.status === 'closed'
-        const contentPreview    = interactiveTitle || effectiveText || `[${msgType}]`
+        const contentPreview    = interactiveTitle || effectiveText || describeNonText(msg) || `[${msgType}]`
         const upsertStatus      = isNewConversation ? 'waiting' : (existingConv?.status ?? 'waiting')
 
         // Item A — reabertura recente: a conversa foi fechada DE PROPÓSITO
