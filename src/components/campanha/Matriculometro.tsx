@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
 
 interface Row { turma: string; serie: string | null; segment: string | null; base: number; matriculados: number; pre: number; ly_base?: number | null; ly_mesmo_dia?: number | null; ly_final?: number | null }
+interface Resumo { ly_final: number; ly_mesmo_dia: number; hoje_matriculados: number; hoje_pre: number; dia_comparado: string }
 type Agg = { base: number; matriculados: number; pre: number; ly_base?: number | null; ly_mesmo_dia?: number | null; ly_final?: number | null }
 // ritmo do ano passado no mesmo dia: quantos já estariam matriculados hoje se fosse como em %ANO%
 const expected = (r: Agg) => (r.ly_base ? Math.round(r.base * (r.ly_mesmo_dia ?? 0) / r.ly_base) : null)
@@ -36,7 +37,8 @@ function Stack({ r, withPre }: { r: Agg; withPre: boolean }) {
 
 export default function Matriculometro({ institutionId, year }: { institutionId: string; year: number }) {
   const [rows, setRows] = useState<Row[] | null>(null)
-  const [withPre, setWithPre] = useState(true)
+  const [withPre, setWithPre] = useState(false)
+  const [resumo, setResumo] = useState<Resumo | null>(null)
   const [err, setErr] = useState('')
   const [sel, setSel] = useState<{ turma: string | null; serie: string | null; title: string } | null>(null)
 
@@ -45,7 +47,7 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
     setRows(null); setErr('')
     supabase.rpc('campaign_matriculometro', { p_inst: institutionId, p_year: year }).then(({ data, error }) => {
       if (!alive) return
-      if (error) setErr(error.message); else setRows(((data as { turmas: Row[] } | null)?.turmas ?? []))
+      if (error) setErr(error.message); else { const d = data as { turmas: Row[]; resumo?: Resumo } | null; setRows(d?.turmas ?? []); setResumo(d?.resumo ?? null) }
     })
     return () => { alive = false }
   }, [institutionId, year])
@@ -75,7 +77,7 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
       <style>{`@media print { body * { visibility: hidden } #matriculometro, #matriculometro * { visibility: visible } #matriculometro { position: absolute; left: 0; top: 0; width: 100% } .no-print { display: none !important } }`}</style>
       <div className="no-print" style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: BRAND.text, cursor: 'pointer' }}>
-          <input type="checkbox" checked={withPre} onChange={e => setWithPre(e.target.checked)} /> Contar pré-matriculados no percentual
+          <input type="checkbox" checked={withPre} onChange={e => setWithPre(e.target.checked)} /> Somar os pré-matriculados nas barras por série e turma (o total do topo conta só matriculados)
         </label>
         <button onClick={() => window.print()} style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', padding: '8px 14px', borderRadius: 9, border: 'none', background: '#05907B', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           <Printer size={15} /> Imprimir (A4)
@@ -84,10 +86,31 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
       <div style={{ fontSize: 18, fontWeight: 800, color: BRAND.ink }}>Matriculômetro {year}</div>
       <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 12 }}>Rematrícula dos veteranos por turma de {year - 1} · atualizado em {today} · clique numa turma ou série para ver os alunos</div>
 
+      {resumo && (
+        <div style={{ ...card, marginBottom: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Alunos: {year - 1} × {year}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            {([
+              [`Fechou ${year - 1} com`, resumo.ly_final, 'alunos matriculados', '#1A2B4A'],
+              [`No mesmo dia de ${year - 1}`, resumo.ly_mesmo_dia, `já matriculados (${new Date(resumo.dia_comparado + 'T12:00:00').toLocaleDateString('pt-BR')})`, '#64748B'],
+              [`Hoje, ${year}`, resumo.hoje_matriculados, 'matriculados', '#059669'],
+              [`Hoje, ${year}`, resumo.hoje_pre, 'em pré-matrícula (não contam)', '#8B5CF6'],
+            ] as [string, number, string, string][]).map(([t, n, sub, c]) => (
+              <div key={t + sub} style={{ borderRadius: 12, background: '#F8FAFC', padding: '10px 12px' }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: BRAND.muted }}>{t}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: c, lineHeight: 1.15 }}>{n}</div>
+                <div style={{ fontSize: 11.5, color: BRAND.muted }}>{sub}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 8 }}>A comparação usa a data em que cada matrícula foi feita: {resumo.ly_mesmo_dia} alunos já estavam matriculados em {year - 1} neste mesmo dia; hoje há {resumo.hoje_matriculados} em {year} ({resumo.hoje_matriculados - resumo.ly_mesmo_dia >= 0 ? '+' : ''}{resumo.hoje_matriculados - resumo.ly_mesmo_dia}).</div>
+        </div>
+      )}
+
       <div style={{ ...card, marginBottom: 14 }}>
         <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div><div style={{ fontSize: 30, fontWeight: 800, color: BRAND.ink, lineHeight: 1 }}>{val(tot)} <span style={{ fontSize: 15, color: '#94A3B8', fontWeight: 600 }}>de {tot.base}</span></div>
-            <div style={{ fontSize: 12.5, color: BRAND.muted }}>{tot.base ? Math.round(val(tot) / tot.base * 100) : 0}% dos veteranos garantidos</div></div>
+          <div><div style={{ fontSize: 30, fontWeight: 800, color: BRAND.ink, lineHeight: 1 }}>{tot.matriculados} <span style={{ fontSize: 15, color: '#94A3B8', fontWeight: 600 }}>de {tot.base}</span></div>
+            <div style={{ fontSize: 12.5, color: BRAND.muted }}>{tot.base ? Math.round(tot.matriculados / tot.base * 100) : 0}% dos veteranos já matriculados · mais {tot.pre} em pré-matrícula (ainda não contam)</div></div>
           <div style={{ display: 'flex', gap: 14, fontSize: 12.5, flexWrap: 'wrap' }}>
             {(['matriculado', 'pre', 'falta'] as const).map(k => (
               <span key={k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><i style={{ width: 10, height: 10, borderRadius: 3, background: COL[k], display: 'inline-block' }} />

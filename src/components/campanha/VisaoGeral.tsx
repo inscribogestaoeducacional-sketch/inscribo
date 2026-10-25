@@ -55,7 +55,7 @@ export default function VisaoGeral(p: Props) {
       const b = (ib.data ?? { leads: 0, visits: 0, novos: 0 }) as { leads: number; visits: number; novos: number }
       setInv({ total: ((ex.data ?? []) as { amount: number }[]).reduce((s, e) => s + Number(e.amount), 0), budget: ((bu.data ?? []) as { budget: number }[]).reduce((s, e) => s + Number(e.budget), 0), leads: b.leads ?? 0, visits: b.visits ?? 0, novos: b.novos ?? 0 })
       const s: Record<string, { base: number; ok: number }> = {}
-      for (const t of ((mm.data as { turmas: { segment: string | null; base: number; matriculados: number; pre: number }[] } | null)?.turmas ?? [])) { const k = t.segment ?? 'outro'; s[k] = s[k] ?? { base: 0, ok: 0 }; s[k].base += t.base; s[k].ok += t.matriculados + t.pre }
+      for (const t of ((mm.data as { turmas: { segment: string | null; base: number; matriculados: number; pre: number }[] } | null)?.turmas ?? [])) { const k = t.segment ?? 'outro'; s[k] = s[k] ?? { base: 0, ok: 0 }; s[k].base += t.base; s[k].ok += t.matriculados }
       setSeg(s)
       const t = tr.data as { exits: number; years: { year: number; exits: number }[] } | null
       setExits(t ? { cur: t.exits, prev: t.years.find(y => y.year === p.targetYear - 2)?.exits ?? 0 } : null)
