@@ -281,7 +281,7 @@ export default function GestorHomeNew() {
       <PageHeader icon={LayoutDashboard} title={`${greeting()}, ${firstName(user?.full_name)}`}
         subtitle={<>{user?.institution_name || 'Sua escola'} · visão geral de {range.label}</>}
         actions={<>
-          <div className="aion-hscroll aion-periods" style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,.14)', border: '1px solid rgba(255,255,255,.28)', borderRadius: 14, padding: 4, flexWrap: 'wrap' }}>
+          <div className="aion-hscroll aion-periods" data-tour="home-periodo" style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,.14)', border: '1px solid rgba(255,255,255,.28)', borderRadius: 14, padding: 4, flexWrap: 'wrap' }}>
             {PERIODS.map(([k, l]) => (
               <button key={k} type="button" onClick={() => setPeriod(k)} style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 800, padding: '6px 11px', borderRadius: 10, background: period === k ? '#fff' : 'transparent', color: period === k ? BRAND.primaryDark : '#fff', transition: 'background .15s' }}>{l}</button>
             ))}
@@ -295,7 +295,7 @@ export default function GestorHomeNew() {
         </>} />
 
       {isMobile && !loading && (
-        <div className="aion-hscroll" role="tablist" style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -12px', padding: '2px 12px', position: 'sticky', top: 0, zIndex: 20, background: 'linear-gradient(#F5FAF9 70%, rgba(245,250,249,0))' }}>
+        <div className="aion-hscroll" role="tablist" data-tour="home-abas" style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -12px', padding: '2px 12px', position: 'sticky', top: 0, zIndex: 20, background: 'linear-gradient(#F5FAF9 70%, rgba(245,250,249,0))' }}>
           {TABS.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={tab === k} type="button" className="aion-tap" onClick={() => setTab(k)}
               style={{ flexShrink: 0, border: tab === k ? 'none' : '1px solid #E3E8F0', background: tab === k ? 'var(--aion-grad)' : '#fff', color: tab === k ? '#fff' : BRAND.muted, fontWeight: 800, fontSize: 13, padding: '8px 15px', borderRadius: 999, fontFamily: 'inherit', cursor: 'pointer', boxShadow: tab === k ? '0 8px 18px -10px rgba(0,122,110,.8)' : 'none' }}>{l}</button>

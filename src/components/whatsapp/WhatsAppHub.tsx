@@ -3180,6 +3180,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       <div
         key={conv.id}
         className="wa-row aion-tap"
+        data-tour="wa-conversa"
         onClick={() => { setActiveId(conv.id); if (isMobile) setMobilePanel('chat') }}
         style={{
           position: 'relative',
@@ -5030,7 +5031,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 <p style={{ fontSize: 12, color: '#94A3B8' }}>Nenhuma conversa encontrada</p>
               </div>
             ) : (
-              <>
+              <div data-tour="wa-lista">
                 {filteredWaitingConvs.length > 0 && (
                   <>
                     <div id="wa-sec-fila" style={{ padding: `8px ${GUTTER}px 4px`, fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -5078,7 +5079,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     {filteredOtherConvs.map(conv => renderConvItem(conv))}
                   </>
                 )}
-              </>
+              </div>
             )}
             {hiddenByFilterCount > 0 && (
               <div style={{ padding: `10px ${GUTTER}px`, fontSize: 11, color: '#94A3B8', textAlign: 'center' }}>
@@ -5845,6 +5846,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 })}
                 <textarea
                   ref={inputRef}
+                  data-tour="wa-escrever"
                   value={inputText}
                   disabled={windowExpired}
                   onChange={e => {

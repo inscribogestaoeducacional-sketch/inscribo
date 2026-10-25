@@ -472,7 +472,7 @@ export default function VisitCalendar() {
       <PageHeader icon={CalendarCheck} title="Visitas"
         subtitle={today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
         actions={<>
-          <div style={{ display: 'flex', background: 'rgba(255,255,255,.16)', borderRadius: 10, padding: 3 }}>
+          <div data-tour="visitas-visao" style={{ display: 'flex', background: 'rgba(255,255,255,.16)', borderRadius: 10, padding: 3 }}>
             {([['month', 'Mês'], ['week', 'Semana'], ['list', 'Lista']] as [ViewMode, string][]).map(([k, l]) => (
               <button key={k} type="button" onClick={() => { setView(k); setFocus(null) }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: view === k && !focus ? '#fff' : 'transparent', color: view === k && !focus ? BRAND.primaryDark : '#fff', transition: 'all .15s' }}>{l}</button>
             ))}

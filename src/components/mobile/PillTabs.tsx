@@ -5,9 +5,9 @@ import React, { useRef } from 'react'
 // e o gesto de arrastar a tela para trocar de aba: useTabSwipe(ids, value, set).
 type Tab = [string, string, React.ComponentType<{ size?: number }>?]
 
-export function PillTabs({ tabs, value, onChange }: { tabs: Tab[]; value: string; onChange: (id: string) => void }) {
+export function PillTabs({ tabs, value, onChange, tour }: { tabs: Tab[]; value: string; onChange: (id: string) => void; tour?: string }) {
   return (
-    <div className="aion-hscroll" role="tablist" style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -12px', padding: '2px 12px', position: 'sticky', top: 0, zIndex: 20, background: 'linear-gradient(#F5FAF9 70%, rgba(245,250,249,0))' }}>
+    <div className="aion-hscroll" role="tablist" data-tour={tour || 'abas'} style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -12px', padding: '2px 12px', position: 'sticky', top: 0, zIndex: 20, background: 'linear-gradient(#F5FAF9 70%, rgba(245,250,249,0))' }}>
       {tabs.map(([id, label, Icon]) => {
         const on = value === id
         return (

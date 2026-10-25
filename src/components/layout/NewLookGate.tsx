@@ -53,6 +53,8 @@ function Dot({ on }: { on: boolean }) {
 
 export default function NewLookGate() {
   const { user } = useAuth()
+  // Prévia para teste: abra qualquer tela com ?prev=caranova — mostra o comunicado sem gravar nada
+  const preview = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('prev') === 'caranova'
   const [show, setShow] = useState(false)
   const [step, setStep] = useState(0)
   const [ok, setOk] = useState(false)
@@ -68,6 +70,7 @@ export default function NewLookGate() {
 
   useEffect(() => {
     if (!user?.id || user.user_type !== 'school_user' || !user.institution_id) return
+    if (preview) { setShow(true); return }
     if (Date.now() < START_AT) return
     let alive = true
     supabase.rpc('release_gate', { p_release: NEW_LOOK_RELEASE, p_cutoff: CUTOFF }).then(({ data, error }) => {
@@ -76,7 +79,7 @@ export default function NewLookGate() {
     supabase.rpc('school_erp_get').then(({ data }) => { if (alive && typeof data === 'string' && data) { setErp(data); setErpSaved(true) } })
     pushState().then(s => { if (alive) setPushOn(s === 'ativo') }).catch(() => {})
     return () => { alive = false }
-  }, [user?.id, user?.user_type, user?.institution_id])
+  }, [user?.id, user?.user_type, user?.institution_id, preview])
 
   useEffect(() => {
     if (!show) return
@@ -92,6 +95,7 @@ export default function NewLookGate() {
   const last = step === STEPS - 1
 
   const finish = async () => {
+    if (preview) { setShow(false); const u = new URL(window.location.href); u.searchParams.delete('prev'); window.history.replaceState({}, '', u.toString()); return }
     setSaving(true)
     const { error } = await supabase.rpc('release_ack', { p_release: NEW_LOOK_RELEASE })
     setSaving(false)

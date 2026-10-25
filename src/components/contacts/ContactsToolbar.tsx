@@ -32,7 +32,7 @@ export function ContactsSummary({ kpi, origin, onOrigin, counts, attention, onAt
   const shown = pend.filter(p => p.n > 0 || attention === p.key)
   return (
     <div className="ld-in" style={compact ? { display: 'flex', flexDirection: 'column', gap: 10 } : { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div className={compact ? 'aion-snap' : undefined} style={{ display: 'grid', gridTemplateColumns: compact ? undefined : 'repeat(4, minmax(0,1fr))', gap: 10 }}>
+      <div data-tour="contatos-tipos" className={compact ? 'aion-snap' : undefined} style={{ display: 'grid', gridTemplateColumns: compact ? undefined : 'repeat(4, minmax(0,1fr))', gap: 10 }}>
         {types.map((t, i) => {
           const on = origin === t.v
           const Icon = t.Icon
@@ -50,7 +50,7 @@ export function ContactsSummary({ kpi, origin, onOrigin, counts, attention, onAt
         })}
       </div>
       {(shown.length > 0 || c.api_resp > 0) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div data-tour="contatos-pendencias" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: '#5B6B86', display: 'flex', alignItems: 'center', gap: 5 }}><AlertTriangle size={13} color="#B45309" />Para resolver:</span>
           {shown.map(p => {
             const on = attention === p.key

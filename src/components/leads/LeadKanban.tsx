@@ -562,7 +562,7 @@ function SortableCard(props: Omit<CardContentProps, 'overlay'>) {
   }
 
   return (
-    <div ref={setNodeRef} className={`cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-40' : ''}`} style={{ transform: CSS.Transform.toString(transform), transition, touchAction: 'none' }} {...attributes} {...listeners} onClick={handleClick}>
+    <div ref={setNodeRef} data-tour="lead-card" className={`cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-40' : ''}`} style={{ transform: CSS.Transform.toString(transform), transition, touchAction: 'none' }} {...attributes} {...listeners} onClick={handleClick}>
       <CardContent {...props} />
     </div>
   )
@@ -1507,7 +1507,7 @@ export default function LeadKanban() {
         </div>
 
         {/* Status chips */}
-        <div className="aion-hscroll" style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', flexWrap: 'nowrap', gap: 6, scrollbarWidth: 'none' }}>
+        <div className="aion-hscroll" data-tour="leads-etapas" style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', flexWrap: 'nowrap', gap: 6, scrollbarWidth: 'none' }}>
           {[{ value: '', label: 'Todos' }, ...Object.entries(statusConfig).map(([v, c]) => ({ value: v, label: c.label }))].map(({ value, label }) => (
             <button key={value} onClick={() => setFilterStatus(value)}
               style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
@@ -1531,7 +1531,7 @@ export default function LeadKanban() {
             const pendingPast = (pendingVisitsByLead.get(lead.id) ?? []).find(isPastVisit)
             const siblings = familySiblingsMap.get(lead.id)
             return (
-              <div key={lead.id} onClick={() => selectMode ? toggleSelected([lead.id]) : cardActions.onEdit(lead)}
+              <div key={lead.id} data-tour="lead-card" onClick={() => selectMode ? toggleSelected([lead.id]) : cardActions.onEdit(lead)}
                 className="aion-tap wa-row" style={{ padding: '12px 14px', background: selectMode && selectedIds.has(lead.id) ? '#EEF2FF' : '#fff', border: '1px solid #E3E8F0', borderRadius: 18, boxShadow: '0 1px 2px rgba(26,43,74,.04)', flexShrink: 0, display: 'flex', gap: 12, cursor: 'pointer', alignItems: 'center' }}>
                 {selectMode && <input type="checkbox" readOnly checked={selectedIds.has(lead.id)} style={{ width: 18, height: 18, accentColor: '#4F46E5', flexShrink: 0 }} aria-label="Selecionado" />}
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: cfg?.accent ?? '#6b7280', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff' }}>
@@ -1705,7 +1705,7 @@ export default function LeadKanban() {
       {viewMode === 'board' && (
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="overflow-x-auto pb-4">
-          <div className="flex gap-4 min-w-max">
+          <div className="flex gap-4 min-w-max" data-tour="leads-etapas">
             {visibleStatuses.map((status) => {
               const col = columns.find(c => c.key === status)!
               const config = col.custom ? { ...statusConfig[col.status as keyof typeof statusConfig], label: col.custom.label } : statusConfig[col.status as keyof typeof statusConfig]

@@ -19,27 +19,26 @@ export function isVisible(el: Element): boolean {
   return true
 }
 
-/** A janela aberta por cima: .aion-pop, [role=dialog], [aria-modal] ou o último elemento fixo grande da página. */
+/** A janela aberta por cima: a camada fixa de maior z-index que cobre boa parte da tela (fundo escuro ou folha). */
 export function modalRoot(): HTMLElement | null {
   const vw = window.innerWidth, vh = window.innerHeight
-  const cands = Array.from(document.querySelectorAll<HTMLElement>('.aion-pop, [role="dialog"], [aria-modal="true"], .m-sheet, [style*="position: fixed"]'))
-  let best: { el: HTMLElement; z: number; order: number } | null = null
-  cands.forEach((el, order) => {
-    if (inTourUi(el) || !isVisible(el)) return
-    if (el.closest('nav.aion-dock, header.aion-topbar, aside')) return
-    const r = el.getBoundingClientRect()
-    const big = r.width >= vw * 0.45 && r.height >= vh * 0.3
-    const explicit = el.matches('.aion-pop, [role="dialog"], [aria-modal="true"], .m-sheet')
-    if (!big && !explicit) return
-    // janelas que cobrem a tela quase toda ou painéis com cara de janela
+  let best: { el: HTMLElement; z: number } | null = null
+  document.querySelectorAll<HTMLElement>('body div, body section, body aside, body form').forEach(el => {
+    if (inTourUi(el)) return
     const cs = getComputedStyle(el)
+    if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') return
     const z = parseInt(cs.zIndex || '0', 10) || 0
-    // um elemento fixo que seja filho de outro candidato é parte dele: fica o de fora
-    if (!best || z > best.z || (z === best.z && order >= best.order)) best = { el, z, order }
+    const explicit = el.matches('.aion-pop, [role="dialog"], [aria-modal="true"], .m-sheet')
+    if (z < 40 && !explicit) return
+    const r = el.getBoundingClientRect()
+    if (r.width < 1 || r.height < 1) return
+    const big = r.width >= vw * 0.8 && r.height >= vh * 0.3
+    const sheet = r.width >= Math.min(280, vw * 0.7) && r.height >= 120 && r.top > 0 && r.top < vh
+    if (!big && !sheet && !explicit) return
+    if (el.closest('nav, header, aside')) return
+    if (!best || z >= best.z) best = { el, z }
   })
-  if (!best) return null
-  // se o candidato é o fundo escuro, a janela de verdade é o filho principal; a busca dentro do fundo já cobre
-  return (best as { el: HTMLElement }).el
+  return best ? (best as { el: HTMLElement }).el : null
 }
 
 function ownText(el: Element): string {

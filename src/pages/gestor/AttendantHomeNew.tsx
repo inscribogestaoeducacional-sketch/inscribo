@@ -398,7 +398,7 @@ export default function AttendantHomeNew() {
           </div>
         } />
 
-      {isMobile && <PillTabs tabs={A_TABS} value={aTab} onChange={id => setATab(id as ATab)} />}
+      {isMobile && <PillTabs tour="home-abas" tabs={A_TABS} value={aTab} onChange={id => setATab(id as ATab)} />}
 
       <AT id="agora" tab={aTab} mobile={isMobile}>
       {/* ── Preciso agir agora ── */}
