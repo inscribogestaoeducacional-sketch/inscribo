@@ -38,7 +38,7 @@ export default function EnrolledWithoutLead({ institutionId, year, onChanged }: 
   }, [institutionId, yr])
   useEffect(() => { load() }, [load])
 
-  if (!data || data.sem_lead === 0) return null
+  if (!data || !Array.isArray(data.lista) || !data.sem_lead) return null
 
   const act = async (r: Row, action: 'link' | 'create' | 'dismiss', lead?: Sug) => {
     setBusy(r.student_id + action); setMsg(null)

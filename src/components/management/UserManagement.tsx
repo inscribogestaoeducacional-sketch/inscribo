@@ -1,4 +1,6 @@
 import PageHeader from '../ui/PageHeader'
+import HeaderAction from '../mobile/HeaderAction'
+import StatStrip from '../mobile/StatStrip'
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -6,7 +8,7 @@ import { usePermissions, DEFAULT_OFF_MODULES } from '../../contexts/PermissionsC
 import { supabase } from '../../lib/supabase'
 import { sendEmail } from '../../lib/email'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
-import {
+import { UsersRound,
   Users, Plus, Edit, Shield, UserCheck, Search,
   Eye, EyeOff, Mail, Calendar, CheckCircle, XCircle, Key, X,
   Building2, AlertTriangle, Loader2, RefreshCw, UserX, RotateCcw, ChevronDown, ChevronUp
@@ -653,7 +655,7 @@ export default function UserManagement() {
   // ─── MOBILE ───────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9', paddingBottom: 96 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9' }}>
         <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
 
         {toast && (
@@ -662,17 +664,9 @@ export default function UserManagement() {
           </div>
         )}
 
-        {/* Header */}
-        <div style={{ padding: '16px 16px 12px', background: '#fff', borderBottom: '1px solid #E2E8F0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={18} color="#3B82F6" />
-            </div>
-            <div>
-              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Usuários</p>
-              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{stats.active} ativo{stats.active !== 1 ? 's' : ''} de {stats.total}</p>
-            </div>
-          </div>
+        <div style={{ padding: '12px 12px 0' }}>
+          <PageHeader compact icon={UsersRound} title="Usuários" subtitle={`${stats.active} ativo${stats.active !== 1 ? 's' : ''} de ${stats.total}`}
+            actions={<HeaderAction primary icon={Plus} label="Novo usuário" onClick={() => { setEditingUser(null); setShowModal(true) }} />} />
         </div>
 
         {/* Search */}
@@ -688,28 +682,17 @@ export default function UserManagement() {
           </div>
         </div>
 
-        {/* Stats 2x2 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 16px' }}>
-          {[
-            { label: 'Total', value: stats.total, color: '#3B82F6', bg: '#DBEAFE', Icon: Users },
-            { label: 'Ativos', value: stats.active, color: '#16a34a', bg: '#D1FAE5', Icon: CheckCircle },
-            { label: 'Admins', value: stats.admins, color: '#DC2626', bg: '#FEE2E2', Icon: Shield },
-            { label: 'Gestores', value: stats.managers, color: '#8B5CF6', bg: '#EDE9FE', Icon: UserCheck },
-          ].map(({ label, value, color, bg, Icon }) => (
-            <div key={label} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Icon size={15} color={color} />
-              </div>
-              <div>
-                <p style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0, lineHeight: 1 }}>{value}</p>
-                <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>{label}</p>
-              </div>
-            </div>
-          ))}
+        <div style={{ padding: '12px 12px 4px' }}>
+          <StatStrip items={[
+            { label: 'Total', value: stats.total, sub: 'usuários cadastrados', color: '#3B82F6', icon: Users },
+            { label: 'Ativos', value: stats.active, sub: 'com acesso liberado', color: '#16A34A', icon: CheckCircle },
+            { label: 'Admins', value: stats.admins, sub: 'acesso total', color: '#DC2626', icon: Shield },
+            { label: 'Gestores', value: stats.managers, sub: 'acompanham os números', color: '#8B5CF6', icon: UserCheck },
+          ]} />
         </div>
 
         {/* User cards */}
-        <div style={{ flex: 1, padding: '0 0 16px' }}>
+        <div style={{ flex: 1, padding: '0 0 100px' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: 40 }}>
               <Loader2 size={28} color="#05907B" className="animate-spin" style={{ margin: '0 auto 12px' }} />
@@ -769,13 +752,6 @@ export default function UserManagement() {
           <RemovedUsersSection removedLinks={removedLinks} show={showRemoved} onToggle={() => setShowRemoved(v => !v)} onReactivate={handleReactivateLink} />
         </div>
 
-        {/* FAB */}
-        <button
-          onClick={() => { setEditingUser(null); setShowModal(true) }}
-          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}
-        >
-          <Plus size={24} />
-        </button>
 
         <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} institutionId={user?.institution_id} />
         <PasswordModal isOpen={showPwdModal} onClose={() => { setShowPwdModal(false); setPwdUser(null) }} targetUser={pwdUser} />
@@ -801,7 +777,7 @@ export default function UserManagement() {
       )}
 
       {/* Header */}
-      <PageHeader icon={Users} title="Usuários" subtitle="Controle de acesso e permissões"
+      <PageHeader icon={UsersRound} title="Usuários" subtitle="Controle de acesso e permissões"
         actions={<>
           <button onClick={loadUsers} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
             <RefreshCw size={14} /> Atualizar

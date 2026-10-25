@@ -1,3 +1,4 @@
+import HeaderAction from '../../components/mobile/HeaderAction'
 import StatStrip, { cardBtn } from '../../components/mobile/StatStrip'
 import PageHeader from '../../components/ui/PageHeader'
 import React, { useState, useEffect, useRef, useMemo } from 'react'
@@ -1752,9 +1753,9 @@ export default function GestorSurveys() {
 
         <div style={{ padding: '12px 12px 0' }}>
           <PageHeader compact icon={ClipboardList} title="Pesquisas" subtitle={`${active} ativa${active !== 1 ? 's' : ''}`}
-            actions={<button onClick={createStaffSurvey} disabled={saving} className="aion-tap" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+            actions={<><HeaderAction primary icon={Plus} label="Nova pesquisa" onClick={openNewModal} /><button onClick={createStaffSurvey} disabled={saving} className="aion-tap" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
               <Users size={14} /> Colaboradores
-            </button>} />
+            </button></>} />
         </div>
 
         <div style={{ margin: '12px 12px 4px' }}>
@@ -1828,13 +1829,6 @@ export default function GestorSurveys() {
           })}
         </div>
 
-        {/* FAB */}
-        <button
-          onClick={openNewModal} className="aion-fab" aria-label="Nova pesquisa"
-          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}
-        >
-          <Plus size={24} />
-        </button>
 
         {/* New Survey Modal */}
         {showNewModal && (

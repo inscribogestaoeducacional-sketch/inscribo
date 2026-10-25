@@ -334,7 +334,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
   )
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+    <div className="lead-modal" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: '#FFFFFF', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.2)', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ background: 'linear-gradient(135deg, #05907B 0%, #00695F 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
@@ -380,7 +380,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+        <div className="lead-modal-body" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '20px 24px' }}>
 
           {/* ABA DADOS */}
           {activeTab === 'dados' && (

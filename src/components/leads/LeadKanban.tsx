@@ -1,4 +1,5 @@
 import EnrolledWithoutLead from '../shared/EnrolledWithoutLead'
+import HeaderAction from '../mobile/HeaderAction'
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Plus, Phone, Calendar, Edit, Edit2, Trash2, X, Search,
@@ -1482,12 +1483,18 @@ export default function LeadKanban() {
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9' }}>
 
         <div style={{ padding: '12px 12px 0', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <PageHeader compact icon={Users} title="Leads" subtitle={`${mobileLeads.length} no funil`} />
+          <PageHeader compact icon={Users} title="Leads" subtitle={`${mobileLeads.length} no funil`}
+            actions={<>
+              <HeaderAction primary icon={Plus} label="Novo lead" onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }} />
+              <HeaderAction icon={UserCog} label="Meus leads" active={ownerFilter === 'mine'} onClick={() => setOwnerFilter(o => o === 'mine' ? 'all' : 'mine')} />
+              <HeaderAction icon={SlidersHorizontal} label="Filtros" dot={hasActiveFilters} onClick={() => setFilterDrawerOpen(true)} />
+              {unitCfg.enabled && <HeaderAction icon={CheckSquare} label={selectMode ? 'Sair da seleção' : 'Selecionar'} active={selectMode} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)} />}
+            </>} />
           {attentionBlock}
         </div>
 
         {/* Search + filtros */}
-        <div style={{ padding: '12px 16px 0', flexShrink: 0, display: 'flex', gap: 8 }}>
+        <div style={{ padding: '12px 12px 0', flexShrink: 0, display: 'flex', gap: 8 }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
             <input
@@ -1497,20 +1504,6 @@ export default function LeadKanban() {
               style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 44, background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 16, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
             />
           </div>
-          {/* Atalho rápido "Meus leads" — alterna direto sem abrir o drawer completo */}
-          <button onClick={() => setOwnerFilter(o => o === 'mine' ? 'all' : 'mine')} title="Meus leads"
-            style={{ width: 44, height: 44, borderRadius: 12, background: ownerFilter === 'mine' ? '#05907B' : '#fff', border: '1.5px solid ' + (ownerFilter === 'mine' ? '#05907B' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <UserCog style={{ width: 17, height: 17, color: ownerFilter === 'mine' ? '#fff' : '#64748B' }} />
-          </button>
-          <button onClick={() => setFilterDrawerOpen(true)} style={{ position: 'relative', width: 44, height: 44, borderRadius: 12, background: hasActiveFilters ? '#05907B' : '#fff', border: '1.5px solid ' + (hasActiveFilters ? '#05907B' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <SlidersHorizontal style={{ width: 17, height: 17, color: hasActiveFilters ? '#fff' : '#64748B' }} />
-          </button>
-          {unitCfg.enabled && (
-            <button onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)} title={`Definir ${unitCfg.label.toLowerCase()} para vários leads`}
-              style={{ width: 44, height: 44, borderRadius: 12, background: selectMode ? '#6366F1' : '#fff', border: '1.5px solid ' + (selectMode ? '#6366F1' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-              <CheckSquare style={{ width: 17, height: 17, color: selectMode ? '#fff' : '#64748B' }} />
-            </button>
-          )}
         </div>
 
         {/* Status chips */}
@@ -1579,11 +1572,6 @@ export default function LeadKanban() {
           })}
         </div>
 
-        {/* FAB */}
-        <button onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }}
-          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', color: '#fff', border: 'none', fontSize: 28, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Plus style={{ width: 26, height: 26 }} />
-        </button>
 
         {filterDrawerEl}
         {bulkBarEl}

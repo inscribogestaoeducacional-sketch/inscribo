@@ -1,3 +1,4 @@
+import HeaderAction from '../mobile/HeaderAction'
 import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -1251,7 +1252,7 @@ export default function ContactsModule() {
           <style>{LEADS_CSS}</style>
           <div style={{ padding: '12px 12px 0', flexShrink: 0 }}>
             <PageHeader compact icon={BookUser} title="Contatos" subtitle={`${kpiCounts.total.toLocaleString('pt-BR')} contatos`}
-              actions={<ActionsMenu items={actionItems} />} />
+              actions={<><HeaderAction primary icon={Plus} label="Novo contato" onClick={openNewContact} /><ActionsMenu items={actionItems} /></>} />
           </div>
           <div style={{ padding: '10px 12px 0', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <ContactsSummary compact kpi={kpiCounts} origin={filterOrigin} onOrigin={setFilterOrigin} counts={attCounts} attention={attention} onAttention={setAttention} />
@@ -1346,10 +1347,6 @@ export default function ContactsModule() {
             )}
           </div>
         </div>
-        <button onClick={openNewContact} className="aion-fab" aria-label="Novo contato"
-          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}>
-          <Plus size={24} />
-        </button>
         {importModal}
         {exportModal}
         {newContactModal}

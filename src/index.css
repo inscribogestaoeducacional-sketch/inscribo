@@ -449,3 +449,13 @@ main table tbody tr:last-child td { border-bottom: none; }
 @keyframes aionSbName { from { clip-path: inset(0 100% 0 0); opacity: 0; transform: translateX(-26px) } to { clip-path: inset(0 0 0 0); opacity: 1; transform: none } }
 
 .tr-chip svg { flex-shrink: 0 }
+
+/* Janela do lead no celular: tela cheia, uma coluna, campos 16px (sem zoom), sem rolagem lateral */
+@media (max-width: 767px) {
+  .lead-modal { padding: 0 !important; align-items: stretch !important }
+  .lead-modal > div { max-width: 100% !important; width: 100% !important; height: 100% !important; max-height: 100% !important; border-radius: 0 !important; border: none !important }
+  .lead-modal [style*="grid-template-columns"] { grid-template-columns: 1fr !important }
+  .lead-modal input, .lead-modal select, .lead-modal textarea { font-size: 16px !important; max-width: 100% !important }
+  .lead-modal * { min-width: 0 }
+  .lead-modal-body { padding: 16px 14px 24px !important; overflow-x: hidden !important }
+}

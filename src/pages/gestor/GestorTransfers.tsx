@@ -1,4 +1,5 @@
 import PageHeader from '../../components/ui/PageHeader'
+import HeaderAction from '../../components/mobile/HeaderAction'
 import { PillTabs } from '../../components/mobile/PillTabs'
 import StatStrip, { cardBtn } from '../../components/mobile/StatStrip'
 import React, { useState, useEffect, useRef } from 'react'
@@ -477,7 +478,8 @@ export default function GestorTransfers() {
         )}
 
         <div style={{ padding: '12px 12px 100px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <PageHeader compact icon={ArrowRightLeft} title="Transferências" subtitle={`${total} registradas`} />
+          <PageHeader compact icon={ArrowRightLeft} title="Transferências" subtitle={`${total} registradas`}
+            actions={isAdmin ? <HeaderAction primary icon={Plus} label="Nova transferência" onClick={() => { setForm(EMPTY_FORM); setEditingTransfer(null); setShowNewModal(true) }} /> : undefined} />
 
           {activeTab === 'active' && <SaidasActivesoft institutionId={institutionId} onRegister={(name, grade) => { setForm({ ...EMPTY_FORM, studentName: name, grade }); setEditingTransfer(null); setShowNewModal(true) }} />}
 
@@ -592,13 +594,6 @@ export default function GestorTransfers() {
           )}
         </div>
 
-        {/* FAB */}
-        {isAdmin && (
-          <button onClick={() => { setForm(EMPTY_FORM); setEditingTransfer(null); setShowNewModal(true) }} className="aion-fab" aria-label="Nova transferência"
-            style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Plus size={26} />
-          </button>
-        )}
 
         {/* Modals */}
         {showNewModal && (
