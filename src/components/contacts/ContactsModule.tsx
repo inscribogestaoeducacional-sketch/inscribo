@@ -1246,7 +1246,7 @@ export default function ContactsModule() {
   if (isMobile) {
     return (
       <>
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#F5FAF9' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9' }}>
 
           <style>{LEADS_CSS}</style>
           <div style={{ padding: '12px 12px 0', flexShrink: 0 }}>
@@ -1288,7 +1288,7 @@ export default function ContactsModule() {
           </div>
 
           {/* Contact list */}
-          <div style={{ flex: 1, overflowY: 'auto', marginTop: 10, background: '#fff', borderTop: '1px solid #F1F5F9' }}>
+          <div style={{ marginTop: 10, padding: '0 12px 100px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center' }}>
                 <div className="animate-spin" style={{ width: 28, height: 28, border: '3px solid #05907B', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 10px' }} />
@@ -1301,8 +1301,8 @@ export default function ContactsModule() {
                 {contacts.map(c => {
                   const cfg = typeCfg(c.contact_type)
                   return (
-                    <div key={c.id} onClick={() => setProfileContact(c)}
-                      style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+                    <div key={c.id} onClick={() => setProfileContact(c)} className="aion-tap"
+                      style={{ padding: '12px 14px', background: '#fff', border: '1px solid #E3E8F0', borderRadius: 18, boxShadow: '0 1px 2px rgba(26,43,74,.04)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
                       <ContactAvatar
                         name={c.name}
                         url={c.profile_picture_url}
@@ -1310,10 +1310,10 @@ export default function ContactsModule() {
                         onClick={c.profile_picture_url ? () => setZoomedPhoto(c.profile_picture_url!) : undefined}
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{c.name}</p>
-                          <span style={{ ...cfg.badgeStyle, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 6 }}>{cfg.label}</span>
-                          {(() => { const rl = relationOf(c); return <span style={{ background: rl.bg, color: rl.fg, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 4 }}>{rl.label}</span> })()}
+                        <div style={{ display: 'flex', justifyContent: 'flex-start', flexWrap: 'wrap', rowGap: 4 }}>
+                          <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 100%', minWidth: 0 }}>{c.name}</p>
+                          <span style={{ ...cfg.badgeStyle, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, flexShrink: 0 }}>{cfg.label}</span>
+                          {(() => { const rl = relationOf(c); return <span style={{ background: rl.bg, color: rl.fg, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 6 }}>{rl.label}</span> })()}
                         </div>
                         {(c.subtitle || c.grade) && (
                           <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1327,7 +1327,7 @@ export default function ContactsModule() {
                   )
                 })}
                 {/* Load more */}
-                <div style={{ padding: '12px 16px', textAlign: 'center', borderTop: contacts.length > 0 ? '1px solid #F1F5F9' : 'none' }}>
+                <div style={{ padding: '4px 4px 0', textAlign: 'center' }}>
                   {hasMore ? (
                     <button onClick={handleLoadMore} disabled={loadingMore}
                       style={{ width: '100%', padding: '10px', border: '1px solid #E2E8F0', borderRadius: 10, background: '#fff', color: '#64748B', fontSize: 13, fontWeight: 600, cursor: loadingMore ? 'not-allowed' : 'pointer', opacity: loadingMore ? 0.6 : 1 }}>
@@ -1341,7 +1341,7 @@ export default function ContactsModule() {
             )}
           </div>
         </div>
-        <button onClick={openNewContact}
+        <button onClick={openNewContact} className="aion-fab" aria-label="Novo contato"
           style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#05907B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}>
           <Plus size={24} />
         </button>
