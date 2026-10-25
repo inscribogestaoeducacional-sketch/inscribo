@@ -74,7 +74,11 @@ Deno.serve(async (req) => {
   const escalate = async () => { await asUser.rpc('support_escalate', { p_thread: threadId }) }
 
   const { data: th } = await admin.from('support_threads').select('status').eq('id', threadId).maybeSingle()
-  if (th?.status === 'escalated') return json({ thread_id: threadId, escalated: true, waiting_staff: true })
+  // se a equipe já assumiu (respondeu), a assistente fica quieta; enquanto isso não acontece, ela continua ajudando
+  if (th?.status === 'escalated') {
+    const { count: staffMsgs } = await admin.from('support_messages').select('id', { count: 'exact', head: true }).eq('thread_id', threadId).eq('author_type', 'staff')
+    if ((staffMsgs ?? 0) > 0) return json({ thread_id: threadId, escalated: true, waiting_staff: true })
+  }
 
   if (used >= DAILY_LIMIT) { await escalate(); return json({ thread_id: threadId, escalated: true, reason: 'limit' }) }
 
@@ -106,11 +110,12 @@ Como conversar:
 - Depois de explicar, confirme se deu certo ou se a pessoa quer ajuda com o próximo passo. Se algo não funcionou, tente entender o que apareceu na tela dela e ajude a resolver.
 - Sugira a aula da Academia quando ajudar, escrevendo [[AULA:chave]] (a chave fica entre colchetes no conhecimento). Indique a tela com [[TELA:/caminho]] só quando o caminho aparecer no conhecimento. No máximo um de cada por resposta.
 - Respostas de até 8 linhas. Não use asteriscos, negrito, títulos nem markdown; escreva texto simples, com listas numeradas curtas (1., 2., 3.) quando houver passos.
+- Escreva como numa conversa de WhatsApp: direto, humano, sem textos longos nem enfeites; no máximo um emoji por resposta.
 - Fale só do uso da Áion Edu. Assuntos fora disso, responda com educação em uma frase e volte ao que você pode ajudar.
 
 O que NUNCA fazer:
 - Nunca invente botão, tela, preço, prazo ou função que não esteja no conhecimento. Se não tiver certeza, diga isso com honestidade.
-- Só chame a equipe quando você realmente tentou ajudar e não conseguiu, ou quando o assunto for cobrança/contrato/plano, erro ou defeito do sistema, acesso ou dados que só a equipe vê, ou pedido de nova função. Nesses casos, explique em uma frase o que vai acontecer e termine a resposta com [[EQUIPE]]. Ao ver [[EQUIPE]] o sistema avisa a equipe automaticamente.
+- Só chame a equipe quando você realmente tentou ajudar e não conseguiu, ou quando o assunto for cobrança/contrato/plano, erro ou defeito do sistema, acesso ou dados que só a equipe vê, ou pedido de nova função. Nesses casos, explique em uma frase o que vai acontecer e termine a resposta com [[EQUIPE]]. O sistema então mostra à pessoa um botão para chamar a equipe, se ela quiser; a conversa continua aberta e você segue ajudando em qualquer nova pergunta.
 
 CONHECIMENTO DO SISTEMA (aulas da Academia):
 ${knowledge || '(conhecimento indisponível agora: ajude com o que souber e, se não der, termine com [[EQUIPE]])'}`
@@ -128,7 +133,6 @@ ${knowledge || '(conhecimento indisponível agora: ajude com o que souber e, se 
     if (!text) throw new Error('vazio')
     await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: text.slice(0, 5900) })
     await admin.from('support_threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId)
-    if (text.includes('[[EQUIPE]]')) await escalate()
     return json({ thread_id: threadId, answer: text })
   } catch (e) {
     console.error('help-ai', (e as Error).message)
