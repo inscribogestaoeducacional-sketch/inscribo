@@ -66,7 +66,7 @@ export default function NewLookGate() {
   const [erpSaved, setErpSaved] = useState(false)
   const [erpBusy, setErpBusy] = useState(false)
 
-  const isGestor = user?.role === 'admin' || user?.role === 'manager'
+  const isGestor = preview || user?.role === 'admin' || user?.role === 'manager'
 
   useEffect(() => {
     if (!user?.id || user.user_type !== 'school_user' || !user.institution_id) return

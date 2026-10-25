@@ -314,6 +314,8 @@ function AppContent() {
     const defaultPath  = isConsultant ? '/super-admin/consultant' : '/super-admin'
 
     return (
+      <>
+      <NewLookGate />
       <Routes>
         <Route path="/super-admin"                    element={<AdminHome />} />
         <Route path="/super-admin/crm"                element={<AdminCRM />} />
@@ -347,6 +349,7 @@ function AppContent() {
         <Route path="/"              element={<Navigate to={defaultPath} replace />} />
         <Route path="*"              element={<NotFoundPage />} />
       </Routes>
+      </>
     )
   }
   // ── BLOQUEIO POR STATUS ───────────────────────────────────────────────────
