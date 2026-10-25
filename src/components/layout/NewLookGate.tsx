@@ -108,7 +108,7 @@ export default function NewLookGate() {
 
   const finish = async () => {
     if (preview) { setShow(false); const u = new URL(window.location.href); u.searchParams.delete('prev'); window.history.replaceState({}, '', u.toString()); return }
-    if (user?.user_type === 'admin_geral' || TEST_EMAILS.includes((user?.email || '').toLowerCase())) { try { localStorage.setItem('aion-caranova-teste', '1') } catch { /* ok */ } setShow(false); return }
+    if (isStaff(user)) { try { localStorage.setItem('aion-caranova-teste', '1') } catch { /* ok */ } setShow(false); return }
     setSaving(true)
     const { error } = await supabase.rpc('release_ack', { p_release: NEW_LOOK_RELEASE })
     setSaving(false)
