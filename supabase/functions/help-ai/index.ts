@@ -107,7 +107,13 @@ Deno.serve(async (req) => {
   }
 
   const lessons = await loadLessons(req.headers.get('origin'))
-  const scored = pick(lessons, message, route, manager, admRole)
+  // pergunta curta ("e como edito?") é continuação: junta com a pergunta anterior para achar a aula certa
+  let queryText = message
+  if (message.length < 45) {
+    const { data: prevQ } = await admin.from('support_messages').select('body').eq('thread_id', threadId).eq('author_type', 'user').order('created_at', { ascending: false }).range(1, 2)
+    queryText = [message, ...((prevQ ?? []) as { body: string }[]).map(x => x.body)].join(' ')
+  }
+  const scored = pick(lessons, queryText, route, manager, admRole)
   // sem aula bem parecida com a pergunta a IA não tenta responder (evita resposta inventada) e oferece chamar a equipe
   if (!scored.length || scored[0].s < 4) {
     const msg = 'Não achei uma aula sobre isso. Tente perguntar de outro jeito (por exemplo: "como agendo uma visita?") ou chame a equipe da Áion.\n[[EQUIPE]]'
@@ -127,7 +133,12 @@ Deno.serve(async (req) => {
   }
   while (msgs.length && msgs[0].role !== 'user') msgs.shift()
 
-  const system = `Você é a assistente da Academia Áion Edu, o sistema de gestão de matrículas de escolas. Responda em português do Brasil, em frases curtas e simples, para quem não é de tecnologia.
+  const nome1 = (me?.full_name || '').trim().split(/\s+/)[0]
+  const system = `Você é a assistente da Academia Áion Edu, o sistema de gestão de matrículas de escolas. Converse como uma colega paciente e simpática, em português do Brasil, com frases curtas e simples, para quem não é de tecnologia${nome1 ? `. A pessoa se chama ${nome1}; use o nome de vez em quando, sem exagero` : ''}.
+Jeito de conversar:
+- Leve em conta o que já foi dito na conversa; se a pessoa perguntar "e depois?" ou "como edito?", continue o assunto.
+- Se a pergunta estiver vaga, faça UMA pergunta curta para entender antes de explicar.
+- Depois de explicar, pergunte se ficou claro ou se quer ajuda com o próximo passo.
 Regras:
 - Use SOMENTE as aulas abaixo. Cite os nomes exatos dos botões e abas entre aspas, como estão nas aulas.
 - Nunca invente botão, tela ou função. Se a resposta não estiver nas aulas, diga que não tem certeza e termine com [[EQUIPE]].
@@ -146,7 +157,7 @@ ${knowledge || '(nenhuma aula encontrada para esta pergunta)'}`
       headers: { 'content-type': 'application/json', authorization: authH },
       body: JSON.stringify({ action: 'wa_help', payload: { system, messages: msgs.length ? msgs : [{ role: 'user', content: message }] } }),
     })
-    if (!r.ok) throw new Error(`ai ${r.status}`)
+    if (!r.ok) throw new Error(`ai ${r.status}: ${(await r.text()).slice(0, 300)}`)
     const j = await r.json()
     const text: string = String(j.text ?? '').trim()
     if (!text) throw new Error('vazio')
@@ -155,6 +166,7 @@ ${knowledge || '(nenhuma aula encontrada para esta pergunta)'}`
     return json({ thread_id: threadId, answer: text })
   } catch (e) {
     console.error('help-ai', (e as Error).message)
+    try { await admin.from('support_ai_errors').insert({ thread_id: threadId, message: (e as Error).message.slice(0, 500) }) } catch { /* ok */ }
     await escalate()
     return json({ thread_id: threadId, escalated: true, reason: 'ai_error' })
   }
