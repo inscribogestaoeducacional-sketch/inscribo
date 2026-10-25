@@ -84,6 +84,28 @@ Deno.serve(async (req) => {
 
   if (used >= DAILY_LIMIT) { await escalate(); return json({ thread_id: threadId, escalated: true, reason: 'limit' }) }
 
+  // cumprimento ou agradecimento: responde com educação (no mesmo período do dia), sem gastar IA
+  {
+    const n = norm(message).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+    const hr = new Date(Date.now() - 3 * 3600_000).getUTCHours()
+    const periodo = hr < 12 ? 'Bom dia' : hr < 18 ? 'Boa tarde' : 'Boa noite'
+    const nome = (me?.full_name || '').trim().split(/\s+/)[0]
+    const quem = nome ? `, ${nome}` : ''
+    const GREET = /^(oi+|ola|opa|e a[ií]|eai|bom dia|boa tarde|boa noite|hello|hey|tudo bem|tudo bom|oi tudo bem|ola tudo bem|ola bom dia|ola boa tarde|ola boa noite|oi bom dia|oi boa tarde|oi boa noite)( .{0,12})?$/
+    const THANKS = /^(obrigad[oa]|valeu|muito obrigad[oa]|brigad[oa]|obg|ok obrigad[oa]|ok valeu|certo obrigad[oa])( .{0,15})?$/
+    let reply = ''
+    if (THANKS.test(n)) reply = `Por nada${quem}! Se precisar de mais alguma coisa, é só chamar.`
+    else if (n.length <= 30 && GREET.test(n)) {
+      const saud = /bom dia|boa tarde|boa noite/.test(n) ? periodo : 'Olá'
+      reply = `${saud}${quem}! Eu sou a assistente da Academia Áion Edu. Em que posso ajudar? Pode perguntar, por exemplo: "como cadastro um lead?", "como agendo uma visita?" ou "como instalo a Áion no celular?".`
+    }
+    if (reply) {
+      await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: reply })
+      await admin.from('support_threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId)
+      return json({ thread_id: threadId, answer: reply, reason: 'greeting' })
+    }
+  }
+
   const lessons = await loadLessons(req.headers.get('origin'))
   const scored = pick(lessons, message, route, manager, admRole)
   // sem aula bem parecida com a pergunta a IA não tenta responder (evita resposta inventada) e oferece chamar a equipe
