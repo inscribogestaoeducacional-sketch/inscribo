@@ -86,8 +86,13 @@ Deno.serve(async (req) => {
 
   const lessons = await loadLessons(req.headers.get('origin'))
   const scored = pick(lessons, message, route, manager, admRole)
-  // sem aula bem parecida com a pergunta a IA não tenta: chama a equipe (evita resposta inventada)
-  if (!scored.length || scored[0].s < 4) { await escalate(); return json({ thread_id: threadId, escalated: true, reason: 'weak' }) }
+  // sem aula bem parecida com a pergunta a IA não tenta responder (evita resposta inventada) e oferece chamar a equipe
+  if (!scored.length || scored[0].s < 4) {
+    const msg = 'Não achei uma aula sobre isso. Tente perguntar de outro jeito (por exemplo: "como agendo uma visita?") ou chame a equipe da Áion.\n[[EQUIPE]]'
+    await admin.from('support_messages').insert({ thread_id: threadId, author_type: 'ai', body: msg })
+    await admin.from('support_threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId)
+    return json({ thread_id: threadId, answer: msg, reason: 'weak' })
+  }
   const chosen = scored.map(x => x.l)
   const knowledge = chosen.map(l => `AULA "${l.title}" (tela: ${l.to})\n${l.summary}\n${l.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}${l.tip ? `\nDica: ${l.tip}` : ''}`).join('\n\n')
 
