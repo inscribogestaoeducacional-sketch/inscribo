@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { LifeBuoy, ArrowLeft, Send, CheckCircle2, Loader2, School } from 'lucide-react'
+import SupportInsights from './SupportInsights'
 import SuperAdminLayout from './SuperAdminLayout'
 import PageHeader from '../ui/PageHeader'
 import { supabase } from '../../lib/supabase'
@@ -8,7 +9,7 @@ import { BRAND } from '../../lib/brand'
 // Suporte (dúvidas): perguntas que a assistente da Academia não resolveu e foram para a equipe da Áion.
 interface Row { id: string; user_id: string; user_name: string; institution_id: string | null; school_name: string | null; subject: string | null; status: string; staff_unread: boolean; escalated_at: string | null; last_message_at: string; last_body: string | null }
 interface Msg { id: string; author_type: 'user' | 'ai' | 'staff'; body: string; created_at: string }
-type Filter = 'open' | 'all'
+type Filter = 'open' | 'all' | 'painel'
 
 const when = (iso: string) => {
   const d = new Date(iso), now = new Date()
@@ -28,6 +29,7 @@ export default function AdminSupport() {
   useEffect(() => { const h = () => setMobile(window.innerWidth < 900); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h) }, [])
 
   const loadList = useCallback(async () => {
+    if (filter === 'painel') return
     const { data, error } = await supabase.rpc('support_staff_list', { p_status: filter })
     if (error) { setErr('Não foi possível carregar as dúvidas.'); setRows([]); return }
     setErr(''); setRows((data ?? []) as Row[])
@@ -126,10 +128,11 @@ export default function AdminSupport() {
           <div role="tablist" style={{ display: 'inline-flex', gap: 2, background: '#EEF3F2', borderRadius: 14, padding: 4, alignSelf: 'flex-start' }}>
             <button type="button" role="tab" aria-selected={filter === 'open'} style={tabBtn(filter === 'open')} onClick={() => { setFilter('open'); setActiveId(null) }}>Abertas</button>
             <button type="button" role="tab" aria-selected={filter === 'all'} style={tabBtn(filter === 'all')} onClick={() => { setFilter('all'); setActiveId(null) }}>Todas</button>
+            <button type="button" role="tab" aria-selected={filter === 'painel'} style={tabBtn(filter === 'painel')} onClick={() => { setFilter('painel'); setActiveId(null) }}>Painel</button>
           </div>
         )}
         {err && !active && <div style={{ padding: 12, borderRadius: 14, background: BRAND.dangerSoft, color: BRAND.danger, fontSize: 14 }}>{err}</div>}
-        {mobile ? (active ? convo : list) : (
+        {filter === 'painel' ? <SupportInsights /> : mobile ? (active ? convo : list) : (
           <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 16, alignItems: 'start' }}>
             {list}
             {convo || <div style={{ padding: 40, textAlign: 'center', color: BRAND.muted, background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 18, fontSize: 14 }}>Escolha uma dúvida para ver a conversa.</div>}
