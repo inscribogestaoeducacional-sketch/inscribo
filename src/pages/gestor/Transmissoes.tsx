@@ -50,14 +50,14 @@ export default function Transmissoes() {
   const [credit, setCredit] = useState(0)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('all')
-  const [mobile, setMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 720)
+  const [mobile, setMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
   const location = useLocation()
   const preRelations = (location.state as { relations?: string[] } | null)?.relations
   const [wizardOpen, setWizardOpen] = useState(!!preRelations?.length)
   const [detailId, setDetailId] = useState<string | null>(null)
 
   useEffect(() => {
-    const f = () => setMobile(window.innerWidth < 720)
+    const f = () => setMobile(window.innerWidth < 768)
     window.addEventListener('resize', f)
     return () => window.removeEventListener('resize', f)
   }, [])
@@ -119,7 +119,7 @@ export default function Transmissoes() {
   ]
 
   const chip = (red: boolean): React.CSSProperties => ({
-    display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+    display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', lineHeight: 1.35, maxWidth: '100%',
     background: red ? '#FEE2E2' : '#FEF3C7', color: red ? '#991B1B' : '#92400E', border: `1.5px solid ${red ? '#FECACA' : '#FDE68A'}`,
   })
   const seg = (on: boolean): React.CSSProperties => ({
@@ -152,19 +152,19 @@ export default function Transmissoes() {
 
       {enabled && <>
         {(paused.length > 0 || highFail.length > 0 || waitingPay.length > 0) && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexDirection: mobile ? 'column' : 'row', flexWrap: 'wrap' }}>
             {paused.map(c => (
-              <button key={c.id} className="ld-alert" style={chip(true)} onClick={() => setDetailId(c.id)}>
+              <button key={c.id} className="ld-alert tr-chip" style={chip(true)} onClick={() => setDetailId(c.id)}>
                 <Pause size={13} /> “{c.name}” pausada — {c.paused_reason === 'schedule_ended' ? 'agenda terminou, reagende' : (PAUSED_REASON[c.paused_reason || ''] || 'veja o motivo')} <ChevronRight size={12} />
               </button>
             ))}
             {highFail.map(c => (
-              <button key={c.id} style={chip(false)} onClick={() => setDetailId(c.id)}>
+              <button key={c.id} className="tr-chip" style={chip(false)} onClick={() => setDetailId(c.id)}>
                 <AlertTriangle size={13} /> “{c.name}”: {rate(c.failed_count, c.sent_count + c.failed_count)}% de falhas <ChevronRight size={12} />
               </button>
             ))}
             {waitingPay.map(c => (
-              <button key={c.id} style={chip(false)} onClick={() => setDetailId(c.id)}>
+              <button key={c.id} className="tr-chip" style={chip(false)} onClick={() => setDetailId(c.id)}>
                 <CreditCard size={13} /> “{c.name}” aguardando pagamento <ChevronRight size={12} />
               </button>
             ))}
@@ -199,7 +199,7 @@ export default function Transmissoes() {
         {tab === 'campaigns' && (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <div style={segWrap}>
+              <div className="aion-hscroll" style={segWrap}>
                 {FILTERS.map(f => <button key={f.k} onClick={() => setFilter(f.k)} style={seg(filter === f.k)}>{f.l}</button>)}
               </div>
               <Btn variant="ghost" onClick={load}><RefreshCw size={14} /> Atualizar</Btn>

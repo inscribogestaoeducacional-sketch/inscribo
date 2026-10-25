@@ -447,3 +447,5 @@ main table tbody tr:last-child td { border-bottom: none; }
 @keyframes aionSbOpen { from { transform: rotate(-360deg) scale(.6) } to { transform: none } }
 @keyframes aionSbClose { from { transform: rotate(360deg) scale(.6) } to { transform: none } }
 @keyframes aionSbName { from { clip-path: inset(0 100% 0 0); opacity: 0; transform: translateX(-26px) } to { clip-path: inset(0 0 0 0); opacity: 1; transform: none } }
+
+.tr-chip svg { flex-shrink: 0 }
