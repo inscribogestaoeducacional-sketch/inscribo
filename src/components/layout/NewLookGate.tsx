@@ -66,11 +66,19 @@ export default function NewLookGate() {
   const [erpSaved, setErpSaved] = useState(false)
   const [erpBusy, setErpBusy] = useState(false)
 
-  const isGestor = preview || user?.role === 'admin' || user?.role === 'manager'
+  const isGestor = preview || user?.user_type === 'admin_geral' || user?.role === 'admin' || user?.role === 'manager'
 
   useEffect(() => {
-    if (!user?.id || user.user_type !== 'school_user' || !user.institution_id) return
+    if (!user?.id) return
     if (preview) { setShow(true); return }
+    // Equipe Áion (admin geral): vê o comunicado já hoje, para teste; a confirmação fica só neste navegador
+    if (user.user_type === 'admin_geral') {
+      let done = false
+      try { done = localStorage.getItem('aion-caranova-teste') === '1' } catch { /* sem storage */ }
+      if (!done) setShow(true)
+      return
+    }
+    if (user.user_type !== 'school_user' || !user.institution_id) return
     if (Date.now() < START_AT) return
     let alive = true
     supabase.rpc('release_gate', { p_release: NEW_LOOK_RELEASE, p_cutoff: CUTOFF }).then(({ data, error }) => {
@@ -96,6 +104,7 @@ export default function NewLookGate() {
 
   const finish = async () => {
     if (preview) { setShow(false); const u = new URL(window.location.href); u.searchParams.delete('prev'); window.history.replaceState({}, '', u.toString()); return }
+    if (user?.user_type === 'admin_geral') { try { localStorage.setItem('aion-caranova-teste', '1') } catch { /* ok */ } setShow(false); return }
     setSaving(true)
     const { error } = await supabase.rpc('release_ack', { p_release: NEW_LOOK_RELEASE })
     setSaving(false)
