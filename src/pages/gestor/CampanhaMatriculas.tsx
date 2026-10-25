@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import PageHeader from '../../components/ui/PageHeader'
 import LinkLeadsToCampaignModal from '../../components/campanha/LinkLeadsToCampaignModal'
 import { BRAND, SHADOW } from '../../lib/brand'
+import EnrolledWithoutLead from '../../components/shared/EnrolledWithoutLead'
 import { applyCampaignCycle } from '../../lib/campaignApply'
 import { aiFetch } from '../../lib/authHeaders'
 import { NovatosTab, RematriculaTab } from '../../components/campanha/NovatosRematricula'
@@ -420,22 +421,7 @@ export default function CampanhaMatriculas() {
 
       {!loading && cycle && tab === 'geral' && (
         <>
-          {noLead && noLead.sem_lead > 0 && (
-            <div style={{ ...card, borderColor: '#FDE68A', background: '#FFFBEB' }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#92400E', marginBottom: 4 }}>
-                {noLead.sem_lead} de {noLead.novos_matriculados} alunos novos matriculados em {targetYear} não têm lead
-              </div>
-              <div style={{ fontSize: 12.5, color: '#92400E', marginBottom: 8 }}>
-                O telefone do responsável não aparece em nenhum lead. Sem o lead, o funil e a origem da matrícula ficam incompletos.
-              </div>
-              <div style={{ fontSize: 12.5, color: BRAND.text, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {noLead.lista.slice(0, 12).map((x, i) => (
-                  <span key={i} style={{ background: '#fff', border: '1px solid #FDE68A', borderRadius: 999, padding: '3px 10px' }}>{x.student}{x.grade ? ` · ${x.grade}` : ''}</span>
-                ))}
-                {noLead.lista.length > 12 && <span style={{ color: BRAND.muted }}>+{noLead.lista.length - 12}</span>}
-              </div>
-            </div>
-          )}
+          <EnrolledWithoutLead institutionId={institutionId} year={targetYear} />
           {!configured ? (
             <div style={card}><div style={{ fontSize: 14, color: BRAND.text }}>Esta campanha ainda não tem meta. Abra <b>Metas e mês a mês</b> para configurar.</div></div>
           ) : (
