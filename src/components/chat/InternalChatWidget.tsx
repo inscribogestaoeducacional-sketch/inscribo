@@ -38,7 +38,7 @@ export default function InternalChatWidget() {
   if (isMobile) {
     return (
       <BottomSheet open={open} onClose={() => setOpen(false)} label="Chat da equipe" height="calc(100dvh - 24px)">
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}><InternalChat compact onClose={() => setOpen(false)} /></div>
+        <div style={{ flex: '0 0 auto', minHeight: 0, height: 'calc(100dvh - 24px - 21px - env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', background: '#fff' }}><InternalChat compact onClose={() => setOpen(false)} /></div>
       </BottomSheet>
     )
   }
