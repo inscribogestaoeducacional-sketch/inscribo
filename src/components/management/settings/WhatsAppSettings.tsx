@@ -20,7 +20,7 @@ import AlertsSettings, { ALERTS_DEFAULTS, type AlertsForm } from './AlertsSettin
 import EmbeddedSignupButton from '../../whatsapp/EmbeddedSignupButton'
 import { canSeeSettingsItem, visibleWhatsAppSections } from '../../../lib/settingsAccess'
 import { BRAND, GRAD } from '../../../lib/brand'
-import { Card, Title, Switch, SaveButton, GhostButton, Pill, NowNote, WarnNote, BackHeader, Tile, input, label, hint } from './ui'
+import { Card, Title, Switch, SaveButton, GhostButton, Pill, NowNote, WarnNote, BackHeader, Tile, useSubHeader, input, label, hint } from './ui'
 import { normalizeBrazilianInput } from '../../../lib/phone'
 
 const FLOW_DAYS = [
@@ -100,7 +100,7 @@ function TimeoutNow({ flow }: { flow: FlowRow }) {
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" onClick={onClick}
+    <button type="button" onClick={onClick} className="cfg-chip"
       style={{ padding: '6px 13px', borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${active ? BRAND.primary : BRAND.line}`, background: active ? BRAND.soft : '#fff', color: active ? BRAND.primaryDark : BRAND.muted }}>
       {children}
     </button>
@@ -196,6 +196,8 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   }, [section])
   const go = (v: string) => { setView(v); onSectionChange?.(v) }
   const goHome = () => { setView('inicio'); onSectionChange?.('') }
+  // Celular: o nome do assunto e o "Voltar" ficam na faixa verde da página.
+  useSubHeader(isMobile && view !== 'inicio' && WA_SECTION_INFO[view] ? { title: WA_SECTION_INFO[view].label, onBack: goHome } : null)
 
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; loadConfig(); return () => { mounted.current = false } }, [])
@@ -632,7 +634,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
       <div style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: `1px solid ${BRAND.line}`, flexWrap: 'wrap' }}>
           <History size={16} color={BRAND.primary} />
-          <div style={{ fontSize: 14, fontWeight: 700, color: BRAND.ink, flex: 1 }}>Enviados automaticamente (últimos 7 dias)</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: BRAND.ink, flex: '1 1 200px' }}>Enviados automaticamente (últimos 7 dias)</div>
           <select value={historyFilter} onChange={e => { setHistoryFilter(e.target.value); setHistoryLimit(8) }} style={{ ...input, width: 'auto', padding: '6px 10px', fontSize: 12.5 }} aria-label="Filtrar por automação">
             <option value="">Todas</option>
             {Object.entries(AUTO_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -830,10 +832,10 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
                 <div key={att.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 14 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>{att.full_name}</div>
                   <div style={{ marginBottom: 12 }}>{days(att.working_days, d => toggleAttendantDay(att.id, d))}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
                     <div><label style={label}>Início</label><input type="time" style={input} value={att.working_hours_start} onChange={e => updateAttendant(att.id, 'working_hours_start', e.target.value)} /></div>
                     <div><label style={label}>Fim</label><input type="time" style={input} value={att.working_hours_end} onChange={e => updateAttendant(att.id, 'working_hours_end', e.target.value)} /></div>
-                    <SaveButton text="Salvar" saving={savingAtt === att.id} onClick={() => handleSaveAttendantHours(att)} />
+                    <div style={{ gridColumn: isMobile ? '1 / -1' : undefined }}><SaveButton text="Salvar" saving={savingAtt === att.id} onClick={() => handleSaveAttendantHours(att)} /></div>
                   </div>
                   <div style={{ marginTop: 12, borderTop: `1px solid ${BRAND.line}`, paddingTop: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: att.has_lunch_break ? 10 : 0 }}>
@@ -855,19 +857,19 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
       )}
 
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
           <Title Icon={Users} title="Grupos de atendimento" help="Equipes por assunto (Secretaria, Financeiro…). O robô e as transferências podem mandar a conversa para um grupo." />
           <GhostButton onClick={() => { setGroupForm({ name: '', emoji: '👥', member_ids: [] }); setEditingGroup(null); setShowGroupForm(true) }}><Plus size={14} /> Novo grupo</GhostButton>
         </div>
         {groups.length === 0 && <p style={{ fontSize: 13, color: BRAND.faint, margin: 0 }}>Nenhum grupo criado ainda.</p>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {groups.map(group => (
-            <div key={group.id} style={{ padding: '10px 14px', borderRadius: 12, border: `1px solid ${BRAND.softLine}`, background: BRAND.softer, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <div>
+            <div key={group.id} style={{ padding: '10px 14px', borderRadius: 12, border: `1px solid ${BRAND.softLine}`, background: BRAND.softer, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 160px', minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>{group.emoji} {group.name}</div>
                 <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 2 }}>{group.member_ids.length} membro(s): {group.member_ids.map(id => flowUsers.find(u => u.id === id)?.full_name || id).join(', ')}</div>
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0, whiteSpace: 'nowrap' }}>
                 <GhostButton onClick={() => { setGroupForm({ name: group.name, emoji: group.emoji, member_ids: group.member_ids }); setEditingGroup(group); setShowGroupForm(true) }}>Editar</GhostButton>
                 <GhostButton danger onClick={async () => { if (!confirm('Excluir este grupo?')) return; await supabase.from('whatsapp_groups').delete().eq('id', group.id); setGroups(prev => prev.filter(g => g.id !== group.id)) }}>Excluir</GhostButton>
               </div>
@@ -923,8 +925,8 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         {blacklist.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: BRAND.muted }}>Nenhum número bloqueado.</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {blacklist.map(b => (
-              <div key={b.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <div>
+              <div key={b.id} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 150px', minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: BRAND.ink, fontFamily: 'monospace' }}>{b.phone_number}</div>
                   {b.reason && <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 2 }}>{b.reason}</div>}
                 </div>
@@ -977,7 +979,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         <div><label style={label}>Nome da etiqueta</label><input style={input} value={newTagName} onChange={e => setNewTagName(e.target.value)} placeholder="Ex.: VIP, Interessado, Aguardando…" maxLength={30} /></div>
         <div>
           <label style={label}>Cor</label>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {TAG_COLORS.map(c => <button key={c} type="button" aria-label={`Cor ${c}`} onClick={() => setNewTagColor(c)} style={{ width: 30, height: 30, borderRadius: 10, background: c, border: newTagColor === c ? `3px solid ${BRAND.ink}` : '2px solid transparent', cursor: 'pointer' }} />)}
           </div>
         </div>
@@ -1170,13 +1172,13 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
       {showFlowEditor && <FlowEditor institutionId={institutionId} onClose={() => { setShowFlowEditor(false); loadConfig() }} />}
       {view === 'inicio' || !info || !content[view] ? home : (
         <div key={view} className="aion-slide" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <BackHeader backLabel="WhatsApp" onBack={goHome} title={info.label} help={info.desc} />
+          {isMobile ? <p style={{ margin: 0, fontSize: 13, color: BRAND.muted, lineHeight: 1.5 }}>{info.desc}</p> : <BackHeader backLabel="WhatsApp" onBack={goHome} title={info.label} help={info.desc} />}
           {content[view]}
         </div>
       )}
 
       {showGroupForm && (
-        <div onClick={() => setShowGroupForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,74,.45)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div className="m-sheet" onClick={() => setShowGroupForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,74,.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, padding: 22, width: 'min(420px, 100%)', boxShadow: '0 30px 80px rgba(26,43,74,.3)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: BRAND.ink, marginBottom: 14 }}>{editingGroup ? 'Editar grupo' : 'Novo grupo'}</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>

@@ -1,7 +1,7 @@
 // Configurações → WhatsApp → Feriados e datas especiais.
 // Cada escola cadastra os dias em que o atendimento muda e escolhe o que o
 // cliente recebe (antes do robô, no lugar dele, ou depois dele).
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CalendarDays, Check, Loader2, Pencil, Plus, Smartphone, Trash2 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { BRAND } from '../../../lib/brand'
@@ -48,6 +48,10 @@ export default function SpecialDatesSettings({ institutionId, horarioTxt, onChan
   const [form, setForm] = useState<Form | null>(null)
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(false)
+  const formRef = useRef<HTMLDivElement>(null)
+  // Celular: ao abrir o formulário, leva a tela até ele (a lista fica acima).
+  const formOpen = !!form, formId = form?.id
+  useEffect(() => { if (formOpen && window.innerWidth < 768) setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60) }, [formOpen, formId])
 
   const load = async () => {
     setLoading(true)
@@ -115,7 +119,7 @@ export default function SpecialDatesSettings({ institutionId, horarioTxt, onChan
         <div style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: `1px solid ${BRAND.line}`, flexWrap: 'wrap' }}>
             <CalendarDays size={16} color={BRAND.primary} />
-            <div style={{ fontSize: 14, fontWeight: 700, color: BRAND.ink, flex: 1 }}>Datas cadastradas</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: BRAND.ink, flex: '1 1 140px' }}>Datas cadastradas</div>
             <GhostButton onClick={addNational} disabled={busy}>{busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Adicionar feriados nacionais</GhostButton>
             <SaveButton text="Nova data" onClick={() => setForm(blank())} />
           </div>
@@ -137,7 +141,7 @@ export default function SpecialDatesSettings({ institutionId, horarioTxt, onChan
         </div>
 
         {form && (
-          <>
+          <div ref={formRef} style={{ display: 'flex', flexDirection: 'column', gap: 16, scrollMarginTop: 70 }}>
             <Card>
               <Title Icon={Pencil} title={form.id ? `Editando: ${form.name || 'data'}` : 'Nova data'} help="Escolha o dia, como o sistema se comporta e o que o cliente recebe." />
               <label style={label}>Nome</label>
@@ -171,7 +175,7 @@ export default function SpecialDatesSettings({ institutionId, horarioTxt, onChan
               <GhostButton onClick={() => setForm(null)}>Cancelar</GhostButton>
               {form.id && <GhostButton danger onClick={() => remove(form.id!)}><Trash2 size={13} /> Excluir</GhostButton>}
             </div>
-          </>
+          </div>
         )}
       </div>
 

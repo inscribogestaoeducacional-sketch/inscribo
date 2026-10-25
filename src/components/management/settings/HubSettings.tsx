@@ -1,9 +1,9 @@
 // Molde único das abas de Configurações com cartões: início com cartões e uma
 // tela por assunto. Com um assunto só liberado para o perfil, abre direto nele.
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { canSeeSettingsItem, type SettingsItemId, type SettingsRole } from '../../../lib/settingsAccess'
 import { BRAND } from '../../../lib/brand'
-import { BackHeader, Tile } from './ui'
+import { BackHeader, Tile, useSubHeader } from './ui'
 
 export interface HubItem {
   key: string
@@ -29,6 +29,14 @@ export default function HubSettings({ rootLabel, groups, role, isMobile, section
   const go = (v: string) => { setView(v); onSectionChange?.(v) }
   const goHome = () => { setView('inicio'); onSectionChange?.('') }
 
+  // O link (?sec=) manda: voltar/abrir por fora da tela também troca o assunto.
+  useEffect(() => {
+    const want = section && all.some(i => i.key === section) ? section : 'inicio'
+    setView(v => (v === want ? v : want))
+  }, [section, all.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cur = all.length === 1 ? undefined : all.find(i => i.key === view)
+  useSubHeader(isMobile && cur ? { title: cur.label, onBack: goHome } : null)
+
   if (all.length === 1) return <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>{all[0].render()}</div>
 
   const current = all.find(i => i.key === view)
@@ -49,7 +57,7 @@ export default function HubSettings({ rootLabel, groups, role, isMobile, section
   }
   return (
     <div key={view} className="aion-slide" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <BackHeader backLabel={rootLabel} onBack={goHome} title={current.label} help={current.desc} />
+      {isMobile ? <p style={{ margin: 0, fontSize: 13, color: BRAND.muted, lineHeight: 1.5 }}>{current.desc}</p> : <BackHeader backLabel={rootLabel} onBack={goHome} title={current.label} help={current.desc} />}
       {current.render()}
     </div>
   )

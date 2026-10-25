@@ -266,7 +266,7 @@ function ManualAggregateCard({ institutionId, onToast }: { institutionId: string
         </p>
       )}
       <div style={{ marginTop: 14 }}>
-        <button onClick={save} disabled={saving || level === 'aluno' || gradeLevels.length === 0} style={saving ? { ...btn, opacity: 0.7 } : btn}>
+        <button className="cfg-save" onClick={save} disabled={saving || level === 'aluno' || gradeLevels.length === 0} style={saving ? { ...btn, opacity: 0.7 } : btn}>
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar números
         </button>
       </div>
@@ -320,7 +320,7 @@ function BaseSettingsCard({ institutionId, onToast }: { institutionId: string; o
         </label>
       </div>
       <p style={{ fontSize: 11, color: '#94A3B8', margin: '8px 0 14px' }}>A base de rematrícula é quem está ativo na data de abertura (decidido em 12/10).</p>
-      <button onClick={save} disabled={saving} style={saving ? { ...btn, opacity: 0.7 } : btn}>
+      <button className="cfg-save" onClick={save} disabled={saving} style={saving ? { ...btn, opacity: 0.7 } : btn}>
         {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar
       </button>
     </div>

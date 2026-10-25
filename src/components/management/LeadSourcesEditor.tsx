@@ -84,7 +84,7 @@ export default function LeadSourcesEditor({ institutionId, onToast }: { institut
             })}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        <div className="cfg-stack" style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <input style={{ ...input, flex: 1 }} value={newName} maxLength={40} placeholder="Nova origem (ex.: Panfleto, Rádio, Evento)" onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} />
           <button type="button" onClick={add} disabled={busy || !newName.trim()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 16px', borderRadius: 12, background: BRAND.primary, color: '#fff', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: !newName.trim() ? 0.5 : 1, fontFamily: 'inherit' }}><Plus size={15} /> Adicionar</button>
         </div>

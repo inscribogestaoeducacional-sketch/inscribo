@@ -64,7 +64,7 @@ export function Modal({ children, onClose, title, wide, footer, subtitle, tabs }
 }) {
   const fancy = subtitle !== undefined || tabs !== undefined
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+    <div className="m-sheet" style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="ld-in" style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: wide ? 860 : 520, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
         {fancy ? (

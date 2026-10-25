@@ -1,7 +1,7 @@
 // Peças visuais compartilhadas das telas de Configurações (padrão do Business,
 // cores do Edu). Só visual: nenhuma delas fala com o banco.
-import type { CSSProperties, ReactNode } from 'react'
-import { Loader2, Check, Save, type LucideIcon } from 'lucide-react'
+import { createContext, useContext, useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
+import { Loader2, Check, Save, ChevronRight, type LucideIcon } from 'lucide-react'
 import { BRAND, GRAD, SHADOW } from '../../../lib/brand'
 
 type IconType = LucideIcon
@@ -12,7 +12,7 @@ export const label: CSSProperties = { fontSize: 12, fontWeight: 600, color: '#47
 export const hint: CSSProperties = { fontSize: 12.5, color: BRAND.muted, margin: '8px 0 0', lineHeight: 1.45 }
 
 export function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-  return <section style={{ ...card, ...style }}>{children}</section>
+  return <section className="cfg-card" style={{ ...card, ...style }}>{children}</section>
 }
 
 /** Título de bloco: ícone suave + título + frase de ajuda. */
@@ -20,7 +20,7 @@ export function Title({ Icon, title, help }: { Icon: IconType; title: string; he
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 14 }}>
       <span style={{ width: 34, height: 34, borderRadius: 11, background: BRAND.soft, color: BRAND.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={17} /></span>
-      <div>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>{title}</div>
         {help && <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 2, lineHeight: 1.45 }}>{help}</div>}
       </div>
@@ -40,7 +40,7 @@ export function Switch({ on, onChange, disabled, labelText }: { on: boolean; onC
 /** Botão principal em degradê, com os estados salvando / salvo. */
 export function SaveButton({ onClick, saving, saved, disabled, text = 'Salvar' }: { onClick: () => void; saving?: boolean; saved?: boolean; disabled?: boolean; text?: string }) {
   return (
-    <button type="button" onClick={onClick} disabled={saving || disabled}
+    <button type="button" onClick={onClick} disabled={saving || disabled} className="cfg-save"
       style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 44, padding: '0 20px', borderRadius: 14, border: 'none', background: saved ? BRAND.success : GRAD, color: '#fff', fontWeight: 800, fontSize: 14.5, cursor: saving || disabled ? 'default' : 'pointer', opacity: saving || disabled ? 0.7 : 1, fontFamily: 'inherit' }}>
       {saving ? <><Loader2 size={16} className="animate-spin" /> Salvando…</> : saved ? <><Check size={16} /> Salvo!</> : <><Save size={16} /> {text}</>}
     </button>
@@ -49,8 +49,8 @@ export function SaveButton({ onClick, saving, saved, disabled, text = 'Salvar' }
 
 export function GhostButton({ children, onClick, disabled, danger, style }: { children: ReactNode; onClick?: () => void; disabled?: boolean; danger?: boolean; style?: CSSProperties }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 12, border: `1px solid ${danger ? '#FECACA' : BRAND.line}`, background: '#fff', color: danger ? BRAND.danger : BRAND.ink, fontWeight: 700, fontSize: 13, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1, fontFamily: 'inherit', ...style }}>
+    <button type="button" onClick={onClick} disabled={disabled} className="cfg-ghost"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 12, border: `1px solid ${danger ? '#FECACA' : BRAND.line}`, background: '#fff', color: danger ? BRAND.danger : BRAND.ink, fontWeight: 700, fontSize: 13, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap', ...style }}>
       {children}
     </button>
   )
@@ -92,13 +92,14 @@ export function BackHeader({ backLabel, onBack, title, help }: { backLabel: stri
 /** Cartão-atalho do início de um grupo (ícone, título, frase). */
 export function Tile({ Icon, title, desc, onClick, highlight }: { Icon: IconType; title: string; desc: string; onClick: () => void; highlight?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className="aion-tile"
-      style={{ textAlign: 'left', background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 16, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'flex-start', fontFamily: 'inherit' }}>
+    <button type="button" onClick={onClick} className="aion-tile aion-tap"
+      style={{ width: '100%', boxSizing: 'border-box', textAlign: 'left', background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 16, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'flex-start', fontFamily: 'inherit' }}>
       <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: highlight ? GRAD : BRAND.soft, color: highlight ? '#fff' : BRAND.primary }}><Icon size={19} /></span>
-      <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
         <span style={{ fontSize: 14, fontWeight: 700, color: BRAND.ink }}>{title}</span>
         <span style={{ fontSize: 12.5, color: BRAND.muted, lineHeight: 1.45 }}>{desc}</span>
       </span>
+      <ChevronRight size={18} color={BRAND.faint} className="cfg-chev" aria-hidden />
     </button>
   )
 }
@@ -109,9 +110,50 @@ export function SettingsStyles() {
     <style>{`
       .animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
       @keyframes aionSlide{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
-      .aion-slide{animation:aionSlide .26s cubic-bezier(.2,.8,.2,1) both}
+      .aion-slide{animation:aionSlide .26s cubic-bezier(.2,.8,.2,1) backwards}
       .aion-tile{transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease}
+      .cfg-chev{display:none;flex-shrink:0;align-self:center}
+      @media (max-width:767px){
+        .cfg-chev{display:block}
+        .cfg-toast{left:14px !important;right:14px !important;top:70px !important}
+        .cfg-m input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]):not([type=range]),.cfg-m select,.cfg-m textarea{font-size:16px !important;min-height:44px;max-width:100%;box-sizing:border-box}
+        .cfg-m textarea{min-height:84px}
+        .cfg-m .cfg-card{padding:16px !important}
+        .cfg-m .cfg-card[style*="padding: 0px"]{padding:0 !important}
+        .cfg-m table.aion-rt input:not([type=checkbox]){width:100% !important;text-align:left !important}
+        .cfg-m [style*="border-radius: 16px"][style*="padding: 24px"]{padding:16px !important}
+        .cfg-m .cfg-save{width:100%;justify-content:center;height:48px !important;font-size:15px !important}
+        .cfg-m .cfg-ghost{min-height:44px;justify-content:center}
+        .cfg-m button{min-height:40px}
+        .cfg-m button[role=switch]{min-height:24px}
+        .cfg-m button[style*="width: 20px"]{min-height:30px;min-width:36px}
+        .cfg-m input[maxlength="2"]{width:56px !important;text-align:center !important}
+        .cfg-m button[aria-label^=Cor]{min-height:36px;min-width:36px}
+        .cfg-m .cfg-chip{min-height:40px}
+        .cfg-m .cfg-tiny{min-height:0}
+        .cfg-m :not(.aion-snap)[style*="grid-template-columns: repeat(auto-fit"],.cfg-m :not(.aion-snap)[style*="grid-template-columns: repeat(auto-fill"]{grid-template-columns:1fr !important}
+        .cfg-m .cfg-stack{flex-wrap:wrap !important}
+        .cfg-m .cfg-stack>input,.cfg-m .cfg-stack>select{flex:1 1 100% !important;min-width:0}
+        .cfg-m .cfg-stack>button{flex:1 1 100%}
+        .cfg-m *{overflow-wrap:anywhere}
+        .cfg-m .cfg-card,.cfg-m .aion-slide{min-width:0}
+      }
       .aion-tile:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(26,43,74,.08);border-color:${BRAND.softLine}}
     `}</style>
   )
+}
+
+/** Celular: a tela de detalhe mostra o nome do assunto e o "Voltar" dentro da faixa verde da página. */
+export type SubHeader = { title: string; onBack: () => void } | null
+export const SubHeaderCtx = createContext<((s: SubHeader) => void) | null>(null)
+export function useSubHeader(s: SubHeader) {
+  const set = useContext(SubHeaderCtx)
+  const backRef = useRef<(() => void) | null>(null)
+  backRef.current = s?.onBack ?? null
+  const title = s?.title ?? null
+  useEffect(() => {
+    if (!set || !title) return
+    set({ title, onBack: () => backRef.current?.() })
+    return () => set(null)
+  }, [title]) // eslint-disable-line react-hooks/exhaustive-deps
 }

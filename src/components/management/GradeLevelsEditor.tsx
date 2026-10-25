@@ -121,7 +121,7 @@ export default function GradeLevelsEditor({ institutionId, onToast }: { institut
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="cfg-stack" style={{ display: 'flex', gap: 8 }}>
         <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRow()} placeholder="Nova série (ex: 1º Ano EF)" style={{ ...input, flex: 1 }} />
         <button onClick={addRow} disabled={saving || !newName.trim()} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 44, padding: '0 18px', borderRadius: 14, background: GRAD, color: '#fff', border: 'none', fontSize: 14, fontWeight: 800, fontFamily: 'inherit', cursor: 'pointer', opacity: !newName.trim() ? 0.5 : 1 }}>
           <Plus size={14} />Adicionar

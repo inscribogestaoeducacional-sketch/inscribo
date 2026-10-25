@@ -972,6 +972,54 @@ export default function FlowEditor({
   const dirtyRef = useRef(false)
 
   const canvasRef = useRef<HTMLDivElement>(null)
+  // Celular: o editor foi feito para mouse. Este "tradutor" transforma o arrasto do dedo em
+  // eventos de mouse (arrastar bloco, mover a tela, ligar portas) sem mexer no resto do editor.
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
+  useEffect(() => {
+    const el = canvasRef.current
+    if (!el || !isMobile) return
+    let active = false
+    let last = { x: 0, y: 0 }
+    const fire = (type: string, target: Element | Window, x: number, y: number) =>
+      target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, view: window }))
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      const t = e.target as HTMLElement
+      if (t.closest('input, textarea, select, button, a, [contenteditable]')) return
+      active = true
+      const p = e.touches[0]
+      last = { x: p.clientX, y: p.clientY }
+      e.preventDefault()
+      fire('mousedown', t, p.clientX, p.clientY)
+    }
+    const onMove = (e: TouchEvent) => {
+      if (!active) return
+      const p = e.touches[0]
+      last = { x: p.clientX, y: p.clientY }
+      e.preventDefault()
+      fire('mousemove', document.elementFromPoint(p.clientX, p.clientY) || el, p.clientX, p.clientY)
+    }
+    const onEnd = () => {
+      if (!active) return
+      active = false
+      fire('mouseup', document.elementFromPoint(last.x, last.y) || el, last.x, last.y)
+    }
+    el.addEventListener('touchstart', onStart, { passive: false })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    el.addEventListener('touchcancel', onEnd)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
+  }, [loading, isMobile])
   const zoomRef   = useRef(zoom)
   const panRef    = useRef(pan)
   useEffect(() => { zoomRef.current = zoom }, [zoom])
@@ -1289,27 +1337,27 @@ export default function FlowEditor({
     }}>
       {/* ── Toolbar ── */}
       <div style={{
-        height: 52, borderBottom: '1px solid #e2e8f0',
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', padding: '0 16px',
+        minHeight: 52, borderBottom: '1px solid #e2e8f0',
+        display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: isMobile ? 6 : 0,
+        justifyContent: 'space-between', padding: isMobile ? '8px 10px' : '0 16px',
         background: 'white', flexShrink: 0,
         boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={onClose} style={{ ...btnBase, background: '#f8fafc', color: '#475569' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexWrap: 'wrap', minWidth: 0 }}>
+          <button onClick={onClose} style={{ ...btnBase, background: '#f8fafc', color: '#475569', whiteSpace: 'nowrap', minHeight: isMobile ? 40 : undefined }}>
             ← Voltar
           </button>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#1a2b4a' }}>Editor de Fluxo</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#1a2b4a', whiteSpace: 'nowrap' }}>{isMobile ? 'Robô' : 'Editor de Fluxo'}</span>
           <span style={{
-            fontSize: 11, padding: '3px 10px', borderRadius: 99,
+            fontSize: 11, borderRadius: 99,
             background: isActive ? '#dcfce7' : '#f1f5f9',
             color: isActive ? '#16a34a' : '#64748b',
             border: `1px solid ${isActive ? '#bbf7d0' : '#e2e8f0'}`,
-            cursor: 'pointer', fontWeight: 600,
+            cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', padding: isMobile ? '8px 12px' : '3px 10px',
           }} onClick={() => setIsActive(a => !a)}>
             {isActive ? '🤖 Robô ativo' : '👤 Robô inativo'}
           </span>
-          <span style={{ fontSize: 11, color: '#94a3b8' }}>
+          <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>
             {nodes.length} blocos · {edges.length} conexões
           </span>
           {connecting && (
@@ -1319,9 +1367,9 @@ export default function FlowEditor({
           )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={fitScreen} style={{ ...btnBase, background: '#f8fafc', color: '#475569' }}>⊡ Ajustar</button>
+          <button onClick={fitScreen} style={{ ...btnBase, background: '#f8fafc', color: '#475569', whiteSpace: 'nowrap', minHeight: isMobile ? 40 : undefined }}>⊡ Ajustar</button>
           <button onClick={handleSave} disabled={saving} style={{
-            ...btnBase, background: saved ? '#16a34a' : '#0d9488',
+            ...btnBase, whiteSpace: 'nowrap', minHeight: isMobile ? 40 : undefined, background: saved ? '#16a34a' : '#0d9488',
             color: 'white', border: 'none', opacity: saving ? 0.7 : 1,
           }}>
             {saved ? '✓ Salvo!' : saving ? 'Salvando...' : '↑ Salvar fluxo'}
@@ -1350,15 +1398,18 @@ export default function FlowEditor({
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* ── Left sidebar ── */}
-        <div style={{
+      <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', overflow: 'hidden' }}>
+        {/* ── Left sidebar (no celular vira uma faixa que desliza no topo) ── */}
+        <div className={isMobile ? 'aion-hscroll' : undefined} style={isMobile ? {
+          borderBottom: '1px solid #e2e8f0', background: '#f8fafc', overflowX: 'auto', overflowY: 'hidden', flexShrink: 0, padding: '8px 10px',
+          display: 'flex', flexDirection: 'row', gap: 6, alignItems: 'center',
+        } : {
           width: 156, borderRight: '1px solid #e2e8f0',
           background: '#f8fafc', overflowY: 'auto', flexShrink: 0, padding: '10px 6px',
         }}>
-          <p style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 8px 4px' }}>Blocos</p>
+          <p style={{ display: isMobile ? 'none' : undefined, fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 8px 4px' }}>Blocos</p>
           <div style={{
-            padding: '7px 10px', marginBottom: 3,
+            padding: '7px 10px', marginBottom: isMobile ? 0 : 3, flexShrink: 0, whiteSpace: 'nowrap', display: isMobile ? 'none' : undefined,
             background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8,
             fontSize: 11, fontWeight: 700, color: '#16a34a',
           }}>
@@ -1370,16 +1421,17 @@ export default function FlowEditor({
               <button key={type} onClick={() => addNode(type)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 7,
-                  padding: '7px 10px', width: '100%', textAlign: 'left',
+                  padding: isMobile ? '10px 14px' : '7px 10px', width: isMobile ? 'auto' : '100%', textAlign: 'left',
+                  flexShrink: 0, whiteSpace: 'nowrap', minHeight: isMobile ? 40 : undefined,
                   background: `${c.color}12`, border: `1px solid ${c.color}30`,
-                  borderRadius: 8, fontSize: 11, fontWeight: 600,
-                  color: c.color, cursor: 'pointer', marginBottom: 3,
+                  borderRadius: 8, fontSize: isMobile ? 12.5 : 11, fontWeight: 600,
+                  color: c.color, cursor: 'pointer', marginBottom: isMobile ? 0 : 3,
                 }}>
                 <span>{c.icon}</span> {c.label}
               </button>
             )
           })}
-          <div style={{ marginTop: 10, padding: 9, background: 'white', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 10, color: '#94a3b8', lineHeight: 1.55 }}>
+          <div style={{ display: isMobile ? 'none' : undefined, marginTop: 10, padding: 9, background: 'white', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 10, color: '#94a3b8', lineHeight: 1.55 }}>
             Clique para adicionar. Arraste pelo cabeçalho. Conecte as portas.
           </div>
         </div>
@@ -1391,7 +1443,7 @@ export default function FlowEditor({
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={() => connecting && setConnecting(null)}
           style={{
-            flex: 1, position: 'relative', overflow: 'hidden',
+            flex: 1, position: 'relative', overflow: 'hidden', touchAction: isMobile ? 'none' : undefined, minHeight: 0,
             background: 'radial-gradient(circle, #cbd5e1 1px, transparent 1px) 0 0 / 24px 24px, #f8fafc',
             cursor: connecting ? 'crosshair' : 'default',
           }}
@@ -1452,7 +1504,7 @@ export default function FlowEditor({
             ].map(btn => (
               <button key={btn.label} onClick={btn.action}
                 style={{
-                  width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: isMobile ? 44 : 32, height: isMobile ? 44 : 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: 'white', border: '1px solid #e2e8f0', borderRadius: 8,
                   color: '#64748b', cursor: 'pointer', fontSize: 14,
                   boxShadow: '0 1px 4px rgba(0,0,0,0.06)',

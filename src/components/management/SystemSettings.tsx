@@ -1,18 +1,20 @@
-﻿import { PillTabs } from '../mobile/PillTabs'
+﻿import { PillTabs, useTabSwipe } from '../mobile/PillTabs'
+import HeaderAction from '../mobile/HeaderAction'
+import StatStrip from '../mobile/StatStrip'
 import React, { useState, useEffect, useRef } from 'react'
 import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
-  ChevronUp, ChevronDown, Pencil, Send, Plug, Filter, Layers, Tag, ThumbsDown, Bell, Eye, Workflow,
+  ChevronUp, ChevronDown, Pencil, Send, Plug, Filter, Layers, Tag, ThumbsDown, Bell, Eye, Workflow, ChevronLeft,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import SchoolSetupModal from '../onboarding/SchoolSetupModal'
 import WhatsAppSettings from './settings/WhatsAppSettings'
 import PageHeader from '../ui/PageHeader'
-import { SettingsStyles, Card, GhostButton, Title, SaveButton, NowNote, WarnNote, Pill, input, label } from './settings/ui'
+import { SettingsStyles, SubHeaderCtx, type SubHeader, Card, GhostButton, Title, SaveButton, NowNote, WarnNote, Pill, input, label } from './settings/ui'
 import { BRAND, GRAD } from '../../lib/brand'
 import FinanceTab from '../transmissoes/FinanceTab'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
@@ -32,7 +34,7 @@ const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg foc
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function Toast({ msg, ok }: { msg: string; ok: boolean }) {
   return (
-    <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: ok ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${ok ? '#BBF7D0' : '#FECACA'}`, borderRadius: 12, padding: '12px 18px', fontSize: 13, color: ok ? '#166534' : '#DC2626', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+    <div className="cfg-toast" role="status" style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: ok ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${ok ? '#BBF7D0' : '#FECACA'}`, borderRadius: 12, padding: '12px 18px', fontSize: 13, color: ok ? '#166534' : '#DC2626', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
       {ok ? <CheckCircle size={15} /> : <AlertCircle size={15} />}{msg}
     </div>
   )
@@ -254,7 +256,7 @@ function IdentidadeTab({ institutionId, onToast }: { institutionId: string; onTo
 }
 
 // ─── Aba: Pagamentos ──────────────────────────────────────────────────────────
-function PagamentosTab({ institutionId }: { institutionId: string }) {
+function PagamentosTab({ institutionId, isMobile }: { institutionId: string; isMobile?: boolean }) {
   const [payments, setPayments] = useState<any[]>([])
   const [institution, setInstitution] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -346,11 +348,19 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
 
   return (
     <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {isMobile ? (
+        <StatStrip items={[
+          { label: 'Mensalidade do plano', value: fmtBRL(institution?.monthly_value || 0), color: BRAND.primary, icon: DollarSign },
+          { label: 'Pagas', value: paidMonthly.length, color: BRAND.success, icon: CheckCircle },
+          { label: late ? 'Pendentes (com atraso)' : 'Pendentes', value: pendingMonthly.length + overdueMonthly.length, color: late ? '#B91C1C' : BRAND.warn, icon: Clock, alert: late },
+        ]} />
+      ) : (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
         {kpi('Mensalidade do plano Áion', fmtBRL(institution?.monthly_value || 0), BRAND.primaryDark)}
         {kpi('Pagas', paidMonthly.length, BRAND.success)}
         {kpi(late ? 'Pendentes (com atraso)' : 'Pendentes', pendingMonthly.length + overdueMonthly.length, late ? '#B91C1C' : BRAND.warn)}
       </div>
+      )}
 
       {implPayment && (
         <Card>
@@ -383,7 +393,7 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
             <div style={{ color: BRAND.muted, fontSize: 12.5, marginTop: 4 }}>As mensalidades são geradas após a confirmação do pagamento da implantação.</div>
           </div>
         ) : (
-          <div style={{ maxHeight: 480, overflow: 'auto' }}>
+          <div style={{ maxHeight: isMobile ? undefined : 480, overflow: isMobile ? 'visible' : 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
               <thead>
                 <tr style={{ background: BRAND.softer }}>
@@ -454,6 +464,7 @@ export default function SystemSettings() {
   const [showSchoolSetup, setShowSchoolSetup] = useState(false)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [sub, setSub] = useState<SubHeader>(null)
 
   const institutionId = user?.institution_id || ''
 
@@ -488,7 +499,7 @@ export default function SystemSettings() {
   const planoGroups: HubGroup[] = [{
     title: 'Plano e cobrança', items: [
       { key: 'plano', label: 'Plano e faturamento', desc: 'Seu plano na Áion, status e mensalidade.', item: 'plano.plano', Icon: FileText, render: () => <GeralTab institutionId={institutionId} onToast={showToast} part="plano" /> },
-      { key: 'pagamentos', label: 'Pagamentos', desc: 'Cobranças da mensalidade e links de pagamento.', item: 'plano.pagamentos', Icon: DollarSign, render: () => <PagamentosTab institutionId={institutionId} /> },
+      { key: 'pagamentos', label: 'Pagamentos', desc: 'Cobranças da mensalidade e links de pagamento.', item: 'plano.pagamentos', Icon: DollarSign, render: () => <PagamentosTab institutionId={institutionId} isMobile={isMobile} /> },
       { key: 'creditos', label: 'Créditos de Transmissões', desc: 'Saldo e recargas para os disparos em massa.', item: 'plano.creditos', Icon: Send, hidden: !broadcastEnabled, render: () => <FinanceTab institutionId={institutionId} /> },
     ],
   }]
@@ -514,17 +525,33 @@ export default function SystemSettings() {
     return () => window.removeEventListener('resize', handler)
   }, [])
 
+  // Celular: ao mudar de aba ou de assunto, volta ao topo da página.
+  useEffect(() => {
+    if (!isMobile) return
+    document.querySelector('main')?.scrollTo?.({ top: 0 })
+    window.scrollTo?.({ top: 0 })
+  }, [activeTab, urlSec]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Arrastar de lado troca de aba, só na tela inicial da aba (nunca dentro de um formulário).
+  const swipe = useTabSwipe(visibleTabs.map(t => t.id), activeTab, setActiveTab, isMobile && !sub)
+  const activeLabel = visibleTabs.find(t => t.id === activeTab)?.label || ''
+
   return (
-    <div style={{ padding: isMobile ? '14px 14px 96px' : '20px 24px 32px', maxWidth: 1200, margin: '0 auto', boxSizing: 'border-box', minHeight: '100%' }}>
+    <SubHeaderCtx.Provider value={setSub}>
+    <div className={isMobile ? 'cfg-m' : undefined} {...(isMobile ? swipe : {})} style={{ padding: isMobile ? '14px 14px 96px' : '20px 24px 32px', maxWidth: 1200, margin: '0 auto', boxSizing: 'border-box', minHeight: '100%' }}>
       <SettingsStyles />
 
       {toast && <Toast msg={toast.msg} ok={toast.ok} />}
 
-      <PageHeader icon={Settings} compact={isMobile} title="Configurações" subtitle="O que vale para a escola toda. As configurações de cada módulo ficam dentro dele." />
-
-      <div style={{ height: 18 }} />
       {isMobile ? (
-        <div style={{ marginBottom: 16 }}><PillTabs tabs={visibleTabs.map(t => [t.id, t.label, t.icon] as [string, string, any])} value={activeTab} onChange={setActiveTab} /></div>
+        <PageHeader icon={Settings} compact title={sub ? sub.title : 'Configurações'} subtitle={sub ? activeLabel : 'O que vale para a escola toda'}
+          actions={sub ? <HeaderAction label="Voltar" icon={ChevronLeft} onClick={sub.onBack} primary /> : undefined} />
+      ) : (
+        <PageHeader icon={Settings} title="Configurações" subtitle="O que vale para a escola toda. As configurações de cada módulo ficam dentro dele." />
+      )}
+
+      <div style={{ height: isMobile ? 12 : 18 }} />
+      {isMobile ? (
+        <><PillTabs tabs={visibleTabs.map(t => [t.id, t.label, t.icon] as [string, string, any])} value={activeTab} onChange={setActiveTab} /><div style={{ height: 14 }} /></>
       ) : (
         <div role="tablist" style={{ display: 'inline-flex', gap: 2, background: '#EEF3F2', borderRadius: 14, padding: 4, marginBottom: 18, flexWrap: 'wrap' }}>
           {visibleTabs.map(tab => {
@@ -553,5 +580,6 @@ export default function SystemSettings() {
         <SchoolSetupModal institutionId={institutionId} initialStep={1} editMode={true} onComplete={() => setShowSchoolSetup(false)} />
       )}
     </div>
+    </SubHeaderCtx.Provider>
   )
 }

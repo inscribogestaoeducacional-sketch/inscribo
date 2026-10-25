@@ -92,7 +92,7 @@ export default function LostReasonsEditor({ institutionId, onToast }: { institut
             })}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+        <div className="cfg-stack" style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
           <input style={{ ...input, flex: '1 1 220px' }} value={label} maxLength={60} placeholder="Novo motivo (ex.: Horário das aulas)" onChange={e => setLabel(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} />
           <select aria-label="Fator do novo motivo" style={{ ...input, width: 'auto' }} value={fator} onChange={e => setFator(e.target.value as any)}>
             <option value="Externo">Externo</option><option value="Interno">Interno</option>

@@ -158,7 +158,7 @@ export default function LeadUnitFieldEditor({ institutionId, onToast }: { instit
       ) : (
         <>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Nome do campo</label>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+          <div className="cfg-stack" style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
             <input value={labelDraft} maxLength={30} disabled={!canManage} onChange={e => setLabelDraft(e.target.value)}
               placeholder="Unidade, Campus, Polo..." style={{ ...inputStyle, flex: 1 }} />
             <button onClick={() => saveSettings({ label: labelDraft })} disabled={!canManage || saving || !labelDraft.trim() || labelDraft.trim() === cfg.label}
@@ -215,7 +215,7 @@ export default function LeadUnitFieldEditor({ institutionId, onToast }: { instit
           </div>
 
           {canManage && (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="cfg-stack" style={{ display: 'flex', gap: 8 }}>
               <input value={newName} maxLength={60} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRow()}
                 placeholder={`Nova opção (ex: ${cfg.label} Centro)`} style={{ ...inputStyle, flex: 1 }} />
               <button onClick={addRow} disabled={saving || !newName.trim()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 16px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: !newName.trim() ? 0.5 : 1 }}>
