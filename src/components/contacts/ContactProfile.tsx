@@ -1,3 +1,4 @@
+import SchoolRelationCard from '../shared/SchoolRelationCard'
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -87,17 +88,6 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const mountedRef = useRef(true)
   const contactRef = contact.lead_id || contact.remote_jid || contact.id
   const { names: GRADES } = useGradeLevels(institutionId)
-  // Relação com a escola (vem da Base de alunos): um cartão só, com os alunos ligados a este telefone
-  const [schoolCard, setSchoolCard] = useState<{ relation: string | null; label: string | null; year: number; students: { name: string; registration: string | null; grade: string | null; class: string | null; year: number | null; status: string | null }[] } | null>(null)
-  useEffect(() => {
-    let alive = true
-    if (!contact.phone) { setSchoolCard(null); return }
-    supabase.rpc('contact_school_card', { p_inst: institutionId, p_phone: contact.phone }).then(({ data, error }) => {
-      if (alive) setSchoolCard(!error && data && (data as any).students?.length ? (data as any) : null)
-    })
-    return () => { alive = false }
-  }, [contact.phone, institutionId])
-
   type TabKey = 'dados' | 'historico' | 'notas' | 'transferencia' | 'alteracoes'
   const [tab, setTab] = useState<TabKey>('dados')
 
@@ -859,22 +849,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                 </select>
               </div>
 
-              {schoolCard && (
-                <div>
-                  <label style={lbl}>Relação com a escola</label>
-                  <div style={{ padding: '10px 12px', background: '#EEF3F2', borderRadius: 8, border: '1px solid #cfe3df' }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#00695F', marginBottom: 6 }}>{schoolCard.label || 'Responsável de aluno'}</div>
-                    {schoolCard.students.map((st, i) => (
-                      <div key={i} style={{ fontSize: 12.5, color: '#475569', padding: '3px 0', borderTop: i ? '1px solid #dbe7e4' : 'none' }}>
-                        <strong style={{ color: '#1A2B4A' }}>{st.name}</strong>
-                        {st.registration ? ` · matrícula ${st.registration}` : ''}
-                        <br />
-                        {[st.grade, st.class, st.year ? String(st.year) : null, st.status ? `Activesoft: ${st.status.replace('_', '-')}` : null].filter(Boolean).join(' · ')}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <SchoolRelationCard institutionId={institutionId} phone={contact.phone} />
 
               {/* Vínculo com aluno — só informativo (import de CSV), sem edição aqui */}
               {(contact.linked_student_name || contact.student_grade || contact.relationship) && (

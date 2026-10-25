@@ -11,6 +11,7 @@ import { BRAND, GRAD } from '../../lib/brand'
 import { supabase } from '../../lib/supabase'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import LeadSequenceCard from './LeadSequenceCard'
+import SchoolRelationCard from '../shared/SchoolRelationCard'
 
 export type PanelTab = 'details' | 'family' | 'history'
 type ConvStatus = 'waiting' | 'open' | 'closed'
@@ -299,6 +300,8 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
       </div>
 
       {!isGroup && p.summarySlot}
+
+      {!isGroup && <SchoolRelationCard institutionId={p.institutionId} phone={conv.phone} />}
 
       {!isGroup && (
         <div className="ld-in" style={card}>
