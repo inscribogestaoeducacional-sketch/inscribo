@@ -1,407 +1,22 @@
 import PageHeader from '../ui/PageHeader'
 import HeaderAction from '../mobile/HeaderAction'
-import StatStrip from '../mobile/StatStrip'
+import StatStrip, { cardBtn } from '../mobile/StatStrip'
+import { PillTabs } from '../mobile/PillTabs'
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions, DEFAULT_OFF_MODULES } from '../../contexts/PermissionsContext'
 import { supabase } from '../../lib/supabase'
 import { sendEmail } from '../../lib/email'
-import { useBroadcastEnabled } from '../../lib/broadcasts'
-import { UsersRound,
-  Users, Plus, Edit, Shield, UserCheck, Search,
-  Eye, EyeOff, Mail, Calendar, CheckCircle, XCircle, Key, X,
-  Building2, AlertTriangle, Loader2, RefreshCw, UserX, RotateCcw, ChevronDown, ChevronUp
+import {
+  UsersRound, Users, Plus, Edit, Shield, UserCheck, Search, Mail, Calendar, CheckCircle, XCircle, Key,
+  Building2, AlertTriangle, Loader2, RefreshCw, UserX, Power,
 } from 'lucide-react'
+import {
+  PERM_MODULES, UserModal, PasswordModal, ConfirmRemoveModal, BlockedRemovalModal, RemovedUsersSection,
+  Avatar, RoleBadge, UserCss, useIsMobile, type AppUser,
+} from './users/UserModals'
 
-const PERM_MODULES = [
-  { id: 'inicio',         label: 'Início',         icon: '🏠', desc: 'Painel com resumo e indicadores gerais' },
-  { id: 'leads',          label: 'Leads',          icon: '👥', desc: 'Gestão do funil de captação de alunos' },
-  { id: 'contatos',       label: 'Contatos',       icon: '📋', desc: 'Base de contatos e histórico' },
-  { id: 'visitas',        label: 'Visitas',        icon: '📅', desc: 'Agendamento e controle de visitas' },
-  { id: 'whatsapp',       label: 'WhatsApp',       icon: '💬', desc: 'Hub de atendimento e fluxos' },
-  { id: 'captacao',       label: 'Captação',       icon: '📣', desc: 'Gatilhos de campanha e dashboard de origem (desligado por padrão)' },
-  { id: 'vitrine',        label: 'Vitrine',        icon: '🏫', desc: 'Página pública da escola com links, WhatsApp e matrícula (desligado por padrão)' },
-  { id: 'transmissoes',   label: 'Transmissões',   icon: '📨', desc: 'Campanhas de disparo em massa com template aprovado (desligado por padrão)' },
-  { id: 'base_alunos',    label: 'Base de alunos', icon: '🎓', desc: 'Painel de rematrícula e lista de quem falta rematricular (desligado por padrão)' },
-  { id: 'relatorios',     label: 'Relatórios',     icon: '📊', desc: 'Métricas e relatórios de desempenho' },
-  { id: 'transferencias', label: 'Transferências', icon: '↔️', desc: 'Transferência de leads entre atendentes' },
-  { id: 'pesquisas',      label: 'Pesquisas',      icon: '⭐', desc: 'Pesquisas de satisfação e resultados' },
-  { id: 'usuarios',       label: 'Usuários',       icon: '👤', desc: 'Gestão de usuários e permissões' },
-  { id: 'configuracoes',  label: 'Configurações',  icon: '⚙️', desc: 'Configurações gerais do sistema' },
-]
-
-interface AppUser {
-  id: string
-  full_name: string
-  email: string
-  role: 'admin' | 'manager' | 'user'
-  institution_id: string
-  active: boolean
-  created_at: string
-  institutions?: { name: string }
-  can_see_all_conversations?: boolean
-  can_see_full_history?: boolean
-}
-
-// ─── Modal Novo/Editar Usuário ────────────────────────────────────────────────
-function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
-  isOpen: boolean; onClose: () => void; onSave: (data: any) => Promise<void>; editingUser?: AppUser | null; institutionId?: string
-}) {
-  const [formData, setFormData] = useState({ full_name: '', email: '', role: 'user' as any, password: '', confirmPassword: '', active: true, can_see_all_conversations: false, can_see_full_history: false })
-  const [showPwd, setShowPwd] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [permMap, setPermMap] = useState<Record<string, boolean>>({})
-  // Fase 6.1: Transmissões também depende da liberação da escola (Super Admin,
-  // broadcast_settings). Mostra quando o módulo não está liberado, pra a
-  // permissão do usuário não parecer suficiente sozinha.
-  const broadcastEnabled = useBroadcastEnabled(institutionId)
-  const schoolBlocked = (moduleId: string) => moduleId === 'transmissoes' && broadcastEnabled === false
-  const [loadingPerms, setLoadingPerms] = useState(false)
-
-  const isConsultor = (role: string) => role !== 'admin' && role !== 'manager'
-
-  useEffect(() => {
-    if (editingUser) {
-      setFormData({ full_name: editingUser.full_name, email: editingUser.email, role: editingUser.role, password: '', confirmPassword: '', active: editingUser.active, can_see_all_conversations: editingUser.can_see_all_conversations ?? false, can_see_full_history: editingUser.can_see_full_history ?? false })
-      if (isConsultor(editingUser.role)) {
-        setLoadingPerms(true)
-        // Escopado pela instituição ATIVA do admin que está editando — sem
-        // isso, um usuário com vínculo em 2+ escolas mostraria os módulos
-        // configurados pra outra escola (ou nenhum, se a linha pertencer a
-        // ela). Ver migration 20260922010000_user_permissions_institution_scope.
-        supabase.from('user_permissions').select('module, enabled').eq('user_id', editingUser.id).eq('institution_id', institutionId ?? '')
-          .then(({ data }) => {
-            const map: Record<string, boolean> = {}
-            PERM_MODULES.forEach(m => { map[m.id] = !DEFAULT_OFF_MODULES.includes(m.id) })
-            if (data) for (const row of data) map[row.module] = row.enabled
-            setPermMap(map)
-          })
-          .finally(() => setLoadingPerms(false))
-      } else {
-        setPermMap({})
-      }
-    } else {
-      setFormData({ full_name: '', email: '', role: 'user', password: '', confirmPassword: '', active: true, can_see_all_conversations: false, can_see_full_history: false })
-      const map: Record<string, boolean> = {}
-      PERM_MODULES.forEach(m => { map[m.id] = !DEFAULT_OFF_MODULES.includes(m.id) })
-      setPermMap(map)
-    }
-    setError('')
-  }, [editingUser, isOpen, institutionId])
-
-  useEffect(() => {
-    if (!editingUser && isConsultor(formData.role)) {
-      const map: Record<string, boolean> = {}
-      PERM_MODULES.forEach(m => { map[m.id] = !DEFAULT_OFF_MODULES.includes(m.id) })
-      setPermMap(map)
-    } else if (!isConsultor(formData.role)) {
-      setPermMap({})
-    }
-  }, [formData.role])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (!editingUser) {
-      if (formData.password !== formData.confirmPassword) return setError('As senhas não coincidem')
-      if (formData.password.length < 6) return setError('Senha mínima: 6 caracteres')
-    }
-    setLoading(true)
-    try {
-      const payload = isConsultor(formData.role) ? { ...formData, permissions: permMap } : formData
-      await onSave(payload)
-      onClose()
-    }
-    catch (err: any) { setError(err.message || 'Erro ao salvar') }
-    finally { setLoading(false) }
-  }
-
-  if (!isOpen) return null
-
-  const S = { input: 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#05907B] focus:outline-none transition-all text-sm' }
-  const showPerms = isConsultor(formData.role)
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 560, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{editingUser ? 'Editar Usuário' : 'Novo Usuário'}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
-        </div>
-
-        {error && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#DC2626', display: 'flex', gap: 8 }}><AlertTriangle size={15} />{error}</div>}
-
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>Nome Completo *</label>
-              <input required className={S.input} placeholder="Nome do usuário" value={formData.full_name} onChange={e => setFormData({ ...formData, full_name: e.target.value })} />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>E-mail *</label>
-              <input required type="email" className={S.input} placeholder="email@escola.com" value={formData.email} disabled={!!editingUser} onChange={e => setFormData({ ...formData, email: e.target.value })} style={editingUser ? { background: '#F8FAFC', color: '#94A3B8' } : {}} />
-            </div>
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>Perfil de Acesso *</label>
-            <select required className={S.input} value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value as any })}>
-              <option value="user">👤 Consultor — Leads, visitas e matrículas</option>
-              <option value="manager">👨‍💼 Gestor — Marketing, funil e relatórios</option>
-              <option value="admin">🛡️ Administrador — Acesso completo</option>
-            </select>
-          </div>
-
-          {!editingUser && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>Senha *</label>
-                <div style={{ position: 'relative' }}>
-                  <input required type={showPwd ? 'text' : 'password'} className={S.input} placeholder="Mín. 6 caracteres" minLength={6} value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} style={{ paddingRight: 40 }} />
-                  <button type="button" onClick={() => setShowPwd(!showPwd)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>{showPwd ? <EyeOff size={16} /> : <Eye size={16} />}</button>
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>Confirmar Senha *</label>
-                <input required type={showPwd ? 'text' : 'password'} className={S.input} placeholder="Confirme a senha" value={formData.confirmPassword} onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })} />
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
-            <input type="checkbox" id="active" checked={formData.active} onChange={e => setFormData({ ...formData, active: e.target.checked })} style={{ width: 16, height: 16, accentColor: '#05907B' }} />
-            <label htmlFor="active" style={{ fontSize: 13, color: '#475569', cursor: 'pointer' }}>Usuário ativo no sistema</label>
-          </div>
-
-          {showPerms && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
-              <div
-                onClick={() => setFormData(f => ({ ...f, can_see_all_conversations: !f.can_see_all_conversations }))}
-                style={{ width: 36, height: 20, borderRadius: 999, background: formData.can_see_all_conversations ? '#05907B' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s', cursor: 'pointer', marginTop: 2 }}
-              >
-                <span style={{ position: 'absolute', top: 2, left: formData.can_see_all_conversations ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />
-              </div>
-              <div onClick={() => setFormData(f => ({ ...f, can_see_all_conversations: !f.can_see_all_conversations }))} style={{ cursor: 'pointer' }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>Pode ver todas as conversas do WhatsApp</p>
-                <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>Quando ativado, este usuário enxerga todas as conversas da instituição, incluindo as atribuídas a outros atendentes.</p>
-              </div>
-            </div>
-          )}
-
-          {showPerms && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
-              <div
-                onClick={() => setFormData(f => ({ ...f, can_see_full_history: !f.can_see_full_history }))}
-                style={{ width: 36, height: 20, borderRadius: 999, background: formData.can_see_full_history ? '#05907B' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s', cursor: 'pointer', marginTop: 2 }}
-              >
-                <span style={{ position: 'absolute', top: 2, left: formData.can_see_full_history ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />
-              </div>
-              <div onClick={() => setFormData(f => ({ ...f, can_see_full_history: !f.can_see_full_history }))} style={{ cursor: 'pointer' }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>Ver histórico completo ao receber transferência</p>
-                <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>Quando ativado, ao receber uma conversa transferida este usuário vê todo o histórico anterior. Quando desativado, vê apenas as mensagens a partir do momento que assumiu.</p>
-              </div>
-            </div>
-          )}
-
-          {showPerms && (
-            <div style={{ border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>🔒 Acesso aos Módulos</p>
-                <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>Administradores e gestores têm acesso total.</p>
-              </div>
-              {loadingPerms ? (
-                <div style={{ textAlign: 'center', padding: 24 }}><Loader2 size={18} color="#05907B" className="animate-spin" style={{ margin: '0 auto' }} /></div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: '#E2E8F0' }}>
-                  {PERM_MODULES.map(m => {
-                    const enabled = permMap[m.id] ?? !DEFAULT_OFF_MODULES.includes(m.id)
-                    return (
-                      <div key={m.id} onClick={() => setPermMap(p => ({ ...p, [m.id]: !(p[m.id] ?? !DEFAULT_OFF_MODULES.includes(m.id)) }))}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#fff', cursor: 'pointer', gap: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <span style={{ fontSize: 16, flexShrink: 0 }}>{m.icon}</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: enabled ? '#1A2B4A' : '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</span>
-                          {schoolBlocked(m.id) && (
-                            <span title="A Áion ainda não liberou este módulo para a escola. Mesmo ligado aqui, o usuário não vai vê-lo."
-                              style={{ fontSize: 10, fontWeight: 700, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 999, padding: '1px 6px', whiteSpace: 'nowrap' }}>
-                              não liberado p/ a escola
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ width: 36, height: 20, borderRadius: 999, background: enabled ? '#05907B' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s' }}>
-                          <span style={{ position: 'absolute', top: 2, left: enabled ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {!editingUser && (
-            <div style={{ background: '#EFF6FF', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#1D4ED8' }}>
-              🔑 Um e-mail de boas-vindas com os dados de acesso será enviado automaticamente para o usuário.
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
-            <button type="button" onClick={onClose} style={{ padding: '9px 20px', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
-            <button type="submit" disabled={loading} style={{ padding: '9px 20px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: loading ? 0.7 : 1 }}>
-              {loading ? <><Loader2 size={13} className="animate-spin" />{editingUser ? 'Salvando...' : 'Criando...'}</> : editingUser ? 'Salvar alterações' : 'Criar usuário'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// ─── Modal Alterar Senha ──────────────────────────────────────────────────────
-function PasswordModal({ isOpen, onClose, targetUser }: { isOpen: boolean; onClose: () => void; targetUser: AppUser | null }) {
-  const [pwd, setPwd] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [show, setShow] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
-
-  useEffect(() => { setPwd(''); setConfirm(''); setError(''); setSuccess(false) }, [isOpen])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (pwd !== confirm) return setError('As senhas não coincidem')
-    if (pwd.length < 6) return setError('Mínimo 6 caracteres')
-    setLoading(true); setError('')
-    try {
-      // Usa edge function ou admin API — aqui usamos reset por email como fallback seguro
-      const { error } = await supabase.auth.resetPasswordForEmail(targetUser!.email, {
-        redirectTo: `${window.location.origin}/reset-password`
-      })
-      if (error) throw error
-      setSuccess(true)
-    } catch (err: any) {
-      setError(err.message || 'Erro ao enviar email de redefinição')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!isOpen || !targetUser) return null
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 420, boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Key size={16} color="#05907B" />Redefinir Senha</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
-        </div>
-
-        <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#475569' }}>
-          <strong>{targetUser.full_name}</strong><br />{targetUser.email}
-        </div>
-
-        {success ? (
-          <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: 16, textAlign: 'center' }}>
-            <CheckCircle size={32} color="#16a34a" style={{ margin: '0 auto 10px' }} />
-            <p style={{ fontSize: 13, color: '#166534', fontWeight: 600, margin: 0 }}>Email de redefinição enviado!</p>
-            <p style={{ fontSize: 12, color: '#16a34a', margin: '4px 0 0' }}>O usuário receberá instruções por email.</p>
-            <button onClick={onClose} style={{ marginTop: 14, padding: '8px 20px', borderRadius: 9, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Fechar</button>
-          </div>
-        ) : (
-          <>
-            {error && <div style={{ background: '#FEF2F2', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: '#DC2626' }}>{error}</div>}
-            <p style={{ fontSize: 13, color: '#64748B', marginBottom: 16 }}>Clique abaixo para enviar um email de redefinição de senha para o usuário.</p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 9, border: '1.5px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
-              <button onClick={handleSubmit as any} disabled={loading} style={{ padding: '9px 18px', borderRadius: 9, background: '#8B5CF6', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {loading ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
-                Enviar email
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Modal: remoção bloqueada por lead/conversa em aberto ─────────────────────
-function BlockedRemovalModal({ info, onClose, onGoToLeads, onGoToWhatsApp }: {
-  info: { user: AppUser; pendingLeads: number; pendingConversations: number } | null
-  onClose: () => void
-  onGoToLeads: () => void
-  onGoToWhatsApp: () => void
-}) {
-  if (!info) return null
-  const parts: string[] = []
-  if (info.pendingLeads > 0) parts.push(`${info.pendingLeads} lead${info.pendingLeads > 1 ? 's' : ''} em aberto`)
-  if (info.pendingConversations > 0) parts.push(`${info.pendingConversations} conversa${info.pendingConversations > 1 ? 's' : ''} de WhatsApp em andamento`)
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 440, boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><AlertTriangle size={16} color="#DC2626" />Não é possível remover</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
-        </div>
-        <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, margin: '0 0 20px' }}>
-          <strong>{info.user.full_name}</strong> tem {parts.join(' e ')} atribuído{(info.pendingLeads + info.pendingConversations) > 1 ? 's' : ''} a ele nesta escola. Transfira para outro atendente antes de remover, para não deixar ninguém sem responsável.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {info.pendingLeads > 0 && (
-            <button onClick={onGoToLeads} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, background: '#05907B', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            Ver leads deste usuário
-            </button>
-          )}
-          {info.pendingConversations > 0 && (
-            <button onClick={onGoToWhatsApp} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, background: '#EFF6FF', color: '#3B82F6', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            Abrir WhatsApp
-            </button>
-          )}
-          <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B' }}>Fechar</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Seção: usuários removidos (vínculo desativado) ──────────────────────────
-function RemovedUsersSection({ removedLinks, show, onToggle, onReactivate }: {
-  removedLinks: { user_id: string; full_name: string; email: string }[]
-  show: boolean
-  onToggle: () => void
-  onReactivate: (userId: string) => void
-}) {
-  if (removedLinks.length === 0) return null
-  return (
-    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-      <button onClick={onToggle} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer' }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#64748B' }}>Removidos desta escola ({removedLinks.length})</span>
-        {show ? <ChevronUp size={16} color="#94A3B8" /> : <ChevronDown size={16} color="#94A3B8" />}
-      </button>
-      {show && (
-        <div style={{ borderTop: '1px solid #F1F5F9' }}>
-          {removedLinks.map(r => (
-            <div key={r.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid #F8FAFC' }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{r.full_name}</div>
-                <div style={{ fontSize: 11, color: '#94A3B8' }}>{r.email}</div>
-              </div>
-              <button onClick={() => onReactivate(r.user_id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: 'none', background: '#F0FDF4', color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                <RotateCcw size={12} /> Reativar
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Componente Principal ─────────────────────────────────────────────────────
 export default function UserManagement() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -416,7 +31,9 @@ export default function UserManagement() {
   const [filterRole, setFilterRole] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const isMobile = useIsMobile()
+  const [confirmRemove, setConfirmRemove] = useState<AppUser | null>(null)
+  const [removing, setRemoving] = useState(false)
 
   // Vínculos desativados (user_institutions.active=false) desta instituição —
   // "removido da escola" agora é reversível, então precisa de um jeito de
@@ -428,12 +45,6 @@ export default function UserManagement() {
   const [blockedRemoval, setBlockedRemoval] = useState<{ user: AppUser; pendingLeads: number; pendingConversations: number } | null>(null)
 
   useEffect(() => { loadUsers(); loadRemovedLinks() }, [user])
-
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768)
-    window.addEventListener('resize', handler)
-    return () => window.removeEventListener('resize', handler)
-  }, [])
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
@@ -603,12 +214,18 @@ export default function UserManagement() {
   // lead/conversa em aberto e a própria desativação acontecem atomicamente
   // no servidor (deactivate_user_institution_link) — ver migration
   // 20260922000000.
-  const handleRemoveFromInstitution = async (u: AppUser) => {
-    if (!confirm(`Remover "${u.full_name}" desta escola?\n\nO acesso a esta instituição é desativado (reversível a qualquer momento). A conta e o acesso a outras escolas, se houver, não são afetados.`)) return
+  const handleRemoveFromInstitution = (u: AppUser) => setConfirmRemove(u)
+
+  const doRemove = async () => {
+    const u = confirmRemove
+    if (!u) return
+    setRemoving(true)
     const { data, error } = await supabase.rpc('deactivate_user_institution_link', {
       p_user_id: u.id,
       p_institution_id: user!.institution_id,
     })
+    setRemoving(false)
+    setConfirmRemove(null)
     if (error) return showToast(error.message || 'Erro ao remover usuário', false)
     const result = Array.isArray(data) ? data[0] : data
     if (!result?.success) {
@@ -647,261 +264,238 @@ export default function UserManagement() {
     admins: users.filter(u => u.role === 'admin').length,
     managers: users.filter(u => u.role === 'manager').length,
   }
+  const consultants = users.filter(u => u.role !== 'admin' && u.role !== 'manager').length
+  const inactive = users.length - stats.active
+  const schoolName = user?.institution_name || user?.institution_id || '—'
 
-  const roleLabel = (r: string) => r === 'admin' ? 'Administrador' : r === 'manager' ? 'Gestor' : 'Consultor'
-  const roleBg = (r: string) => r === 'admin' ? '#FEE2E2' : r === 'manager' ? '#DBEAFE' : '#F1F5F9'
-  const roleColor = (r: string) => r === 'admin' ? '#DC2626' : r === 'manager' ? '#3B82F6' : '#64748B'
+  const openNew = () => { setEditingUser(null); setShowModal(true) }
+  const openEdit = (u: AppUser) => { setEditingUser(u); setShowModal(true) }
+  const openPwd = (u: AppUser) => { setPwdUser(u); setShowPwdModal(true) }
 
-  // ─── MOBILE ───────────────────────────────────────────────
-  if (isMobile) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9' }}>
-        <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+  const statItems = [
+    { label: 'Total', value: stats.total, sub: 'usuários cadastrados', color: '#3B82F6', icon: Users },
+    { label: 'Ativos', value: stats.active, sub: 'com acesso liberado', color: '#16A34A', icon: CheckCircle },
+    { label: 'Admins', value: stats.admins, sub: 'acesso total', color: '#DC2626', icon: Shield },
+    { label: 'Gestores', value: stats.managers, sub: 'acompanham os números', color: '#8B5CF6', icon: UserCheck },
+  ]
 
-        {toast && (
-          <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: toast.ok ? '#1A2B4A' : '#DC2626', color: 'white', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999, display: 'flex', alignItems: 'center', gap: 8 }}>
-            {toast.ok ? <CheckCircle size={14} /> : <AlertTriangle size={14} />}{toast.msg}
-          </div>
-        )}
+  const toastEl = toast && (
+    <div role="status" style={isMobile
+      ? { position: 'fixed', bottom: 90, left: 16, right: 16, margin: '0 auto', width: 'fit-content', maxWidth: 'calc(100% - 32px)', background: toast.ok ? '#1A2B4A' : '#DC2626', color: 'white', padding: '12px 18px', borderRadius: 14, fontSize: 13, fontWeight: 600, zIndex: 9999, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }
+      : { position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: toast.ok ? '#1A2B4A' : '#DC2626', color: 'white', fontSize: 13, fontWeight: 500, padding: '12px 18px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+      {toast.ok ? <CheckCircle size={14} /> : <AlertTriangle size={14} />}{toast.msg}
+    </div>
+  )
 
-        <div style={{ padding: '12px 12px 0' }}>
-          <PageHeader compact icon={UsersRound} title="Usuários" subtitle={`${stats.active} ativo${stats.active !== 1 ? 's' : ''} de ${stats.total}`}
-            actions={<HeaderAction primary icon={Plus} label="Novo usuário" onClick={() => { setEditingUser(null); setShowModal(true) }} />} />
-        </div>
-
-        {/* Search */}
-        <div style={{ padding: '12px 16px', background: '#fff', borderBottom: '1px solid #E2E8F0' }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
-            <input
-              placeholder="Buscar por nome ou email..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 44, border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 16, outline: 'none', background: '#F8FAFC', boxSizing: 'border-box' }}
-            />
-          </div>
-        </div>
-
-        <div style={{ padding: '12px 12px 4px' }}>
-          <StatStrip items={[
-            { label: 'Total', value: stats.total, sub: 'usuários cadastrados', color: '#3B82F6', icon: Users },
-            { label: 'Ativos', value: stats.active, sub: 'com acesso liberado', color: '#16A34A', icon: CheckCircle },
-            { label: 'Admins', value: stats.admins, sub: 'acesso total', color: '#DC2626', icon: Shield },
-            { label: 'Gestores', value: stats.managers, sub: 'acompanham os números', color: '#8B5CF6', icon: UserCheck },
-          ]} />
-        </div>
-
-        {/* User cards */}
-        <div style={{ flex: 1, padding: '0 0 100px' }}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Loader2 size={28} color="#05907B" className="animate-spin" style={{ margin: '0 auto 12px' }} />
-              <p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando...</p>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div style={{ padding: '40px 16px', textAlign: 'center' }}>
-              <Users size={40} color="#CBD5E1" style={{ marginBottom: 12 }} />
-              <p style={{ color: '#94A3B8', fontSize: 14 }}>{users.length === 0 ? 'Nenhum usuário cadastrado' : 'Nenhum resultado'}</p>
-            </div>
-          ) : filtered.map(u => (
-            <div key={u.id} style={{ margin: '0 16px 10px', background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid #E2E8F0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--aion-grad)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                  {u.full_name.charAt(0).toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</p>
-                  <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>
-                </div>
-                <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: roleBg(u.role), color: roleColor(u.role), flexShrink: 0 }}>
-                  {roleLabel(u.role)}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => handleToggle(u.id, u.active)}
-                  style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: 'none', background: u.active ? '#D1FAE5' : '#FEE2E2', color: u.active ? '#16a34a' : '#DC2626', fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 44 }}
-                >
-                  {u.active ? <><CheckCircle size={13} />Ativo</> : <><XCircle size={13} />Inativo</>}
-                </button>
-                <button
-                  onClick={() => { setEditingUser(u); setShowModal(true) }}
-                  style={{ width: 44, height: 44, borderRadius: 10, border: 'none', background: '#EFF6FF', color: '#3B82F6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Edit size={16} />
-                </button>
-                <button
-                  onClick={() => { setPwdUser(u); setShowPwdModal(true) }}
-                  style={{ width: 44, height: 44, borderRadius: 10, border: 'none', background: '#F5F3FF', color: '#8B5CF6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Key size={16} />
-                </button>
-                <button
-                  onClick={() => handleRemoveFromInstitution(u)}
-                  title="Remover desta escola"
-                  style={{ width: 44, height: 44, borderRadius: 10, border: 'none', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <UserX size={16} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ margin: '0 16px 16px' }}>
-          <RemovedUsersSection removedLinks={removedLinks} show={showRemoved} onToggle={() => setShowRemoved(v => !v)} onReactivate={handleReactivateLink} />
-        </div>
-
-
-        <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} institutionId={user?.institution_id} />
-        <PasswordModal isOpen={showPwdModal} onClose={() => { setShowPwdModal(false); setPwdUser(null) }} targetUser={pwdUser} />
-        <BlockedRemovalModal
-          info={blockedRemoval}
-          onClose={() => setBlockedRemoval(null)}
-          onGoToLeads={() => { const id = blockedRemoval?.user.id; setBlockedRemoval(null); if (id) navigate(`/leads?owner=${id}`) }}
-          onGoToWhatsApp={() => { setBlockedRemoval(null); navigate('/whatsapp') }}
-        />
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ padding: 24, minHeight: '100%', background: '#F5FAF9', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.ok ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${toast.ok ? '#BBF7D0' : '#FECACA'}`, borderRadius: 12, padding: '12px 18px', fontSize: 13, color: toast.ok ? '#166534' : '#DC2626', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
-          {toast.ok ? <CheckCircle size={15} /> : <AlertTriangle size={15} />}{toast.msg}
-        </div>
-      )}
-
-      {/* Header */}
-      <PageHeader icon={UsersRound} title="Usuários" subtitle="Controle de acesso e permissões"
-        actions={<>
-          <button onClick={loadUsers} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-            <RefreshCw size={14} /> Atualizar
-          </button>
-          <button onClick={() => { setEditingUser(null); setShowModal(true) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#00695F', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
-            <Plus size={15} /> Novo Usuário
-          </button>
-        </>} />
-
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
-        {[
-          { label: 'Total', value: stats.total, color: '#3B82F6', bg: '#DBEAFE', Icon: Users },
-          { label: 'Ativos', value: stats.active, color: '#16a34a', bg: '#D1FAE5', Icon: CheckCircle },
-          { label: 'Admins', value: stats.admins, color: '#DC2626', bg: '#FEE2E2', Icon: Shield },
-          { label: 'Gestores', value: stats.managers, color: '#8B5CF6', bg: '#EDE9FE', Icon: UserCheck },
-        ].map(({ label, value, color, bg, Icon }) => (
-          <div key={label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 6px' }}>{label}</p>
-              <p style={{ fontSize: 26, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>{value}</p>
-            </div>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon size={18} color={color} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filtros */}
-      <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
-          <input placeholder="Buscar por nome ou email..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 40, border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, outline: 'none', background: '#F8FAFC', boxSizing: 'border-box' }} />
-        </div>
-        <select value={filterRole} onChange={e => setFilterRole(e.target.value)} style={{ height: 40, padding: '0 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 13, background: '#F8FAFC', outline: 'none', color: '#475569' }}>
-          <option value="">Todos os perfis</option>
-          <option value="admin">Administradores</option>
-          <option value="manager">Gestores</option>
-          <option value="user">Consultores</option>
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ height: 40, padding: '0 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 13, background: '#F8FAFC', outline: 'none', color: '#475569' }}>
-          <option value="">Todos os status</option>
-          <option value="active">Ativos</option>
-          <option value="inactive">Inativos</option>
-        </select>
-      </div>
-
-      {/* Tabela */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '48px 0' }}>
-            <Loader2 size={28} color="#05907B" className="animate-spin" style={{ margin: '0 auto 12px' }} />
-            <p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando usuários...</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px 0', color: '#94A3B8' }}>
-            <Users size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-            <p style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px' }}>{users.length === 0 ? 'Nenhum usuário cadastrado' : 'Nenhum resultado encontrado'}</p>
-            <p style={{ fontSize: 12, margin: 0 }}>{users.length === 0 ? 'Clique em "Novo Usuário" para começar' : 'Tente ajustar os filtros'}</p>
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                {['Usuário', 'Perfil', 'Instituição', 'Status', 'Cadastrado em', 'Ações'].map(h => (
-                  <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((u, i) => (
-                <tr key={u.id} style={{ borderBottom: '1px solid #F8FAFC', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
-                  <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--aion-grad)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                        {u.full_name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 600, color: '#1A2B4A' }}>{u.full_name}</div>
-                        <div style={{ fontSize: 11, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 4 }}><Mail size={10} />{u.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: roleBg(u.role), color: roleColor(u.role) }}>
-                      {roleLabel(u.role)}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px', color: '#64748B', fontSize: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Building2 size={12} color="#94A3B8" />{user?.institution_name || user?.institution_id || '—'}</div>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <button onClick={() => handleToggle(u.id, u.active)} style={{ padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: u.active ? '#D1FAE5' : '#FEE2E2', color: u.active ? '#16a34a' : '#DC2626', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {u.active ? <><CheckCircle size={11} />Ativo</> : <><XCircle size={11} />Inativo</>}
-                    </button>
-                  </td>
-                  <td style={{ padding: '12px 16px', color: '#64748B', fontSize: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Calendar size={12} color="#94A3B8" />{new Date(u.created_at).toLocaleDateString('pt-BR')}</div>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button onClick={() => { setEditingUser(u); setShowModal(true) }} title="Editar" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#EFF6FF', color: '#3B82F6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Edit size={13} /></button>
-                      <button onClick={() => { setPwdUser(u); setShowPwdModal(true) }} title="Redefinir senha" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#F5F3FF', color: '#8B5CF6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={13} /></button>
-                      <button onClick={() => handleRemoveFromInstitution(u)} title="Remover desta escola" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UserX size={13} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <RemovedUsersSection removedLinks={removedLinks} show={showRemoved} onToggle={() => setShowRemoved(v => !v)} onReactivate={handleReactivateLink} />
-
+  const modals = (
+    <>
       <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} institutionId={user?.institution_id} />
       <PasswordModal isOpen={showPwdModal} onClose={() => { setShowPwdModal(false); setPwdUser(null) }} targetUser={pwdUser} />
+      <ConfirmRemoveModal user={confirmRemove} loading={removing} onClose={() => setConfirmRemove(null)} onConfirm={doRemove} />
       <BlockedRemovalModal
         info={blockedRemoval}
         onClose={() => setBlockedRemoval(null)}
         onGoToLeads={() => { const id = blockedRemoval?.user.id; setBlockedRemoval(null); if (id) navigate(`/leads?owner=${id}`) }}
         onGoToWhatsApp={() => { setBlockedRemoval(null); navigate('/whatsapp') }}
       />
+    </>
+  )
+
+  const emptyState = (
+    <div style={{ padding: isMobile ? '36px 20px' : '48px 24px', textAlign: 'center' }}>
+      <div style={{ width: 56, height: 56, borderRadius: 16, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+        <Users size={24} color="#05907B" />
+      </div>
+      <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>{users.length === 0 ? 'Nenhum usuário cadastrado' : 'Nenhum resultado encontrado'}</p>
+      <p style={{ margin: '0 auto', fontSize: 13, color: '#64748b', maxWidth: 360, lineHeight: 1.6 }}>
+        {users.length === 0 ? 'Crie o primeiro acesso para a sua equipe começar a usar o sistema.' : 'Tente mudar a busca ou os filtros.'}
+      </p>
+      {users.length === 0 ? (
+        <button onClick={openNew} className="aion-tap" style={cardBtn('primary', { flex: '0 0 auto', marginTop: 18, padding: '10px 22px', display: 'inline-flex', alignItems: 'center', gap: 6 })}><Plus size={15} /> Novo usuário</button>
+      ) : (
+        <button onClick={() => { setSearch(''); setFilterRole(''); setFilterStatus('') }} className="aion-tap" style={cardBtn('ghost', { flex: '0 0 auto', marginTop: 18, padding: '10px 22px' })}>Limpar filtros</button>
+      )}
+    </div>
+  )
+
+  // ─── MOBILE ───────────────────────────────────────────────
+  if (isMobile) {
+    const chip = (on: boolean): React.CSSProperties => ({
+      flexShrink: 0, minHeight: 36, padding: '6px 14px', borderRadius: 999, fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
+      border: `1px solid ${on ? '#05907B' : '#E3E8F0'}`, background: on ? '#E6F7F5' : '#fff', color: on ? '#00695F' : '#5B6B86',
+    })
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#F5FAF9' }}>
+        <UserCss />
+        {toastEl}
+
+        <div style={{ padding: '12px 12px 100px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <PageHeader compact icon={UsersRound} title="Usuários" subtitle={`${stats.active} ativo${stats.active !== 1 ? 's' : ''} de ${stats.total}`}
+            actions={<>
+              <HeaderAction primary icon={Plus} label="Novo usuário" onClick={openNew} />
+              <HeaderAction icon={RefreshCw} label="Atualizar" onClick={() => { loadUsers(); loadRemovedLinks() }} />
+            </>} />
+
+          <StatStrip items={statItems} />
+
+          <div style={{ position: 'relative' }}>
+            <Search size={16} color="#94A3B8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
+            <input aria-label="Buscar usuário" placeholder="Buscar por nome ou e-mail" value={search} onChange={e => setSearch(e.target.value)} className="um-in"
+              style={{ paddingLeft: 40, height: 46, fontSize: 16, borderRadius: 14, boxShadow: '0 1px 2px rgba(26,43,74,.04)' }} />
+          </div>
+
+          <PillTabs value={filterRole} onChange={setFilterRole}
+            tabs={[['', `Todos (${stats.total})`], ['admin', `Admins (${stats.admins})`], ['manager', `Gestores (${stats.managers})`], ['user', `Consultores (${consultants})`]]} />
+
+          <div className="aion-hscroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -12px', padding: '0 12px' }}>
+            <button type="button" className="aion-tap" style={chip(filterStatus === '')} onClick={() => setFilterStatus('')}>Qualquer situação</button>
+            <button type="button" className="aion-tap" style={chip(filterStatus === 'active')} onClick={() => setFilterStatus('active')}>Ativos ({stats.active})</button>
+            <button type="button" className="aion-tap" style={chip(filterStatus === 'inactive')} onClick={() => setFilterStatus('inactive')}>Inativos ({inactive})</button>
+          </div>
+
+          {loading ? (
+            [0, 1, 2].map(i => <div key={i} className="um-sk" style={{ height: 150, borderRadius: 18, background: '#fff', border: '1px solid #E3E8F0' }} />)
+          ) : filtered.length === 0 ? (
+            <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #E3E8F0' }}>{emptyState}</div>
+          ) : filtered.map(u => (
+            <div key={u.id} className="ld-card" style={{ padding: 14, background: '#fff', border: '1px solid #E3E8F0', borderRadius: 18, boxShadow: '0 1px 2px rgba(26,43,74,.04)', opacity: u.active ? 1 : 0.8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Avatar name={u.full_name} size={46} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflowWrap: 'anywhere', lineHeight: 1.25 }}>
+                    {u.full_name}{u.id === user?.id && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: '#00695F', background: '#E6F7F5', borderRadius: 999, padding: '1px 8px', verticalAlign: 'middle' }}>você</span>}
+                  </p>
+                  <p style={{ fontSize: 12.5, color: '#5B6B86', margin: '3px 0 0', display: 'flex', alignItems: 'flex-start', gap: 5, overflowWrap: 'anywhere', lineHeight: 1.3 }}><Mail size={12} style={{ flexShrink: 0, marginTop: 2 }} />{u.email}</p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '12px 0' }}>
+                <RoleBadge role={u.role} />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: u.active ? '#D1FAE5' : '#FEE2E2', color: u.active ? '#16a34a' : '#DC2626' }}>
+                  {u.active ? <><CheckCircle size={11} />Ativo</> : <><XCircle size={11} />Inativo</>}
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5, color: '#5B6B86', marginBottom: 12 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Building2 size={13} color="#94A3B8" />{schoolName}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Calendar size={13} color="#94A3B8" />Cadastrado em {new Date(u.created_at).toLocaleDateString('pt-BR')}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => openEdit(u)} className="aion-tap" style={cardBtn('primary', { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 })}><Edit size={15} />Editar</button>
+                <button onClick={() => openPwd(u)} className="aion-tap" style={cardBtn('ghost', { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 })}><Key size={15} />Senha</button>
+                <button onClick={() => handleToggle(u.id, u.active)} className="aion-tap" style={cardBtn('ghost', { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 })}><Power size={15} />{u.active ? 'Desativar' : 'Ativar'}</button>
+                <button onClick={() => handleRemoveFromInstitution(u)} className="aion-tap" style={cardBtn('danger', { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 })}><UserX size={15} />Remover</button>
+              </div>
+            </div>
+          ))}
+
+          <RemovedUsersSection removedLinks={removedLinks} show={showRemoved} onToggle={() => setShowRemoved(v => !v)} onReactivate={handleReactivateLink} />
+        </div>
+
+        {modals}
+      </div>
+    )
+  }
+
+  // ─── COMPUTADOR ───────────────────────────────────────────
+  const seg = (on: boolean): React.CSSProperties => ({
+    padding: '6px 14px', borderRadius: 7, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+    background: on ? '#fff' : 'transparent', color: on ? '#1A2B4A' : '#64748b', boxShadow: on ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+  })
+  const segWrap: React.CSSProperties = { display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4 }
+  const actBtn = (color: string, bg: string): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 7, background: bg, color, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' })
+
+  return (
+    <div style={{ padding: 24, minHeight: '100%', background: '#F5FAF9', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <UserCss />
+      {toastEl}
+
+      <PageHeader icon={UsersRound} title="Usuários" subtitle="Controle de acesso e permissões da equipe"
+        actions={<>
+          <button onClick={() => { loadUsers(); loadRemovedLinks() }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.14)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <RefreshCw size={14} /> Atualizar
+          </button>
+          <button onClick={openNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 12, border: 'none', background: '#fff', color: '#00695F', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)' }}>
+            <Plus size={15} /> Novo usuário
+          </button>
+        </>} />
+
+      <StatStrip items={statItems} />
+
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0, marginRight: 'auto' }}>Equipe da escola <span style={{ color: '#94a3b8', fontWeight: 600 }}>({filtered.length})</span></h3>
+          <div style={{ position: 'relative', width: 280 }}>
+            <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+            <input aria-label="Buscar usuário" placeholder="Buscar por nome ou e-mail" value={search} onChange={e => setSearch(e.target.value)} className="um-in" style={{ paddingLeft: 34, height: 38, fontSize: 13, borderRadius: 10 }} />
+          </div>
+          <div style={segWrap}>
+            {([['', 'Todos'], ['admin', 'Admins'], ['manager', 'Gestores'], ['user', 'Consultores']] as const).map(([id, l]) => (
+              <button key={id} onClick={() => setFilterRole(id)} style={seg(filterRole === id)}>{l}</button>
+            ))}
+          </div>
+          <div style={segWrap}>
+            {([['', 'Todos'], ['active', 'Ativos'], ['inactive', 'Inativos']] as const).map(([id, l]) => (
+              <button key={id} onClick={() => setFilterStatus(id)} style={seg(filterStatus === id)}>{l}</button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[0, 1, 2, 3].map(i => <div key={i} className="um-sk" style={{ height: 52, borderRadius: 10, background: '#f8fafc' }} />)}
+          </div>
+        ) : filtered.length === 0 ? emptyState : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  {['Usuário', 'Perfil', 'Instituição', 'Status', 'Cadastrado em', 'Ações'].map(h => (
+                    <th key={h} style={{ padding: '10px 16px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((u, i) => (
+                  <tr key={u.id} style={{ borderTop: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa', opacity: u.active ? 1 : 0.75 }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Avatar name={u.full_name} size={36} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{u.full_name}{u.id === user?.id && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#00695F', background: '#E6F7F5', borderRadius: 999, padding: '1px 7px' }}>você</span>}</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}><Mail size={10} />{u.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}><RoleBadge role={u.role} /></td>
+                    <td style={{ padding: '12px 16px', color: '#475569', fontSize: 13 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Building2 size={12} color="#94A3B8" />{schoolName}</div>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <button onClick={() => handleToggle(u.id, u.active)} title={u.active ? 'Clique para desativar' : 'Clique para ativar'}
+                        style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: u.active ? '#D1FAE5' : '#FEE2E2', color: u.active ? '#16a34a' : '#DC2626', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {u.active ? <><CheckCircle size={11} />Ativo</> : <><XCircle size={11} />Inativo</>}
+                      </button>
+                    </td>
+                    <td style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 12, whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Calendar size={12} />{new Date(u.created_at).toLocaleDateString('pt-BR')}</div>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => openEdit(u)} title="Editar" style={actBtn('#1D4ED8', '#EFF6FF')}><Edit size={12} />Editar</button>
+                        <button onClick={() => openPwd(u)} title="Redefinir senha" style={actBtn('#7C3AED', '#F5F3FF')}><Key size={12} />Senha</button>
+                        <button onClick={() => handleRemoveFromInstitution(u)} title="Remover desta escola" style={actBtn('#DC2626', '#FEF2F2')}><UserX size={12} />Remover</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <RemovedUsersSection removedLinks={removedLinks} show={showRemoved} onToggle={() => setShowRemoved(v => !v)} onReactivate={handleReactivateLink} />
+
+      {modals}
     </div>
   )
 }
