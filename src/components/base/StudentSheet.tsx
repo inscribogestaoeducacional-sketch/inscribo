@@ -1,6 +1,7 @@
 // Ficha do aluno da Base de alunos: tela cheia no celular, janela no computador.
 // Mostra tudo que a lista traz (e mais) e as ações: WhatsApp, marcar/desfazer rematrícula.
 import { useEffect, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, MessageCircle, Phone, CheckCircle2, Undo2, Loader2, User, GraduationCap, CalendarDays, Hash, Layers, Info as InfoIcon } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
 import { Z } from '../../lib/layers'
@@ -22,6 +23,7 @@ function Line({ icon: Icon, label, children }: { icon: React.ElementType; label:
 export default function StudentSheet({ row, year, canEdit, busy, onClose, onMark }: {
   row: Row; year: number; canEdit: boolean; busy: boolean; onClose: () => void; onMark: (r: Row, on: boolean) => void
 }) {
+  const navigate = useNavigate()
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', k)
@@ -79,10 +81,11 @@ export default function StudentSheet({ row, year, canEdit, busy, onClose, onMark
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {hasPhone && (
-              <a href={`https://wa.me/${waNumber(row.guardian_phone as string)}`} target="_blank" rel="noreferrer" className="aion-tap"
-                style={{ ...cardBtn(row.category === 'a_rematricular' ? 'primary' : 'ghost'), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, textDecoration: 'none' }}>
+              // Abre a conversa dentro da Áion (módulo WhatsApp), não o WhatsApp de fora.
+              <button type="button" onClick={() => navigate(`/whatsapp?phone=${String(row.guardian_phone).replace(/\D/g, '')}`)} className="aion-tap"
+                style={{ ...cardBtn(row.category === 'a_rematricular' ? 'primary' : 'ghost'), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
                 <MessageCircle size={16} /> Chamar no WhatsApp
-              </a>
+              </button>
             )}
             {hasPhone && (
               <a href={`tel:+${waNumber(row.guardian_phone as string)}`} className="aion-tap"

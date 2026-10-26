@@ -1,6 +1,7 @@
 // Peças da Base de alunos que mudam de desenho entre computador e celular.
 // No celular: tudo vira cartão (tabela larga nunca); no computador: as tabelas de sempre.
 import type { CSSProperties, ElementType, ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, ChevronRight, Download, Loader2, MessageCircle, Search, Undo2, User, Users } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
 import { CountUp } from '../leads/LeadsAttention'
@@ -252,6 +253,7 @@ export function GeralView({ mobile, year, counts, parts, totalAll, preCounts, ca
 export const GROUPS: [Group, string][] = [['matriculados', 'Matriculados'], ['pre', 'Pré-matriculados'], ['faltam', 'Ainda faltam'], ['saiu', 'Saíram'], ['concluinte', 'Concluintes'], ['todos', 'Todos']]
 
 export function RowActions({ r, canEdit, busyId, mark, size = 'card' }: { r: Row; canEdit: boolean; busyId: string; mark: (r: Row, on: boolean) => void; size?: 'card' | 'table' }) {
+  const navigate = useNavigate()
   const busy = busyId === r.student_id
   const stop = (e: React.MouseEvent) => e.stopPropagation()
   const tb = size === 'table'
@@ -260,12 +262,13 @@ export function RowActions({ r, canEdit, busyId, mark, size = 'card' }: { r: Row
   return (
     <>
       {wa && (
-        <a href={`https://wa.me/${waNumber(r.guardian_phone as string)}`} target="_blank" rel="noreferrer" title="Chamar no WhatsApp" onClick={stop} className="aion-tap"
+        // Abre a conversa dentro da Áion (módulo WhatsApp), não o WhatsApp de fora.
+        <button type="button" title="Chamar no WhatsApp" onClick={e => { stop(e); navigate(`/whatsapp?phone=${String(r.guardian_phone).replace(/\D/g, '')}`) }} className="aion-tap"
           style={tb
-            ? { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, marginRight: 6, borderRadius: 8, border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D' }
-            : { ...cardBtn('primary'), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, textDecoration: 'none' }}>
+            ? { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, marginRight: 6, borderRadius: 8, border: '1px solid #BBF7D0', background: '#F0FDF4', color: '#15803D', cursor: 'pointer' }
+            : { ...cardBtn('primary'), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
           <MessageCircle size={tb ? 15 : 16} />{!tb && ' Chamar no WhatsApp'}
-        </a>
+        </button>
       )}
       {r.category === 'a_rematricular' && canEdit && (
         <button type="button" onClick={e => { stop(e); mark(r, true) }} disabled={busy} className="aion-tap"
