@@ -12,7 +12,7 @@
 // curva padrão, marcada como "estimativa".
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet, LogOut, Link2 } from 'lucide-react'
+import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet, LogOut, Link2, LineChart as LineChartIcon } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import PageHeader from '../../components/ui/PageHeader'
@@ -26,6 +26,7 @@ import RematriculaManual, { useManualReenroll } from '../../components/campanha/
 import Investimento from '../../components/campanha/Investimento'
 import FunilCampanha from '../../components/campanha/FunilCampanha'
 import Matriculometro from '../../components/campanha/Matriculometro'
+import CurvaDiaria from '../../components/campanha/CurvaDiaria'
 import VisaoGeral from '../../components/campanha/VisaoGeral'
 import HistoricoManual from '../../components/campanha/HistoricoManual'
 import SaidasReport from '../../components/campanha/SaidasReport'
@@ -43,7 +44,7 @@ type PanelRow = {
   grade_level_id: string; grade_name: string; base_prev_year: number; reenrolled: number; reenrolled_declared: number; pending: number
   left_school: number; new_students: number; returning_students: number; graduates: number; pre_enrolled: number
 }
-type Tab = 'geral' | 'funil' | 'novatos' | 'rematricula' | 'invest' | 'metas' | 'serie' | 'matriculometro' | 'saidas' | 'relatorio'
+type Tab = 'geral' | 'funil' | 'novatos' | 'rematricula' | 'invest' | 'metas' | 'serie' | 'matriculometro' | 'dia' | 'saidas' | 'relatorio'
 type Report = { resumo?: string; secoes?: { titulo: string; texto?: string; pontos?: string[] }[]; alertas?: string[] }
 type Ed = {
   start: string; end: string; curStudents: number; baseStudents: number; retention: number
@@ -353,7 +354,7 @@ export default function CampanhaMatriculas() {
   const st = STATUS_LABEL[cycle?.status ?? 'draft'] ?? STATUS_LABEL.draft
   const TAB_LIST: [Tab, string, typeof LayoutGrid][] = [
     ['geral', 'Visão geral', LayoutGrid], ['funil', 'Funil', Filter], ['novatos', 'Novatos', Users], ['rematricula', 'Rematrícula', RefreshCw],
-    ['invest', 'Investimento', Wallet], ['serie', 'Séries e turmas', Layers], ['matriculometro', 'Matriculômetro', Flag], ['saidas', 'Saídas', LogOut], ['relatorio', 'Relatório', Sparkles],
+    ['invest', 'Investimento', Wallet], ['serie', 'Séries e turmas', Layers], ['matriculometro', 'Matriculômetro', Flag], ['dia', 'Dia a dia', LineChartIcon], ['saidas', 'Saídas', LogOut], ['relatorio', 'Relatório', Sparkles],
   ]
   const tabBtn = (id: Tab, label: string, Icon: typeof LayoutGrid) => isMobile ? (
     <button key={id} type="button" role="tab" aria-selected={tab === id} className="aion-tap" onClick={() => setTab(id)} style={{
@@ -613,6 +614,8 @@ export default function CampanhaMatriculas() {
       {!loading && cycle && tab === 'invest' && institutionId && <Investimento institutionId={institutionId} year={targetYear} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`} />}
 
       {!loading && cycle && tab === 'matriculometro' && institutionId && <Matriculometro institutionId={institutionId} year={targetYear} />}
+
+      {!loading && cycle && tab === 'dia' && institutionId && <CurvaDiaria institutionId={institutionId} year={targetYear} mobile={isMobile} />}
 
       {!loading && cycle && tab === 'serie' && (
         <div style={card}>
