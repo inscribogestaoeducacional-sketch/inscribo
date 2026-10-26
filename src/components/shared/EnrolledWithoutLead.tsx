@@ -1,5 +1,5 @@
 // Alunos novos matriculados no sistema da escola que ainda não estão ligados a um lead.
-// Aparece em Leads e na Campanha. Para cada aluno: vincular ao lead sugerido (mesmo nome e série),
+// Aparece na Base de alunos (Conferir matrículas) e na Campanha. Para cada aluno: vincular ao lead sugerido (mesmo nome e série),
 // criar o lead já matriculado, abrir a conversa do responsável ou marcar "não é lead".
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -13,10 +13,10 @@ type Data = { year: number; novos_matriculados: number; sem_lead: number; lista:
 
 const STATUS_LABEL: Record<string, string> = { new: 'Novo', contact: 'Em contato', scheduled: 'Visita agendada', visit: 'Visitou', proposal: 'Proposta', enrolled: 'Matriculado', lost: 'Perdido' }
 
-export default function EnrolledWithoutLead({ institutionId, year, onChanged }: { institutionId?: string; year?: number | null; onChanged?: () => void }) {
+export default function EnrolledWithoutLead({ institutionId, year, onChanged, defaultOpen }: { institutionId?: string; year?: number | null; onChanged?: () => void; defaultOpen?: boolean }) {
   const navigate = useNavigate()
   const [data, setData] = useState<Data | null>(null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(!!defaultOpen)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [yr, setYr] = useState<number | null>(year ?? null)

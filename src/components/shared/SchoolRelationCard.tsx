@@ -6,14 +6,14 @@ import { GraduationCap, ExternalLink, UserPlus, RefreshCw, X, Hash, Layers, Chev
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
 import { Z } from '../../lib/layers'
-import { activesoftStudentUrl, activesoftNewStudentUrl } from '../../lib/activesoft'
+import { erpSystem, type ErpSystem } from '../../lib/erp'
 
 export type SchoolHistory = { year: number; grade: string | null; class: string | null; status: string | null }
 export type SchoolStudent = {
   name: string; registration: string | null; grade: string | null; class: string | null; year: number | null; status: string | null
   student_id?: string; external_id?: string | null; history?: SchoolHistory[]
 }
-// erp: sistema da escola ligado por integração ('activesoft'); null = sem integração (botões não aparecem).
+// erp: sistema da escola ligado por integração (chave de lib/erp.ts); null = sem integração (botões não aparecem).
 export type SchoolCard = { relation: string | null; label: string | null; year: number; erp?: string | null; students: SchoolStudent[] }
 
 const STATUS: Record<string, [string, string, string]> = {
@@ -41,17 +41,17 @@ const btnBase = { display: 'inline-flex', alignItems: 'center', justifyContent: 
 const openNew = (url: string) => window.open(url, '_blank', 'noopener')
 
 // Aluno que já está matriculado neste ano → só abrir; aluno da casa sem matrícula no ano → rematricular.
-function studentAction(s: SchoolStudent, year: number) {
+function studentAction(s: SchoolStudent, year: number, erp: ErpSystem) {
   const matriculado = s.year === year && s.status === 'ativo'
-  return matriculado ? { label: 'Abrir na Activesoft', Icon: ExternalLink } : { label: 'Rematricular na Activesoft', Icon: RefreshCw }
+  return matriculado ? { label: `Abrir na ${erp.label}`, Icon: ExternalLink } : { label: `Rematricular na ${erp.label}`, Icon: RefreshCw }
 }
 
-function ActionButton({ s, year, wide }: { s: SchoolStudent; year: number; wide?: boolean }) {
-  if (!s.external_id) return null
-  const a = studentAction(s, year)
+function ActionButton({ s, year, erp, wide }: { s: SchoolStudent; year: number; erp: ErpSystem | null; wide?: boolean }) {
+  if (!s.external_id || !erp) return null
+  const a = studentAction(s, year, erp)
   const primary = a.label.startsWith('Rematricular')
   return (
-    <button type="button" onClick={() => openNew(activesoftStudentUrl(s.external_id!))}
+    <button type="button" onClick={() => openNew(erp.studentUrl(s.external_id!))}
       style={{ ...btnBase, width: wide ? '100%' : undefined, background: primary ? 'var(--aion-grad)' : '#fff', color: primary ? '#fff' : BRAND.primary, border: primary ? 'none' : `1.5px solid ${BRAND.primary}` }}>
       <a.Icon size={14} /> {a.label}
     </button>
@@ -59,7 +59,7 @@ function ActionButton({ s, year, wide }: { s: SchoolStudent; year: number; wide?
 }
 
 // Ficha leve do aluno: série atual, histórico de séries e o botão da Activesoft.
-function StudentQuickSheet({ s, year, onClose }: { s: SchoolStudent; year: number; onClose: () => void }) {
+function StudentQuickSheet({ s, year, erp, onClose }: { s: SchoolStudent; year: number; erp: ErpSystem | null; onClose: () => void }) {
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', k)
@@ -102,7 +102,7 @@ function StudentQuickSheet({ s, year, onClose }: { s: SchoolStudent; year: numbe
             })}
             </div>
           </div>
-          <ActionButton s={s} year={year} wide />
+          <ActionButton s={s} year={year} erp={erp} wide />
         </div>
       </div>
     </div>,
@@ -114,9 +114,10 @@ export default function SchoolRelationCard({ institutionId, phone }: { instituti
   const card = useSchoolCard(institutionId, phone)
   const [open, setOpen] = useState<SchoolStudent | null>(null)
   if (!card) return null
-  const erp = card.erp === 'activesoft'
+  const erp = erpSystem(card.erp)
   // Contato que não é aluno: só o atalho para matricular (escolas com Activesoft).
   if (!card.students.length) {
+    if (!erp) return null
     return (
       <div style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 14, boxShadow: '0 1px 2px rgba(26,43,74,.04)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -124,7 +125,7 @@ export default function SchoolRelationCard({ institutionId, phone }: { instituti
           <b style={{ flex: 1, fontSize: 13.5, color: BRAND.ink }}>Relação com a escola</b>
         </div>
         <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 10 }}>Nenhum aluno ligado a este telefone.</div>
-        <button type="button" onClick={() => openNew(activesoftNewStudentUrl())} style={{ ...btnBase, width: '100%', background: 'var(--aion-grad)', color: '#fff' }}><UserPlus size={14} /> Matricular agora na Activesoft</button>
+        <button type="button" onClick={() => erp && openNew(erp.newStudentUrl())} style={{ ...btnBase, width: '100%', background: 'var(--aion-grad)', color: '#fff' }}><UserPlus size={14} /> Matricular agora na {erp?.label}</button>
       </div>
     )
   }
@@ -149,15 +150,15 @@ export default function SchoolRelationCard({ institutionId, phone }: { instituti
                 </span>
               </button>
               <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 2 }}>{[s.grade, s.class, s.year ? String(s.year) : null, s.registration ? `matrícula ${s.registration}` : null].filter(Boolean).join(' · ')}</div>
-              {erp && <div style={{ marginTop: 8 }}><ActionButton s={s} year={card.year} wide /></div>}
+              {erp && <div style={{ marginTop: 8 }}><ActionButton s={s} year={card.year} erp={erp} wide /></div>}
             </div>
           )
         })}
       </div>
       {erp && (
-        <button type="button" onClick={() => openNew(activesoftNewStudentUrl())} style={{ ...btnBase, width: '100%', marginTop: 10, background: '#fff', color: BRAND.primary, border: `1.5px dashed ${BRAND.primary}` }}><UserPlus size={14} /> Matricular outro aluno</button>
+        <button type="button" onClick={() => openNew(erp.newStudentUrl())} style={{ ...btnBase, width: '100%', marginTop: 10, background: '#fff', color: BRAND.primary, border: `1.5px dashed ${BRAND.primary}` }}><UserPlus size={14} /> Matricular outro aluno</button>
       )}
-      {open && <StudentQuickSheet s={open} year={card.year} onClose={() => setOpen(null)} />}
+      {open && <StudentQuickSheet s={open} year={card.year} erp={erp} onClose={() => setOpen(null)} />}
     </div>
   )
 }

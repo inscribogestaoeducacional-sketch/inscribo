@@ -19,7 +19,7 @@ export type Head = {
   prev_studying: number; prev_left: number; secretary_count: number | null
 }
 export type Info = { last_seen: string | null; sources: string[] | null; pre_counts: boolean }
-export type Tab = 'geral' | 'alunos' | 'serie' | 'conferencia'
+export type Tab = 'geral' | 'alunos' | 'serie' | 'conferencia' | 'matriculas'
 export type Period = 'all' | 'month' | 'last' | 'custom'
 export type Group = 'todos' | 'matriculados' | 'pre' | 'faltam' | 'saiu' | 'concluinte'
 export type Counts = {

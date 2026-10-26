@@ -22,6 +22,7 @@ import { useActiveCampaignYear } from '../../lib/activeCampaign'
 import PageHeader from '../../components/ui/PageHeader'
 import HeaderAction from '../../components/mobile/HeaderAction'
 import { BRAND } from '../../lib/brand'
+import EnrollmentCheck from '../../components/base/EnrollmentCheck'
 import StudentSheet from '../../components/base/StudentSheet'
 import {
   ORIGIN_LABEL, baseCard, fmtDate, stateLabel,
@@ -44,7 +45,7 @@ function periodRange(p: Period, from: string, to: string): [string, string] | nu
   return [from || '0000-01-01', to || '9999-12-31']
 }
 
-const BA_TABS: [string, string, any][] = [['geral', 'Visão geral', LayoutGrid], ['alunos', 'Alunos', Users], ['serie', 'Por série', Layers], ['conferencia', 'Conferência', ClipboardCheck]]
+const BA_TABS: [string, string, any][] = [['geral', 'Visão geral', LayoutGrid], ['alunos', 'Alunos', Users], ['serie', 'Por série', Layers], ['conferencia', 'Conferência', ClipboardCheck], ['matriculas', 'Conferir matrículas', UserCheck]]
 const PERIOD_NOTE = 'O período usa a data da matrícula. Pré-matrícula não tem data no sistema da escola: só aparece em “Todo o período”.'
 
 export default function BaseAlunos() {
@@ -292,7 +293,7 @@ export default function BaseAlunos() {
     </div>
   ) : hasData && (
     <>
-      {!(isMobile && tab === 'alunos') && periodBar}
+      {!(isMobile && tab === 'alunos') && tab !== 'matriculas' && periodBar}
 
       {tab === 'geral' && (
         <>
@@ -315,6 +316,8 @@ export default function BaseAlunos() {
       {tab === 'conferencia' && (
         <ConferenceView mobile={isMobile} head={head} draft={headDraft} setDraft={setHeadDraft} save={saveHead} canEdit={canEdit} year={thisYear} />
       )}
+
+      {tab === 'matriculas' && <EnrollmentCheck institutionId={institutionId} year={year} mobile={isMobile} />}
     </>
   )
 
