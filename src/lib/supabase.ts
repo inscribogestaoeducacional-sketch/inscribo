@@ -1230,7 +1230,7 @@ export class DatabaseService {
     if (!data || data.length === 0) throw new Error('Não foi possível salvar a tag — a conversa não está atribuída a você.')
   }
 
-  static async closeConversation(institutionId: string, remoteJid: string): Promise<{ count: number; error: any }> {
+  static async closeConversation(institutionId: string, remoteJid: string, opts?: { restartBot?: boolean }): Promise<{ count: number; error: any }> {
     const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const norm = `${raw}@s.whatsapp.net`
     // Não zera assigned_user_id/assigned_user_name aqui: a policy de RLS de
@@ -1245,7 +1245,8 @@ export class DatabaseService {
     // closed_at — usado pelo webhook (item A) pra saber se uma mensagem nova
     // chegou pouco depois do encerramento (reabre silenciosamente, sem
     // repetir boas-vindas/menu) ou muito depois (trata como atendimento novo).
-    const payload = { status: 'closed', bot_active: false, unread_count: 0, closed_at: new Date().toISOString() }
+    // close_restart_bot: "Somente concluir" → na próxima mensagem do cliente o robô inicia na hora.
+    const payload = { status: 'closed', bot_active: false, unread_count: 0, closed_at: new Date().toISOString(), close_restart_bot: opts?.restartBot === true }
 
     // Always update both formats in parallel — DB may have either form (legacy + current)
     const [r1, r2] = await Promise.all([

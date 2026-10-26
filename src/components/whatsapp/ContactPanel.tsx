@@ -51,7 +51,9 @@ export interface ContactPanelProps {
   transferTarget: string; setTransferTarget: (v: string) => void
   onTransfer: () => void
   onBotToggle: () => void
-  onConclude: () => void; onLeave: () => void
+  onConclude: (withSurvey: boolean) => void; onLeave: () => void
+  // pesquisa de satisfação: escola usa? janela de 24h do cliente aberta?
+  surveyEnabled?: boolean; surveyWindowOpen?: boolean
   // funil
   lead: any | null
   leadInfo: string
@@ -292,9 +294,19 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
           </span>
         </button>
         {conv.status !== 'closed' && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={p.onConclude} style={{ flex: 2, padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#fff', background: GRAD, border: 'none', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}><CheckCircle2 size={15} /> Concluir</button>
-            {conv.assigned_user_id && <button onClick={p.onLeave} title="Sair do atendimento: a conversa volta para a fila" style={{ flex: 1, padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'inherit' }}><LogOut size={14} /> Sair</button>}
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {p.surveyEnabled && (
+              <button onClick={() => p.onConclude(true)} disabled={!p.surveyWindowOpen}
+                title={p.surveyWindowOpen ? 'Conclui e manda a pesquisa de satisfação ao cliente' : 'A janela de 24h do cliente fechou: não dá para enviar a pesquisa'}
+                style={{ width: '100%', padding: '11px 0', fontSize: 13, fontWeight: 800, color: '#fff', background: p.surveyWindowOpen ? GRAD : '#CBD5E1', border: 'none', borderRadius: 12, cursor: p.surveyWindowOpen ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}><CheckCircle2 size={15} /> Concluir e enviar pesquisa</button>
+            )}
+            {p.surveyEnabled && !p.surveyWindowOpen && <span style={{ fontSize: 11.5, color: '#64748B', textAlign: 'center' }}>Janela de 24h fechada: não dá para enviar a pesquisa.</span>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => p.onConclude(false)} title="Conclui sem enviar nada. Se o cliente escrever depois, o robô inicia" style={p.surveyEnabled
+                ? { flex: 2, padding: '10px 0', fontSize: 13, fontWeight: 800, color: BRAND.primary, background: '#fff', border: `1.5px solid ${BRAND.primary}`, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }
+                : { flex: 2, padding: '10px 0', fontSize: 13, fontWeight: 800, color: '#fff', background: GRAD, border: 'none', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}><CheckCircle2 size={15} /> {p.surveyEnabled ? 'Somente concluir' : 'Concluir'}</button>
+              {conv.assigned_user_id && <button onClick={p.onLeave} title="Sair do atendimento: a conversa volta para a fila" style={{ flex: 1, padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'inherit' }}><LogOut size={14} /> Sair</button>}
+            </div>
           </div>
         )}
       </div>

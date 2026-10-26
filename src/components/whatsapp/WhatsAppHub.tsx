@@ -4372,7 +4372,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       .eq('phone', normPhone)
   }
 
-  const handleCloseConversation = async () => {
+  // withSurvey=true → "Concluir e enviar pesquisa"; false → "Somente concluir" (o robô inicia quando o cliente escrever).
+  const handleCloseConversation = async (withSurvey: boolean = true) => {
     if (!activeId || !effectiveInstitutionId) return
     const convId = activeId
     const rJid   = rawJid(convId)
@@ -4396,7 +4397,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     setActiveId(null)
 
     // 3. Persist to DB (triggers Realtime — guarded above)
-    const closeResult = await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
+    const closeResult = await DatabaseService.closeConversation(effectiveInstitutionId, rJid, { restartBot: !withSurvey })
     if (closeResult.error || closeResult.count === 0) {
       console.warn('[CLOSE 5] AVISO: 0 linhas atualizadas — possível problema de RLS ou formato do JID')
       // Desfaz o "fechado" otimista — sem isso o atendente vê a conversa como
@@ -4424,7 +4425,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }, 10000)
 
     // 5. Send satisfaction survey if enabled
-    if (flowConfig?.satisfaction_survey_enabled && windowWasOpen && previousStatus !== 'closed') {
+    if (withSurvey && flowConfig?.satisfaction_survey_enabled && windowWasOpen && previousStatus !== 'closed') {
       const to = rJid.replace(/@.*/, '').replace(/\D/g, '')
       const surveyMsg = flowConfig.satisfaction_message || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊'
       try {
@@ -4443,6 +4444,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               message: surveyMsg + '\n\n1 - Ruim\n2 - Regular\n3 - Ótimo',
             }),
           })
+          // Marca que a pesquisa saiu (o webhook só aceita nota depois de uma pesquisa enviada).
+          await supabase.from('whatsapp_conversations').update({ survey_sent_at: new Date().toISOString() })
+            .eq('institution_id', effectiveInstitutionId).in('remote_jid', [rJid.replace(/@.*/, ''), rJid.replace(/@.*/, '') + '@s.whatsapp.net'])
         }
       } catch (e) {
         console.error('[survey] erro ao enviar pesquisa:', e)
@@ -5935,6 +5939,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               transferTarget={transferTarget} setTransferTarget={setTransferTarget}
               onTransfer={activeConv.status === 'closed' ? handleAssignFromClosed : handleTransfer}
               onBotToggle={toggleBot} onConclude={handleCloseConversation} onLeave={handleLeaveConversation}
+              surveyEnabled={!!flowConfig?.satisfaction_survey_enabled}
+              surveyWindowOpen={!!activeConv.last_customer_message_at && Date.now() - new Date(activeConv.last_customer_message_at).getTime() < 24 * 3600000}
               lead={leadData}
               leadInfo={leadData ? ([leadData.grade_interest, leadData.source, unitCfg.enabled ? unitCfg.unitName(leadData.unit_id) : null].filter(Boolean).join(' · ') || 'Lead') : ''}
               stages={(Object.keys(statusConfig) as (keyof typeof statusConfig)[]).map(k => ({ key: k, label: statusConfig[k].label, accent: statusConfig[k].accent }))}

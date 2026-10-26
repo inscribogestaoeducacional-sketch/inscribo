@@ -4371,7 +4371,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // objeto que nunca tinha essa coluna selecionada (sempre undefined).
         const { data: existingConv } = await supabase
           .from('whatsapp_conversations')
-          .select('status, lead_id, contact_name, assigned_user_id, assigned_user_name, closed_at')
+          .select('status, lead_id, contact_name, assigned_user_id, assigned_user_name, closed_at, close_restart_bot, survey_sent_at')
           .eq('institution_id', institutionId)
           .eq('remote_jid', remoteJid)
           .maybeSingle()
@@ -4387,7 +4387,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .eq('institution_id', institutionId)
             .maybeSingle()
 
-          if (sf?.satisfaction_survey_enabled) {
+          // A avaliação só vale se a pesquisa foi mesmo enviada neste encerramento (tolerância de 2 min).
+          // "Somente concluir" não envia nada: um "1" ou "2" do cliente não é nota.
+          const surveyWasSent = !!existingConv.survey_sent_at && !!existingConv.closed_at &&
+            new Date(existingConv.survey_sent_at as unknown as string).getTime() >= new Date(existingConv.closed_at as unknown as string).getTime() - 120_000
+          if (sf?.satisfaction_survey_enabled && surveyWasSent) {
             const cfg = surveyCfg((sf as any).survey_config)
             const { data: sv } = await supabase.from('whatsapp_conversations')
               .select('satisfaction_score, satisfaction_comment, satisfaction_repeated')
@@ -4461,7 +4465,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // de silêncio do bot corrigido antes) — aqui o fechamento foi
         // intencional, então uma mensagem nova do cliente não deve reiniciar
         // boas-vindas/menu do zero, só reabrir silenciosamente.
-        const isRecentReopen = isNewConversation && !!existingConv?.closed_at &&
+        // "Somente concluir" (close_restart_bot): o atendente encerrou de propósito sem pesquisa,
+        // então a próxima mensagem do cliente já inicia o robô, sem a reabertura silenciosa.
+        const isRecentReopen = isNewConversation && !!existingConv?.closed_at && existingConv?.close_restart_bot !== true &&
           (Date.now() - new Date(existingConv.closed_at as unknown as string).getTime()) < REOPEN_RECENT_WINDOW_MS
 
         console.log('[WEBHOOK UPSERT]', {
@@ -4534,6 +4540,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               assigned_user_id:   reopenAssigneeId,
               assigned_user_name: reopenAssigneeName,
               bot_active:         false,
+              close_restart_bot:  false,
             })
             .eq('institution_id', institutionId)
             .eq('remote_jid', remoteJid)
@@ -4555,6 +4562,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               bot_active:         !lastWasTemplate,
               bot_current_node:   null,
               bot_variables:      {},
+              close_restart_bot:  false,
             })
             .eq('institution_id', institutionId)
             .eq('remote_jid', remoteJid)
