@@ -33,8 +33,10 @@ self.addEventListener('notificationclick', (event) => {
     const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     const same = list.find((c) => new URL(c.url).origin === self.location.origin)
     if (same) {
-      await same.focus()
+      try { await same.focus() } catch (e) {}
       same.postMessage({ type: 'aion-open', url: data.url || '/whatsapp', id: data.id || null })
+      // Plano B: se o app (versão antiga) não tratar a mensagem, navega direto.
+      try { if ('navigate' in same) await same.navigate(target) } catch (e) {}
       return
     }
     await self.clients.openWindow(target)

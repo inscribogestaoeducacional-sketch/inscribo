@@ -1,7 +1,7 @@
 import { BrandLoader } from './components/ui/BrandLoader'
 import { useStageLabelsVersion } from './lib/stageLabels'
 import React, { useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import PageTitle from './components/PageTitle'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider, usePermissions } from './contexts/PermissionsContext'
@@ -424,10 +424,29 @@ function AppContent() {
   )
 }
 
+// Toque numa notificação push com o app já aberto (caso típico do celular/PWA):
+// o service worker só foca a janela e manda 'aion-open'; aqui a gente navega.
+function PushNavBridge() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data
+      if (d && d.type === 'aion-open' && typeof d.url === 'string' && d.url.startsWith('/')) {
+        navigate(d.url)
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg)
+  }, [navigate])
+  return null
+}
+
 export default function App() {
   return (
     <Router>
       <PageTitle />
+      <PushNavBridge />
       <AuthProvider>
         <PermissionsProvider>
           <GlobalToast />
