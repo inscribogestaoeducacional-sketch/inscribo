@@ -55,7 +55,12 @@ const rl = createInterface({ input: entry, crlfDelay: Infinity })
 let idx = null, sep = ';', first = true, batch = [], lidas = 0, gravadas = 0, falta = new Set()
 const flush = async () => {
   if (!batch.length || dry) { batch = []; return }
-  const { error } = await sb.from('inep_escolas').upsert(batch, { onConflict: 'co_entidade,ano_censo' })
+  let error
+  for (let t = 1; t <= 4; t++) {
+    ;({ error } = await sb.from('inep_escolas').upsert(batch, { onConflict: 'co_entidade,ano_censo' }))
+    if (!error) break
+    await new Promise((r) => setTimeout(r, 2000 * t))
+  }
   if (error) { console.error('\nErro no lote:', error.message); process.exit(1) }
   gravadas += batch.length; batch = []
 }
@@ -82,7 +87,7 @@ for await (const raw of rl) {
     ano_censo: ano, dados,
   })
   lidas++
-  if (batch.length >= 1000) { await flush(); process.stdout.write(`\r  lidas ${lidas}  gravadas ${gravadas}`) }
+  if (batch.length >= 200) { await flush(); process.stdout.write(`\r  lidas ${lidas}  gravadas ${gravadas}`) }
 }
 await flush()
 if (!dry) await sb.from('fonte_dados').upsert({ chave: `inep_censo_${ano}`, fonte: 'INEP — Microdados do Censo Escolar', ano, linhas: gravadas, importado_em: new Date().toISOString() }, { onConflict: 'chave' })
