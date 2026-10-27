@@ -7,7 +7,7 @@ import { funnelNeeds, monthName, type FunnelRates, type PlanMonth } from '../../
 
 type Et = Record<string, { n: number; inferidos: number }>
 interface Data {
-  history_since: string | null; entraram: number; matriculados_leads_antigos?: number; leads_antes_da_campanha?: number; totais: Et; origens: string[]; series: string[]
+  history_since: string | null; entraram: number; matriculados_leads_antigos?: number; matriculou_erp?: { confirmados: number; matriculados: number }; totais: Et; origens: string[]; series: string[]
   motivos_perda: { motivo: string; n: number }[]
   months: { m: string; entraram: number; etapas: Et }[]
 }
@@ -65,13 +65,31 @@ export default function FunilCampanha({ institutionId, from, to, planMonths, rat
       </div>
       <StageCards data={data} mes={mes} planMonths={planMonths} rates={rates} />
       <ConvRow data={data} mes={mes} rates={rates} />
+      <div style={card}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Mês a mês: quem entrou e até onde chegou</div>
+        <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 8 }}>Cada linha são os leads que <b>entraram naquele mês</b>. As etapas contam quem já passou por elas, mesmo que hoje esteja mais adiante ou tenha sido perdido.</div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+            <thead><tr><th style={{ ...th, textAlign: 'left' }}>Mês</th>{['Entraram', 'Contato', 'Agendou', 'Visitou', 'Proposta', 'Matriculou', 'Perdeu'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {data.months.filter(m => m.entraram > 0).map(m => (
+                <tr key={m.m}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(m.m + '-01')}</td><td style={{ ...td, fontWeight: 800 }}>{m.entraram}</td>
+                  {(['contact', 'scheduled', 'visit', 'proposal', 'enrolled', 'lost'] as const).map(k => <td key={k} style={{ ...td, color: k === 'lost' ? '#B91C1C' : k === 'enrolled' ? '#05907B' : undefined, fontWeight: k === 'enrolled' ? 800 : 400 }}>{m.etapas[k]?.n ?? 0}</td>)}</tr>
+              ))}
+              <tr style={{ background: '#F8FBFA' }}><td style={{ ...td, textAlign: 'left', fontWeight: 800 }}>Total</td><td style={{ ...td, fontWeight: 800 }}>{data.entraram}</td>
+                {(['contact', 'scheduled', 'visit', 'proposal', 'enrolled', 'lost'] as const).map(k => <td key={k} style={{ ...td, fontWeight: 800 }}>{data.totais[k]?.n ?? 0}</td>)}</tr>
+            </tbody>
+          </table>
+        </div>
+        {data.matriculou_erp && <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 10, lineHeight: 1.5 }}>Das <b>{data.matriculou_erp.matriculados}</b> matrículas dos leads, <b style={{ color: '#05907B' }}>{data.matriculou_erp.confirmados}</b> já têm o aluno confirmado no sistema da escola. {data.matriculou_erp.matriculados - data.matriculou_erp.confirmados > 0 ? <>As outras {data.matriculou_erp.matriculados - data.matriculou_erp.confirmados} estão em Base de alunos → Conferir matrículas. </> : null}O que vale como matrícula final é o do sistema da escola.</div>}
+      </div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ ...card, flex: '1.5 1 520px' }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Mês a mês no gráfico</div>
           <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 8 }}>Linhas cheias: o que aconteceu. Tracejado: a meta. Cada mês mostra os leads que <b>entraram</b> naquele mês e até onde chegaram. Clique num mês acima para ver os cartões dele.</div>
           <MonthLines data={data} planMonths={planMonths} rates={rates} />
           <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0', lineHeight: 1.6 }}>
-            {data.history_since ? `O registro de etapas começou em ${fmtDate(data.history_since)}. ` : ''}O funil olha só os leads que <b>entraram na campanha</b> e conta cada um em toda etapa que já alcançou, por isso os números só diminuem de uma etapa para a próxima. {data.leads_antes_da_campanha ? <>Entram também os <b>{data.leads_antes_da_campanha}</b> leads que chegaram antes do início da campanha mas são para {to.slice(0, 4)}{data.matriculados_leads_antigos ? <> ({data.matriculados_leads_antigos} já matriculou)</> : null}. </> : null}Quem matriculou conta em todas as etapas anteriores, porque necessariamente passou por elas. <b>~N estimados</b>: quando um lead aparece numa etapa mais à frente sem registro de ter passado pela anterior, o sistema entende que ele passou e marca como estimado.
+            {data.history_since ? `O registro de etapas começou em ${fmtDate(data.history_since)}. ` : ''}O funil olha só os leads que <b>entraram na campanha</b> e conta cada um em toda etapa que já alcançou, por isso os números só diminuem de uma etapa para a próxima. {data.matriculados_leads_antigos ? <>Não entram aqui os <b>{data.matriculados_leads_antigos}</b> leads que chegaram antes do início da campanha e matricularam nela. </> : null}Quem matriculou conta em todas as etapas anteriores, porque necessariamente passou por elas. <b>~N estimados</b>: quando um lead aparece numa etapa mais à frente sem registro de ter passado pela anterior, o sistema entende que ele passou e marca como estimado.
           </p>
         </div>
         <div style={{ ...card, flex: '1 1 280px' }}>
