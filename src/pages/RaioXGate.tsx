@@ -132,6 +132,7 @@ export default function RaioXGate({ onStart }: { onStart: () => void }) {
               <img className="a" src="/raiox/prev-6.jpg" alt="" />
               <img className="c" src="/raiox/prev-9.jpg" alt="" />
               <img className="b" src="/raiox/prev-1.jpg" alt="" />
+              <span style={{ position: 'absolute', left: 0, right: 0, bottom: -4, textAlign: 'center', fontSize: 11.5, color: 'rgba(255,255,255,.8)', zIndex: 3 }}>Exemplo com dados fictícios</span>
             </div>
           </div>
         </div>
@@ -170,7 +171,8 @@ export default function RaioXGate({ onStart }: { onStart: () => void }) {
             </div>
           ))}
         </div>
-        <div className="gt-gal" role="list" aria-label="Páginas do relatório">
+        <p style={{ textAlign: 'center', fontSize: 12.5, color: MUTED, margin: '26px 0 0' }}>Páginas de exemplo, com escola e dados fictícios. No seu relatório, tudo vem dos dados oficiais da sua escola.</p>
+        <div className="gt-gal" style={{ marginTop: 10 }} role="list" aria-label="Páginas do relatório">
           {GAL.map(([n, t]) => <figure key={n} role="listitem"><img src={`/raiox/prev-${n}.jpg`} alt={`Página: ${t}`} loading="lazy" /><figcaption style={{ textAlign: 'center', fontWeight: 800, fontSize: 13.5, color: TXT, marginTop: 10 }}>{t}</figcaption></figure>)}
         </div>
       </section>
