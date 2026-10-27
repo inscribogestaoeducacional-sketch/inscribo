@@ -112,19 +112,19 @@ export function RematriculaTab({ goal, done, months, hist, pre, pending, bySegme
           <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0' }}>Entram só os alunos com data de matrícula informada.</p>
         </div>
         <div style={{ ...card, flex: '1 1 320px' }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Por série: já voltaram × faltam</div>
-          <div style={{ fontSize: 12, color: BRAND.muted, marginBottom: 8 }}>Verde: matriculados ou pré. Cinza: ainda sem resposta.</div>
-          {(hist?.by_grade ?? []).filter(g => g.base > 0).map(g => {
-            const r = g.retained / g.base, low = r < 0.5
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Por série: matriculados × pré × faltam</div>
+          <div style={{ fontSize: 12, color: BRAND.muted, marginBottom: 8 }}>Verde: matriculados. Roxo claro: só pré-matrícula, ainda não efetivou. Cinza: faltam. Em âmbar: série abaixo da média da escola.</div>
+          {(() => { const bg = (hist?.by_grade ?? []).filter(g => g.base > 0); const avgAll = bg.reduce((s, g) => s + g.retained, 0) / Math.max(1, bg.reduce((s, g) => s + g.base, 0)); return bg.map(g => {
+            const r = g.retained / g.base, rp = (g.pre ?? 0) / g.base, low = r < avgAll - 0.05
             return (
-              <div key={g.grade_id} title={`${g.name}: ${g.retained} de ${g.base} garantidos, faltam ${g.lost}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 12.5 }}>
+              <div key={g.grade_id} title={`${g.name}: ${g.retained} matriculados de ${g.base}${g.pre ? `, ${g.pre} só pré-matriculados` : ''}, faltam ${g.lost}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 12.5 }}>
                 <span style={{ width: 118, flexShrink: 0 }}>{g.name}</span>
-                <div style={{ flex: 1, height: 12, borderRadius: 6, background: '#E5E7EB', overflow: 'hidden' }}><div style={{ width: `${r * 100}%`, height: '100%', background: low ? '#F59E0B' : '#10B981', transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /></div>
+                <div style={{ flex: 1, height: 12, borderRadius: 6, background: '#E5E7EB', overflow: 'hidden' }}><div style={{ display: 'flex', height: '100%' }}><div style={{ width: `${r * 100}%`, background: '#10B981', transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /><div style={{ width: `${rp * 100}%`, background: '#C4B5FD' }} /></div></div>
                 <b style={{ width: 70, textAlign: 'right' }}>{g.retained}/{g.base}</b>
                 <span style={{ width: 34, textAlign: 'right', color: low ? '#B45309' : '#15803D', fontWeight: 700 }}>{Math.round(r * 100)}%</span>
               </div>
             )
-          })}
+          }) })()}
           {!(hist?.by_grade ?? []).some(g => g.base > 0) && <div style={{ fontSize: 13, color: BRAND.muted }}>Sem dados por série ainda.</div>}
         </div>
       </div>

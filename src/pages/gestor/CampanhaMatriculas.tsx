@@ -628,7 +628,7 @@ export default function CampanhaMatriculas() {
               <div style={{ marginBottom: 22 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
                   <div style={{ fontSize: 16, fontWeight: 800, color: BRAND.ink }}>Campanha {targetYear} em andamento</div>
-                  <div style={{ fontSize: 13, color: BRAND.muted }}><b style={{ color: BRAND.primaryDark, fontSize: 18 }}>{pct(avgC, 1)}</b> já garantidos · {fmt(c.retained)} de {fmt(c.base)} alunos · {fmt(c.new_students)} novos</div>
+                  <div style={{ fontSize: 13, color: BRAND.muted }}><b style={{ color: BRAND.primaryDark, fontSize: 18 }}>{pct(avgC, 1)}</b> já rematriculados · {fmt(c.retained)} matriculados{c.pre ? <> · {fmt(c.pre)} só com pré-matrícula</> : null} · faltam {fmt(c.lost)} de {fmt(c.base)} alunos · {fmt(c.new_students)} novos</div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
                   {c.by_grade.filter(g => g.base > 0 || g.new_students > 0).map(g => {
@@ -646,7 +646,7 @@ export default function CampanhaMatriculas() {
                         </div>
                         <div style={{ height: 8, borderRadius: 99, background: '#EDF1F0', overflow: 'hidden', margin: '8px 0' }}><div style={{ width: `${r * 100}%`, height: '100%', background: behind ? '#EF4444' : '#10B981', transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /></div>
                         <div style={{ fontSize: 12.5, color: BRAND.muted, lineHeight: 1.6 }}>
-                          <b style={{ color: BRAND.ink }}>{fmt(g.retained)}</b> garantidos de {fmt(g.base)} · faltam <b style={{ color: behind ? '#B91C1C' : BRAND.ink }}>{fmt(g.lost)}</b> · {fmt(g.new_students)} novos
+                          <b style={{ color: BRAND.ink }}>{fmt(g.retained)}</b> matriculados de {fmt(g.base)}{g.pre ? <> · {fmt(g.pre)} só pré</> : null} · faltam <b style={{ color: behind ? '#B91C1C' : BRAND.ink }}>{fmt(g.lost)}</b> · {fmt(g.new_students)} novos
                           {lr != null && <div>Fechou {targetYear - 1} com {pct(lr, 0)} <span style={{ color: r >= lr ? '#15803D' : '#B45309', fontWeight: 700 }}>({r >= lr ? 'já passou' : `faltam ${Math.round((lr - r) * 100)} pontos`})</span></div>}
                         </div>
                         {turmas.length > 0 && <button onClick={() => setOpenClasses(openClasses === key ? null : key)} style={{ border: 'none', background: 'none', padding: '6px 0 0', color: BRAND.primaryDark, fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{openClasses === key ? 'ocultar turmas' : `ver ${turmas.length} turmas`}</button>}
@@ -668,10 +668,10 @@ export default function CampanhaMatriculas() {
             const avg = y.base ? y.retained / y.base : 0
             return (
               <div key={y.year} style={{ marginBottom: 22 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Campanha {y.year}{inProg ? ' (em andamento)' : ''}: {pct(avg, 1)} {inProg ? 'já garantidos' : 'de retenção'} ({fmt(y.retained)} de {fmt(y.base)}) · {fmt(y.new_students)} novos</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Campanha {y.year}{inProg ? ' (em andamento)' : ''}: {pct(avg, 1)} {inProg ? 'já rematriculados' : 'de retenção'} ({fmt(y.retained)} de {fmt(y.base)}){inProg && y.pre ? ` · ${fmt(y.pre)} só com pré-matrícula` : ''} · {fmt(y.new_students)} novos</div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ background: '#F8FAFC' }}><th style={{ ...th, textAlign: 'left' }}>Série (no ano anterior)</th><th style={th}>Alunos</th><th style={th}>{inProg ? 'Matriculados ou pré' : 'Voltaram'}</th><th style={th}>{inProg ? 'Ainda sem rematrícula' : 'Não voltaram'}</th><th style={{ ...th, textAlign: 'left', width: 200 }}>Retenção</th><th style={th}>Novos na série</th><th style={th} /></tr></thead>
+                    <thead><tr style={{ background: '#F8FAFC' }}><th style={{ ...th, textAlign: 'left' }}>Série (no ano anterior)</th><th style={th}>Alunos</th><th style={th}>{inProg ? 'Matriculados' : 'Voltaram'}</th><th style={th}>{inProg ? 'Ainda sem rematrícula' : 'Não voltaram'}</th><th style={{ ...th, textAlign: 'left', width: 200 }}>Retenção</th><th style={th}>Novos na série</th><th style={th} /></tr></thead>
                     <tbody>
                       {y.by_grade.filter(g => g.base > 0 || g.new_students > 0).map(g => {
                         const r = g.base ? g.retained / g.base : null

@@ -23,7 +23,7 @@ export default function RematriculasReport({ institutionId, institutionName }: {
   const base = sum(g => g.base_prev_year), grad = sum(g => g.graduates), rema = sum(g => g.reenrolled), pend = sum(g => g.pending), pre = sum(g => g.pre_enrolled), saiu = sum(g => g.left_school), novos = sum(g => g.new_students)
   const elegiveis = Math.max(0, base - grad)
   const pct = (a: number, b: number) => b ? `${Math.round(a / b * 100)}%` : '—'
-  const linhas = (rows ?? []).map(g => ({ 'Ano letivo': year, 'Série': g.grade_name, 'Alunos no ano anterior': g.base_prev_year, 'Concluintes': g.graduates, 'Rematriculados': g.reenrolled, 'Pré-matriculados': g.pre_enrolled, 'A rematricular': g.pending, 'Saíram': g.left_school, 'Alunos novos': g.new_students, 'Capacidade': g.capacity, 'Taxa de rematrícula (%)': g.base_prev_year - g.graduates > 0 ? Math.round(g.reenrolled / (g.base_prev_year - g.graduates) * 100) : null }))
+  const linhas = (rows ?? []).map(g => ({ 'Ano letivo': year, 'Série': g.grade_name, 'Alunos no ano anterior': g.base_prev_year, 'Concluintes': g.graduates, 'Rematriculados': g.reenrolled, 'Pré-matriculados': g.pre_enrolled, 'Sem matrícula nem pré': g.pending, 'Saíram': g.left_school, 'Alunos novos': g.new_students, 'Capacidade': g.capacity, 'Taxa de rematrícula (%)': g.base_prev_year - g.graduates > 0 ? Math.round(g.reenrolled / (g.base_prev_year - g.graduates) * 100) : null }))
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="no-print" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -37,14 +37,14 @@ export default function RematriculasReport({ institutionId, institutionName }: {
           <KpiGrid>
             <Kpi label="ALUNOS A REMATRICULAR" value={elegiveis} color="#6366F1" sub={`${base} no ano anterior, ${grad} concluintes`} />
             <Kpi label="REMATRICULADOS" value={rema} color="#05907B" sub={`${pct(rema, elegiveis)} dos elegíveis`} />
-            <Kpi label="PRÉ-MATRICULADOS" value={pre} color="#0EA5E9" sub="aguardando confirmação" />
-            <Kpi label="A REMATRICULAR" value={pend} color="#F59E0B" sub="ainda sem resposta" />
+            <Kpi label="PRÉ-MATRICULADOS" value={pre} color="#0EA5E9" sub="só pré-matrícula, ainda não efetivaram" />
+            <Kpi label="SEM MATRÍCULA NEM PRÉ" value={pend} color="#F59E0B" sub="ainda não responderam" />
             <Kpi label="SAÍRAM" value={saiu} color="#EF4444" sub={`${novos} alunos novos`} />
           </KpiGrid>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ ...card, flex: '2 1 520px', overflowX: 'auto' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Por série</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Série</th><th style={{ ...th, textAlign: 'right' }}>Ano anterior</th><th style={{ ...th, textAlign: 'right' }}>Rematriculados</th><th style={{ ...th, textAlign: 'right' }}>Pré-matr.</th><th style={{ ...th, textAlign: 'right' }}>A rematricular</th><th style={{ ...th, textAlign: 'right' }}>Saíram</th><th style={{ ...th, textAlign: 'right' }}>Novos</th><th style={{ ...th, textAlign: 'right' }}>Taxa</th></tr></thead>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Série</th><th style={{ ...th, textAlign: 'right' }}>Ano anterior</th><th style={{ ...th, textAlign: 'right' }}>Rematriculados</th><th style={{ ...th, textAlign: 'right' }}>Pré-matr.</th><th style={{ ...th, textAlign: 'right' }}>Sem matr. nem pré</th><th style={{ ...th, textAlign: 'right' }}>Saíram</th><th style={{ ...th, textAlign: 'right' }}>Novos</th><th style={{ ...th, textAlign: 'right' }}>Taxa</th></tr></thead>
                 <tbody>{(rows ?? []).map(g => { const el = g.base_prev_year - g.graduates; return <tr key={g.grade_name}><td style={{ ...td, fontWeight: 700 }}>{g.grade_name}</td><td style={{ ...td, textAlign: 'right' }}>{g.base_prev_year}</td><td style={{ ...td, textAlign: 'right' }}>{g.reenrolled}</td><td style={{ ...td, textAlign: 'right' }}>{g.pre_enrolled}</td><td style={{ ...td, textAlign: 'right' }}>{g.pending}</td><td style={{ ...td, textAlign: 'right' }}>{g.left_school}</td><td style={{ ...td, textAlign: 'right' }}>{g.new_students}</td><td style={{ ...td, textAlign: 'right', fontWeight: 800 }}>{el > 0 ? `${Math.round(g.reenrolled / el * 100)}%` : '—'}</td></tr> })}</tbody></table>
             </div>
             <div style={{ ...card, flex: '1 1 280px' }}><div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Rematriculados por série</div><BarList color="#05907B" rows={(rows ?? []).filter(g => g.reenrolled > 0).map(g => ({ label: g.grade_name, n: g.reenrolled }))} /></div>
