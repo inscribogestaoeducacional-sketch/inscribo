@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
 import { erpSystem } from '../../lib/erp'
 import EnrolledWithoutLead from '../shared/EnrolledWithoutLead'
+import NovosBridge from '../campanha/NovosBridge'
 import { SectionTitle, baseCard } from './baseShared'
 
 type Cand = { student_id: string; name: string; grade: string | null }
@@ -34,6 +35,7 @@ export default function EnrollmentCheck({ institutionId, year, mobile }: { insti
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState('')
+  const [nov, setNov] = useState<{ novatos: number; returning: number; ras: boolean } | null>(null)
 
   const load = useCallback(async () => {
     if (!institutionId) return
@@ -48,6 +50,19 @@ export default function EnrollmentCheck({ institutionId, year, mobile }: { insti
     setLoading(false)
   }, [institutionId, year])
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (!institutionId) return
+    let alive = true
+    Promise.all([
+      supabase.rpc('base_reenrollment_panel', { p_institution_id: institutionId, p_target_year: year }),
+      supabase.rpc('base_returning_as_new', { p_institution_id: institutionId }),
+    ]).then(([a, b]) => {
+      if (!alive || a.error) return
+      const rows = (a.data ?? []) as { new_students: number; returning_students?: number }[]
+      setNov({ novatos: rows.reduce((t, g) => t + (g.new_students ?? 0), 0), returning: rows.reduce((t, g) => t + (g.returning_students ?? 0), 0), ras: b.data !== false })
+    })
+    return () => { alive = false }
+  }, [institutionId, year])
 
   const link = async (lead: SemAluno, cand: Cand) => {
     setBusy(lead.lead_id + cand.student_id); setMsg('')
@@ -94,6 +109,16 @@ export default function EnrollmentCheck({ institutionId, year, mobile }: { insti
           {chip(data.leads_sem_aluno, 'leads sem aluno', true)}
         </div>
         {msg && <div style={{ fontSize: 12.5, color: '#B91C1C', marginTop: 8 }}>{msg}</div>}
+        {nov && sys && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {chip(nov.novatos, `novatos na ${sys.label}`, false)}
+              {chip(nov.novatos + (nov.ras ? nov.returning : 0), 'novos aqui', false)}
+            </div>
+            <NovosBridge novos={nov.novatos + (nov.ras ? nov.returning : 0)} returning={nov.returning} returningAsNew={nov.ras} />
+            <div style={{ fontSize: 12, color: BRAND.muted }}>A conferência com a {sys.label} é só dos novatos. Os veteranos (rematrículas) já batem.</div>
+          </div>
+        )}
         {nada && <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 13, color: '#047857', fontWeight: 700 }}><CheckCircle2 size={16} /> Tudo certo: leads e alunos novos batem.</div>}
       </div>
 

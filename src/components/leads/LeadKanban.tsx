@@ -4,7 +4,7 @@ import {
   Plus, Phone, Calendar, Edit, Edit2, Trash2, X, Search,
   Clock, Users, Send, CheckCircle, Save,
   MessageCircle, AlertTriangle, ChevronDown, ChevronRight, ChevronUp,
-  Bell, UserCog, SlidersHorizontal, CheckSquare,
+  Bell, UserCog, GraduationCap, SlidersHorizontal, CheckSquare,
   LayoutGrid, Rows3, Tag, Megaphone, MapPin, GraduationCap, List as ListIcon, Kanban,
 } from 'lucide-react'
 import { logAudit } from '../../hooks/useAudit'
@@ -1485,6 +1485,7 @@ export default function LeadKanban() {
             actions={<>
               <HeaderAction primary icon={Plus} label="Novo lead" onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }} />
               <HeaderAction icon={UserCog} label="Meus leads" active={ownerFilter === 'mine'} onClick={() => setOwnerFilter(o => o === 'mine' ? 'all' : 'mine')} />
+              <HeaderAction icon={GraduationCap} label="Concurso de Bolsas" active={filterSource === 'Concurso de Bolsas'} onClick={() => setFilterSource(f => f === 'Concurso de Bolsas' ? '' : 'Concurso de Bolsas')} />
               <HeaderAction icon={SlidersHorizontal} label="Filtros" dot={hasActiveFilters} onClick={() => setFilterDrawerOpen(true)} />
               {unitCfg.enabled && <HeaderAction icon={CheckSquare} label={selectMode ? 'Sair da seleção' : 'Selecionar'} active={selectMode} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)} />}
             </>} />
@@ -1634,6 +1635,12 @@ export default function LeadKanban() {
           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (ownerFilter === 'mine' ? '#05907B' : '#E2E8F0'), background: ownerFilter === 'mine' ? '#05907B' : '#fff', color: ownerFilter === 'mine' ? '#fff' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
         >
           <UserCog style={{ width: 14, height: 14 }} /> Meus Leads
+        </button>
+        <button
+          onClick={() => setFilterSource(f => f === 'Concurso de Bolsas' ? '' : 'Concurso de Bolsas')}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (filterSource === 'Concurso de Bolsas' ? '#05907B' : '#E2E8F0'), background: filterSource === 'Concurso de Bolsas' ? '#05907B' : '#fff', color: filterSource === 'Concurso de Bolsas' ? '#fff' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+        >
+          <GraduationCap style={{ width: 14, height: 14 }} /> Concurso de Bolsas
         </button>
         <button
           onClick={() => setFilterDrawerOpen(true)}

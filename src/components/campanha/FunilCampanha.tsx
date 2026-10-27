@@ -56,6 +56,7 @@ export default function FunilCampanha({ institutionId, from, to, planMonths, rat
         <select value={grade} onChange={e => setGrade(e.target.value)} style={sel}>
           <option value="">Série: todas</option>{data.series.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
+        <button onClick={() => setSource(x => x === 'Concurso de Bolsas' ? '' : 'Concurso de Bolsas')} style={{ padding: '7px 13px', borderRadius: 99, border: '1px solid ' + (source === 'Concurso de Bolsas' ? BRAND.primary : '#E2E8F0'), background: source === 'Concurso de Bolsas' ? BRAND.primary : '#fff', color: source === 'Concurso de Bolsas' ? '#fff' : BRAND.text, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>Só Concurso de Bolsas</button>
         <span style={{ fontSize: 12.5, color: BRAND.muted }}>Período da campanha: {fmtDate(from)} a {fmtDate(to)}</span>
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
