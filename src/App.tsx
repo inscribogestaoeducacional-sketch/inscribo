@@ -276,7 +276,19 @@ function AppContent() {
     return <Routes><Route path="/novidades/transmissoes" element={<NovidadeModulo content={NOVIDADE_TRANSMISSOES} />} /></Routes>
   }
 
-  if (initializing || !ready || !introDone) {
+  // O site público (início, módulos, integrações, guias, blog...) abre direto, sem a tela de carregamento.
+  // A animação da logo fica para o app instalado, para o login e para quem já tem sessão salva.
+  const PUBLIC_PATHS = ['/modulos', '/integracoes', '/guias', '/sobre', '/blog', '/parceiros', '/parceria-meta', '/privacidade', '/termos']
+  const isPublicPath = pathname === '/' || PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+  let standalone = false
+  let hasStoredSession = false
+  try {
+    standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true
+    hasStoredSession = Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k))
+  } catch { /* sem acesso ao armazenamento: segue com o carregamento normal */ }
+  const skipLoader = isPublicPath && !standalone && !hasStoredSession
+
+  if (!skipLoader && (initializing || !ready || !introDone)) {
     return (
       <BrandLoader fullscreen label="Carregando" />
     )
@@ -285,7 +297,7 @@ function AppContent() {
   if (!user) {
     return (
       <Routes>
-        <Route path="/"               element={<Suspense fallback={<BrandLoader fullscreen label="Carregando" />}><SiteHome /></Suspense>} />
+        <Route path="/"               element={<Suspense fallback={null}><SiteHome /></Suspense>} />
         <Route path="/modulos"        element={<Suspense fallback={null}><SiteModules /></Suspense>} />
         <Route path="/modulos/:slug"  element={<Suspense fallback={null}><SiteModule /></Suspense>} />
         <Route path="/privacidade"    element={<Privacidade />} />

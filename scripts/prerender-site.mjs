@@ -38,7 +38,7 @@ for (const g of [...integrations, ...guides]) {
 const shell = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8')
 const navLinks = modules.map(m => `<a href="/modulos/${m.slug}">${esc(m.name)}</a>`).join(' ')
 const body = p => {
-  let h = `<div style="max-width:880px;margin:0 auto;padding:24px;font-family:system-ui,sans-serif;line-height:1.6"><nav aria-label="Principal"><a href="/">Áion Edu</a> · <a href="/modulos">Módulos</a> · <a href="/integracoes/whatsapp">Integrações</a> · <a href="/raio-x">Raio-X grátis</a> · <a href="/blog">Blog</a></nav><main>`
+  let h = `<div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"><nav aria-label="Principal"><a href="/">Áion Edu</a> · <a href="/modulos">Módulos</a> · <a href="/integracoes/whatsapp">Integrações</a> · <a href="/raio-x">Raio-X grátis</a> · <a href="/blog">Blog</a></nav><main>`
   h += `<h1>${esc(p.h1)}</h1>` + (p.intro ?? []).map(t => `<p>${esc(t)}</p>`).join('')
   for (const s of p.sections ?? []) {
     h += `<section><h2>${esc(s.h)}</h2>` + (s.p ? `<p>${esc(s.p)}</p>` : '') + (s.items ? `<ul>${s.items.map(i => `<li><strong>${esc(i.t)}</strong>: ${esc(i.d)}</li>`).join('')}</ul>` : '') + '</section>'
