@@ -35,6 +35,18 @@ const HERO_GRADIENT = `linear-gradient(135deg, ${VD} 0%, ${VMID} 50%, ${VM} 100%
 
 // CSS responsivo específico da página — breakpoints mobile, tap targets maiores
 const RAIOX_CSS = `
+@keyframes rxPulse { 0%,100% { transform: scale(1); box-shadow: 0 8px 24px rgba(0,0,0,0.18) } 50% { transform: scale(1.05); box-shadow: 0 12px 34px rgba(13,211,191,0.45) } }
+@keyframes rxPop { 0% { transform: scale(.4); opacity: 0 } 70% { transform: scale(1.15) } 100% { transform: scale(1); opacity: 1 } }
+@keyframes rxSlideIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+.rx-logo-pulse { animation: rxPulse 1.8s ease-in-out infinite; }
+.rx-pop { animation: rxPop .4s cubic-bezier(.22,1,.36,1) both; }
+.rx-slide { animation: rxSlideIn .4s ease both; }
+.rx-feat { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.rx-prev { display: flex; gap: 12px; justify-content: center; }
+.rx-prev img { width: 23%; min-width: 0; border-radius: 10px; border: 1px solid #dff0ea; box-shadow: 0 8px 22px rgba(0,82,60,.16); }
+.rx-prev img:nth-child(odd) { transform: translateY(14px); }
+@media (max-width: 600px) { .rx-feat { grid-template-columns: 1fr; } .rx-prev { gap: 6px; } }
+@media (prefers-reduced-motion: reduce) { .rx-logo-pulse, .rx-pop, .rx-slide { animation: none; } }
 .rx-hero { padding: 48px 20px 130px; }
 .rx-card-wrap { margin: -90px auto 60px; padding: 0 20px; }
 .rx-card { padding: 32px; transition: padding .2s ease; }
@@ -107,6 +119,16 @@ const AION_HIGHLIGHTS: { icon: HighlightIconName; title: string; desc: string }[
   { icon: 'star',  title: 'O melhor custo-benefício do mercado educacional', desc: 'Tecnologia completa por um investimento que cabe no orçamento da sua escola.' },
 ]
 
+const PASSOS_GERACAO: { t: string; soIg?: boolean }[] = [
+  { t: 'Lendo os dados oficiais do INEP' },
+  { t: 'Comparando com as particulares da cidade' },
+  { t: 'Desenhando o mapa de bairros e a renda' },
+  { t: 'Lendo o Instagram da escola', soIg: true },
+  { t: 'Calculando a nota de atendimento' },
+  { t: 'Escrevendo o diagnóstico com IA' },
+  { t: 'Montando o seu PDF' },
+]
+
 const CAROUSEL_CARD_MS = 2400
 const CAROUSEL_TOTAL_MS = CAROUSEL_CARD_MS * AION_HIGHLIGHTS.length // 12s no total
 
@@ -144,13 +166,17 @@ const backLinkStyle: React.CSSProperties = {
 }
 
 // ─── portão de entrada (gate) — exibido antes do fluxo de busca/formulário ───
-const GATE_CHECKLIST = [
-  'Ranking da cidade',
-  'Principais concorrentes',
-  'Market Share',
-  'Dados oficiais do INEP',
-  'Relatório em PDF',
+const GATE_ITEMS: { t: string; d: string }[] = [
+  { t: 'Sua posição na cidade', d: 'Ranking entre as escolas particulares, por etapa de ensino.' },
+  { t: 'Crescimento e perda de alunos', d: 'Quanto a escola e a cidade cresceram em 5 anos e onde os alunos saem.' },
+  { t: 'Mapa de bairros', d: 'Onde estão as crianças, a renda das famílias e as concorrentes.' },
+  { t: 'ENEM e estrutura', d: 'Sua nota frente às outras particulares e o que as concorrentes oferecem.' },
+  { t: 'Nascimentos e creche', d: 'A demanda que vem por aí nos próximos anos.' },
+  { t: 'Nota do Instagram', d: 'Se você informar o @, avaliamos o perfil e os últimos posts.' },
+  { t: 'Nota de atendimento', d: 'Seis perguntas mostram onde a matrícula escapa.' },
+  { t: 'Diagnóstico e 3 oportunidades', d: 'Um resumo escrito por IA e os caminhos de maior ganho.' },
 ]
+const GATE_STEPS = ['Escolha sua escola', 'Responda 6 perguntas rápidas', 'Baixe o PDF na hora']
 
 function CheckIcon({ size = 22, color = VD }: { size?: number; color?: string }) {
   return (
@@ -239,7 +265,7 @@ function GateScreen({ onStart }: { onStart: () => void }) {
               padding: '11px 20px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.28)',
             }}>
               <span style={{ fontSize: 14, lineHeight: 1 }}>🟢</span>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fff' }}>Receba seu Raio-X Estratégico em menos de 1 minuto.</span>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fff' }}>Receba seu Raio-X Estratégico em poucos minutos.</span>
             </div>
           </div>
 
@@ -262,25 +288,39 @@ function GateScreen({ onStart }: { onStart: () => void }) {
         </div>
       </div>
 
-      {/* ── Seção 2 — Reforço ──────────────────────────────────────── */}
-      <div style={{ background: '#fff', padding: 'clamp(56px, 10vw, 96px) 20px' }}>
-        <div style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center' }}>
+      {/* ── Seção 2 — O que vem no relatório ───────────────────────── */}
+      <div style={{ background: '#fff', padding: 'clamp(48px, 9vw, 84px) 20px' }}>
+        <div style={{ maxWidth: 760, margin: '0 auto', textAlign: 'center' }}>
           <h2 className="s-title" style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 36px)', color: VD, lineHeight: 1.2 }}>
-            DESCUBRA A POSIÇÃO DA SUA ESCOLA.
+            UM RELATÓRIO COMPLETO DA SUA ESCOLA.
           </h2>
+          <p style={{ margin: '12px auto 0', maxWidth: 520, fontSize: 15, color: MUTED, lineHeight: 1.6 }}>
+            Até 16 páginas feitas só com dados públicos oficiais (INEP, IBGE e Ministério da Saúde), comparando apenas escolas particulares.
+          </p>
+          <div className="rx-prev" style={{ marginTop: 34, marginBottom: 30 }}>
+            {[1, 2, 6, 9].map(n => <img key={n} src={`/raiox/prev-${n}.jpg`} alt="Página do Raio-X" loading="lazy" />)}
+          </div>
+          <div className="rx-feat" style={{ textAlign: 'left' }}>
+            {GATE_ITEMS.map(it => (
+              <div key={it.t} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', borderRadius: 16, background: SOFT, border: `1px solid ${BORDER}` }}>
+                <CheckIcon size={22} />
+                <div><div style={{ fontSize: 14.5, fontWeight: 800, color: TEXT }}>{it.t}</div><div style={{ fontSize: 12.5, color: MUTED, marginTop: 2, lineHeight: 1.5 }}>{it.d}</div></div>
+              </div>
+            ))}
+          </div>
+          <p style={{ margin: '14px 0 0', fontSize: 12, color: MUTED }}>Páginas sem dado público para a sua escola ou cidade não aparecem.</p>
 
-          <div style={{ marginTop: 36, display: 'inline-flex', flexDirection: 'column', gap: 16, textAlign: 'left' }}>
-            {GATE_CHECKLIST.map(item => (
-              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <CheckIcon />
-                <span style={{ fontSize: 16, fontWeight: 600, color: TEXT }}>{item}</span>
+          <div style={{ marginTop: 40, display: 'flex', flexWrap: 'wrap', gap: 14, justifyContent: 'center' }}>
+            {GATE_STEPS.map((t, i) => (
+              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg, ${VD}, ${VM})`, color: '#fff', fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>{t}</span>
               </div>
             ))}
           </div>
 
           <p style={{ margin: '32px 0 0', fontSize: 18, fontWeight: 800, color: VD }}>Tudo isso gratuitamente.</p>
-
-          <div style={{ marginTop: 26 }}>
+          <div style={{ marginTop: 22 }}>
             <button type="button" className="btn-g rx-gate-btn" onClick={onStart} style={{ fontSize: 15, padding: '17px 44px' }}>
               FAZER MEU RAIO-X
             </button>
@@ -640,7 +680,7 @@ export default function RaioXPage() {
             Raio-X Estratégico da Escola
           </h1>
           <p style={{ margin: '12px 0 0', fontSize: 15, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
-            Descubra gratuitamente como sua escola está posicionada frente à concorrência da sua região — com dados oficiais do Censo Escolar INEP.
+            Posição, crescimento, mapa de bairros, ENEM, Instagram e atendimento da sua escola, só com dados públicos oficiais.
           </p>
         </div>
       </div>
@@ -907,9 +947,20 @@ export default function RaioXPage() {
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               {showCarousel && (
                 <>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginBottom: 18 }}>
-                    <div style={{ width: 16, height: 16, border: `2.5px solid ${VM}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'raiox-spin 0.8s linear infinite', flexShrink: 0 }} />
-                    <h2 className="s-title" style={{ margin: 0, fontSize: 17, color: TEXT }}>Gerando seu relatório...</h2>
+                  <div className="rx-logo-pulse" style={{ display: 'inline-flex', background: '#fff', borderRadius: 18, padding: '10px 18px', border: `1px solid ${BORDER}`, marginBottom: 14 }}>
+                    <img src={AION_LOGO_B64} alt="Áion Edu" style={{ height: 30, objectFit: 'contain' }} />
+                  </div>
+                  <h2 className="s-title" style={{ margin: '0 0 14px', fontSize: 17, color: TEXT }}>Montando o Raio-X da sua escola</h2>
+                  <div style={{ textAlign: 'left', maxWidth: 340, margin: '0 auto 20px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+                    {PASSOS_GERACAO.filter(p => !p.soIg || instagram.trim()).map((p, i, arr) => {
+                      const at = Math.min(arr.length - 1, Math.floor((carouselProgress / 100) * arr.length)), feito = pdfState === 'ready' || i < at, ativo = i === at && pdfState !== 'ready'
+                      if (i > at && pdfState !== 'ready') return null
+                      return (
+                        <div key={p.t} className="rx-slide" style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, fontWeight: feito ? 600 : 800, color: feito ? MUTED : TEXT }}>
+                          {feito ? <span className="rx-pop"><CheckIcon size={18} /></span> : <div style={{ width: 16, height: 16, margin: 1, border: `2.5px solid ${VM}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'raiox-spin 0.8s linear infinite', flexShrink: 0 }} />}
+                          <span>{p.t}</span>{ativo ? null : null}
+                        </div>)
+                    })}
                   </div>
 
                   {/* carrossel dos diferenciais Áion */}
@@ -959,7 +1010,7 @@ export default function RaioXPage() {
                   <div style={{ width: 64, height: 64, borderRadius: '50%', background: SOFT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
                     <CheckIcon size={34} />
                   </div>
-                  <h2 className="s-title" style={{ margin: 0, fontSize: 19, color: TEXT }}>Seu relatório está pronto!</h2>
+                  <h2 className="s-title rx-pop" style={{ margin: 0, fontSize: 19, color: TEXT }}>Seu relatório está pronto!</h2>
                   <p style={{ margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>
                     O Raio-X Estratégico de <strong>{selectedSchool.no_entidade}</strong> já pode ser baixado.
                   </p>
