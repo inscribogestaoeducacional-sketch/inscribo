@@ -73,17 +73,26 @@ export function Header({ dark = false }: { dark?: boolean }) {
         <button type="button" className="st-burger" aria-label={open ? 'Fechar menu' : 'Abrir menu'} onClick={() => setOpen(o => !o)}>{open ? <X size={26} /> : <List size={26} />}</button>
       </div>
       {open && createPortal(<div className="st"><div className="st-drawer" role="dialog" aria-label="Menu">
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button type="button" className="st-burger" style={{ display: 'block', color: '#fff' }} aria-label="Fechar menu" onClick={() => setOpen(false)}><X size={28} /></button></div>
-          <a href="/raio-x" onClick={() => setOpen(false)} style={{ color: '#2DCBA4' }}>Raio-X grátis da sua escola <ArrowRight size={18} /></a>
-          <small>Módulos</small>
-          {MODULES.map(m => <a key={m.slug} href={`/modulos/${m.slug}`} onClick={() => setOpen(false)}><ModIcon name={m.icon} size={22} color={m.color} weight="fill" />{m.name}</a>)}
-          <small>Integrações</small>
-          {INTEGRATIONS.map(i => <a key={i.href} href={i.href}>{i.label}</a>)}
-          <small>Guias</small>
-          {GUIDES.map(g => <a key={g.href} href={g.href}>{g.label}</a>)}
-          <small>Empresa</small>
-          <a href="/blog">Blog</a><a href="/sobre">Quem somos</a><a href="/entrar">Entrar</a>
-          <div style={{ marginTop: 18 }}><WaButton /></div>
+          <div className="st-drawer-top">
+            <a className="st-drawer-enter" href="/entrar" onClick={() => setOpen(false)}>Entrar</a>
+            <button type="button" className="st-burger" style={{ display: 'block', color: '#fff' }} aria-label="Fechar menu" onClick={() => setOpen(false)}><X size={28} /></button>
+          </div>
+          <details className="st-acc">
+            <summary>Módulos <CaretDown size={16} weight="bold" /></summary>
+            <div>{MODULES.map(m => <a key={m.slug} href={`/modulos/${m.slug}`} onClick={() => setOpen(false)}><ModIcon name={m.icon} size={20} color={m.color} weight="fill" />{m.name}</a>)}</div>
+          </details>
+          <details className="st-acc">
+            <summary>Integrações <CaretDown size={16} weight="bold" /></summary>
+            <div>{INTEGRATIONS.map(i => <a key={i.href} href={i.href} onClick={() => setOpen(false)}>{i.label}</a>)}</div>
+          </details>
+          <details className="st-acc">
+            <summary>Guias <CaretDown size={16} weight="bold" /></summary>
+            <div>{GUIDES.map(g => <a key={g.href} href={g.href} onClick={() => setOpen(false)}>{g.label}</a>)}</div>
+          </details>
+          <a className="st-drawer-main" href="/raio-x" onClick={() => setOpen(false)} style={{ color: '#2DCBA4' }}>Raio-X grátis da sua escola</a>
+          <a className="st-drawer-main" href="/blog" onClick={() => setOpen(false)}>Blog</a>
+          <a className="st-drawer-main" href="/sobre" onClick={() => setOpen(false)}>Quem somos</a>
+          <div className="st-drawer-wa"><WaButton /></div>
         </div></div>, document.body)}
     </header>
   )
