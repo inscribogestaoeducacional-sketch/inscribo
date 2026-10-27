@@ -196,3 +196,10 @@ a.st-card:hover{transform:translateY(-4px);box-shadow:0 18px 40px rgba(5,144,123
 .st-crumb a:hover{color:var(--g3)}
 .st-showcase{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.34fr);gap:22px;align-items:end}
 @media(max-width:800px){.st-showcase{grid-template-columns:1fr}.st-showcase .st-phone{max-width:240px;margin-inline:auto}}
+
+.st-cookie{position:fixed;left:16px;bottom:16px;z-index:60;max-width:420px;background:#fff;color:#0f2a24;border:1px solid #d6efe8;border-radius:16px;box-shadow:0 12px 40px rgba(0,82,60,.18);padding:14px 16px;font-size:13px;line-height:1.5}
+.st-cookie p{margin:0 0 10px}.st-cookie a{color:#00523C;text-decoration:underline}
+.st-cookie div{display:flex;gap:8px}
+.st-cookie button{font:inherit;font-weight:700;border-radius:999px;padding:8px 14px;cursor:pointer;border:1px solid #d6efe8;background:#fff;color:#0f2a24}
+.st-cookie .st-cookie-ok{background:linear-gradient(135deg,#00523C,#00A896);color:#fff;border:0}
+@media(max-width:640px){.st-cookie{left:12px;right:12px;bottom:84px;max-width:none}}

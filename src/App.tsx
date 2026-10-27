@@ -73,6 +73,7 @@ import InternalChatWidget from './components/chat/InternalChatWidget'
 
 // ── Super Admin ───────────────────────────────────────────────────────────
 import AdminHome        from './components/superadmin/AdminHome'
+import AdminSite        from './components/superadmin/AdminSite'
 import AdminSchools     from './components/superadmin/AdminSchools'
 import AdminRoteiro     from './components/superadmin/AdminRoteiro'
 import RoteiroCampanha from './pages/gestor/RoteiroCampanha'
@@ -348,6 +349,7 @@ function AppContent() {
         <Route path="/super-admin/schools/:id"        element={<InstitutionDetails />} />
         <Route path="/super-admin/school-groups"       element={<AdminSchoolGroups />} />
         <Route path="/super-admin/school-groups/:id"   element={<AdminSchoolGroups />} />
+        <Route path="/super-admin/site"                element={<AdminSite />} />
         <Route path="/super-admin/showcase-schools"    element={<AdminShowcaseSchools />} />
         <Route path="/super-admin/market-intelligence" element={<AdminMarketIntelligence />} />
         <Route path="/super-admin/consultants"        element={<AdminConsultants />} />

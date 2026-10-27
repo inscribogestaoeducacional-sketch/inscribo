@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
+import { trackPage, trackEvent, sessionCode, trackingChoice, setTrackingChoice } from './track'
 import { List, X, CaretDown, WhatsappLogo, ArrowRight } from '@phosphor-icons/react'
 import './site.css'
 import { MODULES, MODULE_GROUPS, waLink, WA_DISPLAY } from './lib'
@@ -127,13 +129,50 @@ export function Footer() {
   )
 }
 
+function PrivacyNotice() {
+  const [show, setShow] = useState(false)
+  useEffect(() => { setShow(trackingChoice() === null && (navigator as Navigator & { doNotTrack?: string }).doNotTrack !== '1') }, [])
+  if (!show) return null
+  const pick = (v: 'yes' | 'no') => { setTrackingChoice(v); setShow(false); if (v === 'yes') trackPage(location.pathname) }
+  return (
+    <div className="st-cookie" role="dialog" aria-label="Aviso de privacidade">
+      <p>Usamos uma medição simples e anônima das visitas para melhorar o site. Não vendemos nem compartilhamos dados. <a href="/privacidade">Saiba mais</a></p>
+      <div><button type="button" className="st-cookie-ok" onClick={() => pick('yes')}>Tudo bem</button><button type="button" className="st-cookie-no" onClick={() => pick('no')}>Não medir</button></div>
+    </div>
+  )
+}
+
+/** Mede a visita, o tempo na página e os cliques no WhatsApp (o código da visita vai na mensagem). */
+function useSiteTracking() {
+  const { pathname } = useLocation()
+  useEffect(() => { trackPage(pathname) }, [pathname])
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement | null)?.closest?.('a') as HTMLAnchorElement | null
+      if (!a) return
+      if (a.href.startsWith('https://wa.me/')) {
+        const code = sessionCode()
+        try {
+          const u = new URL(a.href); const t = u.searchParams.get('text') ?? ''
+          if (!t.includes('(ref ')) { u.searchParams.set('text', `${t} (ref ${code})`); a.href = u.toString() }
+        } catch { /* ignora */ }
+        trackEvent('wa_click', code)
+      } else if (a.pathname === '/raio-x') trackEvent('raiox_click')
+    }
+    document.addEventListener('click', onClick, true)
+    return () => document.removeEventListener('click', onClick, true)
+  }, [])
+}
+
 export function SiteShell({ children, dark = false }: { children: ReactNode; dark?: boolean }) {
+  useSiteTracking()
   return (
     <div className="st">
       <Header dark={dark} />
       <main>{children}</main>
       <RaioXBand />
       <Footer />
+      <PrivacyNotice />
       <a className="st-wa-fab" href={waLink()} target="_blank" rel="noopener noreferrer" aria-label="Falar com a Áion no WhatsApp"><WhatsappLogo size={30} weight="fill" /></a>
     </div>
   )

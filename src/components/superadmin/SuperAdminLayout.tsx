@@ -12,18 +12,18 @@ import {
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
   AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3, Network,
-  MapPinned, MessageSquare, Send, LifeBuoy, ListChecks,
+  MapPinned, MessageSquare, Send, LifeBuoy, ListChecks, Globe,
 } from 'lucide-react'
 import {
   House, TrendUp, Tray, Buildings, TreeStructure, MapPinLine, GearSix, UsersThree, ChartLineUp, BookOpenText, WhatsappLogo, ChatCircleText,
-  CurrencyCircleDollar, PaperPlaneTilt, FileText as PhFileText,
+  CurrencyCircleDollar, PaperPlaneTilt, FileText as PhFileText, GlobeHemisphereWest,
 } from '@phosphor-icons/react'
 
 // Ícones duotone do Modelo C no lugar dos de traço
 const PH_ICON: Record<string, any> = {
   Home: House, TrendingUp: TrendUp, Inbox: Tray, Building2: Buildings, Network: TreeStructure, MapPinned: MapPinLine, Settings: GearSix,
   Users: UsersThree, BarChart3: ChartLineUp, BookOpen: BookOpenText, MessageCircle: WhatsappLogo, MessageSquare: ChatCircleText,
-  DollarSign: CurrencyCircleDollar, Send: PaperPlaneTilt, FileText: PhFileText,
+  Globe: GlobeHemisphereWest, DollarSign: CurrencyCircleDollar, Send: PaperPlaneTilt, FileText: PhFileText,
 }
 
 // ─── tipos ────────────────────────────────────────────────────────────────
@@ -65,6 +65,7 @@ const ADMIN_GROUPS: MenuGroup[] = [
   {
     title: 'Marketing',
     items: [
+      { path: '/super-admin/site', label: 'Site (visitas)', icon: Globe },
       { path: '/super-admin/showcase-schools', label: 'Escolas em Destaque', icon: MapPinned },
     ],
   },
