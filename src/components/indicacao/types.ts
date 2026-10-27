@@ -13,6 +13,7 @@ export interface Indicacao {
   premio: number            // valor prometido no dia da indicação
   indicador_nome?: string   // só na tela da Áion
   indicador_escola?: string
+  indicador_pix?: string | null
 }
 
 export const STATUS_INFO: Record<IndStatus, { label: string; cor: string; fundo: string; dica: string }> = {

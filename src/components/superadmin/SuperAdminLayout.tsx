@@ -129,6 +129,15 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   const [todayMeetings, setTodayMeetings] = useState(0)
   // Dúvidas da Academia esperando a equipe (selo do menu "Suporte (dúvidas)")
   const [supportOpen, setSupportOpen] = useState(0)
+  // Indicações novas esperando abordagem (selo do menu "Indicações")
+  const [refNovas, setRefNovas] = useState(0)
+  useEffect(() => {
+    if (user?.user_type !== 'admin_geral') return
+    const load = () => { supabase.from('referrals').select('id', { count: 'exact', head: true }).eq('status', 'indicado').then(({ count }) => setRefNovas(count ?? 0), () => {}) }
+    load()
+    const t = setInterval(load, 60000)
+    return () => clearInterval(t)
+  }, [user?.user_type])
   useEffect(() => {
     if (user?.user_type !== 'admin_geral') return
     const load = () => { supabase.rpc('support_open_count').then(({ data }) => setSupportOpen(typeof data === 'number' ? data : 0), () => {}) }
@@ -250,7 +259,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     const Icon   = item.icon
 
     // badge por item
-    const badge = item.path === '/super-admin/crm' ? overdueFollowups : item.path === '/super-admin/support' ? supportOpen : 0
+    const badge = item.path === '/super-admin/crm' ? overdueFollowups : item.path === '/super-admin/support' ? supportOpen : item.path === '/super-admin/indicacoes' ? refNovas : 0
 
     return (
       <Link key={item.path} to={item.path}
@@ -294,7 +303,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     const go = (to: string) => { setMenuOpen(false); setProfileOpen(false); setNotifOpen(false); if (to !== location.pathname) goTo(navigate, to) }
     const groups = (isConsultant ? [{ title: 'Menu', items: CONSULTANT_MENU }] : ADMIN_GROUPS).map((g, gi) => ({
       title: g.title,
-      modules: g.items.filter(m => !onBar(m)).map(m => ({ key: m.path, label: m.label, Icon: ico(m) as any, tint: gi, active: act(m), badge: m.path === '/super-admin/crm' ? overdueFollowups : m.path === '/super-admin/support' ? supportOpen : 0, onPress: () => go(m.path) })),
+      modules: g.items.filter(m => !onBar(m)).map(m => ({ key: m.path, label: m.label, Icon: ico(m) as any, tint: gi, active: act(m), badge: m.path === '/super-admin/crm' ? overdueFollowups : m.path === '/super-admin/support' ? supportOpen : m.path === '/super-admin/indicacoes' ? refNovas : 0, onPress: () => go(m.path) })),
     })).filter(g => g.modules.length)
     const onDock = ADMIN_MENU_FLAT.concat(CONSULTANT_MENU).some(m => onBar(m) && act(m))
     const empty = notifications.length === 0 && overdueFollowups === 0 && todayMeetings === 0 && alerts.length === 0

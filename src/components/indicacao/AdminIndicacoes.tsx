@@ -12,12 +12,15 @@ export default function AdminIndicacoes() {
   const [pronto, setPronto] = useState(false)
 
   const load = useCallback(async () => {
-    const [cfg, l] = await Promise.all([
+    const [cfg, l, pf] = await Promise.all([
       supabase.from('platform_settings').select('key,value').in('key', ['referral_prize', 'referral_message']),
-      supabase.from('referrals').select('id,created_at,gestor_nome:gestor_name,gestor_whatsapp,gestor_email,escola_nome:school_name,status,premio:prize,indicador_nome:referrer_name,indicador_escola:referrer_school').order('created_at', { ascending: false }),
+      supabase.from('referrals').select('id,created_at,gestor_nome:gestor_name,gestor_whatsapp,gestor_email,escola_nome:school_name,status,premio:prize,indicador_nome:referrer_name,indicador_escola:referrer_school,referrer_user_id').order('created_at', { ascending: false }),
+      supabase.from('referral_profiles').select('user_id,pix_key'),
     ])
     for (const r of (cfg.data as any[]) ?? []) { if (r.key === 'referral_prize') setPremio(Number(r.value) || 500); if (r.key === 'referral_message' && r.value) setMsg(r.value) }
-    setLista(((l.data as any[]) ?? []).map(r => ({ ...r, premio: Number(r.premio) })) as Indicacao[])
+    const pix: Record<string, string> = {}
+    for (const x of (pf.data as any[]) ?? []) pix[x.user_id] = x.pix_key
+    setLista(((l.data as any[]) ?? []).map(({ referrer_user_id, ...r }) => ({ ...r, premio: Number(r.premio), indicador_pix: pix[referrer_user_id] ?? null })) as Indicacao[])
     setPronto(true)
   }, [])
   useEffect(() => { load() }, [load])

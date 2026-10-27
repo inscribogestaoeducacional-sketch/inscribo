@@ -56,6 +56,7 @@ export default function IndicacoesAdminView({ premio, msg, lista, onStatus, onSa
               <div style={{ fontWeight: 800, fontSize: 15.5, color: BRAND.ink }}>{i.escola_nome}</div>
               <div style={{ fontSize: 13, color: BRAND.muted, marginTop: 2 }}>Gestor: {i.gestor_nome} · {i.gestor_whatsapp}{i.gestor_email ? ` · ${i.gestor_email}` : ''}</div>
               <div style={{ fontSize: 13, color: BRAND.ink, marginTop: 4 }}>Indicado por <b>{i.indicador_nome}</b> ({i.indicador_escola}) em {dataCurta(i.created_at)} · prêmio {brl(i.premio)}</div>
+              {(i.status === 'fechou' || i.status === 'pago') && <div style={{ fontSize: 13, color: i.indicador_pix ? '#047857' : '#B45309', marginTop: 4, fontWeight: 700 }}>{i.indicador_pix ? `Pix para pagar: ${i.indicador_pix}` : 'O indicador ainda não informou a chave Pix.'}</div>}
             </div>
             <Pill s={i.status} />
           </div>

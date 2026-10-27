@@ -1,5 +1,5 @@
 // Painel de indicação dentro da Áion Edu (todo usuário vê): vantagens, formulário e acompanhamento.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Gift, Users, CheckCircle2, Wallet, Clock, Plus, Send, X, Sparkles } from 'lucide-react'
 import PageHeader from '../ui/PageHeader'
 import StatStrip from '../mobile/StatStrip'
@@ -37,8 +37,10 @@ export function IndicarForm({ premio, onClose, onSend }: { premio: number; onClo
   )
 }
 
-export default function IndicacaoView({ premio, lista, abrirForm = false, onNova, onSend }: { premio: number; lista: Indicacao[]; abrirForm?: boolean; onNova?: () => void; onSend?: (v: any) => void }) {
+export default function IndicacaoView({ premio, lista, abrirForm = false, pix = '', onNova, onSend, onSavePix }: { premio: number; lista: Indicacao[]; abrirForm?: boolean; pix?: string; onNova?: () => void; onSend?: (v: any) => void; onSavePix?: (v: string) => void }) {
   const [form, setForm] = useState(abrirForm)
+  const [pixTxt, setPixTxt] = useState(pix)
+  useEffect(() => { setPixTxt(pix) }, [pix])
   const validas = lista.filter(i => i.status !== 'ja_no_crm' && i.status !== 'nao_fechou')
   const fecharam = lista.filter(i => i.status === 'fechou' || i.status === 'pago').length
   const aReceber = lista.filter(i => i.status === 'fechou').reduce((s, i) => s + i.premio, 0)
@@ -64,6 +66,13 @@ export default function IndicacaoView({ premio, lista, abrirForm = false, onNova
             </div>
           ))}
         </div>
+      </div>
+      <div style={{ background: '#fff', border: `1.5px solid ${BRAND.line}`, borderRadius: 18, padding: '14px 16px', boxShadow: SHADOW, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 240px' }}>
+          <label style={lab}>Sua chave Pix para receber o prêmio</label>
+          <input style={inp} value={pixTxt} onChange={e => setPixTxt(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" />
+        </div>
+        <button type="button" onClick={() => onSavePix?.(pixTxt.trim())} disabled={pixTxt.trim() === pix.trim()} style={{ minHeight: 46, padding: '0 18px', borderRadius: 12, border: 'none', background: pixTxt.trim() === pix.trim() ? '#CBD5E1' : 'var(--aion-grad)', color: '#fff', fontWeight: 800, fontSize: 14, fontFamily: 'inherit', cursor: 'pointer' }}>{pix && pixTxt.trim() === pix.trim() ? 'Pix salvo' : 'Salvar Pix'}</button>
       </div>
       <div style={{ fontSize: 16, fontWeight: 800, color: BRAND.ink, marginTop: 4 }}>Suas indicações</div>
       {lista.length === 0 ? (
