@@ -63,6 +63,9 @@ import CentralRelatorios from './components/relatorios/CentralRelatorios'
 import ClientsModule    from './components/clients/ClientsModule'
 import ContactsModule  from './components/contacts/ContactsModule'
 import UserManagement    from './components/management/UserManagement'
+import IndicacaoPage     from './components/indicacao/IndicacaoPage'
+import AdminIndicacoes   from './components/indicacao/AdminIndicacoes'
+import IndicaPopup       from './components/indicacao/IndicaPopup'
 import SystemSettings    from './components/management/SystemSettings'
 import UserProfile       from './components/management/UserProfile'
 
@@ -360,6 +363,7 @@ function AppContent() {
         <Route path="/super-admin/financial"          element={<AdminFinancial />} />
         <Route path="/super-admin/transmissoes/precos" element={<AdminBroadcastPricing />} />
         <Route path="/super-admin/settings"           element={<AdminSettings />} />
+        <Route path="/super-admin/indicacoes"        element={<AdminIndicacoes />} />
         <Route path="/super-admin/updates"           element={<AdminUpdates />} />
         <Route path="/super-admin/support"           element={<AdminSupport />} />
         <Route path="/super-admin/whatsapp"          element={<AdminWhatsApp />} />
@@ -406,6 +410,7 @@ function AppContent() {
         <TopBar />
         <NewLookGate />
         {isGestor && user.institution_id && <GestorUpdatePopup institutionId={user.institution_id} />}
+        <IndicaPopup />
         <InternalChatWidget />
         <TourPlayer />
         <HelpPanel />
@@ -436,6 +441,7 @@ function AppContent() {
             <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><UserManagement /></ProtectedRoute>} />
             {/* Fase 6.2: gestor também abre; cada item é filtrado por perfil em lib/settingsAccess.ts */}
             <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin','manager']}><SystemSettings /></ProtectedRoute>} />
+            <Route path="/indicacoes"  element={<IndicacaoPage />} />
             <Route path="/academia"     element={<Academia />} />
             <Route path="/roteiro"      element={<ProtectedRoute allowedRoles={['admin','manager']}><RoteiroCampanha /></ProtectedRoute>} />
             <Route path="/profile"      element={<UserProfile />} />

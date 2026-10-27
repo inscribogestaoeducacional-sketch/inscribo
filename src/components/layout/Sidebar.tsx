@@ -11,7 +11,7 @@ import { useRoadmap } from '../../lib/roadmap'
 import { X, SlidersHorizontal, LayoutGrid, MessageSquare } from 'lucide-react'
 import {
   House, Funnel, AddressBook, WhatsappLogo, CalendarCheck, Megaphone, Storefront, PaperPlaneTilt, Flag,
-  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle, BookOpenText, ListChecks,
+  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle, BookOpenText, ListChecks, Gift,
 } from '@phosphor-icons/react'
 import type { Icon as PhIcon } from '@phosphor-icons/react'
 
@@ -47,6 +47,7 @@ const NAV_CFG: NavItem[] = [
   { path: '/users',           label: 'Usuários',        iconBg: '#E0E7FF', iconColor: '#4F46E5', Icon: UsersThree,      roles: ['admin'], module: 'usuarios',      group: 'Administração' },
   { path: '/settings',        label: 'Configurações',   iconBg: '#E2E8F0', iconColor: '#334155', Icon: GearSix,        roles: ['admin','manager'], module: 'configuracoes', group: 'Administração' },  // Ajuda
   { path: '/roteiro',         label: 'Minha campanha',  iconBg: '#FFEDD5', iconColor: '#EA580C', Icon: ListChecks,     roles: ['admin','manager'], module: 'roteiro', group: 'Ajuda' },
+  { path: '/indicacoes',      label: 'Indique e ganhe', iconBg: '#E6F7F5', iconColor: '#05907B', Icon: Gift,           roles: ['admin','manager','user'], module: 'indicacoes', group: 'Ajuda' },
   { path: '/academia',        label: 'Academia',        iconBg: '#E6F7F5', iconColor: '#05907B', Icon: BookOpenText,   roles: ['admin','manager','user'], module: 'academia', group: 'Ajuda' },
 ]
 

@@ -8,7 +8,7 @@ import { useAlertNotifications } from '../../hooks/useAlertNotifications'
 import AlertNotificationList from '../layout/AlertNotificationList'
 import { AppDock, MenuSheet, BottomSheet, SheetRow, ProfileHero, PageAnim, goTo, useIsMobile, DOCK_SPACE } from '../mobile/MobileShell'
 import {
-  Home, Building2, DollarSign, FileText, Settings,
+  Home, Building2, DollarSign, FileText, Settings, Gift,
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
   AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3, Network,
@@ -51,6 +51,7 @@ const ADMIN_GROUPS: MenuGroup[] = [
     title: 'Comercial',
     items: [
       { path: '/super-admin/crm',        label: 'CRM Comercial', icon: TrendingUp  },
+      { path: '/super-admin/indicacoes', label: 'Indicações',    icon: Gift        },
       { path: '/super-admin/aion-inbox', label: 'Inbox Áion',    icon: Inbox       },
     ],
   },
