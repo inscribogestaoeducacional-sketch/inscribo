@@ -69,7 +69,7 @@ function Problems() {
   const [i, setI] = useState(0)
   const [auto, setAuto] = useState(true)
   useEffect(() => {
-    if (!auto || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    if (!auto || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || window.matchMedia?.('(max-width: 900px)').matches) return
     const t = setInterval(() => setI(x => (x + 1) % PROBLEMS.length), 7000)
     return () => clearInterval(t)
   }, [auto])
@@ -193,8 +193,8 @@ function Ways() {
           <h2 className="st-h2" style={{ marginTop: 12, maxWidth: 760 }}>Conecte o número da escola do jeito que for melhor para vocês</h2>
           <p className="st-lead" style={{ marginTop: 14 }}>Duas formas de conectar. As mensagens de atendimento estão incluídas no plano, sem cobrança por mensagem.</p></Rv>
         <div className="st-ways">
-          <Rv className="st-way"><span className="n">Forma 1</span><h3>Conexão em 1 clique</h3><p style={{ color: 'var(--mut)' }}>Pelo cadastro oficial da Meta, direto no painel. O número continua funcionando no WhatsApp Business do celular e a equipe atende também pela Áion Edu.</p></Rv>
-          <Rv d={1} className="st-way"><span className="n">Forma 2</span><h3>Conexão manual pela API</h3><p style={{ color: 'var(--mut)' }}>Para quem já tem a conta da Meta configurada. Você informa o Phone ID e o token e a Áion Edu testa a conexão na hora.</p></Rv>
+          <Rv className="st-way"><span className="n">Forma 1</span><h3>App WhatsApp Business (coexistência)</h3><p style={{ color: 'var(--mut)' }}>A Áion acompanha a conexão com você, em uma chamada curta. O número continua funcionando no WhatsApp Business do celular e a equipe atende também pela Áion Edu.</p></Rv>
+          <Rv d={1} className="st-way"><span className="n">Forma 2</span><h3>API oficial com Phone ID e token</h3><p style={{ color: 'var(--mut)' }}>Para quem já tem a conta da Meta configurada. A Áion cadastra o Phone ID e o token e testa a conexão.</p></Rv>
         </div>
         <div style={{ marginTop: 28 }}><Btn kind="main" href="/integracoes/whatsapp">Ver a integração com o WhatsApp <ArrowRight size={18} weight="bold" /></Btn></div>
       </div>

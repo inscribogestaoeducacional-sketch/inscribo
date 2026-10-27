@@ -6,7 +6,7 @@
  "faq": [
   {
    "q": "Preciso trocar o número de WhatsApp da escola?",
-   "a": "Não. A escola conecta o número que já usa, pelo painel. Existem duas formas: conexão em 1 clique, que mantém o número no WhatsApp Business do celular, e conexão manual pela API, informando o Phone ID e o token."
+   "a": "Não. A escola conecta o número que já usa, com o acompanhamento da equipe da Áion. Existem duas formas: pelo app WhatsApp Business (coexistência), que mantém o número no celular, e pela API oficial, com Phone ID e token."
   },
   {
    "q": "As mensagens do WhatsApp são cobradas?",

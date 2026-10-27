@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { trackPage, trackEvent, sessionCode, trackingChoice, setTrackingChoice } from './track'
 import { List, X, CaretDown, WhatsappLogo, ArrowRight } from '@phosphor-icons/react'
@@ -71,8 +72,7 @@ export function Header({ dark = false }: { dark?: boolean }) {
         </div>
         <button type="button" className="st-burger" aria-label={open ? 'Fechar menu' : 'Abrir menu'} onClick={() => setOpen(o => !o)}>{open ? <X size={26} /> : <List size={26} />}</button>
       </div>
-      {open && (
-        <div className="st-drawer" role="dialog" aria-label="Menu">
+      {open && createPortal(<div className="st"><div className="st-drawer" role="dialog" aria-label="Menu">
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button type="button" className="st-burger" style={{ display: 'block', color: '#fff' }} aria-label="Fechar menu" onClick={() => setOpen(false)}><X size={28} /></button></div>
           <a href="/raio-x" onClick={() => setOpen(false)} style={{ color: '#2DCBA4' }}>Raio-X grátis da sua escola <ArrowRight size={18} /></a>
           <small>Módulos</small>
@@ -84,8 +84,7 @@ export function Header({ dark = false }: { dark?: boolean }) {
           <small>Empresa</small>
           <a href="/blog">Blog</a><a href="/sobre">Quem somos</a><a href="/entrar">Entrar</a>
           <div style={{ marginTop: 18 }}><WaButton /></div>
-        </div>
-      )}
+        </div></div>, document.body)}
     </header>
   )
 }
