@@ -63,7 +63,7 @@ export default function FunilCampanha({ institutionId, from, to, planMonths, rat
           <button key={k} onClick={() => setMes(k)} style={{ padding: '7px 13px', borderRadius: 99, border: '1px solid ' + (mes === k ? BRAND.primary : '#E2E8F0'), background: mes === k ? BRAND.primary : '#fff', color: mes === k ? '#fff' : BRAND.text, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>{l}</button>
         ))}
       </div>
-      <StageCards data={data} mes={mes} planMonths={planMonths} rates={rates} />
+      <FunilVisual data={data} mes={mes} planMonths={planMonths} rates={rates} />
       <ConvRow data={data} mes={mes} rates={rates} />
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Mês a mês: quem entrou e até onde chegou</div>
@@ -237,6 +237,71 @@ function MonthTable({ data, planMonths, rates }: { data: Data; planMonths: PlanM
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+const FV: { k: string; label: string; verb: string; metaIdx: number | null; c: [string, string] }[] = [
+  { k: 'entraram', label: 'Cadastros', verb: 'entraram na campanha', metaIdx: 0, c: ['#6366F1', '#7C83F5'] },
+  { k: 'contact', label: 'Contato', verb: 'foram contatados', metaIdx: null, c: ['#7C5CF0', '#9A7DF5'] },
+  { k: 'scheduled', label: 'Agendamentos', verb: 'agendaram visita', metaIdx: 1, c: ['#8B5CF6', '#A98BF8'] },
+  { k: 'visit', label: 'Visitas', verb: 'visitaram a escola', metaIdx: 2, c: ['#D9970B', '#F5B23A'] },
+  { k: 'proposal', label: 'Proposta', verb: 'receberam proposta', metaIdx: null, c: ['#2F9E6B', '#4FC08B'] },
+  { k: 'enrolled', label: 'Matrículas novas', verb: 'matricularam', metaIdx: 3, c: ['#05907B', '#2DCBA4'] },
+]
+
+/** Funil de verdade: barras que estreitam, com número, % do total, conversão entre etapas, meta e a etapa onde mais se perde. */
+function FunilVisual({ data, mes, planMonths, rates }: { data: Data; mes: string; planMonths: PlanMonth[]; rates: FunnelRates }) {
+  const mrow = data.months.find(m => m.m === mes)
+  const get = (k: string) => k === 'entraram' ? (mes ? (mrow?.entraram ?? 0) : data.entraram) : (mes ? (mrow?.etapas[k]?.n ?? 0) : (data.totais[k]?.n ?? 0))
+  const inf = (k: string) => k === 'entraram' ? 0 : (mes ? (mrow?.etapas[k]?.inferidos ?? 0) : (data.totais[k]?.inferidos ?? 0))
+  const meta = metaOf(planMonths, rates, mes)
+  const vals = FV.map(f => get(f.k))
+  const top = Math.max(1, vals[0])
+  const widths = vals.map(v => Math.max(34, Math.round(v / top * 100)))
+  // etapa com a maior queda proporcional em relação à anterior (só onde há gente)
+  let worst = -1, worstDrop = 0
+  vals.forEach((v, i) => { if (i > 0 && vals[i - 1] > 0) { const drop = 1 - v / vals[i - 1]; if (drop > worstDrop) { worstDrop = drop; worst = i } } })
+  const lostV = mes ? (mrow?.etapas.lost?.n ?? 0) : (data.totais.lost?.n ?? 0)
+  return (
+    <div style={{ ...card, padding: '18px 14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', padding: '0 6px', marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Funil de matrículas novas</div>
+        <div style={{ fontSize: 12, color: BRAND.muted }}>{mes ? monthName(mes + '-01') : 'Campanha toda'} · {vals[0]} leads entraram</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {FV.map((f, i) => {
+          const v = vals[i], w = widths[i], nextW = i < FV.length - 1 ? widths[i + 1] : Math.max(26, w - 10)
+          const inset = Math.max(0, (w - nextW) / 2 / w * 100)
+          const m = f.metaIdx != null ? meta[f.metaIdx] : 0
+          const d = m > 0 ? Math.round((v - m) / m * 100) : null
+          const conv = i > 0 ? (vals[i - 1] > 0 ? Math.round(v / vals[i - 1] * 100) : null) : null
+          return (
+            <div key={f.k} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              {i > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '5px 0', fontSize: 11.5, fontWeight: 700, color: worst === i ? '#B91C1C' : '#64748B' }}>
+                  <span aria-hidden>↓</span>
+                  <span style={{ padding: '2px 9px', borderRadius: 99, background: worst === i ? '#FEE2E2' : '#F1F5F4' }}>{conv == null ? '—' : `${conv}% ${f.verb}`}</span>
+                  {worst === i && <span style={{ fontSize: 11, fontWeight: 800 }}>maior perda</span>}
+                </div>
+              )}
+              <div title={`${f.label}: ${v}`} style={{ width: `${w}%`, minWidth: 128, height: 58, position: 'relative', background: `linear-gradient(135deg, ${f.c[0]}, ${f.c[1]})`, clipPath: `polygon(0 0, 100% 0, ${100 - inset}% 100%, ${inset}% 100%)`, borderRadius: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', transition: 'width .8s cubic-bezier(.2,.8,.2,1)' }}>
+                <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{v}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, opacity: .95, marginTop: 2 }}>{f.label}</div>
+              </div>
+              <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <span>{vals[0] > 0 ? Math.round(v / vals[0] * 100) : 0}% dos cadastros</span>
+                {m > 0 && <span>meta {m}</span>}
+                {d != null && <b style={{ color: devColor(d) }}>{d >= 0 ? '↑ +' : '↓ '}{d}%</b>}
+                {inf(f.k) > 0 && <span title="Deduzidos: o lead aparece numa etapa mais à frente sem registro desta" style={{ color: '#0F766E', fontWeight: 700 }}>~{inf(f.k)} estimados</span>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 12, background: '#FEF2F2', color: '#B91C1C', fontSize: 12.5, fontWeight: 700, display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <span>Perdidos no período</span><span>{lostV}{vals[0] > 0 ? ` · ${Math.round(lostV / vals[0] * 100)}% dos cadastros` : ''}</span>
       </div>
     </div>
   )

@@ -5,7 +5,7 @@ import { AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
 import { monthName, funnelNeeds, type FunnelRates, type HistYear, type PlanMonth } from '../../lib/campaignPlan'
-import { thisMonthSP } from '../../lib/campaignCompare'
+import { compensate, thisMonthSP } from '../../lib/campaignCompare'
 import { CountUp, useMounted } from './CampaignCharts'
 
 type Tab = 'funil' | 'novatos' | 'rematricula' | 'invest' | 'serie' | 'matriculometro' | 'saidas'
@@ -79,7 +79,8 @@ export default function VisaoGeral(p: Props) {
   const bw = Math.min(22, (slot - 10) / Math.max(1, chart.length))
   const y = (v: number) => H - B - (v / top) * (H - B - T)
 
-  const goalFor = (k: 'novos' | 'rematriculas') => p.months.map(m => m[k])
+  const effFor = { novos: compensate(p.months, p.cur, 'novos', now).effective, rematriculas: compensate(p.months, p.cur, 'rematriculas', now).effective }
+  const goalFor = (k: 'novos' | 'rematriculas') => effFor[k]
   const feitoFor = (k: 'novos' | 'rematriculas', m: string) => p.cur?.monthly.find(x => x.m === m)?.[k] ?? 0
   const kpis: [string, number, number, string, string][] = [
     ['Matriculados', p.prog.done, p.goals.total, '#059669', '#10B981'], ['Novos', p.prog.novos, p.goals.novos, '#7C3AED', '#7C3AED'],
@@ -164,7 +165,7 @@ export default function VisaoGeral(p: Props) {
 
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Meta mês a mês, por tipo</div>
-        <div style={{ fontSize: 12.5, color: '#64748B', marginBottom: 8 }}>Cada tipo com a sua meta e o que foi feito. A compensação da meta fica nas abas Novatos e Rematrícula.</div>
+        <div style={{ fontSize: 12.5, color: '#64748B', marginBottom: 8 }}>A meta de cada mês já inclui o que faltou (ou sobrou) do mês anterior.</div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={{ ...th, textAlign: 'left' }}>Mês</th><th style={th}>Novos meta</th><th style={th}>Feito</th><th style={th}>Rematrículas meta</th><th style={th}>Feito</th></tr></thead>

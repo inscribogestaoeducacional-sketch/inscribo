@@ -7,26 +7,28 @@ export const thisMonthSP = () => new Date().toLocaleDateString('en-CA', { timeZo
 export const realOf = (cur: HistYear | null, m: string, k: Kind) => cur?.monthly.find(x => x.m === m)?.[k] ?? 0
 
 /**
- * Compensação: o que faltou (ou sobrou) nos meses já fechados é redistribuído, em proporção à meta,
- * entre o mês em curso e os meses seguintes. Mês em curso e futuros recebem a "meta ajustada".
+ * Meta cumulativa, mês a mês e em cadeia: o que faltou num mês soma na meta do mês seguinte; o que sobrou diminui
+ * (e, se a sobra passa da meta do mês seguinte, segue adiante). `effective` é a meta de cada mês já com o que veio do
+ * anterior; `adjusted` é a mesma meta só para o mês em curso e os futuros (null nos fechados); `carryIn` é o que entrou.
  */
 export function compensate(months: PlanMonth[], cur: HistYear | null, k: Kind, now = thisMonthSP()) {
   const plan = months.map(m => m[k])
   const real = months.map(m => (m.m <= now ? realOf(cur, m.m, k) : null))
   const closed = months.map(m => m.m < now)
-  const deficit = months.reduce((s, m, i) => s + (closed[i] ? plan[i] - (real[i] ?? 0) : 0), 0)
-  const openIdx = months.map((_, i) => i).filter(i => !closed[i])
-  const openPlan = openIdx.reduce((s, i) => s + plan[i], 0)
-  const adjusted: (number | null)[] = months.map(() => null)
-  let given = 0
-  openIdx.forEach((i, pos) => {
-    const share = openPlan > 0 ? plan[i] / openPlan : 1 / openIdx.length
-    const v = pos === openIdx.length - 1 ? Math.round(plan[i] + deficit - given) : Math.round(plan[i] + deficit * share)
-    const val = Math.max(0, v)
-    adjusted[i] = val
-    given += Math.round(deficit * share)
+  const effective: number[] = [], carryIn: number[] = [], adjusted: (number | null)[] = []
+  let carry = 0, deficit = 0, seenOpen = false
+  months.forEach((_, i) => {
+    carryIn.push(carry)
+    const raw = plan[i] + carry
+    effective.push(Math.max(0, raw))
+    if (closed[i]) { carry = raw - (real[i] ?? 0); adjusted.push(null) }
+    else {
+      if (!seenOpen) { deficit = carry; seenOpen = true }
+      adjusted.push(Math.max(0, Math.round(raw)))
+      carry = Math.min(0, raw) // projeção: só a sobra que passou da meta segue adiante
+    }
   })
-  return { plan, real, closed, adjusted, deficit }
+  return { plan, real, closed, adjusted, effective: effective.map(Math.round), carryIn: carryIn.map(Math.round), deficit: Math.round(deficit) }
 }
 
 /** Acumulados (plano, realizado até o mês atual) e dos anos anteriores alinhados aos meses da campanha. */
