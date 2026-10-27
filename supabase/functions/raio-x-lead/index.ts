@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json()
-    const { director_name, role, phone, email, city, state, school_name, co_entidade } = body
+    const { director_name, role, phone, email, city, state, school_name, co_entidade, diagnostico } = body
 
     if (!director_name?.trim() || !phone?.trim() || !email?.trim() || !school_name?.trim()) {
       return new Response(
@@ -57,6 +57,28 @@ Deno.serve(async (req) => {
       throw new Error(leadError.message)
     }
 
+    // Diagnóstico de atendimento respondido pela escola (opcional). Falha aqui não derruba o cadastro.
+    let diagnostico_id: string | null = null
+    if (diagnostico && typeof diagnostico === 'object' && Number.isFinite(Number(co_entidade))) {
+      try {
+        const num = (v: unknown) => (typeof v === 'number' && isFinite(v) ? Math.round(v) : null)
+        const txt = (v: unknown, n: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null)
+        const { data: dg, error: dgErr } = await supabase.from('raiox_diagnostico').insert({
+          lead_id: lead?.id ?? null,
+          co_entidade: Number(co_entidade),
+          respostas: diagnostico.respostas && typeof diagnostico.respostas === 'object' ? diagnostico.respostas : {},
+          pontuacao: num(diagnostico.pontuacao),
+          faixa: txt(diagnostico.faixa, 20),
+          instagram: txt(diagnostico.instagram, 60),
+          instagram_texto: txt(diagnostico.instagram_texto, 6000),
+          instagram_dados: diagnostico.instagram_dados && typeof diagnostico.instagram_dados === 'object' ? diagnostico.instagram_dados : null,
+          outras_cidades: diagnostico.outras_cidades && typeof diagnostico.outras_cidades === 'object' ? diagnostico.outras_cidades : null,
+        }).select('id').single()
+        if (dgErr) console.error('[raio-x-lead] diagnóstico:', dgErr.message)
+        else diagnostico_id = dg?.id ?? null
+      } catch (e) { console.error('[raio-x-lead] diagnóstico:', e) }
+    }
+
     // Fase B — WhatsApp + e-mail de boas-vindas assim que o lead é capturado
     // (único sinal server-side que temos: o PDF em si é gerado e baixado
     // 100% no client, ver src/pages/RaioXPage.tsx). Best-effort: uma falha
@@ -81,7 +103,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ ok: true }),
+      JSON.stringify({ ok: true, diagnostico_id }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
     )
   } catch (err: unknown) {

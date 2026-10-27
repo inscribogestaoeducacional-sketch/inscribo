@@ -16,7 +16,7 @@ export type Check = { id: string; titulo: string; ok: boolean; peso: number; det
 export type IgAnalise = {
   perfil: { username: string; nome: string | null; bio: string; site: string | null; seguidores: number; posts_total: number }
   amostra: { n: number; dias: number | null; primeiro: string | null; ultimo: string | null }
-  frequencia: { por_semana: number | null; dias_desde_ultimo: number | null; semanas: { inicio: string; qtd: number }[] }
+  frequencia: { por_semana: number | null; dias_desde_ultimo: number | null; serie_dias: { dia: string; qtd: number }[] }
   tipos: { tipo: Tipo; qtd: number; pct: number; engaj_medio: number | null }[]
   engajamento: {
     curtidas_ocultas: boolean; medio_por_post: number | null; taxa_pct: number | null
@@ -25,7 +25,12 @@ export type IgAnalise = {
     por_dia: { dia: string; qtd: number; engaj_medio: number | null }[]
     melhor_dia: string | null
   }
-  conteudo: { fala_matricula: number; com_chamada: number; legenda_media: number | null; hashtags_media: number | null; recentes_matricula_30d: number; posts_30d: number }
+  conteudo: {
+    fala_matricula: number; com_chamada: number; legenda_media: number | null; hashtags_media: number | null; recentes_matricula_30d: number; posts_30d: number
+    engaj_matricula: number | null; engaj_outros: number | null
+    temas: { tema: string; qtd: number; engaj_medio: number | null }[]
+    hashtags_top: { tag: string; qtd: number }[]
+  }
   bio_checks: { site: boolean; contato: boolean; matricula: boolean; cidade: boolean | null }
   checks: Check[]
   nota: number
@@ -65,12 +70,13 @@ export function analisar(raw: IgRaw, cidade?: string | null, agora = new Date())
   const desdeUltimo = ultimo ? Math.max(0, Math.floor((+agora - +new Date(ultimo)) / 86400_000)) : null
   const porSemana = dias && posts.length >= 2 ? r1((posts.length / dias) * 7) : null
 
-  // últimas 12 semanas (seg.-dom.), da mais antiga para a mais nova
-  const semanas: { inicio: string; qtd: number }[] = []
-  const ini0 = new Date(agora); ini0.setUTCHours(0, 0, 0, 0); ini0.setUTCDate(ini0.getUTCDate() - ((ini0.getUTCDay() + 6) % 7))
-  for (let i = 11; i >= 0; i--) {
-    const a = new Date(+ini0 - i * 7 * 86400_000), b = new Date(+a + 7 * 86400_000)
-    semanas.push({ inicio: a.toISOString().slice(0, 10), qtd: posts.filter(p => { const t = +new Date(p.timestamp!); return t >= +a && t < +b }).length })
+  // posts por dia, do primeiro post da amostra até hoje (entre 7 e 30 dias), em data de Fortaleza
+  const nDias = Math.min(30, Math.max(7, (dias ?? 7) + 1))
+  const hoje = local(agora.toISOString()); hoje.setUTCHours(0, 0, 0, 0)
+  const serie_dias: { dia: string; qtd: number }[] = []
+  for (let i = nDias - 1; i >= 0; i--) {
+    const d = new Date(+hoje - i * 86400_000), k = d.toISOString().slice(0, 10)
+    serie_dias.push({ dia: k, qtd: posts.filter(p => local(p.timestamp!).toISOString().slice(0, 10) === k).length })
   }
 
   const tiposOrd: Tipo[] = ['reels', 'carrossel', 'foto']
@@ -95,6 +101,22 @@ export function analisar(raw: IgRaw, cidade?: string | null, agora = new Date())
   const t30 = posts.filter(p => +agora - +new Date(p.timestamp!) <= 30 * 86400_000)
   const mat30 = t30.filter(p => RE_MAT.test(norm(p.caption ?? ''))).length
 
+  const TEMAS: [string, RegExp][] = [
+    ['Matrícula e vagas', RE_MAT],
+    ['Aprovações e conquistas', /aprova|medicina|conquista|enem|vestibular|medalha|olimp/],
+    ['Eventos e família', /evento|festa|familia|adesiva|encontro|passeio|viagem|reuniao/],
+    ['Datas comemorativas', /dia dos|dia das|semana d|aniversario|feliz|parabens/],
+    ['Estrutura e novidades', /playground|novidade|novo |nova |estrutura|laboratorio|quadra|reforma/],
+  ]
+  const temas = TEMAS.map(([tema, re]) => {
+    const g = posts.filter(p => re.test(norm(p.caption ?? '')))
+    return { tema, qtd: g.length, engaj_medio: r1(media(g.map(engaj))) }
+  })
+  const ehMat = (p: IgMedia) => RE_MAT.test(norm(p.caption ?? ''))
+  const tagCount: Record<string, number> = {}
+  for (const l of legs) for (const t of new Set((l.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(x => x.toLowerCase()))) tagCount[t] = (tagCount[t] ?? 0) + 1
+  const hashtags_top = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([tag, qtd]) => ({ tag, qtd }))
+
   const bio_checks = {
     site: !!raw.website,
     contato: RE_CONTATO.test(bioN) || /wa\.me|whatsapp/.test(norm(raw.website ?? '')),
@@ -118,7 +140,7 @@ export function analisar(raw: IgRaw, cidade?: string | null, agora = new Date())
   return {
     perfil: { username: raw.username ?? '', nome: raw.name ?? null, bio, site: raw.website ?? null, seguidores, posts_total: raw.media_count ?? 0 },
     amostra: { n: posts.length, dias, primeiro, ultimo },
-    frequencia: { por_semana: porSemana, dias_desde_ultimo: desdeUltimo, semanas },
+    frequencia: { por_semana: porSemana, dias_desde_ultimo: desdeUltimo, serie_dias },
     tipos,
     engajamento: {
       curtidas_ocultas: ocultas,
@@ -134,6 +156,8 @@ export function analisar(raw: IgRaw, cidade?: string | null, agora = new Date())
       legenda_media: r1(media(legs.map(l => l.length))),
       hashtags_media: r1(media(legs.map(l => (l.match(/#\w+/g) ?? []).length))),
       recentes_matricula_30d: mat30, posts_30d: t30.length,
+      engaj_matricula: r1(media(posts.filter(ehMat).map(engaj))), engaj_outros: r1(media(posts.filter(p => !ehMat(p)).map(engaj))),
+      temas, hashtags_top,
     },
     bio_checks, checks, nota,
     faixa: nota >= 70 ? 'forte' : nota >= 40 ? 'medio' : 'fraco',

@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, FormEvent } from 'react'
-import { pdf } from '@react-pdf/renderer'
 import { supabase } from '../lib/supabase'
 import { SHARED_CSS } from '../styles/sharedCSS'
 import AION_LOGO_B64 from '../lib/aionLogo'
-import { calculateRaioXMetrics } from '../lib/raioXMetrics'
-import RaioXPdfDocument from '../lib/raioXPdf'
+import { gerarRaioXBlob } from '../lib/raiox/pdf/gerar'
+import { PERGUNTAS, pontuar, respondeuTudo, type Respostas } from '../lib/raiox/atendimento'
+import { limpaTexto } from '../lib/raiox/data'
+import type { IgAnalise } from '../lib/raiox/ig'
 import { normalizePhone } from '../lib/phone'
 
 // ─── tipos ──────────────────────────────────────────────────────────────────
@@ -17,7 +18,7 @@ interface SchoolResult {
   ano_censo: number
 }
 
-type Step = 'search' | 'confirm' | 'form' | 'success'
+type Step = 'search' | 'confirm' | 'form' | 'atend' | 'success'
 type SearchStage = 'uf' | 'city' | 'school'
 
 // ─── design tokens — paleta oficial da Áion Edu (ver src/styles/sharedCSS.ts) ─
@@ -91,15 +92,15 @@ const UFS = [
 ]
 const ufName = (uf: string) => UFS.find(u => u.uf === uf)?.name ?? uf
 
-const STEP_LABELS = ['Buscar escola', 'Confirmar', 'Seus dados']
-const STEP_INDEX: Record<Step, number> = { search: 0, confirm: 1, form: 2, success: 3 }
+const STEP_LABELS = ['Buscar escola', 'Confirmar', 'Seus dados', 'Atendimento']
+const STEP_INDEX: Record<Step, number> = { search: 0, confirm: 1, form: 2, atend: 3, success: 4 }
 
 // carrossel de diferenciais exibido enquanto o relatório é calculado/gerado
 // (mesmo conteúdo usado na página "Por que a Áion Edu" do PDF — ver raioXPdf.tsx)
 type HighlightIconName = 'trend' | 'home' | 'chart' | 'grid' | 'star'
 
 const AION_HIGHLIGHTS: { icon: HighlightIconName; title: string; desc: string }[] = [
-  { icon: 'trend', title: 'Criamos sua campanha de matrícula com você', desc: 'A Áion não entrega só um sistema - montamos a campanha junto e acompanhamos os resultados automaticamente.' },
+  { icon: 'trend', title: 'Campanha de matrículas com origem de cada lead', desc: 'Cadastre cada anúncio e veja quantas conversas, visitas e matrículas ele trouxe.' },
   { icon: 'home',  title: 'CRM feito especialmente para escolas',       desc: 'Não é um sistema genérico adaptado - foi construído pensando na realidade da gestão educacional.' },
   { icon: 'chart', title: 'Relatórios de campanha completos',          desc: 'Veja exatamente de onde vêm seus leads e o que está funcionando, sem precisar montar planilha.' },
   { icon: 'grid',  title: 'Mais de 10 módulos, um único clique',       desc: 'Tudo organizado numa única tela - sem dor de cabeça pra gerar nada.' },
@@ -343,6 +344,13 @@ export default function RaioXPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
+  // diagnóstico de atendimento (etapa 4)
+  const [respostas, setRespostas] = useState<Respostas>({})
+  const [instagram, setInstagram] = useState('')
+  const [igTexto, setIgTexto] = useState('')
+  const [igAviso, setIgAviso] = useState<string | null>(null)
+  const [outrasCidades, setOutrasCidades] = useState('')
+
   // geração do relatório em PDF (Fase C)
   const [pdfState, setPdfState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
@@ -437,9 +445,12 @@ export default function RaioXPage() {
     setSchoolsError(null)
     const { data, error } = await supabase
       .from('inep_escolas')
-      .select('co_entidade, no_entidade, no_municipio, sg_uf, qt_mat_total, ano_censo')
+      // só particulares em atividade; escolas sem matrícula de educação básica (ex.: técnicas) ficam de fora
+      .select('co_entidade, no_entidade, no_municipio, sg_uf, qt_mat_total, ano_censo, qt_mat_inf, qt_mat_fund, qt_mat_med')
       .eq('sg_uf', selectedUf)
       .eq('no_municipio', selectedCity)
+      .eq('tp_dependencia', 4)
+      .eq('tp_situacao_funcionamento', 1)
       .order('ano_censo', { ascending: false })
     setLoadingSchools(false)
 
@@ -452,8 +463,9 @@ export default function RaioXPage() {
     // a mesma escola aparece uma vez por ano do censo — mantém só o ano mais recente
     const seen = new Set<string>()
     const deduped: SchoolResult[] = []
-    for (const row of (data ?? []) as SchoolResult[]) {
+    for (const row of (data ?? []) as (SchoolResult & { qt_mat_inf: number | null; qt_mat_fund: number | null; qt_mat_med: number | null })[]) {
       if (seen.has(row.co_entidade)) continue
+      if ((row.qt_mat_inf ?? 0) + (row.qt_mat_fund ?? 0) + (row.qt_mat_med ?? 0) <= 0) continue
       seen.add(row.co_entidade)
       deduped.push(row)
     }
@@ -504,22 +516,24 @@ export default function RaioXPage() {
     setSearchStage('school')
   }
 
-  async function generateReport(school: SchoolResult, director: string) {
+  async function generateReport(school: SchoolResult, extras: { ig?: IgAnalise | null; diagnosticoId?: string | null } = {}) {
     setPdfState('loading')
     startCarousel()
     try {
-      const metrics = await calculateRaioXMetrics(school.co_entidade, school.no_municipio ?? '', school.sg_uf ?? '')
-      if (!metrics) throw new Error('Sem dados suficientes')
-
-      const generatedDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-      const blob = await pdf(
-        <RaioXPdfDocument data={{ metrics, directorName: director, generatedDate }} />
-      ).toBlob()
-
+      const sc = pontuar(respostas)
+      const atend = sc ? { ...sc, respostas } : null
+      let textoIA: string | null = null
+      if (extras.diagnosticoId) {
+        try {
+          const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'raiox_diagnostico', payload: { diagnosticoId: extras.diagnosticoId } }), signal: AbortSignal.timeout(25000) })
+          if (r.ok) textoIA = ((await r.json()) as { text?: string }).text ?? null
+        } catch { /* o relatório sai sem o texto da IA */ }
+      }
+      const blob = await gerarRaioXBlob(school.co_entidade, { ig: extras.ig, atend, textoIA })
+      if (!blob) throw new Error('Sem dados suficientes')
       setPdfUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
       setPdfState('ready')
     } catch (err) {
-      // TODO(diagnóstico): remover depois de identificar a causa real em produção
       console.error('[RaioX] Erro ao gerar relatório:', err instanceof Error ? err.stack ?? err.message : err)
       setPdfState('error')
     }
@@ -534,17 +548,34 @@ export default function RaioXPage() {
     city.trim().length > 1 &&
     lgpdAccepted
 
+  function irParaAtendimento(e: FormEvent) {
+    e.preventDefault()
+    if (!canSubmit) return
+    setStep('atend')
+  }
+
+  const atendOk = respondeuTudo(respostas)
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!canSubmit || !selectedSchool || submitting) return
+    if (!canSubmit || !atendOk || !selectedSchool || submitting) return
     setSubmitting(true)
     setSubmitError(null)
+    setIgAviso(null)
     try {
-      // normalizePhone (mesma função do webhook real, ver src/lib/phone.ts)
-      // assume que o DDI já está presente; o campo acima é de texto livre e
-      // um diretor de escola BR normalmente digita sem o 55 na frente, então
-      // garantimos o prefixo antes de normalizar — senão o número ficaria
-      // sem código de país salvo em crm_leads.phone.
+      // Instagram (opcional): lê o perfil público; se não der, o relatório sai sem as páginas de Instagram
+      let ig: IgAnalise | null = null
+      const handle = instagram.trim()
+      if (handle) {
+        try {
+          const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'raiox_instagram', payload: { handle, cidade: selectedSchool.no_municipio } }), signal: AbortSignal.timeout(25000) })
+          const j = await r.json().catch(() => ({})) as { analise?: IgAnalise; mensagem?: string }
+          if (r.ok && j.analise) ig = j.analise
+          else setIgAviso(j.mensagem || 'Não consegui ler o Instagram. O relatório sai sem essa parte.')
+        } catch { setIgAviso('Não consegui ler o Instagram. O relatório sai sem essa parte.') }
+      }
+      const sc = pontuar(respostas)
+      // normalizePhone assume DDI; garantimos o 55 na frente
       const normalizedPhone = normalizePhone(digits.startsWith('55') ? digits : `55${digits}`)
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/raio-x-lead`, {
         method: 'POST',
@@ -556,14 +587,19 @@ export default function RaioXPage() {
           email: email.trim(),
           city: city.trim(),
           state: selectedSchool.sg_uf,
-          school_name: selectedSchool.no_entidade,
+          school_name: limpaTexto(selectedSchool.no_entidade),
           co_entidade: selectedSchool.co_entidade,
+          diagnostico: {
+            respostas, pontuacao: sc?.pontuacao ?? null, faixa: sc?.faixa ?? null,
+            instagram: handle || null, instagram_texto: igTexto.trim() || null, instagram_dados: ig,
+            outras_cidades: respostas.outras || outrasCidades.trim() ? { faixa: respostas.outras ?? null, cidades: outrasCidades.trim() || null } : null,
+          },
         }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error || 'Erro ao enviar. Tente novamente.')
       setStep('success')
-      void generateReport(selectedSchool, directorName.trim())
+      void generateReport(selectedSchool, { ig, diagnosticoId: data?.diagnostico_id ?? null })
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erro ao enviar. Tente novamente.')
     } finally {
@@ -671,7 +707,7 @@ export default function RaioXPage() {
                   <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
                     {cityResults.map(c => (
                       <button key={c} type="button" className="rx-list-item" onClick={() => pickCity(c)}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>{c}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>{limpaTexto(c)}</span>
                       </button>
                     ))}
                   </div>
@@ -702,7 +738,7 @@ export default function RaioXPage() {
                       {schoolResults.length === 0 && <p style={hintStyle}>Nenhuma escola encontrada com esse filtro.</p>}
                       {schoolResults.map(r => (
                         <button key={r.co_entidade} type="button" className="rx-list-item" onClick={() => selectSchool(r)}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>{r.no_entidade}</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>{limpaTexto(r.no_entidade)}</div>
                           <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
                             {r.qt_mat_total != null ? `${r.qt_mat_total.toLocaleString('pt-BR')} matrículas` : 'Matrículas não informadas'} · Censo {r.ano_censo}
                           </div>
@@ -727,7 +763,7 @@ export default function RaioXPage() {
                     <SchoolIcon size={20} />
                   </div>
                   <div>
-                    <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: TEXT }}>{selectedSchool.no_entidade}</p>
+                    <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: TEXT }}>{limpaTexto(selectedSchool.no_entidade)}</p>
                     <p style={{ margin: '2px 0 0', fontSize: 13, color: MUTED }}>
                       {selectedSchool.no_municipio ?? '—'}{selectedSchool.sg_uf ? `/${selectedSchool.sg_uf}` : ''}
                     </p>
@@ -760,7 +796,7 @@ export default function RaioXPage() {
 
           {/* ── Passo 3: formulário ────────────────────────────────── */}
           {step === 'form' && selectedSchool && (
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={irParaAtendimento}>
               <h2 className="s-title" style={headingStyle}>Seus dados de contato</h2>
               <p style={{ margin: '0 0 4px', fontSize: 13, color: MUTED }}>Enviaremos o Raio-X Estratégico assim que estiver pronto.</p>
 
@@ -806,9 +842,60 @@ export default function RaioXPage() {
                 <button
                   type="submit"
                   className="btn-g"
-                  disabled={!canSubmit || submitting}
-                  style={{ flex: 1, justifyContent: 'center', fontSize: 14, padding: '13px 18px', ...(!canSubmit || submitting ? disabledBtnStyle : {}) }}
+                  disabled={!canSubmit}
+                  style={{ flex: 1, justifyContent: 'center', fontSize: 14, padding: '13px 18px', ...(!canSubmit ? disabledBtnStyle : {}) }}
                 >
+                  Continuar
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ── Passo 4: diagnóstico de atendimento ─────────────────── */}
+          {step === 'atend' && selectedSchool && (
+            <form onSubmit={handleSubmit}>
+              <h2 className="s-title" style={headingStyle}>Como é o atendimento da sua escola?</h2>
+              <p style={{ margin: '0 0 4px', fontSize: 13, color: MUTED }}>Seis perguntas rápidas. Elas geram a nota de atendimento do seu relatório.</p>
+              {PERGUNTAS.filter(q => !q.opcional).map((q, i) => (
+                <div key={q.id}>
+                  <label style={labelStyle}>{i + 1}. {q.t} *</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {q.opcoes.map(o => {
+                      const on = respostas[q.id] === o.v
+                      return <button key={o.v} type="button" onClick={() => setRespostas(r => ({ ...r, [q.id]: o.v }))}
+                        style={{ padding: '9px 13px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${on ? VM : BORDER}`, background: on ? SOFT : '#fff', color: on ? VD : TEXT }}>{o.t}</button>
+                    })}
+                  </div>
+                </div>
+              ))}
+              {(() => { const q = PERGUNTAS.find(x => x.opcional)!; return (
+                <div>
+                  <label style={labelStyle}>{q.t}</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {q.opcoes.map(o => {
+                      const on = respostas[q.id] === o.v
+                      return <button key={o.v} type="button" onClick={() => setRespostas(r => ({ ...r, [q.id]: on ? '' : o.v }))}
+                        style={{ padding: '9px 13px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${on ? VM : BORDER}`, background: on ? SOFT : '#fff', color: on ? VD : TEXT }}>{o.t}</button>
+                    })}
+                  </div>
+                  {respostas[q.id] && respostas[q.id] !== '0' ? <input className="inp" style={{ marginTop: 8 }} value={outrasCidades} onChange={e => setOutrasCidades(e.target.value)} placeholder="Quais cidades? (opcional)" /> : null}
+                </div>) })()}
+
+              <label style={labelStyle}>Instagram da escola (opcional)</label>
+              <input className="inp" value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@suaescola" autoCapitalize="none" />
+              <p style={{ ...hintStyle, textAlign: 'left', marginTop: 6 }}>Com o @, o relatório inclui a nota do Instagram. Só lemos o que é público e o perfil precisa ser profissional.</p>
+              {igAviso && (
+                <div>
+                  <p style={errStyle}>{igAviso}</p>
+                  <textarea className="inp" rows={3} value={igTexto} onChange={e => setIgTexto(e.target.value)} placeholder="Se quiser, cole aqui a bio e as últimas legendas" />
+                </div>
+              )}
+
+              {submitError && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 12 }}>{submitError}</p>}
+              <div className="rx-actions" style={{ marginTop: 22 }}>
+                <button type="button" className="btn-outline-green" onClick={() => setStep('form')} style={{ flex: '0 0 auto', padding: '12px 18px', fontSize: 13 }}>← Voltar</button>
+                <button type="submit" className="btn-g" disabled={!atendOk || submitting}
+                  style={{ flex: 1, justifyContent: 'center', fontSize: 14, padding: '13px 18px', ...(!atendOk || submitting ? disabledBtnStyle : {}) }}>
                   {submitting ? 'Enviando...' : 'Gerar meu Raio-X gratuito'}
                 </button>
               </div>
@@ -899,7 +986,7 @@ export default function RaioXPage() {
                   <button
                     type="button"
                     className="btn-outline-green"
-                    onClick={() => selectedSchool && generateReport(selectedSchool, directorName.trim())}
+                    onClick={() => selectedSchool && generateReport(selectedSchool)}
                     style={{ marginTop: 18 }}
                   >
                     Tentar novamente
