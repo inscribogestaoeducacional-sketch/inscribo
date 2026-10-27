@@ -253,7 +253,6 @@ export default function RaioXPage() {
   const [instagram, setInstagram] = useState('')
   const [igTexto, setIgTexto] = useState('')
   const [igAviso, setIgAviso] = useState<string | null>(null)
-  const [outrasCidades, setOutrasCidades] = useState('')
 
   // geração do relatório em PDF (Fase C)
   const [pdfState, setPdfState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
@@ -496,7 +495,6 @@ export default function RaioXPage() {
           diagnostico: {
             respostas, pontuacao: sc?.pontuacao ?? null, faixa: sc?.faixa ?? null,
             instagram: handle || null, instagram_texto: igTexto.trim() || null, instagram_dados: ig,
-            outras_cidades: respostas.outras || outrasCidades.trim() ? { faixa: respostas.outras ?? null, cidades: outrasCidades.trim() || null } : null,
           },
         }),
       })
@@ -759,7 +757,7 @@ export default function RaioXPage() {
           {step === 'atend' && selectedSchool && (
             <form onSubmit={handleSubmit}>
               <h2 className="s-title" style={headingStyle}>Como é o atendimento da sua escola?</h2>
-              <p style={{ margin: '0 0 4px', fontSize: 13, color: MUTED }}>Cinco perguntas rápidas geram a nota de atendimento do seu relatório. O resto é opcional.</p>
+              <p style={{ margin: '0 0 4px', fontSize: 13, color: MUTED }}>Cinco perguntas rápidas geram a nota de atendimento do seu relatório.</p>
               {PERGUNTAS.filter(q => !q.opcional).map((q, i) => (
                 <div key={q.id}>
                   <label style={labelStyle}>{i + 1}. {q.t} *</label>
@@ -772,19 +770,6 @@ export default function RaioXPage() {
                   </div>
                 </div>
               ))}
-              {PERGUNTAS.filter(q => q.opcional).map(q => (
-                <div key={q.id}>
-                  <label style={labelStyle}>{q.t}</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {q.opcoes.map(o => {
-                      const on = respostas[q.id] === o.v
-                      return <button key={o.v} type="button" onClick={() => setRespostas(r => ({ ...r, [q.id]: on ? '' : o.v }))}
-                        style={{ padding: '9px 13px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${on ? VM : BORDER}`, background: on ? SOFT : '#fff', color: on ? VD : TEXT }}>{o.t}</button>
-                    })}
-                  </div>
-                  {q.id === 'outras' && respostas[q.id] && respostas[q.id] !== '0' ? <input className="inp" style={{ marginTop: 8 }} value={outrasCidades} onChange={e => setOutrasCidades(e.target.value)} placeholder="Quais cidades? (opcional)" /> : null}
-                </div>))}
-
               <label style={labelStyle}>Instagram da escola (opcional)</label>
               <input className="inp" value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@suaescola" autoCapitalize="none" />
               <p style={{ ...hintStyle, textAlign: 'left', marginTop: 6 }}>Com o @, o relatório inclui a nota do Instagram. Só lemos o que é público e o perfil precisa ser profissional.</p>

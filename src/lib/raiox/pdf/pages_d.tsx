@@ -17,12 +17,11 @@ export function PageAtendimento({ c }: { c: RaioXCtx }) {
   const A = c.atend
   const Q: [string, string, string, string][] = [
     ['timer', 'Quanto tempo a escola leva para responder um contato novo?', 'menos de 5 min, até 1 hora, no mesmo dia ou só no dia seguinte', ''],
-    ['inbox', 'Quantos contatos de famílias novas chegam por mês?', 'faixas de 0 a mais de 300', ''],
     ['door', 'De cada 10 famílias que pedem informação, quantas visitam?', 'de 0 a 10', ''],
     ['moon', 'Quem atende fora do horário e nos fins de semana?', 'ninguém, um funcionário, robô ou equipe de plantão', ''],
     ['target', 'A escola sabe de qual anúncio veio cada matrícula?', 'não sabe, de alguns ou de todos', ''],
     ['repeat', 'Como é feita a rematrícula?', 'sem processo, papel, planilha ou sistema com cobrança', ''],
-    ['map', 'Quantos alunos moram em outra cidade? (opcional)', 'percentual aproximado e as cidades', 'o']]
+    ]
   const fx: [string, string, string][] = [['80 a 100', 'Atendimento forte', C.TURQ], ['50 a 79', 'Atendimento com falhas', C.AMBAR], ['0 a 49', 'Matrículas se perdendo no caminho', C.CORAL]]
   return (
     <Pg>
