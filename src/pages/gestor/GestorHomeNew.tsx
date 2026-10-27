@@ -158,7 +158,7 @@ export default function GestorHomeNew() {
     const qc = (x: any) => Promise.resolve(x).then((r: any) => (r?.error ? 0 : r?.count ?? 0)).catch(() => 0)
     const q = (x: any) => Promise.resolve(x).then((r: any) => (r?.error ? null : r?.data ?? null)).catch(() => null)
     ;(async () => {
-      const [leads, vis, wa, att, sat, usr, mat, wait, queue, overdue, past, incomplete, panel, info, hist, fun, trans, invBase, exps, trig, trigNames, enr] = await Promise.all([
+      const [leads, vis, wa, att, sat, usr, mat, wait, queue, overdue, past, incomplete, panel, info, hist, fun, trans, invBase, exps, trig, trigNames, enr, matBase] = await Promise.all([
         q(supabase.rpc('report_leads', p)), q(supabase.rpc('report_visitas', p)), q(supabase.rpc('report_whatsapp', p)),
         q(supabase.rpc('report_atendimento', p)), q(supabase.rpc('report_satisfacao', p)), q(supabase.rpc('report_usuarios', p)), q(supabase.rpc('report_matriculas', p)),
         q(supabase.rpc('lead_waiting', { p_institution_id: inst })),
@@ -176,10 +176,11 @@ export default function GestorHomeNew() {
         q(supabase.rpc('capture_trigger_stats', { p_institution_id: inst, p_start: new Date(range.from + 'T00:00:00-03:00').toISOString(), p_end: new Date(Date.now() + 60000).toISOString() })),
         q(supabase.from('capture_triggers').select('id,name').eq('institution_id', inst)),
         q(supabase.from('enrollments').select('enrollment_date').eq('institution_id', inst).is('cancelled_at', null).gte('enrollment_date', new Date(Date.now() - 240 * 864e5).toISOString()).limit(5000)),
+        q(supabase.rpc('report_matriculas_base', p)),
       ])
       if (!alive) return
       void since14
-      setD(prev => ({ ...prev, leads, vis, wa, att, sat, usr, mat, wait, queue, overdue, past, incomplete, panel, info, hist, fun, trans, invBase, exps, trig, trigNames, enr }))
+      setD(prev => ({ ...prev, leads, vis, wa, att, sat, usr, mat, wait, queue, overdue, past, incomplete, panel, info, hist, fun, trans, invBase, exps, trig, trigNames, enr, matBase }))
       setLoading(false)
     })()
     return () => { alive = false }
@@ -336,7 +337,12 @@ export default function GestorHomeNew() {
         <section className="ld-in">
           <Head icon={GraduationCap} title="Resultados do período" sub={`${range.label} · comparado com o período anterior`} />
           <div className="aion-snap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
-            <Kpi label="Matrículas" value={<CountUp value={n0(mat?.total)} />} color="#05907B" icon={GraduationCap} to="/reports?tab=matriculas" delay={0} sub={<Delta cur={n0(mat?.total)} prev={n0(mat?.anterior_total)} />} />
+            {(() => {
+              const mb = d.matBase as Json | null
+              if (!mb?.has_base) return <Kpi label="Matrículas" value={<CountUp value={n0(mat?.total)} />} color="#05907B" icon={GraduationCap} to="/reports?tab=matriculas" delay={0} sub={<Delta cur={n0(mat?.total)} prev={n0(mat?.anterior_total)} />} />
+              return <Kpi label="Matrículas" value={<CountUp value={n0(mb.total)} />} color="#05907B" icon={GraduationCap} to="/base-alunos" delay={0}
+                sub={<span>{n0(mb.novos)} novos · {n0(mb.rematriculas)} rematrículas<br /><span style={{ color: BRAND.faint }}>{n0(mb.dos_leads)} vieram de leads · </span><Delta cur={n0(mb.total)} prev={n0(mb.anterior_total)} /></span>} />
+            })()}
             <Kpi label="Leads novos" value={<CountUp value={n0(leads?.total)} />} color="#2DCBA4" icon={Users} to="/reports?tab=leads" delay={60} sub={<Delta cur={n0(leads?.total)} prev={n0(leads?.anterior?.total)} />} />
             <Kpi label="Conversão" value={pct(n0(mat?.total), n0(leads?.total)) != null ? `${pct(n0(mat?.total), n0(leads?.total))}%` : '—'} color="#00695F" icon={TrendingUp} to="/reports?tab=leads" delay={120} sub="matrículas ÷ leads do período" />
             <Kpi label="Tempo até matricular" value={mat?.dias_ate_matricular_mediana != null ? `${n0(mat.dias_ate_matricular_mediana)} dias` : '—'} color="#F59E0B" icon={Clock} to="/reports?tab=matriculas" delay={180} sub="mediana do primeiro contato à matrícula" />

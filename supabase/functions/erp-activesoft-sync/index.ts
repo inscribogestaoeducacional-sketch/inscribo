@@ -29,7 +29,7 @@ const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!
 const TIME_BUDGET_MS = 40_000
-const KEEP_FROM_YEAR = new Date().getFullYear() - 2     // N-2 em diante (histórico para novato / ex-aluno)
+const KEEP_FROM_YEAR = new Date().getFullYear() - 4     // N-4 em diante (histórico para novato / ex-aluno)
 
 type Supa = ReturnType<typeof createClient>
 class HttpError extends Error { constructor(public status: number, message: string) { super(message) } }

@@ -216,7 +216,7 @@ export type PeriodPlan = { atual: string; seguinte: string; anteriores?: string[
 export function periodYears(now = new Date()): { atual: string; seguinte: string; anteriores: string[] } {
   const y = now.getFullYear()
   // anteriores: histórico lido para separar novato, rematrícula e ex-aluno que voltou
-  return { atual: String(y), seguinte: String(y + 1), anteriores: [String(y - 1), String(y - 2)] }
+  return { atual: String(y), seguinte: String(y + 1), anteriores: [String(y - 1), String(y - 2), String(y - 3), String(y - 4)] }
 }
 const SITUACOES = ['A', 'I', 'P', 'S']
 // Rota que pode estar fora do token sem impedir a carga: unidades (a
