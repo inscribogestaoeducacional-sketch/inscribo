@@ -29,41 +29,63 @@ const ano = parseInt(anoArg, 10)
 if (!zipPath || !ano) { console.error('Uso: node scripts/import-enem-escola.mjs <arquivo.zip> <ano> [--dry] [--min 10]'); process.exit(1) }
 const sb = dry ? null : createClient(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 
-const entry = await new Promise((ok, no) => {
-  createReadStream(resolve(zipPath)).pipe(unzipper.Parse()).on('entry', (e) => {
-    if (/microdados_enem_\d{4}\.csv$/i.test(e.path) || /MICRODADOS_ENEM_\d{4}\.csv$/i.test(e.path)) ok(e); else e.autodrain()
-  }).on('close', () => no(new Error('CSV de microdados do ENEM não encontrado no zip'))).on('error', no)
-})
 function split(line, sep) { const r = []; let c = '', q = false; for (const ch of line) { if (ch === '"') q = !q; else if (ch === sep && !q) { r.push(c); c = '' } else c += ch } r.push(c); return r }
-const num = (v) => { if (!v) return null; const x = Number(v.replace(',', '.')); return Number.isFinite(x) ? x : null }
+const num = (v) => { if (v == null || v === '') return null; const x = Number(String(v).replace(',', '.')); return Number.isFinite(x) ? x : null }
 
-const rl = createInterface({ input: entry, crlfDelay: Infinity })
-let idx = null, sep = ';', first = true, total = 0, comEscola = 0, validos = 0
-const acc = new Map() // co_escola -> {n, cn, ch, lc, mt, red, mun}
-for await (const line of rl) {
-  if (!line.trim()) continue
-  if (first) {
-    sep = line.includes(';') ? ';' : ','
-    const h = split(line, sep).map((x) => x.trim().toUpperCase())
-    idx = Object.fromEntries(h.map((x, i) => [x, i]))
-    const need = ['CO_ESCOLA', 'NU_NOTA_CN', 'NU_NOTA_CH', 'NU_NOTA_LC', 'NU_NOTA_MT', 'NU_NOTA_REDACAO']
-    const miss = need.filter((c) => !(c in idx))
-    if (miss.length) { console.error('Colunas ausentes:', miss.join(', ')); process.exit(1) }
-    first = false; continue
+const lerCsv = async (entry, onHeader, onRow) => {
+  const rl = createInterface({ input: entry, crlfDelay: Infinity })
+  let idx = null, sep = ';'
+  for await (const line of rl) {
+    if (!line.trim()) continue
+    if (!idx) {
+      sep = line.includes(';') ? ';' : ','
+      const h = split(line, sep).map((x) => x.trim().toUpperCase())
+      idx = Object.fromEntries(h.map((x, i) => [x, i]))
+      onHeader(idx, h); continue
+    }
+    onRow(split(line, sep), idx)
   }
-  total++
-  const c = split(line, sep)
-  const esc = c[idx.CO_ESCOLA]?.trim()
-  if (!esc) continue
-  comEscola++
-  if (idx.IN_TREINEIRO !== undefined && c[idx.IN_TREINEIRO]?.trim() === '1') continue
-  const cn = num(c[idx.NU_NOTA_CN]), ch = num(c[idx.NU_NOTA_CH]), lc = num(c[idx.NU_NOTA_LC]), mt = num(c[idx.NU_NOTA_MT]), red = num(c[idx.NU_NOTA_REDACAO])
-  if ([cn, ch, lc, mt, red].some((x) => x == null)) continue
-  validos++
-  let a = acc.get(esc); if (!a) { a = { n: 0, cn: 0, ch: 0, lc: 0, mt: 0, red: 0, mun: c[idx.CO_MUNICIPIO_ESC]?.trim() || null }; acc.set(esc, a) }
-  a.n++; a.cn += cn; a.ch += ch; a.lc += lc; a.mt += mt; a.red += red
-  if (total % 500000 === 0) process.stdout.write(`\r  linhas ${total}`)
 }
+
+const quem = new Map() // inscrição -> [co_escola, co_municipio_esc]
+let total = 0, comEscola = 0, validos = 0, viuPart = false, viuRes = false
+const acc = new Map()
+const zip = createReadStream(resolve(zipPath)).pipe(unzipper.Parse({ forceStream: true }))
+for await (const entry of zip) {
+  const nome = entry.path
+  if (/PARTICIPANTES_\d{4}\.csv$/i.test(nome)) {
+    viuPart = true
+    await lerCsv(entry, (idx, h) => {
+      const need = ['NU_INSCRICAO', 'CO_ESCOLA']
+      const miss = need.filter((c) => !(c in idx))
+      if (miss.length) { console.error('PARTICIPANTES sem as colunas:', miss.join(', '), '\nColunas existentes:', h.join(', ')); process.exit(1) }
+    }, (c, idx) => {
+      total++
+      const esc = c[idx.CO_ESCOLA]?.trim()
+      if (!esc) return
+      if (idx.IN_TREINEIRO !== undefined && c[idx.IN_TREINEIRO]?.trim() === '1') return
+      comEscola++
+      quem.set(Number(c[idx.NU_INSCRICAO]), [esc, idx.CO_MUNICIPIO_ESC !== undefined ? c[idx.CO_MUNICIPIO_ESC]?.trim() || null : null])
+    })
+    console.log(`  participantes: ${total} inscritos, ${comEscola} com escola informada`)
+  } else if (/RESULTADOS_\d{4}\.csv$/i.test(nome)) {
+    if (!viuPart) { console.error('RESULTADOS veio antes de PARTICIPANTES no zip; me avise.'); process.exit(1) }
+    viuRes = true
+    await lerCsv(entry, (idx, h) => {
+      const need = ['NU_INSCRICAO', 'NU_NOTA_CN', 'NU_NOTA_CH', 'NU_NOTA_LC', 'NU_NOTA_MT', 'NU_NOTA_REDACAO']
+      const miss = need.filter((c) => !(c in idx))
+      if (miss.length) { console.error('RESULTADOS sem as colunas:', miss.join(', '), '\nColunas existentes:', h.join(', ')); process.exit(1) }
+    }, (c, idx) => {
+      const q = quem.get(Number(c[idx.NU_INSCRICAO])); if (!q) return
+      const cn = num(c[idx.NU_NOTA_CN]), ch = num(c[idx.NU_NOTA_CH]), lc = num(c[idx.NU_NOTA_LC]), mt = num(c[idx.NU_NOTA_MT]), red = num(c[idx.NU_NOTA_REDACAO])
+      if ([cn, ch, lc, mt, red].some((x) => x == null)) return
+      validos++
+      let a = acc.get(q[0]); if (!a) { a = { n: 0, cn: 0, ch: 0, lc: 0, mt: 0, red: 0, mun: q[1] }; acc.set(q[0], a) }
+      a.n++; a.cn += cn; a.ch += ch; a.lc += lc; a.mt += mt; a.red += red
+    })
+  } else entry.autodrain()
+}
+if (!viuPart || !viuRes) { console.error('Não encontrei PARTICIPANTES e RESULTADOS dentro do zip.'); process.exit(1) }
 const r1 = (x) => Math.round(x * 10) / 10
 const rows = [...acc.entries()].filter(([, a]) => a.n >= min).map(([co, a]) => {
   const m = { cn: a.cn / a.n, ch: a.ch / a.n, lc: a.lc / a.n, mt: a.mt / a.n, red: a.red / a.n }
