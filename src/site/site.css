@@ -203,3 +203,8 @@ a.st-card:hover{transform:translateY(-4px);box-shadow:0 18px 40px rgba(5,144,123
 .st-cookie button{font:inherit;font-weight:700;border-radius:999px;padding:8px 14px;cursor:pointer;border:1px solid #d6efe8;background:#fff;color:#0f2a24}
 .st-cookie .st-cookie-ok{background:linear-gradient(135deg,#00523C,#00A896);color:#fff;border:0}
 @media(max-width:640px){.st-cookie{left:12px;right:12px;bottom:84px;max-width:none}}
+.st-steps{list-style:none;margin:28px 0 0;padding:0;display:grid;gap:14px;max-width:760px}
+.st-steps li{display:flex;gap:16px;align-items:flex-start;background:#fff;border:1px solid var(--line,#d6efe8);border-radius:18px;padding:16px 18px}
+.st-steps h3{margin:0 0 4px;font-size:17px}.st-steps p{margin:0;color:var(--mut,#5b7a71);font-size:15px;line-height:1.55}
+.st-step-n{flex:none;width:34px;height:34px;border-radius:12px;background:linear-gradient(135deg,#00523C,#0DD3BF);color:#fff;font-weight:800;display:grid;place-items:center}
+.st-linklist{list-style:none;margin:0;padding:0;display:grid;gap:8px}.st-linklist a{color:var(--g2,#05907B);font-weight:700}

@@ -30,6 +30,7 @@ import Landing            from './pages/Landing'
 import { lazy, Suspense } from 'react'
 const SiteHome = lazy(() => import('./site/Home'))
 const SiteModules = lazy(() => import('./site/pages/ModulesHub'))
+const SiteArticle = lazy(() => import('./site/pages/ArticleRoute'))
 const SiteModule = lazy(() => import('./site/pages/ModuleRoute'))
 void Landing
 import ResetPassword      from './pages/ResetPassword'
@@ -301,6 +302,8 @@ function AppContent() {
         <Route path="/"               element={<Suspense fallback={null}><SiteHome /></Suspense>} />
         <Route path="/modulos"        element={<Suspense fallback={null}><SiteModules /></Suspense>} />
         <Route path="/modulos/:slug"  element={<Suspense fallback={null}><SiteModule /></Suspense>} />
+        <Route path="/integracoes/:slug" element={<Suspense fallback={null}><SiteArticle /></Suspense>} />
+        <Route path="/guias/:slug"    element={<Suspense fallback={null}><SiteArticle /></Suspense>} />
         <Route path="/privacidade"    element={<Privacidade />} />
         <Route path="/termos"         element={<Termos />} />
         <Route path="/sobre"          element={<SobreNos />} />

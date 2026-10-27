@@ -1,0 +1,300 @@
+[
+ {
+  "path": "/integracoes/whatsapp",
+  "title": "Integração com WhatsApp oficial da Meta para escolas | Áion Edu",
+  "description": "Conecte o número da escola à API oficial do WhatsApp (Meta) e atenda com toda a equipe. Veja as duas formas de conectar: pelo app WhatsApp Business (coexistência) ou pela API com Phone ID e token.",
+  "h1": "WhatsApp oficial da Meta, conectado ao número da escola",
+  "intro": [
+   "A Áion Edu usa a API oficial do WhatsApp, a mesma que as grandes empresas usam. Toda a equipe atende pelo número da escola, o histórico fica salvo no lead e as mensagens de atendimento estão incluídas no plano, sem cobrança por mensagem.",
+   "Existem duas formas de conectar o número. A equipe da Áion acompanha a conexão com você e deixa tudo funcionando em até 5 dias."
+  ],
+  "related": [
+   "whatsapp",
+   "robo-e-sequencia",
+   "transmissoes",
+   "captacao-inteligente"
+  ],
+  "sections": [
+   {
+    "h": "Por que a API oficial importa para a escola",
+    "ps": [
+     "Aplicativos não oficiais de WhatsApp funcionam até o dia em que a Meta bloqueia o número. Para uma escola, perder o número na época de matrícula significa perder as famílias que estavam conversando.",
+     "Na API oficial o número tem selo e regras claras, a equipe usa vários atendentes ao mesmo tempo e o robô responde com segurança quando ninguém pode atender."
+    ],
+    "items": [
+     {
+      "t": "Sem risco de bloqueio por uso indevido",
+      "d": "O envio segue as regras da Meta: modelos aprovados e janela de atendimento de 24 horas."
+     },
+     {
+      "t": "Vários atendentes no mesmo número",
+      "d": "Secretaria, coordenação e direção atendem juntas, com fila e histórico."
+     },
+     {
+      "t": "Mensagens de atendimento incluídas",
+      "d": "Responder a família que escreveu não gera cobrança por mensagem no plano."
+     },
+     {
+      "t": "Transmissões à parte",
+      "d": "O envio em massa é o módulo Transmissões, com cobrança própria e custo calculado antes do envio."
+     }
+    ]
+   },
+   {
+    "h": "Forma 1: conexão com o app WhatsApp Business (coexistência)",
+    "ps": [
+     "Indicada para a escola que já usa o aplicativo WhatsApp Business no celular e quer continuar usando. O número passa a funcionar na Áion Edu e o aplicativo segue funcionando no celular da secretaria."
+    ],
+    "steps": [
+     {
+      "t": "Combine a conexão com a Áion",
+      "d": "A equipe marca um horário curto, por chamada, com quem tem o celular da escola."
+     },
+     {
+      "t": "Abra o WhatsApp Business no celular",
+      "d": "Em aparelhos vinculados, leia o QR code que a Áion mostra na tela da conexão."
+     },
+     {
+      "t": "Aceite as permissões da Meta",
+      "d": "A Meta confirma o vínculo do número com a conta da escola."
+     },
+     {
+      "t": "Pronto para atender",
+      "d": "As conversas aparecem no WhatsApp da Áion Edu e a equipe começa a atender."
+     }
+    ],
+    "shot": "whatsapp-conexao"
+   },
+   {
+    "h": "Forma 2: API oficial com Phone ID e token",
+    "ps": [
+     "Indicada para o número que já está na API oficial da Meta, ou para a escola que prefere um número novo só para a API. A Áion cadastra o identificador do número (Phone ID), a conta do WhatsApp Business (WABA) e o token de acesso."
+    ],
+    "steps": [
+     {
+      "t": "Número na conta oficial",
+      "d": "O número é cadastrado em uma conta do WhatsApp Business na Meta."
+     },
+     {
+      "t": "A Áion cadastra os dados",
+      "d": "Phone ID, WABA e token entram no cadastro da escola, com o token guardado de forma protegida."
+     },
+     {
+      "t": "Teste de conexão",
+      "d": "A tela de Conexão mostra o número conectado e permite testar o envio."
+     },
+     {
+      "t": "Robô e equipe configurados",
+      "d": "A Áion deixa o robô inicial, os atendentes e as filas prontos."
+     }
+    ],
+    "shot": "whatsapp"
+   },
+   {
+    "h": "O que muda no dia a dia depois de conectar",
+    "items": [
+     {
+      "t": "Conversa vira lead",
+      "d": "Quem escreve entra no funil com origem, série de interesse e responsável."
+     },
+     {
+      "t": "Robô de primeiro atendimento",
+      "d": "Menu, horário de atendimento e encaminhamento para a pessoa certa."
+     },
+     {
+      "t": "Origem do anúncio",
+      "d": "Com a Captação Inteligente, a conversa mostra de qual anúncio a família veio."
+     },
+     {
+      "t": "Pesquisa e avisos",
+      "d": "Pesquisa de satisfação e mensagens automáticas passam pela API oficial, com modelos que a escola pode editar."
+     }
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "Preciso trocar o número da escola?",
+    "a": "Não. O número que as famílias já conhecem pode ser conectado, tanto pela coexistência com o app WhatsApp Business quanto pela API."
+   },
+   {
+    "q": "O aplicativo WhatsApp Business continua funcionando?",
+    "a": "Na conexão por coexistência, sim: o aplicativo segue no celular da secretaria e a Áion Edu recebe as mesmas conversas."
+   },
+   {
+    "q": "Quem faz a conexão?",
+    "a": "A equipe da Áion acompanha a conexão com a escola, em uma chamada curta. A implantação completa leva até 5 dias."
+   },
+   {
+    "q": "Cobram por mensagem de atendimento?",
+    "a": "Não. As mensagens de atendimento estão incluídas no plano. O envio em massa pelo módulo Transmissões é cobrado à parte."
+   },
+   {
+    "q": "E se a Meta bloquear o número?",
+    "a": "O uso pela API oficial segue as regras da Meta, o que reduz esse risco. A Áion orienta a escola sobre boas práticas e modelos aprovados."
+   }
+  ]
+ },
+ {
+  "path": "/integracoes/activesoft",
+  "title": "Integração Activesoft para escolas: alunos e rematrícula no CRM | Áion Edu",
+  "description": "A Áion Edu lê os dados de alunos, turmas e rematrícula da Activesoft, só em modo leitura, e faz o número da campanha bater com o do sistema da escola.",
+  "h1": "Activesoft integrado: o número do sistema, dentro da campanha",
+  "intro": [
+   "A Áion Edu se conecta à Activesoft em modo somente leitura. Cadastro, turmas, enturmação e alunos são lidos direto do sistema da escola, e a Base de alunos, a rematrícula e a conferência de matrículas passam a usar esses dados.",
+   "A regra é simples: o número da Activesoft é a verdade final, e o da Áion Edu precisa bater com ele."
+  ],
+  "related": [
+   "base-de-alunos",
+   "rematricula",
+   "campanha-de-matriculas",
+   "contatos"
+  ],
+  "sections": [
+   {
+    "h": "O que é lido da Activesoft",
+    "items": [
+     {
+      "t": "Alunos e turmas",
+      "d": "Cadastro, série, turma e situação de cada aluno, do ano atual e dos anos anteriores."
+     },
+     {
+      "t": "Rematrículas e novatos",
+      "d": "Quem já rematriculou, quem falta e quem é aluno novo no ano da campanha."
+     },
+     {
+      "t": "Responsáveis e telefones",
+      "d": "Os responsáveis entram na base de Contatos, prontos para filtrar em Transmissões."
+     },
+     {
+      "t": "Só leitura",
+      "d": "Notas, frequência, ocorrências e financeiro nunca são lidos, e nada é alterado na Activesoft."
+     }
+    ],
+    "shot": "activesoft"
+   },
+   {
+    "h": "Como conectar",
+    "steps": [
+     {
+      "t": "Aceite o aditivo de proteção de dados",
+      "d": "Antes de conectar, a escola aceita o aditivo de proteção de dados (LGPD)."
+     },
+     {
+      "t": "Cole o token da Activesoft",
+      "d": "Você gera o token na Activesoft e informa em Configurações, Integrações."
+     },
+     {
+      "t": "Teste e primeira leitura",
+      "d": "O sistema testa o token e faz a primeira leitura dos alunos."
+     },
+     {
+      "t": "Atualização automática",
+      "d": "Depois disso, a leitura acontece sozinha todas as noites, e o botão Sincronizar agora fica à mão."
+     }
+    ]
+   },
+   {
+    "h": "O que a escola ganha",
+    "ps": [
+     "Com os alunos da Activesoft dentro da Áion Edu, a campanha deixa de depender de planilha. O gestor vê o Rematriculômetro por série, a ponte entre aluno novo e veterano, e a conferência entre leads matriculados e alunos do sistema."
+    ],
+    "items": [
+     {
+      "t": "Conferência lead × aluno",
+      "d": "A escola vê quem está matriculado no CRM e ainda não aparece no sistema, e o contrário."
+     },
+     {
+      "t": "Rematrícula por série",
+      "d": "Quem falta rematricular, série a série, com botão para falar com a família."
+     },
+     {
+      "t": "Cartão da família",
+      "d": "Na conversa, a equipe vê a relação do contato com a escola: aluno, série e ano."
+     },
+     {
+      "t": "Número que bate",
+      "d": "Matriculados, rematriculados e novatos seguem o número da Activesoft."
+     }
+    ],
+    "shot": "base"
+   }
+  ],
+  "faq": [
+   {
+    "q": "A integração altera dados na Activesoft?",
+    "a": "Não. A leitura é somente de consulta. A Áion Edu nunca escreve nem altera dados na Activesoft."
+   },
+   {
+    "q": "O que acontece com notas e financeiro?",
+    "a": "Esses dados nunca são lidos. A integração traz só cadastro, turmas, enturmação e alunos."
+   },
+   {
+    "q": "Preciso mandar planilha todo ano?",
+    "a": "Não, quando a Activesoft está conectada. A planilha continua disponível para escolas que usam outro sistema."
+   },
+   {
+    "q": "Quanto tempo leva para conectar?",
+    "a": "A conexão em si leva minutos. A implantação completa da Áion Edu na escola leva até 5 dias."
+   },
+   {
+    "q": "Quais outros sistemas serão integrados?",
+    "a": "A Activesoft é o único sistema integrado hoje. Outros sistemas de gestão escolar estão em andamento. Veja a página de outros sistemas."
+   }
+  ]
+ },
+ {
+  "path": "/integracoes/outros-sistemas",
+  "title": "Integração com outros sistemas de gestão escolar | Áion Edu",
+  "description": "A Activesoft é o sistema integrado hoje. Outros sistemas de gestão escolar estão em andamento. Enquanto isso, envie a planilha ou lance os números manualmente.",
+  "h1": "E se a escola usa outro sistema de gestão?",
+  "intro": [
+   "Hoje a Áion Edu está integrada à Activesoft. Outros sistemas de gestão escolar estão em andamento, e tudo o que foi feito para a Activesoft vale como padrão para os próximos.",
+   "Enquanto a integração do seu sistema não chega, a escola não fica parada: dá para trazer os alunos por planilha ou relatório, ou lançar os números por série."
+  ],
+  "related": [
+   "base-de-alunos",
+   "rematricula",
+   "campanha-de-matriculas"
+  ],
+  "sections": [
+   {
+    "h": "Como usar a Áion Edu sem integração",
+    "items": [
+     {
+      "t": "Planilha ou relatório",
+      "d": "Envie o relatório de alunos do ano anterior e do ano atual que o seu sistema já gera."
+     },
+     {
+      "t": "Lançamento manual",
+      "d": "Digite os números de cada série, sem precisar de integração."
+     },
+     {
+      "t": "Campanha completa",
+      "d": "Funil, metas, Matriculômetro e rematrícula funcionam com esses dados."
+     }
+    ]
+   },
+   {
+    "h": "Conte qual sistema a escola usa",
+    "ps": [
+     "Quanto mais escolas pedem um sistema, mais cedo ele entra na fila. Fale com a Áion pelo WhatsApp, diga qual sistema a escola usa e se há acesso a uma API ou a relatórios em planilha."
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "Minha escola usa outro sistema. Posso usar a Áion Edu?",
+    "a": "Pode. O CRM, o WhatsApp, o funil e a campanha funcionam sem integração. Os alunos entram por planilha ou lançamento manual."
+   },
+   {
+    "q": "Quais sistemas vão ser integrados?",
+    "a": "Estamos avaliando os sistemas mais usados pelas escolas. Conte qual você usa para entrar na fila."
+   },
+   {
+    "q": "A integração terá custo extra?",
+    "a": "Fale com a Áion pelo WhatsApp para saber as condições."
+   }
+  ]
+ }
+]

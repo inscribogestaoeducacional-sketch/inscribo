@@ -41,7 +41,7 @@ const body = p => {
   let h = `<div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"><nav aria-label="Principal"><a href="/">Áion Edu</a> · <a href="/modulos">Módulos</a> · <a href="/integracoes/whatsapp">Integrações</a> · <a href="/raio-x">Raio-X grátis</a> · <a href="/blog">Blog</a></nav><main>`
   h += `<h1>${esc(p.h1)}</h1>` + (p.intro ?? []).map(t => `<p>${esc(t)}</p>`).join('')
   for (const s of p.sections ?? []) {
-    h += `<section><h2>${esc(s.h)}</h2>` + (s.p ? `<p>${esc(s.p)}</p>` : '') + (s.items ? `<ul>${s.items.map(i => `<li><strong>${esc(i.t)}</strong>: ${esc(i.d)}</li>`).join('')}</ul>` : '') + '</section>'
+    h += `<section><h2>${esc(s.h)}</h2>` + (s.p ? `<p>${esc(s.p)}</p>` : '') + (s.ps ? s.ps.map(x => `<p>${esc(x)}</p>`).join('') : '') + (s.steps ? `<ol>${s.steps.map(i => `<li><strong>${esc(i.t)}</strong>: ${esc(i.d)}</li>`).join('')}</ol>` : '') + (s.items ? `<ul>${s.items.map(i => `<li><strong>${esc(i.t)}</strong>: ${esc(i.d)}</li>`).join('')}</ul>` : '') + '</section>'
   }
   if (p.faq?.length) h += `<section><h2>Perguntas frequentes</h2>${p.faq.map(f => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join('')}</section>`
   h += `</main><footer><p>Módulos: ${navLinks}</p><p>Áion Soluções Tecnológicas LTDA, Patos, Paraíba.</p></footer></div>`

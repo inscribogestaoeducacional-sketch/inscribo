@@ -1,0 +1,714 @@
+[
+ {
+  "path": "/guias/crm-para-escolas",
+  "title": "CRM para escolas particulares: o que é e como escolher | Áion Edu",
+  "description": "O que é um CRM para escolas, o que ele precisa ter (funil, WhatsApp, visitas, campanha) e como escolher o sistema certo para a secretaria e a direção.",
+  "h1": "CRM para escolas particulares: o que é e como escolher",
+  "intro": [
+   "Um CRM para escola organiza o caminho da família, do primeiro contato até a matrícula, e depois acompanha a rematrícula. Em vez de recados em caderno, planilhas e conversas soltas no celular, a escola passa a ter um funil que mostra quem falta atender."
+  ],
+  "related": [
+   "crm-de-leads",
+   "whatsapp",
+   "campanha-de-matriculas",
+   "visitas"
+  ],
+  "sections": [
+   {
+    "h": "O que é um CRM escolar",
+    "ps": [
+     "CRM significa gestão do relacionamento com o cliente. Na escola, o \"cliente\" é a família: quem pediu informações, visitou a escola, recebeu proposta e matriculou.",
+     "Um bom CRM escolar guarda o histórico de cada conversa, mostra em que etapa cada família está e avisa quando alguém ficou sem resposta."
+    ]
+   },
+   {
+    "h": "O que um CRM para escolas precisa ter",
+    "items": [
+     {
+      "t": "Funil de matrículas",
+      "d": "Etapas claras do contato à matrícula, com origem e série de interesse de cada lead."
+     },
+     {
+      "t": "WhatsApp integrado",
+      "d": "A conversa com a família acontece dentro do sistema, com toda a equipe no mesmo número."
+     },
+     {
+      "t": "Visitas e agenda",
+      "d": "Visita marcada, lembrada e acompanhada até virar matrícula."
+     },
+     {
+      "t": "Campanha de matrículas",
+      "d": "Meta por mês, acompanhamento em tempo real e comparação com o ano anterior."
+     },
+     {
+      "t": "Rematrícula e base de alunos",
+      "d": "Quem já rematriculou, quem falta e quem saiu, série a série."
+     },
+     {
+      "t": "Relatórios para a direção",
+      "d": "Números prontos para a reunião, sem montar planilha."
+     }
+    ],
+    "shot": "leads"
+   },
+   {
+    "h": "Perguntas para fazer antes de contratar",
+    "steps": [
+     {
+      "t": "O sistema foi feito para escola?",
+      "d": "Etapas como visita, série de interesse, ano letivo e rematrícula precisam existir de fábrica."
+     },
+     {
+      "t": "Usa a API oficial do WhatsApp?",
+      "d": "É o que evita bloqueio do número e permite vários atendentes."
+     },
+     {
+      "t": "Funciona no celular?",
+      "d": "Quem atende a família quase sempre está no celular."
+     },
+     {
+      "t": "Quanto tempo leva para implantar?",
+      "d": "Na Áion Edu, até 5 dias, com a equipe aprendendo pelo próprio sistema."
+     },
+     {
+      "t": "Conversa com o sistema da escola?",
+      "d": "A integração com o sistema de gestão faz o número da campanha bater com o da secretaria."
+     }
+    ]
+   },
+   {
+    "h": "Como a Áion Edu entra nessa conta",
+    "ps": [
+     "A Áion Edu nasceu dentro de uma escola, para a rotina da secretaria e da direção. Reúne CRM de leads, WhatsApp, robô, visitas, captação, vitrine, campanha de matrículas, base de alunos, rematrícula, relatórios e pesquisas no mesmo lugar."
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "CRM é só para escola grande?",
+    "a": "Não. Escolas pequenas ganham muito, porque a mesma pessoa costuma atender, visitar e matricular. O funil evita que alguém fique esquecido."
+   },
+   {
+    "q": "CRM substitui o sistema de gestão da escola?",
+    "a": "Não. O sistema de gestão cuida de notas, financeiro e cadastro. O CRM cuida da relação com a família até a matrícula. Os dois podem se conversar por integração."
+   },
+   {
+    "q": "Dá para usar com o WhatsApp que a escola já tem?",
+    "a": "Dá. A Áion Edu conecta o número da escola à API oficial, e o aplicativo WhatsApp Business pode continuar no celular."
+   }
+  ]
+ },
+ {
+  "path": "/guias/crm-escolar-brasileiro",
+  "title": "CRM escolar brasileiro: feito para a rotina das escolas do Brasil | Áion Edu",
+  "description": "Por que a escola brasileira precisa de um CRM feito para a sua realidade: WhatsApp, ano letivo, rematrícula, sistemas de gestão nacionais e proteção de dados (LGPD).",
+  "h1": "CRM escolar brasileiro: o que muda quando o sistema é feito para a nossa realidade",
+  "intro": [
+   "Uma ferramenta de vendas genérica não entende ano letivo, rematrícula, turma e série. E, no Brasil, boa parte do atendimento acontece no WhatsApp. Um CRM escolar brasileiro nasce pensando nisso."
+  ],
+  "related": [
+   "crm-de-leads",
+   "whatsapp",
+   "rematricula",
+   "base-de-alunos"
+  ],
+  "sections": [
+   {
+    "h": "O que é diferente no Brasil",
+    "items": [
+     {
+      "t": "WhatsApp é o canal principal",
+      "d": "A família escreve no WhatsApp da escola, não por formulário. O CRM precisa viver dentro dessa conversa."
+     },
+     {
+      "t": "Ano letivo e campanha",
+      "d": "A matrícula tem época, meta mensal e comparação com o ano anterior."
+     },
+     {
+      "t": "Rematrícula pesa tanto quanto captação",
+      "d": "Manter quem já é aluno é parte da meta, e precisa de acompanhamento série a série."
+     },
+     {
+      "t": "Sistemas de gestão nacionais",
+      "d": "O número que vale é o do sistema da secretaria. O CRM precisa bater com ele."
+     },
+     {
+      "t": "LGPD",
+      "d": "Dados de crianças e famílias exigem aditivo de proteção de dados e leitura somente do necessário."
+     }
+    ]
+   },
+   {
+    "h": "Como a Áion Edu responde a isso",
+    "ps": [
+     "A Áion Edu usa a API oficial do WhatsApp, tem campanha de matrículas com meta cumulativa, rematrícula por série, integração com a Activesoft em modo leitura e aditivo de LGPD no primeiro passo da integração."
+    ],
+    "shot": "campanha"
+   },
+   {
+    "h": "Feito por quem viveu a época de matrícula",
+    "ps": [
+     "A Áion nasceu dentro de uma escola. As telas existem porque a secretaria e a direção precisaram delas na época de matrículas: o funil, o roteiro da campanha, a conferência entre lead e aluno e a Vitrine da escola."
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "O que é um CRM escolar?",
+    "a": "É o sistema que organiza o relacionamento com as famílias, do primeiro contato à matrícula e à rematrícula."
+   },
+   {
+    "q": "Por que não usar um CRM genérico?",
+    "a": "Porque etapas como visita, série, ano letivo e rematrícula teriam de ser montadas do zero, e a integração com WhatsApp e com o sistema da escola costuma ser fraca."
+   },
+   {
+    "q": "A Áion Edu atende escolas de todo o Brasil?",
+    "a": "Sim. Hoje há escolas usando em quatro estados, e o atendimento e a implantação são feitos à distância."
+   }
+  ]
+ },
+ {
+  "path": "/guias/chatbot-whatsapp-para-escolas",
+  "title": "Chatbot de WhatsApp para escolas: como funciona e como configurar | Áion Edu",
+  "description": "Como um chatbot de WhatsApp ajuda a escola a atender famílias fora do horário, encaminhar para o setor certo e retomar leads sem resposta, sem perder o toque humano.",
+  "h1": "Chatbot de WhatsApp para escolas: como funciona na prática",
+  "intro": [
+   "Na época de matrículas, a secretaria não consegue responder todo mundo ao mesmo tempo. O chatbot de WhatsApp faz o primeiro atendimento, direciona a família para o setor certo e avisa a equipe quando é a hora de a pessoa entrar na conversa."
+  ],
+  "related": [
+   "robo-e-sequencia",
+   "whatsapp",
+   "crm-de-leads",
+   "transmissoes"
+  ],
+  "sections": [
+   {
+    "h": "O que o chatbot faz",
+    "items": [
+     {
+      "t": "Primeiro atendimento",
+      "d": "Cumprimenta, apresenta um menu e entende se a família quer matrícula, financeiro ou secretaria."
+     },
+     {
+      "t": "Encaminha para a pessoa certa",
+      "d": "Cada opção cai em uma fila ou em um atendente, com o histórico junto."
+     },
+     {
+      "t": "Fora do horário",
+      "d": "Responde com o horário de atendimento e registra o contato para a equipe retomar."
+     },
+     {
+      "t": "Sequência para lead sem resposta",
+      "d": "Com até 5 mensagens automáticas, a equipe retoma o lead que parou de responder."
+     }
+    ],
+    "shot": "robo"
+   },
+   {
+    "h": "Boas práticas para escola",
+    "steps": [
+     {
+      "t": "Menu curto",
+      "d": "Três a cinco opções claras, com linguagem simples."
+     },
+     {
+      "t": "Sempre uma saída para a pessoa",
+      "d": "Toda opção deve permitir falar com um atendente."
+     },
+     {
+      "t": "Mensagem com a cara da escola",
+      "d": "Texto cordial, sem parecer robô frio."
+     },
+     {
+      "t": "Revisar durante a campanha",
+      "d": "Veja o que as famílias mais perguntam e ajuste o menu."
+     }
+    ]
+   },
+   {
+    "h": "Chatbot e API oficial",
+    "ps": [
+     "Mensagens automáticas enviadas às famílias passam pela API oficial do WhatsApp, com modelos aprovados pela Meta que a escola pode editar. Isso mantém o número protegido e o envio dentro das regras."
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "O robô substitui a secretaria?",
+    "a": "Não. Ele cuida do primeiro atendimento e do que se repete. A pessoa entra quando a família precisa de atenção."
+   },
+   {
+    "q": "O robô atende fora do horário?",
+    "a": "Sim. Ele responde com o horário da escola e registra o contato para a equipe."
+   },
+   {
+    "q": "Dá para manter o robô que a escola já usa?",
+    "a": "Sim. A Áion preserva os fluxos que as escolas já usam ao implantar."
+   }
+  ]
+ },
+ {
+  "path": "/guias/whatsapp-api-oficial-para-escolas",
+  "title": "WhatsApp API oficial para escolas: o que é e por que usar | Áion Edu",
+  "description": "O que é a API oficial do WhatsApp (Meta), como ela difere do aplicativo comum, quais são as regras de mensagem e como a escola pode conectar o número sem perder o aplicativo.",
+  "h1": "WhatsApp API oficial para escolas: o que é e por que usar",
+  "intro": [
+   "A API oficial do WhatsApp é a forma que a Meta oferece para empresas atenderem clientes com segurança, com vários atendentes e automações. Para escolas, ela resolve o problema de um único celular concentrando toda a matrícula."
+  ],
+  "related": [
+   "whatsapp",
+   "robo-e-sequencia",
+   "transmissoes",
+   "captacao-inteligente"
+  ],
+  "sections": [
+   {
+    "h": "Aplicativo comum, Business e API",
+    "items": [
+     {
+      "t": "WhatsApp comum",
+      "d": "Uma pessoa, um celular. Não serve para atendimento de equipe."
+     },
+     {
+      "t": "WhatsApp Business",
+      "d": "Melhor para pequenos negócios, mas ainda limitado a poucos aparelhos."
+     },
+     {
+      "t": "API oficial",
+      "d": "Vários atendentes, robô, integração com o CRM e relatórios, dentro das regras da Meta."
+     }
+    ]
+   },
+   {
+    "h": "As regras que a escola precisa conhecer",
+    "ps": [
+     "Quando a família escreve, a escola pode responder livremente por 24 horas. Fora dessa janela, só é possível iniciar a conversa com um modelo de mensagem aprovado pela Meta.",
+     "Envios em massa devem usar modelos aprovados e respeitar o limite diário de cada número. Por isso, na Áion Edu, o envio em massa é um módulo próprio, Transmissões, com o custo calculado antes de enviar."
+    ]
+   },
+   {
+    "h": "Como a Áion Edu conecta o número",
+    "ps": [
+     "Há duas formas: pela coexistência com o aplicativo WhatsApp Business, mantendo o app no celular, ou pela API com Phone ID e token. A equipe da Áion acompanha a conexão. Veja a página da integração com o WhatsApp para os passos."
+    ],
+    "shot": "whatsapp-conexao"
+   }
+  ],
+  "faq": [
+   {
+    "q": "A API oficial é paga?",
+    "a": "A Meta cobra por certos tipos de mensagem. Na Áion Edu, as mensagens de atendimento estão incluídas no plano, e o envio em massa por Transmissões é cobrado à parte."
+   },
+   {
+    "q": "Preciso de um número novo?",
+    "a": "Não necessariamente. O número da escola pode ser conectado, inclusive mantendo o aplicativo WhatsApp Business."
+   },
+   {
+    "q": "Posso perder o número?",
+    "a": "O uso pela API oficial segue as regras da Meta e reduz o risco de bloqueio comum em soluções não oficiais."
+   }
+  ]
+ },
+ {
+  "path": "/guias/como-montar-campanha-de-matricula",
+  "title": "Como montar uma campanha de matrícula para escola, passo a passo | Áion Edu",
+  "description": "Passo a passo para montar a campanha de matrícula da escola: meta, funil, origens de lead, responsáveis, acompanhamento mensal e fechamento da campanha.",
+  "h1": "Como montar a campanha de matrícula da escola, passo a passo",
+  "intro": [
+   "Campanha de matrícula não é só divulgar. É ter meta, saber de onde vêm as famílias, acompanhar cada etapa do funil e corrigir a rota todo mês. Este guia mostra a ordem para montar a campanha."
+  ],
+  "related": [
+   "campanha-de-matriculas",
+   "minha-campanha",
+   "crm-de-leads",
+   "captacao-inteligente"
+  ],
+  "sections": [
+   {
+    "h": "Passo a passo",
+    "steps": [
+     {
+      "t": "Defina o ano e a base",
+      "d": "Quantos alunos a escola tem, quantos devem rematricular e qual é a meta total de matrículas."
+     },
+     {
+      "t": "Distribua a meta por mês",
+      "d": "A meta mensal deve ser cumulativa: o que faltou soma no mês seguinte e o que sobrou diminui."
+     },
+     {
+      "t": "Monte o funil",
+      "d": "Etapas do contato à matrícula, com origens e séries de interesse cadastradas."
+     },
+     {
+      "t": "Escolha os canais",
+      "d": "Anúncios, indicação, site, Vitrine e eventos, cada um com uma mensagem de entrada própria."
+     },
+     {
+      "t": "Prepare a equipe",
+      "d": "Quem atende, quem visita e quem fecha, com responsáveis por lead e modelos de mensagem."
+     },
+     {
+      "t": "Acompanhe toda semana",
+      "d": "Funil, visitas, conversão por origem e meta do mês."
+     },
+     {
+      "t": "Feche a campanha",
+      "d": "No fim, compare com o ano anterior e registre o que aprender para a próxima."
+     }
+    ],
+    "shot": "campanha"
+   },
+   {
+    "h": "O que acompanhar",
+    "items": [
+     {
+      "t": "Leads que entraram desde o início da campanha",
+      "d": "O funil conta quem entrou no ano e quantos passaram por cada etapa."
+     },
+     {
+      "t": "Origem de cada matrícula",
+      "d": "Saber qual anúncio ou canal trouxe a matrícula evita investir no que não funciona."
+     },
+     {
+      "t": "Visitas",
+      "d": "Visita realizada é o maior sinal de matrícula. Acompanhe agendadas e realizadas."
+     },
+     {
+      "t": "Meta do mês",
+      "d": "Matriculados no mês contra a meta cumulativa."
+     }
+    ]
+   },
+   {
+    "h": "Como a Áion Edu ajuda",
+    "ps": [
+     "O módulo Campanha de Matrículas reúne funil, meta cumulativa e acompanhamento em tempo real. O roteiro Minha campanha guia a escola passo a passo e cada etapa pode ser refeita todo ano."
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "Quando começar a campanha de matrícula?",
+    "a": "Quanto antes, melhor. A maioria das escolas concentra as matrículas entre outubro e janeiro, então a preparação deve começar antes."
+   },
+   {
+    "q": "Como definir a meta?",
+    "a": "Parta do número de vagas por série, subtraia os alunos que devem rematricular e distribua o que falta pelos meses da campanha."
+   },
+   {
+    "q": "O que fazer com o lead que não responde?",
+    "a": "Use uma sequência de mensagens automáticas com modelos aprovados e registre o motivo da perda quando a família desistir."
+   }
+  ]
+ },
+ {
+  "path": "/guias/campanha-de-matriculas-modelo-e-metas",
+  "title": "Campanha de matrículas: modelo, metas mensais e acompanhamento | Áion Edu",
+  "description": "Modelo de campanha de matrículas para escolas: como calcular a meta, dividir por mês com saldo cumulativo, acompanhar o funil e comparar com o ano anterior.",
+  "h1": "Campanha de matrículas: modelo de metas e acompanhamento",
+  "intro": [
+   "Meta sem acompanhamento vira apenas um número no quadro da secretaria. Este modelo mostra como transformar a meta em um número por mês, por série e por etapa do funil."
+  ],
+  "related": [
+   "campanha-de-matriculas",
+   "base-de-alunos",
+   "rematricula",
+   "relatorios"
+  ],
+  "sections": [
+   {
+    "h": "Modelo de meta",
+    "steps": [
+     {
+      "t": "Vagas por série",
+      "d": "Capacidade de cada série e de cada turma."
+     },
+     {
+      "t": "Veteranos esperados",
+      "d": "Alunos da base atual que devem rematricular, com base no histórico dos anos anteriores."
+     },
+     {
+      "t": "Novos alunos necessários",
+      "d": "A diferença entre vagas e veteranos é a meta de captação."
+     },
+     {
+      "t": "Meta por mês",
+      "d": "Divida a meta de novos alunos pelos meses da campanha, com mais peso nos meses de pico."
+     }
+    ]
+   },
+   {
+    "h": "Meta cumulativa",
+    "ps": [
+     "Na meta cumulativa, o que faltou em um mês soma ao mês seguinte e o que sobrou diminui. Assim a escola enxerga o quanto precisa fechar até o fim do mês para voltar ao ritmo."
+    ]
+   },
+   {
+    "h": "Funil que acompanha a meta",
+    "ps": [
+     "Cada etapa do funil conta quem já passou por ela. Com isso, o gestor vê quantos leads viraram visita, quantas visitas viraram proposta e quantas propostas viraram matrícula, mês a mês."
+    ],
+    "shot": "funil"
+   },
+   {
+    "h": "Comparar com o ano anterior",
+    "ps": [
+     "O Matriculômetro mostra a base, os matriculados e os pré-matriculados de cada turma, ao lado do mesmo dia do ano anterior. Assim a escola sabe se está adiantada ou atrasada."
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "O que é meta cumulativa?",
+    "a": "É a meta que carrega o saldo: o que faltou em um mês soma no seguinte e o que sobrou diminui."
+   },
+   {
+    "q": "Preciso de integração com o sistema da escola?",
+    "a": "Ajuda muito, porque o número do sistema é a verdade final. Sem integração, dá para enviar planilha ou lançar os números por série."
+   },
+   {
+    "q": "Posso usar o mesmo modelo todo ano?",
+    "a": "Sim. Ao abrir a campanha do ano seguinte, os módulos passam a usar o novo ano sem recadastrar nada."
+   }
+  ]
+ },
+ {
+  "path": "/guias/como-aumentar-a-rematricula",
+  "title": "Como aumentar a rematrícula na escola: guia prático | Áion Edu",
+  "description": "Estratégias para aumentar a rematrícula: acompanhar série a série, falar cedo com as famílias, entender os motivos de saída e usar pesquisa de satisfação.",
+  "h1": "Como aumentar a rematrícula na escola",
+  "intro": [
+   "Manter um aluno costa menos do que conquistar um novo. Por isso a rematrícula é metade da meta. O segredo é saber quem ainda não rematriculou, falar cedo e entender por que as famílias saem."
+  ],
+  "related": [
+   "rematricula",
+   "transferencias",
+   "pesquisas-e-nps",
+   "transmissoes"
+  ],
+  "sections": [
+   {
+    "h": "Cinco ações que funcionam",
+    "steps": [
+     {
+      "t": "Acompanhe série a série",
+      "d": "Veja quem já rematriculou e quem falta em cada turma."
+     },
+     {
+      "t": "Fale cedo",
+      "d": "Abra o contato com as famílias antes do período de pico."
+     },
+     {
+      "t": "Use uma mensagem pessoal",
+      "d": "Nome da família e do aluno, com um próximo passo claro."
+     },
+     {
+      "t": "Ouça quem está insatisfeito",
+      "d": "Pesquisa de satisfação antes da rematrícula mostra problemas a tempo."
+     },
+     {
+      "t": "Registre o motivo de cada saída",
+      "d": "Transferências e cancelamentos com motivo mostram o que mudar."
+     }
+    ],
+    "shot": "rematricula"
+   },
+   {
+    "h": "Entender as saídas",
+    "ps": [
+     "O módulo Transferências registra por que a família está saindo, em quais séries isso mais acontece e como o número evolui ano a ano. Com isso, a direção corrige a causa e não só o sintoma."
+    ],
+    "shot": "transferencias"
+   },
+   {
+    "h": "Falar com quem falta",
+    "ps": [
+     "Com a lista de quem não rematriculou, a equipe chama as famílias pelo WhatsApp. Para falar com muitas famílias de uma vez, o módulo Transmissões envia mensagem aprovada pela Meta, com o nome da família e respeitando o limite de envio."
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "Quando começar a rematrícula?",
+    "a": "Assim que a escola tiver a lista de alunos do ano. Quanto mais cedo, mais tempo para resolver o que atrapalha."
+   },
+   {
+    "q": "Como saber por que a família está saindo?",
+    "a": "Registrando o motivo em cada transferência e fazendo pesquisa de satisfação durante o ano."
+   },
+   {
+    "q": "A rematrícula conta na meta da campanha?",
+    "a": "Sim. A campanha considera veteranos e novos alunos, e acompanha cada um série a série."
+   }
+  ]
+ },
+ {
+  "path": "/guias/funil-de-matriculas",
+  "title": "Funil de matrículas: etapas, métricas e como acompanhar | Áion Edu",
+  "description": "Como montar o funil de matrículas da escola: etapas do contato à matrícula, taxas de conversão, motivos de perda e como acompanhar mês a mês.",
+  "h1": "Funil de matrículas: etapas, métricas e como acompanhar",
+  "intro": [
+   "O funil de matrículas mostra o caminho da família até a matrícula. Ele responde a perguntas simples: quantas famílias entraram, quantas visitaram, quantas receberam proposta e quantas matricularam."
+  ],
+  "related": [
+   "crm-de-leads",
+   "campanha-de-matriculas",
+   "visitas",
+   "captacao-inteligente"
+  ],
+  "sections": [
+   {
+    "h": "Etapas do funil",
+    "items": [
+     {
+      "t": "Contato",
+      "d": "A família entrou em contato, pelo WhatsApp, site ou indicação."
+     },
+     {
+      "t": "Agendamento",
+      "d": "A visita foi marcada."
+     },
+     {
+      "t": "Visita",
+      "d": "A família conheceu a escola."
+     },
+     {
+      "t": "Proposta",
+      "d": "A escola apresentou valores e condições."
+     },
+     {
+      "t": "Matrícula",
+      "d": "A família matriculou o aluno."
+     }
+    ],
+    "shot": "funil"
+   },
+   {
+    "h": "Métricas que importam",
+    "items": [
+     {
+      "t": "Conversão entre etapas",
+      "d": "Onde as famílias mais se perdem."
+     },
+     {
+      "t": "Origem dos leads",
+      "d": "Quais canais trazem mais matrículas, não só mais contatos."
+     },
+     {
+      "t": "Motivos de perda",
+      "d": "Preço, distância, outra escola: o que a escola pode mudar."
+     },
+     {
+      "t": "Tempo de resposta",
+      "d": "Quem responde rápido fecha mais."
+     }
+    ]
+   },
+   {
+    "h": "Cuidados na leitura",
+    "ps": [
+     "O funil deve contar só os leads que entraram desde o início da campanha e cada etapa deve contar quem já passou por ela. Assim os números mês a mês fazem sentido e podem ser comparados."
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "Quantas etapas o funil precisa ter?",
+    "a": "As cinco do modelo bastam para a maioria das escolas. O importante é que a equipe use todas do mesmo jeito."
+   },
+   {
+    "q": "O que fazer com leads parados?",
+    "a": "Colocá-los em uma sequência de mensagens ou registrar o motivo da perda."
+   },
+   {
+    "q": "O funil mostra a origem do lead?",
+    "a": "Sim. Com a Captação Inteligente, a origem de cada conversa e de cada matrícula aparece no funil."
+   }
+  ]
+ },
+ {
+  "path": "/guias/captacao-de-alunos",
+  "title": "Captação de alunos para escolas: como atrair e medir resultado | Áion Edu",
+  "description": "Como fazer captação de alunos: anúncios que levam ao WhatsApp, Vitrine da escola, indicação, evento e como saber qual canal trouxe cada matrícula.",
+  "h1": "Captação de alunos: como atrair famílias e medir o resultado",
+  "intro": [
+   "Captar alunos é conseguir que a família entre em contato. Mas só vale a pena investir no canal que traz matrícula, não apenas conversa. Por isso a captação precisa ser medida."
+  ],
+  "related": [
+   "captacao-inteligente",
+   "vitrine",
+   "campanha-de-matriculas",
+   "crm-de-leads"
+  ],
+  "sections": [
+   {
+    "h": "Canais de captação",
+    "items": [
+     {
+      "t": "Anúncios no Instagram e Facebook",
+      "d": "Levam a família direto para o WhatsApp da escola."
+     },
+     {
+      "t": "Google",
+      "d": "Quem pesquisa a escola ou a região encontra o contato."
+     },
+     {
+      "t": "Vitrine da escola",
+      "d": "Uma página com tudo o que a família procura: apresentação, séries e botão de WhatsApp."
+     },
+     {
+      "t": "Indicação",
+      "d": "Famílias satisfeitas são o melhor canal. Registre quem indicou."
+     },
+     {
+      "t": "Eventos e visitas",
+      "d": "Dia de visita e eventos abertos trazem a família para dentro da escola."
+     }
+    ],
+    "shot": "vitrine"
+   },
+   {
+    "h": "Como medir cada canal",
+    "ps": [
+     "Cada anúncio pode ter uma mensagem pré-preenchida diferente. Quando a família escreve, a Captação Inteligente identifica de qual anúncio ela veio e marca a conversa com a origem. No fim, a escola vê quantas conversas, leads, visitas e matrículas cada canal trouxe."
+    ],
+    "shot": "captacao"
+   },
+   {
+    "h": "O que fazer com o resultado",
+    "steps": [
+     {
+      "t": "Compare canais",
+      "d": "Veja o custo e o resultado de cada um."
+     },
+     {
+      "t": "Invista no que traz matrícula",
+      "d": "Reduza o que só gera conversa."
+     },
+     {
+      "t": "Responda rápido",
+      "d": "Conversa sem resposta é investimento perdido."
+     },
+     {
+      "t": "Registre o motivo da perda",
+      "d": "Ajuda a ajustar a oferta e o anúncio."
+     }
+    ]
+   }
+  ],
+  "faq": [
+   {
+    "q": "Qual o melhor canal para captar alunos?",
+    "a": "Depende da escola e da região. Por isso é importante medir a origem de cada matrícula."
+   },
+   {
+    "q": "Como saber qual anúncio trouxe a matrícula?",
+    "a": "Com mensagem pré-preenchida diferente em cada anúncio e a Captação Inteligente, que marca a conversa e o lead com a origem."
+   },
+   {
+    "q": "A Vitrine substitui o site?",
+    "a": "Não precisa. Ela é uma página simples, com link único, que a escola usa em anúncios, bio de Instagram e mensagens."
+   }
+  ]
+ }
+]
