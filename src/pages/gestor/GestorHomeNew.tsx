@@ -269,7 +269,7 @@ export default function GestorHomeNew() {
     { key: 'us', n: waitingUs, label: 'Famílias esperando a escola', sub: 'sem resposta nossa', color: '#B91C1C', icon: AlertCircle, to: '/leads?filter=us' },
     { key: 'fila', n: n0(d.queue), label: 'Conversas na fila', sub: 'ninguém assumiu ainda', color: '#B45309', icon: MessageCircle, to: '/whatsapp' },
     { key: 'pay', n: overdueList.length, label: 'Pagamentos em atraso', sub: overdueList.length ? brl(overdueList.reduce((s, p) => s + n0(p.amount), 0)) : '', color: '#DC2626', icon: Wallet, to: '/settings' },
-    { key: 'rem', n: prog.pending, label: 'Rematrículas pendentes', sub: 'famílias da base ainda sem rematrícula', color: '#05907B', icon: GraduationCap, to: '/base-alunos' },
+    { key: 'rem', n: prog.pending, label: 'Sem matrícula nem pré', sub: 'alunos da base que ainda não responderam', color: '#05907B', icon: GraduationCap, to: '/base-alunos' },
     { key: 'sem', n: n0(d.incomplete), label: 'Leads sem responsável', sub: 'ninguém da equipe assumiu', color: '#5B6B86', icon: UserX, to: '/leads?owner=unassigned' },
   ]
   const hot = alerts.filter(a => a.n > 0)
@@ -357,7 +357,7 @@ export default function GestorHomeNew() {
                 {[
                   ['Esperado hoje', expectedToday ? String(expectedToday) : '—', prog.done >= expectedToday ? '#15803D' : '#B45309', expectedToday ? (prog.done >= expectedToday ? `+${prog.done - expectedToday} à frente` : `${expectedToday - prog.done} atrás do ritmo`) : ''],
                   ['Projeção final', projected != null ? String(projected) : '—', projected != null && projected >= goalTotal ? '#15803D' : '#B45309', projected != null ? `meta ${goalTotal}` : 'poucos dias de dados'],
-                  ['Ainda não rematricularam', String(prog.pending), '#B45309', 'famílias da base'],
+                  ['Sem matrícula nem pré', String(prog.pending), '#B45309', 'ainda não responderam'], ['Só pré-matriculados', String(prog.pre), '#7C3AED', 'ainda não efetivaram'],
                   ['Saíram', String(prog.left), '#B91C1C', 'da base do ano'],
                 ].map(([l, v, c, s]) => (
                   <div key={l} style={{ background: '#F8FBFA', border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: '10px 12px' }}>

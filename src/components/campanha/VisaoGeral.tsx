@@ -83,7 +83,7 @@ export default function VisaoGeral(p: Props) {
   const feitoFor = (k: 'novos' | 'rematriculas', m: string) => p.cur?.monthly.find(x => x.m === m)?.[k] ?? 0
   const kpis: [string, number, number, string, string][] = [
     ['Matriculados', p.prog.done, p.goals.total, '#059669', '#10B981'], ['Novos', p.prog.novos, p.goals.novos, '#7C3AED', '#7C3AED'],
-    ['Rematrículas', p.prog.reMat, p.goals.re, '#0EA5E9', '#0EA5E9'], ['Pré-matriculados', p.prog.pre, Math.max(0, p.goals.total - p.prog.done), '#B45309', '#F59E0B'],
+    ['Rematrículas', p.prog.reMat, p.goals.re, '#0EA5E9', '#0EA5E9'], ['Pré-matriculados', p.prog.pre, 0, '#B45309', '#F59E0B'],
   ]
   const lastYear = p.years[p.years.length - 1]
   const risk = (p.cur?.by_grade ?? []).filter(g => g.base > 0).map(g => {
@@ -100,7 +100,7 @@ export default function VisaoGeral(p: Props) {
       <div className="aion-snap" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
         {kpis.map(([t, v, m, c, bc]) => (
           <div key={t} style={card}><div style={{ fontSize: 28, fontWeight: 800, color: c, lineHeight: 1.1 }}><CountUp value={v} /></div>
-            <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>{t}{t === 'Pré-matriculados' ? ` · faltam ${m} para a meta` : ` · meta ${m}`}</div><Bar v={v} max={m} c={bc} /></div>
+            <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>{t}{t === 'Pré-matriculados' ? ' · ainda não efetivaram a matrícula' : ` · meta ${m}`}</div>{t !== 'Pré-matriculados' && <Bar v={v} max={m} c={bc} />}</div>
         ))}
       </div>
 
