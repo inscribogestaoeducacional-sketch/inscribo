@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 /**
- * Calcula a média do ENEM por escola a partir dos microdados (participantes com CO_ESCOLA informado)
- * e grava em enem_escola.
+ * Calcula a média do ENEM por escola e grava em enem_escola.
+ * Fonte: Microdados do ENEM (INEP), arquivo DADOS/RESULTADOS_AAAA.csv, que traz CO_ESCOLA,
+ * TP_DEPENDENCIA_ADM_ESC, CO_MUNICIPIO_ESC e as notas de cada participante.
  *
- * Uso:  node scripts/import-enem-escola.mjs <microdados_enem_AAAA.zip> <ano> [--dry] [--min 10]
- * Fonte: https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados/enem
- * Só entram escolas com pelo menos --min participantes (padrão 10) que fizeram todas as provas.
- * Participantes sem escola informada não entram (o relatório diz a cobertura).
+ * Uso:  node scripts/import-enem-escola.mjs <RESULTADOS_AAAA.csv> <ano> [--dry] [--min 10]
+ * (extraia o zip antes — o arquivo usa compressão que o Node não lê; use o Explorador de Arquivos)
+ *
+ * Regras: só entram participantes com escola informada e as 5 notas (CN, CH, LC, MT, redação).
+ * Só ficam escolas com pelo menos --min participantes (padrão 10).
+ * Requer .env.local com SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.
  */
 import { readFileSync, existsSync, createReadStream } from 'fs'
 import { createInterface } from 'readline'
 import { createClient } from '@supabase/supabase-js'
-import unzipper from 'unzipper'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -22,80 +24,64 @@ if (existsSync(envPath)) for (const l of readFileSync(envPath, 'utf-8').split('\
   const i = t.indexOf('='); if (i > 0 && !process.env[t.slice(0, i).trim()]) process.env[t.slice(0, i).trim()] = t.slice(i + 1).trim()
 }
 const args = process.argv.slice(2)
-const [zipPath, anoArg] = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--min')
+const [csvPath, anoArg] = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--min')
 const dry = args.includes('--dry')
 const min = args.includes('--min') ? parseInt(args[args.indexOf('--min') + 1], 10) : 10
 const ano = parseInt(anoArg, 10)
-if (!zipPath || !ano) { console.error('Uso: node scripts/import-enem-escola.mjs <arquivo.zip> <ano> [--dry] [--min 10]'); process.exit(1) }
+if (!csvPath || !ano) { console.error('Uso: node scripts/import-enem-escola.mjs <RESULTADOS_AAAA.csv> <ano> [--dry] [--min 10]'); process.exit(1) }
+if (!existsSync(csvPath)) { console.error('Arquivo não encontrado:', csvPath); process.exit(1) }
 const sb = dry ? null : createClient(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 
-function split(line, sep) { const r = []; let c = '', q = false; for (const ch of line) { if (ch === '"') q = !q; else if (ch === sep && !q) { r.push(c); c = '' } else c += ch } r.push(c); return r }
-const num = (v) => { if (v == null || v === '') return null; const x = Number(String(v).replace(',', '.')); return Number.isFinite(x) ? x : null }
-
-const lerCsv = async (entry, onHeader, onRow) => {
-  const rl = createInterface({ input: entry, crlfDelay: Infinity })
-  let idx = null, sep = ';'
-  for await (const line of rl) {
-    if (!line.trim()) continue
-    if (!idx) {
-      sep = line.includes(';') ? ';' : ','
-      const h = split(line, sep).map((x) => x.trim().toUpperCase())
-      idx = Object.fromEntries(h.map((x, i) => [x, i]))
-      onHeader(idx, h); continue
-    }
-    onRow(split(line, sep), idx)
-  }
-}
-
-const quem = new Map() // inscrição -> [co_escola, co_municipio_esc]
-let total = 0, comEscola = 0, validos = 0, viuPart = false, viuRes = false
+const num = (v) => { if (v == null || v === '') return null; const x = Number(v.replace(',', '.')); return Number.isFinite(x) ? x : null }
+const rl = createInterface({ input: createReadStream(resolve(csvPath), { encoding: 'utf-8' }), crlfDelay: Infinity })
+let idx = null, total = 0, comEscola = 0, validos = 0
 const acc = new Map()
-const zip = createReadStream(resolve(zipPath)).pipe(unzipper.Parse({ forceStream: true }))
-for await (const entry of zip) {
-  const nome = entry.path
-  if (/PARTICIPANTES_\d{4}\.csv$/i.test(nome)) {
-    viuPart = true
-    await lerCsv(entry, (idx, h) => {
-      const need = ['NU_INSCRICAO', 'CO_ESCOLA']
-      const miss = need.filter((c) => !(c in idx))
-      if (miss.length) { console.error('PARTICIPANTES sem as colunas:', miss.join(', '), '\nColunas existentes:', h.join(', ')); process.exit(1) }
-    }, (c, idx) => {
-      total++
-      const esc = c[idx.CO_ESCOLA]?.trim()
-      if (!esc) return
-      if (idx.IN_TREINEIRO !== undefined && c[idx.IN_TREINEIRO]?.trim() === '1') return
-      comEscola++
-      quem.set(Number(c[idx.NU_INSCRICAO]), [esc, idx.CO_MUNICIPIO_ESC !== undefined ? c[idx.CO_MUNICIPIO_ESC]?.trim() || null : null])
-    })
-    console.log(`  participantes: ${total} inscritos, ${comEscola} com escola informada`)
-  } else if (/RESULTADOS_\d{4}\.csv$/i.test(nome)) {
-    if (!viuPart) { console.error('RESULTADOS veio antes de PARTICIPANTES no zip; me avise.'); process.exit(1) }
-    viuRes = true
-    await lerCsv(entry, (idx, h) => {
-      const need = ['NU_INSCRICAO', 'NU_NOTA_CN', 'NU_NOTA_CH', 'NU_NOTA_LC', 'NU_NOTA_MT', 'NU_NOTA_REDACAO']
-      const miss = need.filter((c) => !(c in idx))
-      if (miss.length) { console.error('RESULTADOS sem as colunas:', miss.join(', '), '\nColunas existentes:', h.join(', ')); process.exit(1) }
-    }, (c, idx) => {
-      const q = quem.get(Number(c[idx.NU_INSCRICAO])); if (!q) return
-      const cn = num(c[idx.NU_NOTA_CN]), ch = num(c[idx.NU_NOTA_CH]), lc = num(c[idx.NU_NOTA_LC]), mt = num(c[idx.NU_NOTA_MT]), red = num(c[idx.NU_NOTA_REDACAO])
-      if ([cn, ch, lc, mt, red].some((x) => x == null)) return
-      validos++
-      let a = acc.get(q[0]); if (!a) { a = { n: 0, cn: 0, ch: 0, lc: 0, mt: 0, red: 0, mun: q[1] }; acc.set(q[0], a) }
-      a.n++; a.cn += cn; a.ch += ch; a.lc += lc; a.mt += mt; a.red += red
-    })
-  } else entry.autodrain()
+const NEED = ['CO_ESCOLA', 'CO_MUNICIPIO_ESC', 'SG_UF_ESC', 'TP_DEPENDENCIA_ADM_ESC', 'NU_NOTA_CN', 'NU_NOTA_CH', 'NU_NOTA_LC', 'NU_NOTA_MT', 'NU_NOTA_REDACAO']
+const COMPS = ['NU_NOTA_COMP1', 'NU_NOTA_COMP2', 'NU_NOTA_COMP3', 'NU_NOTA_COMP4', 'NU_NOTA_COMP5']
+for await (const line of rl) {
+  if (!line) continue
+  const c = line.split(';')
+  if (!idx) {
+    idx = Object.fromEntries(c.map((x, i) => [x.replace(/"/g, '').trim().toUpperCase(), i]))
+    const miss = NEED.filter((k) => !(k in idx))
+    if (miss.length) { console.error('Colunas ausentes:', miss.join(', '), '\nColunas existentes:', Object.keys(idx).join(', ')); process.exit(1) }
+    continue
+  }
+  total++
+  if (total % 250000 === 0) process.stdout.write(`\r  linhas ${total}`)
+  const esc = c[idx.CO_ESCOLA]
+  if (!esc) continue
+  comEscola++
+  const cn = num(c[idx.NU_NOTA_CN]), ch = num(c[idx.NU_NOTA_CH]), lc = num(c[idx.NU_NOTA_LC]), mt = num(c[idx.NU_NOTA_MT]), red = num(c[idx.NU_NOTA_REDACAO])
+  if ([cn, ch, lc, mt, red].some((x) => x == null)) continue
+  validos++
+  let a = acc.get(esc)
+  if (!a) { a = { n: 0, cn: 0, ch: 0, lc: 0, mt: 0, red: 0, cp: [0, 0, 0, 0, 0], np: 0, mun: c[idx.CO_MUNICIPIO_ESC] || null, uf: c[idx.SG_UF_ESC] || null, dep: num(c[idx.TP_DEPENDENCIA_ADM_ESC]) }; acc.set(esc, a) }
+  a.n++; a.cn += cn; a.ch += ch; a.lc += lc; a.mt += mt; a.red += red
+  const cp = COMPS.map((k) => (k in idx ? num(c[idx[k]]) : null))
+  if (cp.every((x) => x != null)) { a.np++; for (let i = 0; i < 5; i++) a.cp[i] += cp[i] }
 }
-if (!viuPart || !viuRes) { console.error('Não encontrei PARTICIPANTES e RESULTADOS dentro do zip.'); process.exit(1) }
 const r1 = (x) => Math.round(x * 10) / 10
 const rows = [...acc.entries()].filter(([, a]) => a.n >= min).map(([co, a]) => {
   const m = { cn: a.cn / a.n, ch: a.ch / a.n, lc: a.lc / a.n, mt: a.mt / a.n, red: a.red / a.n }
-  return { co_entidade: co, ano, n_part: a.n, media_cn: r1(m.cn), media_ch: r1(m.ch), media_lc: r1(m.lc), media_mt: r1(m.mt), media_red: r1(m.red), media_geral: r1((m.cn + m.ch + m.lc + m.mt + m.red) / 5), co_municipio: a.mun }
-})
-if (!dry) {
-  for (let i = 0; i < rows.length; i += 1000) {
-    const { error } = await sb.from('enem_escola').upsert(rows.slice(i, i + 1000), { onConflict: 'co_entidade,ano' })
-    if (error) { console.error('Erro:', error.message); process.exit(1) }
+  return {
+    co_entidade: co, ano, n_part: a.n, media_cn: r1(m.cn), media_ch: r1(m.ch), media_lc: r1(m.lc), media_mt: r1(m.mt), media_red: r1(m.red),
+    media_geral: r1((m.cn + m.ch + m.lc + m.mt + m.red) / 5), co_municipio: a.mun, sg_uf: a.uf, tp_dependencia: a.dep,
+    media_comp: a.np ? { n: a.np, c: a.cp.map((x) => r1(x / a.np)) } : null,
   }
-  await sb.from('fonte_dados').upsert({ chave: `enem_escola_${ano}`, fonte: 'INEP — Microdados do ENEM (médias por escola calculadas)', ano, linhas: rows.length, observacao: `mín. ${min} participantes; ${comEscola} de ${total} inscritos tinham escola informada`, importado_em: new Date().toISOString() }, { onConflict: 'chave' })
+})
+const priv = rows.filter((r) => r.tp_dependencia === 4).length
+if (!dry) {
+  for (let i = 0; i < rows.length; i += 300) {
+    let error
+    for (let t = 1; t <= 4; t++) {
+      ;({ error } = await sb.from('enem_escola').upsert(rows.slice(i, i + 300), { onConflict: 'co_entidade,ano' }))
+      if (!error) break
+      await new Promise((r) => setTimeout(r, 2000 * t))
+    }
+    if (error) { console.error('\nErro:', error.message); process.exit(1) }
+  }
+  await sb.from('fonte_dados').upsert({ chave: `enem_escola_${ano}`, fonte: 'INEP — Microdados do ENEM (RESULTADOS), médias por escola calculadas pela Áion', ano, linhas: rows.length, observacao: `mín. ${min} participantes com as 5 notas; ${comEscola} de ${total} linhas tinham escola`, importado_em: new Date().toISOString() }, { onConflict: 'chave' })
 }
-console.log(`\nENEM ${ano}: ${total} inscritos, ${comEscola} com escola informada, ${validos} com as 5 notas. ${rows.length} escolas com ${min}+ participantes${dry ? ' (simulação)' : ' gravadas'}.`)
+console.log(`\n\nENEM ${ano}: ${total} linhas, ${comEscola} com escola informada, ${validos} com as 5 notas.`)
+console.log(`${rows.length} escolas com ${min}+ participantes (${priv} particulares)${dry ? ' — simulação, nada gravado' : ' gravadas'}.`)
