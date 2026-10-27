@@ -4,7 +4,7 @@ import {
   Plus, Phone, Calendar, Edit, Edit2, Trash2, X, Search,
   Clock, Users, Send, CheckCircle, Save,
   MessageCircle, AlertTriangle, ChevronDown, ChevronRight, ChevronUp,
-  Bell, UserCog, GraduationCap, SlidersHorizontal, CheckSquare,
+  Bell, UserCog, SlidersHorizontal, CheckSquare,
   LayoutGrid, Rows3, Tag, Megaphone, MapPin, GraduationCap, List as ListIcon, Kanban,
 } from 'lucide-react'
 import { logAudit } from '../../hooks/useAudit'
