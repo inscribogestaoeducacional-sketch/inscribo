@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { analisar, limparUsuario, type IgRaw } from './_lib/raioxInstagram.js'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 
@@ -438,6 +439,9 @@ async function resolveCaller(req: VercelRequest, action: string, payload: Record
   }
 
   // Raio-X público: quem preencheu o diagnóstico recebe um id (uuid) que só ele conhece.
+  if (action === 'raiox_instagram') {
+    return { ok: true, caller: { institutionId: null, userId: null, surveyTransfer: null } }
+  }
   if (action === 'raiox_diagnostico') {
     const id = typeof payload.diagnosticoId === 'string' ? payload.diagnosticoId : ''
     if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, status: 400, error: 'Diagnóstico inválido.' }
@@ -486,6 +490,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           quota: { used: quota.calls, limit: quota.limit, month: quota.monthYear },
         })
       }
+    }
+
+    // ── RAIO-X · PRESENÇA DIGITAL: lê o perfil público do Instagram (Business Discovery) e devolve os números prontos ──
+    if (action === 'raiox_instagram') {
+      const user = limparUsuario(payload.handle)
+      if (!user) return res.status(400).json({ error: 'invalido', mensagem: 'Digite o @ do Instagram, por exemplo @colegioexemplo.' })
+      const cidade = typeof payload.cidade === 'string' ? payload.cidade.slice(0, 60) : null
+      const supa = getSupabaseAdmin()
+      const { data: c } = await supa.from('raiox_instagram_cache').select('dados, buscado_em').eq('handle', user).maybeSingle()
+      if (c && Date.now() - +new Date(c.buscado_em) < 6 * 3600_000) return res.json({ analise: analisar(c.dados as IgRaw, cidade), cached: true })
+      // limite global: no máximo 60 consultas novas por hora (protege a cota da Meta)
+      const { count } = await supa.from('raiox_instagram_cache').select('handle', { count: 'exact', head: true }).gte('buscado_em', new Date(Date.now() - 3600_000).toISOString())
+      if ((count ?? 0) >= 60) return res.status(429).json({ error: 'ocupado', mensagem: 'Muitas consultas agora. Tente de novo em alguns minutos ou cole o texto do perfil.' })
+      const igId = process.env.META_IG_USER_ID, tk = process.env.META_IG_TOKEN
+      if (!igId || !tk) return res.status(503).json({ error: 'indisponivel', mensagem: 'A leitura automática do Instagram está indisponível. Cole a bio e as legendas.' })
+      const campos = `business_discovery.username(${user}){username,name,biography,website,followers_count,media_count,profile_picture_url,media.limit(30){caption,comments_count,like_count,media_type,media_product_type,timestamp,permalink}}`
+      const r = await fetch(`https://graph.facebook.com/v26.0/${igId}?fields=${encodeURIComponent(campos)}&access_token=${encodeURIComponent(tk)}`, { signal: AbortSignal.timeout(20000) })
+      const j = await r.json() as { business_discovery?: IgRaw; error?: { code?: number; message?: string } }
+      if (!r.ok || !j.business_discovery) {
+        const code = j.error?.code
+        if (code === 190) { console.error('raiox_instagram: token da Meta vencido ou inválido'); return res.status(503).json({ error: 'indisponivel', mensagem: 'A leitura automática do Instagram está indisponível. Cole a bio e as legendas.' }) }
+        return res.status(404).json({ error: 'nao_encontrado', mensagem: 'Não consegui ler este perfil. Só é possível ler perfis profissionais (comercial ou criador) e públicos. Confira o @ ou cole a bio e as legendas.' })
+      }
+      await supa.from('raiox_instagram_cache').upsert({ handle: user, dados: j.business_discovery, buscado_em: new Date().toISOString() })
+      return res.json({ analise: analisar(j.business_discovery, cidade), cached: false })
     }
 
     // ── RAIO-X: diagnóstico escrito pela IA a partir dos números do relatório (público, 1 texto por diagnóstico) ──
