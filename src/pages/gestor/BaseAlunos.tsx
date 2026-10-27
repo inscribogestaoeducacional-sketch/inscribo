@@ -76,15 +76,18 @@ export default function BaseAlunos() {
   const campaignYear = useActiveCampaignYear(institutionId)
   useEffect(() => { if (campaignYear) setYear(campaignYear) }, [campaignYear])
 
+  const [retAsNew, setRetAsNew] = useState(true)
   const load = useCallback(async () => {
     if (!institutionId) return
     setLoading(true); setError('')
-    const [o, p, inf, h] = await Promise.all([
+    const [o, p, inf, h, ras] = await Promise.all([
       supabase.rpc('base_students_overview', { p_institution_id: institutionId, p_target_year: year }),
       supabase.rpc('base_reenrollment_panel', { p_institution_id: institutionId, p_target_year: year }),
       supabase.rpc('base_sync_info', { p_institution_id: institutionId }),
       supabase.rpc('base_headcount', { p_institution_id: institutionId, p_year: thisYear }),
+      supabase.rpc('base_returning_as_new', { p_institution_id: institutionId }),
     ])
+    setRetAsNew(ras.data !== false)
     setLoading(false)
     setInfo(((inf.data ?? [])[0] ?? null) as Info | null)
     const err = o.error || p.error
@@ -102,6 +105,7 @@ export default function BaseAlunos() {
   useEffect(() => { setLimit(100) }, [group, grade, q, period, from, to, year])
 
   const preCounts = !!info?.pre_counts
+  const returningAsNew = retAsNew
   const range = useMemo(() => periodRange(period, from, to), [period, from, to])
   const inPeriod = useCallback((r: Row) => !range || (!!r.enrolled_on && r.enrolled_on >= range[0] && r.enrolled_on <= range[1]), [range])
 
@@ -177,6 +181,18 @@ export default function BaseAlunos() {
     return m
   }, [rows, inPeriod, isMat, isPre])
 
+  const setReturningAsNew = async (on: boolean) => {
+    const { error: err } = await supabase.rpc('base_set_returning_as_new', { p_inst: institutionId, p_value: on })
+    if (err) { setError('Não foi possível salvar a regra: ' + err.message); return }
+    load()
+  }
+  const setFormer = async (r: Row, on: boolean) => {
+    setBusyId(r.student_id)
+    const { error: err } = await supabase.rpc('student_set_former', { p_inst: institutionId, p_student: r.student_id, p_value: on })
+    setBusyId('')
+    if (err) { setError('Não foi possível marcar: ' + err.message); return }
+    load()
+  }
   const setPreCounts = async (on: boolean) => {
     const { error: err } = await supabase.rpc('base_set_pre_counts', { p_institution_id: institutionId, p_on: on })
     if (err) { setError('Não foi possível salvar a regra: ' + err.message); return }
@@ -300,7 +316,7 @@ export default function BaseAlunos() {
           <ProgressCard year={year} rem={remCount} pre={reconcileParts[1].n} faltam={counts.faltam} base={totals.base} onFaltam={() => goGroup('faltam')} />
           {strip}
           <GeralView mobile={isMobile} year={year} counts={counts} parts={reconcileParts} totalAll={totals.all} preCounts={preCounts}
-            canEdit={canEdit} setPreCounts={setPreCounts} months={months} />
+            canEdit={canEdit} setPreCounts={setPreCounts} returningAsNew={returningAsNew} setReturningAsNew={setReturningAsNew} months={months} />
         </>
       )}
 
@@ -353,7 +369,7 @@ export default function BaseAlunos() {
 
       {body}
 
-      {sheetRow && <StudentSheet row={sheetRow} year={year} canEdit={canEdit} busy={busyId === sheetRow.student_id} onClose={() => setSheetId('')} onMark={mark} />}
+      {sheetRow && <StudentSheet row={sheetRow} year={year} canEdit={canEdit} busy={busyId === sheetRow.student_id} onClose={() => setSheetId('')} onMark={mark} onFormer={setFormer} />}
     </div>
   )
 }

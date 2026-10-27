@@ -20,8 +20,8 @@ function Line({ icon: Icon, label, children }: { icon: React.ElementType; label:
   )
 }
 
-export default function StudentSheet({ row, year, canEdit, busy, onClose, onMark }: {
-  row: Row; year: number; canEdit: boolean; busy: boolean; onClose: () => void; onMark: (r: Row, on: boolean) => void
+export default function StudentSheet({ row, year, canEdit, busy, onClose, onMark, onFormer }: {
+  row: Row; year: number; canEdit: boolean; busy: boolean; onClose: () => void; onMark: (r: Row, on: boolean) => void; onFormer?: (r: Row, on: boolean) => void
 }) {
   const navigate = useNavigate()
   useEffect(() => {
@@ -96,6 +96,11 @@ export default function StudentSheet({ row, year, canEdit, busy, onClose, onMark
             {row.category === 'a_rematricular' && canEdit && (
               <button type="button" onClick={() => onMark(row, true)} disabled={busy} className="aion-tap" style={cardBtn(hasPhone ? 'ghost' : 'primary', { flexBasis: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 })}>
                 {busy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Marcar rematriculado
+              </button>
+            )}
+            {onFormer && canEdit && (row.origin === 'novato' || row.origin === 'ex_aluno') && (
+              <button type="button" onClick={() => onFormer(row, row.origin === 'novato')} disabled={busy} className="aion-tap" style={cardBtn('ghost', { flexBasis: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 })}>
+                {busy ? <Loader2 size={15} className="animate-spin" /> : <GraduationCap size={15} />} {row.origin === 'novato' ? 'Já foi aluno da escola' : 'Marcar como novato de verdade'}
               </button>
             )}
             {row.category === 'rematriculado_declarado' && canEdit && (

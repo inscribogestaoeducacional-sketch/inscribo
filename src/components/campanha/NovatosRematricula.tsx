@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
+import NovosBridge from './NovosBridge'
 import { funnelNeeds, monthName, type FunnelRates, type HistYear, type PlanMonth } from '../../lib/campaignPlan'
 
 interface Common {
@@ -24,7 +25,7 @@ const status = (feito: number, meta: number, past: boolean) => {
 }
 const thisMonth = new Date().toISOString().slice(0, 7)
 
-export function NovatosTab({ institutionId, from, to, rates, goal, done, months, hist }: Common & { institutionId: string; from: string; to: string; rates: FunnelRates }) {
+export function NovatosTab({ institutionId, from, to, rates, goal, done, months, hist, returning = 0, returningAsNew = true }: Common & { institutionId: string; from: string; to: string; rates: FunnelRates; returning?: number; returningAsNew?: boolean }) {
   const [fun, setFun] = useState<{ months: { m: string; entraram: number; etapas: Record<string, { n: number }> }[] } | null>(null)
   useEffect(() => {
     supabase.rpc('campaign_funnel', { p_inst: institutionId, p_from: from, p_to: to, p_source: null, p_grade: null, p_assigned: null })
@@ -43,6 +44,7 @@ export function NovatosTab({ institutionId, from, to, rates, goal, done, months,
           <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1 }}>{totalNeeds.registrations} <span style={{ fontSize: 15, color: '#94A3B8', fontWeight: 600 }}>leads</span></div>
           <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 6 }}>{totalNeeds.schedules} agendamentos · {totalNeeds.visits} visitas, nas taxas do plano</div></div>
       </div>
+      <NovosBridge novos={done} returning={returning} returningAsNew={returningAsNew} />
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Mês a mês: novatos e o funil necessário</div>
         <div style={{ overflowX: 'auto' }}>

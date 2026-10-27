@@ -193,9 +193,11 @@ export default function GestorHomeNew() {
   const preCounts = !!((d.info ?? [])[0]?.pre_counts)
   const prog = useMemo(() => {
     const s = (k: keyof PanelRow) => panelRows.reduce((a, r) => a + (n0(r[k])), 0)
-    const reMat = s('reenrolled') + s('reenrolled_declared'), novos = s('new_students') + s('returning_students'), pre = s('pre_enrolled')
+    const rc = ((d.hist as Json | null)?.current as Json | undefined)?.returning_as_new !== false
+    const ret = s('returning_students')
+    const reMat = s('reenrolled') + s('reenrolled_declared') + (rc ? 0 : ret), novos = s('new_students') + (rc ? ret : 0), pre = s('pre_enrolled')
     return { reMat, novos, pre: preCounts ? 0 : pre, pending: s('pending'), left: s('left_school'), done: reMat + novos + (preCounts ? pre : 0) }
-  }, [panelRows, preCounts])
+  }, [panelRows, preCounts, d.hist]) // eslint-disable-line react-hooks/exhaustive-deps
   const goalTotal = cycle ? (cycle.goal_total ?? n0(cycle.goal_reenrollments) + n0(cycle.target_new_students)) : 0
   const goalRe = n0(cycle?.goal_reenrollments), goalNovos = Math.max(0, goalTotal - goalRe)
   const dayInfo = useMemo(() => {

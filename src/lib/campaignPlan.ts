@@ -5,7 +5,7 @@ export type HistMonth = { m: string; novos: number; rematriculas: number }
 export type HistGrade = { grade_id: string; name: string; segment: string | null; sort_order: number; base: number; retained: number; pre?: number; secured?: number; lost: number; new_students: number }
 export type HistClass = { class_id: string; name: string; grade_id: string | null; base: number; retained: number; pre?: number; secured?: number; lost: number }
 export type HistYear = {
-  year: number; base: number; retained: number; pre?: number; secured?: number; pre_counts?: boolean; lost: number; graduates: number; left_during_year: number
+  year: number; base: number; retained: number; pre?: number; secured?: number; pre_counts?: boolean; returning?: number; returning_as_new?: boolean; lost: number; graduates: number; left_during_year: number
   new_students: number; total_students: number; monthly: HistMonth[]; by_grade: HistGrade[]; by_class: HistClass[]
 }
 export type History = { target_year: number; years: HistYear[]; current: HistYear | null; current_base: number; current_students: number }

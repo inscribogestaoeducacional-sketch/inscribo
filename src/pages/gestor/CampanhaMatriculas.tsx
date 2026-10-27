@@ -325,9 +325,11 @@ export default function CampanhaMatriculas() {
   const prog = useMemo(() => {
     const s = (k: keyof PanelRow) => panel.reduce((a, r) => a + ((r[k] as number) || 0), 0)
     const preCounts = !!info?.pre_counts
-    const reMat = s('reenrolled') + s('reenrolled_declared'), novos = s('new_students') + s('returning_students'), pre = s('pre_enrolled')
-    return { reMat: reMat + manualTotal, novos, pre: preCounts ? 0 : pre, pending: s('pending'), left: s('left_school'), grads: s('graduates'), done: reMat + manualTotal + novos + (preCounts ? pre : 0) }
-  }, [panel, info, manualTotal])
+    const rc = hist?.current?.returning_as_new ?? true
+    const ret = s('returning_students')
+    const reMat = s('reenrolled') + s('reenrolled_declared') + (rc ? 0 : ret), novos = s('new_students') + (rc ? ret : 0), pre = s('pre_enrolled')
+    return { reMat: reMat + manualTotal, novos, returning: ret, returningAsNew: rc, pre: preCounts ? 0 : pre, pending: s('pending'), left: s('left_school'), grads: s('graduates'), done: reMat + manualTotal + novos + (preCounts ? pre : 0) }
+  }, [panel, info, manualTotal, hist])
   const goalTotal = cycle ? (cycle.goal_total ?? ((cycle.goal_reenrollments ?? 0) + (cycle.target_new_students ?? 0))) : 0
   const dayInfo = useMemo(() => {
     if (!cycle?.start_date || !cycle?.end_date) return null
@@ -598,7 +600,7 @@ export default function CampanhaMatriculas() {
       {!loading && cycle && tab === 'novatos' && institutionId && (
         <NovatosTab institutionId={institutionId} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`}
           rates={ed?.rates ?? ((cycle.funnel_rates as FunnelRates | null) ?? DEFAULT_FUNNEL)} goal={cycle.target_new_students ?? 0} done={prog.novos}
-          months={ed?.months ?? []} hist={hist?.current ?? null} />
+          months={ed?.months ?? []} hist={hist?.current ?? null} returning={prog.returning} returningAsNew={prog.returningAsNew} />
       )}
       {!loading && cycle && tab === 'novatos' && ed && <MetaCharts kind="novos" months={ed.months} cur={hist?.current ?? null} years={years} targetYear={targetYear} label="Alunos novos" />}
 

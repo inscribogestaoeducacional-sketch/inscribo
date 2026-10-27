@@ -151,9 +151,9 @@ export function ProgressCard({ year, rem, pre, faltam, base, onFaltam }: { year:
   )
 }
 
-export function GeralView({ mobile, year, counts, parts, totalAll, preCounts, canEdit, setPreCounts, months }: {
+export function GeralView({ mobile, year, counts, parts, totalAll, preCounts, canEdit, setPreCounts, returningAsNew, setReturningAsNew, months }: {
   mobile: boolean; year: number; counts: Counts; parts: ReconcilePart[]; totalAll: number; preCounts: boolean; canEdit: boolean
-  setPreCounts: (on: boolean) => void; months: { mat: number; pre: number }[]
+  setPreCounts: (on: boolean) => void; returningAsNew: boolean; setReturningAsNew: (on: boolean) => void; months: { mat: number; pre: number }[]
 }) {
   const origins = ['rematricula', 'novato', 'ex_aluno'] as const
   const totMat = counts.matOnly.rematricula + counts.matOnly.novato + counts.matOnly.ex_aluno
@@ -239,6 +239,25 @@ export function GeralView({ mobile, year, counts, parts, totalAll, preCounts, ca
             {[false, true].map(v => (
               <button key={String(v)} type="button" onClick={() => { if (preCounts !== v) setPreCounts(v) }}
                 style={{ padding: '10px 20px', minHeight: 44, border: 0, cursor: 'pointer', fontFamily: 'inherit', background: preCounts === v ? BRAND.primary : '#fff', color: preCounts === v ? '#fff' : BRAND.text, fontWeight: 700 }}>
+                {v ? 'Sim' : 'Não'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="ld-card" style={{ ...baseCard, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 16px' }}>
+        <div style={{ flex: '1 1 220px' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: BRAND.ink }}>Quem já foi da escola e volta conta como novo?</div>
+          <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 2, lineHeight: 1.45 }}>
+            Cada escola escolhe. A Activesoft conta esses alunos como veteranos. Hoje: {returningAsNew ? 'Sim, contam como novos (com a etiqueta “já foi da escola”).' : 'Não, contam como rematrícula, igual à Activesoft.'}
+          </div>
+        </div>
+        {canEdit && (
+          <div style={{ display: 'flex', border: `1.5px solid ${BRAND.line}`, borderRadius: 12, overflow: 'hidden', fontSize: 13 }}>
+            {[true, false].map(v => (
+              <button key={String(v)} type="button" onClick={() => { if (returningAsNew !== v) setReturningAsNew(v) }}
+                style={{ padding: '10px 20px', minHeight: 44, border: 0, cursor: 'pointer', fontFamily: 'inherit', background: returningAsNew === v ? BRAND.primary : '#fff', color: returningAsNew === v ? '#fff' : BRAND.text, fontWeight: 700 }}>
                 {v ? 'Sim' : 'Não'}
               </button>
             ))}
