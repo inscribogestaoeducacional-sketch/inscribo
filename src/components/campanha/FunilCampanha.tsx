@@ -68,7 +68,7 @@ export default function FunilCampanha({ institutionId, from, to, planMonths, rat
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ ...card, flex: '1.5 1 520px' }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 2 }}>Mês a mês no gráfico</div>
-          <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 8 }}>Linhas cheias: o que aconteceu. Tracejado: a meta. Clique num mês acima para ver os cartões dele.</div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 8 }}>Linhas cheias: o que aconteceu. Tracejado: a meta. Cada mês mostra os leads que <b>entraram</b> naquele mês e até onde chegaram. Clique num mês acima para ver os cartões dele.</div>
           <MonthLines data={data} planMonths={planMonths} rates={rates} />
           <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0', lineHeight: 1.6 }}>
             {data.history_since ? `O registro de etapas começou em ${fmtDate(data.history_since)}. ` : ''}<b>~N estimados</b>: quando um lead aparece numa etapa mais à frente sem registro de ter passado pela anterior, o sistema entende que ele passou e marca como estimado.

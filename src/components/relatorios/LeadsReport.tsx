@@ -6,7 +6,7 @@ import { BRAND } from '../../lib/brand'
 import { ActionBar, AnalisePanel, BarList, DayLine, Kpi, KpiGrid, PeriodBar, card, downloadCsv, logAudit, td, th, useAnalise, usePeriod, sel } from './shared'
 
 interface D {
-  total: number; anterior: { total: number; matriculados: number; perdidos: number }; por_etapa: Record<string, number>; por_dia: { d: string; n: number }[]
+  total: number; anterior: { total: number; matriculados: number; perdidos: number }; por_etapa: Record<string, number>; alcancou?: Record<string, number>; por_dia: { d: string; n: number }[]
   por_origem: { origem: string; leads: number; matriculados: number; perdidos: number }[]
   por_responsavel: { responsavel: string; leads: number; agendaram: number; visitaram: number; matriculados: number; perdidos: number }[]
   por_serie: { serie: string; leads: number; matriculados: number }[]; perdas: { motivo: string; n: number }[]; truncado: boolean; historico_desde: string | null; linhas: Record<string, string | number | null>[]
@@ -36,7 +36,9 @@ export default function LeadsReport({ institutionId, institutionName }: { instit
   }, [institutionId, per.from, per.to])
   if (err) return <div style={{ ...card, color: '#B91C1C' }}>{err.includes('permiss') ? 'Somente gestores podem ver os relatórios.' : err}</div>
   const e = d?.por_etapa ?? {}
-  const agend = (e.scheduled ?? 0) + (e.visit ?? 0) + (e.proposal ?? 0) + (e.enrolled ?? 0), vis = (e.visit ?? 0) + (e.proposal ?? 0) + (e.enrolled ?? 0)
+  // quem já passou pela etapa (não só quem está nela agora)
+  const al = d?.alcancou
+  const agend = al ? al.scheduled : (e.scheduled ?? 0) + (e.visit ?? 0) + (e.proposal ?? 0) + (e.enrolled ?? 0), vis = al ? al.visit : (e.visit ?? 0) + (e.proposal ?? 0) + (e.enrolled ?? 0)
   const csv = () => { if (!d) return; downloadCsv(`leads-${per.from}-${per.to}.csv`, linhas); logAudit(institutionId, 'leads', 'csv', per.from, per.to, linhas.length) }
   const analisar = () => d && ai.run({ periodo_total: d.total, anterior: d.anterior, etapas: d.por_etapa, agendaram_ou_alem: agend, visitaram_ou_alem: vis, por_origem: d.por_origem, por_responsavel: d.por_responsavel, por_serie: d.por_serie, motivos_perda: d.perdas, por_dia: d.por_dia, visitas: vis2 ? { total: vis2.total, anterior: vis2.anterior_total, realizadas: vis2.realizadas, faltaram: vis2.faltaram, canceladas: vis2.canceladas, ainda_agendadas: vis2.agendadas_futuras, viraram_matricula: vis2.matriculados_apos_visita, sem_baixa: vis2.sem_baixa, confirmadas_pela_familia: vis2.confirmadas, motivos_de_nao_realizacao: vis2.por_motivo, por_quem_atende: vis2.por_responsavel } : null })
 
@@ -52,7 +54,7 @@ export default function LeadsReport({ institutionId, institutionName }: { instit
           <KpiGrid>
             <Kpi label="LEADS NO PERÍODO" value={d.total} color="#6366F1" now={d.total} before={d.anterior.total} />
             <Kpi label="AGENDARAM VISITA" value={agend} color="#8B5CF6" sub={`${pc(agend, d.total)} dos leads`} />
-            <Kpi label="VISITARAM" value={vis} color="#F59E0B" sub={`${pc(vis, agend)} de quem agendou`} />
+            <Kpi label="VISITARAM" value={vis} color="#F59E0B" sub={`${pc(vis, agend)} de quem agendou · conta quem já passou pela etapa`} />
             <Kpi label="MATRICULADOS" value={e.enrolled ?? 0} color="#05907B" now={e.enrolled ?? 0} before={d.anterior.matriculados} sub={`${pc(e.enrolled ?? 0, d.total)} dos leads`} />
             <Kpi label="PERDIDOS" value={e.lost ?? 0} color="#B91C1C" now={e.lost ?? 0} before={d.anterior.perdidos} invert sub={`${pc(e.lost ?? 0, d.total)} dos leads`} />
           </KpiGrid>
