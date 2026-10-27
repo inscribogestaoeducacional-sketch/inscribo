@@ -12,10 +12,12 @@
 // curva padrão, marcada como "estimativa".
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet, LogOut, Link2, LineChart as LineChartIcon } from 'lucide-react'
+import { Flag, Loader2, Check, AlertTriangle, LayoutGrid, SlidersHorizontal, Layers, Sparkles, Filter, Users, RefreshCw, Wallet, LogOut, Link2, LineChart as LineChartIcon, MoreHorizontal } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import PageHeader from '../../components/ui/PageHeader'
+import HeaderAction from '../../components/mobile/HeaderAction'
+import { cardBtn } from '../../components/mobile/StatStrip'
 import LinkLeadsToCampaignModal from '../../components/campanha/LinkLeadsToCampaignModal'
 import { BRAND, SHADOW } from '../../lib/brand'
 import EnrolledWithoutLead from '../../components/shared/EnrolledWithoutLead'
@@ -93,6 +95,7 @@ export default function CampanhaMatriculas() {
   const [cycleId, setCycleId] = useState('')
   const [hist, setHist] = useState<History | null>(null)
   const [panel, setPanel] = useState<PanelRow[]>([])
+  const [menuOpen, setMenuOpen] = useState(false)
   const [info, setInfo] = useState<{ sources: string[] | null; pre_counts: boolean } | null>(null)
   const [tab, setTab] = useState<Tab>('geral')
   const [noLead, setNoLead] = useState<{ novos_matriculados: number; sem_lead: number; lista: { student: string; grade: string | null }[] } | null>(null)
@@ -325,9 +328,11 @@ export default function CampanhaMatriculas() {
   const prog = useMemo(() => {
     const s = (k: keyof PanelRow) => panel.reduce((a, r) => a + ((r[k] as number) || 0), 0)
     const preCounts = !!info?.pre_counts
-    const reMat = s('reenrolled') + s('reenrolled_declared'), novos = s('new_students') + s('returning_students'), pre = s('pre_enrolled')
-    return { reMat: reMat + manualTotal, novos, pre: preCounts ? 0 : pre, pending: s('pending'), left: s('left_school'), grads: s('graduates'), done: reMat + manualTotal + novos + (preCounts ? pre : 0) }
-  }, [panel, info, manualTotal])
+    const rc = hist?.current?.returning_as_new ?? true
+    const ret = s('returning_students')
+    const reMat = s('reenrolled') + s('reenrolled_declared') + (rc ? 0 : ret), novos = s('new_students') + (rc ? ret : 0), pre = s('pre_enrolled')
+    return { reMat: reMat + manualTotal, novos, returning: ret, returningAsNew: rc, pre: preCounts ? 0 : pre, pending: s('pending'), left: s('left_school'), grads: s('graduates'), done: reMat + manualTotal + novos + (preCounts ? pre : 0) }
+  }, [panel, info, manualTotal, hist])
   const goalTotal = cycle ? (cycle.goal_total ?? ((cycle.goal_reenrollments ?? 0) + (cycle.target_new_students ?? 0))) : 0
   const dayInfo = useMemo(() => {
     if (!cycle?.start_date || !cycle?.end_date) return null
@@ -356,6 +361,7 @@ export default function CampanhaMatriculas() {
     ['geral', 'Visão geral', LayoutGrid], ['funil', 'Funil', Filter], ['novatos', 'Novatos', Users], ['rematricula', 'Rematrícula', RefreshCw],
     ['invest', 'Investimento', Wallet], ['serie', 'Séries e turmas', Layers], ['matriculometro', 'Matriculômetro', Flag], ['dia', 'Dia a dia', LineChartIcon], ['saidas', 'Saídas', LogOut], ['relatorio', 'Relatório', Sparkles],
   ]
+  useEffect(() => { document.querySelector<HTMLElement>('[role=tablist] [aria-selected=true]')?.scrollIntoView?.({ inline: 'center', block: 'nearest' }) }, [tab])
   const tabBtn = (id: Tab, label: string, Icon: typeof LayoutGrid) => isMobile ? (
     <button key={id} type="button" role="tab" aria-selected={tab === id} className="aion-tap" onClick={() => setTab(id)} style={{
       flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, border: tab === id ? 'none' : `1px solid ${BRAND.line}`, borderRadius: 999, padding: '8px 14px', cursor: 'pointer', fontFamily: 'inherit',
@@ -383,6 +389,28 @@ export default function CampanhaMatriculas() {
         const n = TAB_LIST[Math.max(0, Math.min(TAB_LIST.length - 1, i + (dx < 0 ? 1 : -1)))][0]
         if (n !== tab) { setTab(n); window.scrollTo?.({ top: 0 }) }
       }}>
+      {isMobile ? (
+        <>
+          <PageHeader compact icon={Flag} title="Campanha de Matrículas"
+            subtitle={cycle ? `${cycle.label ?? `Campanha ${targetYear}`}${dayInfo ? ` · dia ${dayInfo.day} de ${dayInfo.total}` : ''}` : ''}
+            actions={cycle ? <>
+              <Chip c={st.c} bg={st.bg}>{st.t}</Chip>
+              <HeaderAction label="Ações" icon={MoreHorizontal} active={menuOpen} onClick={() => setMenuOpen(o => !o)} />
+            </> : undefined} />
+          {cycle && menuOpen && (
+            <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 8, padding: 12 }}>
+              <button type="button" className="aion-tap" onClick={() => { setMenuOpen(false); setShowLink(true) }} style={cardBtn('ghost', { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 })}><Link2 size={15} /> Vincular leads</button>
+              <button type="button" className="aion-tap" onClick={() => { setMenuOpen(false); setStep(1); setTab('metas') }} style={cardBtn('ghost', { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 })}><SlidersHorizontal size={15} /> Configuração da campanha</button>
+              {cycle.status === 'active' && institutionId && <div style={{ display: 'flex' }}><FinalizarButton cycle={cycle} institutionId={institutionId} institutionName={user?.institution_name ?? ''} targetYear={targetYear} onDone={() => { setMenuOpen(false); loadCycles(); setTab('relatorio') }} /></div>}
+              {cycles.length > 1 && (
+                <select value={cycleId} onChange={e => { setCycleId(e.target.value); setEd(null) }} style={{ minHeight: 44, padding: '8px 12px', borderRadius: 12, border: `1px solid ${BRAND.line}`, fontWeight: 700, fontSize: 14, color: BRAND.ink, background: '#fff' }}>
+                  {cycles.map(c => <option key={c.id} value={c.id}>{c.label ?? `Campanha ${c.target_school_year ?? c.year}`}{c.status === 'active' ? ' (ativa)' : ''}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
       <PageHeader icon={Flag} title="Campanha de Matrículas"
         subtitle={cycle ? `${cycle.label ?? `Campanha ${targetYear}`}${cycle.start_date ? ` · ${cycle.start_date.split('-').reverse().join('/')} a ${(cycle.end_date ?? '').split('-').reverse().join('/')}` : ''}${dayInfo ? ` · dia ${dayInfo.day} de ${dayInfo.total}` : ''}` : ''}
         actions={<>
@@ -397,6 +425,7 @@ export default function CampanhaMatriculas() {
             </select>
           )}
         </>} />
+      )}
 
       {cycle && cycle.status !== 'active' && !readOnly && (
         <div style={{ ...card, border: `2px solid ${BRAND.primary}`, background: BRAND.softer, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -598,7 +627,7 @@ export default function CampanhaMatriculas() {
       {!loading && cycle && tab === 'novatos' && institutionId && (
         <NovatosTab institutionId={institutionId} from={cycle.start_date ?? `${targetYear - 1}-09-01`} to={cycle.end_date ?? `${targetYear}-03-31`}
           rates={ed?.rates ?? ((cycle.funnel_rates as FunnelRates | null) ?? DEFAULT_FUNNEL)} goal={cycle.target_new_students ?? 0} done={prog.novos}
-          months={ed?.months ?? []} hist={hist?.current ?? null} />
+          months={ed?.months ?? []} hist={hist?.current ?? null} returning={prog.returning} returningAsNew={prog.returningAsNew} />
       )}
       {!loading && cycle && tab === 'novatos' && ed && <MetaCharts kind="novos" months={ed.months} cur={hist?.current ?? null} years={years} targetYear={targetYear} label="Alunos novos" />}
 

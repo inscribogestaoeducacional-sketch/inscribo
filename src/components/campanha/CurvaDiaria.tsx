@@ -102,6 +102,8 @@ export default function CurvaDiaria({ institutionId, year, mobile }: { instituti
         {kind !== 'total' && maps.some(m => !m.has) && <div style={{ fontSize: 11.5, color: BRAND.muted, marginTop: 8 }}>Anos sem o ano anterior na base não separam rematrícula de novato e ficam de fora desta visão.</div>}
       </div>
 
+      {!noData && <MapaDias data={data} year={year} kind={kind} axis={axis} />}
+
       {noData ? (
         <div style={{ ...cardS, fontSize: 13, color: BRAND.muted }}>Ainda não há matrículas com data para montar o gráfico.</div>
       ) : (
@@ -148,3 +150,81 @@ export default function CurvaDiaria({ institutionId, year, mobile }: { instituti
   )
 }
 const cardS: React.CSSProperties = { background: '#fff', borderRadius: 18, border: `1px solid ${BRAND.line}`, padding: 16, boxShadow: '0 1px 2px rgba(26,43,74,.04)' }
+
+const WD = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
+const SCALE = ['#EAF4F1', '#BFE6D8', '#7FD0B5', '#2DB38E', '#05806B']
+
+/** Mapa de calor do calendário: um quadrado por dia, mais escuro quanto mais matrículas naquele dia. */
+function MapaDias({ data, year, kind, axis }: { data: Data; year: number; kind: Kind; axis: Date[] }) {
+  const [sel, setSel] = useState<string | null>(null)
+  const serie = data.anos.find(a => a.year === year)
+  const daily = useMemo(() => {
+    const m = new Map<string, { t: number; r: number; n: number }>()
+    if (!serie) return m
+    const diff = (arr: number[] | null, i: number) => (arr ? arr[i] - (i > 0 ? arr[i - 1] : 0) : 0)
+    serie.total.forEach((_, i) => m.set(addDays(serie.start, i).toISOString().slice(0, 10), { t: diff(serie.total, i), r: diff(serie.rem, i), n: diff(serie.nov, i) }))
+    return m
+  }, [serie])
+  if (!serie) return null
+  const val = (iso: string) => { const d = daily.get(iso); return d ? (kind === 'total' ? d.t : kind === 'rem' ? d.r : d.n) : null }
+  const todayIso = data.hoje
+  const days = axis.map(dt => dt.toISOString().slice(0, 10))
+  const past = days.filter(d => d <= todayIso && val(d) != null)
+  const max = Math.max(1, ...past.map(d => val(d) ?? 0))
+  const total = past.reduce((a, d) => a + (val(d) ?? 0), 0)
+  const best = past.reduce<string | null>((b, d) => (b == null || (val(d) ?? 0) > (val(b) ?? 0) ? d : b), null)
+  const uteis = past.filter(d => { const w = new Date(d + 'T12:00:00Z').getUTCDay(); return w >= 1 && w <= 5 })
+  const media = uteis.length ? (uteis.reduce((a, d) => a + (val(d) ?? 0), 0) / uteis.length) : 0
+  const hoje = val(todayIso) ?? 0
+  const shade = (v: number) => (v <= 0 ? '#F1F5F4' : SCALE[Math.min(4, Math.max(1, Math.ceil(v / max * 4)))])
+  const months = new Map<string, string[]>()
+  days.forEach(d => { const k = d.slice(0, 7); months.set(k, [...(months.get(k) ?? []), d]) })
+  const selD = sel ? daily.get(sel) : null
+  const fmtL = (iso: string) => { const dt = new Date(iso + 'T12:00:00Z'); return `${WD[dt.getUTCDay()]}, ${dt.getUTCDate()} de ${MES[dt.getUTCMonth()]}` }
+  const kpi = (n: string | number, l: string) => (
+    <div style={{ flex: '1 1 40%', background: BRAND.softer, borderRadius: 12, padding: '9px 11px' }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color: BRAND.ink, lineHeight: 1.1 }}>{n}</div><div style={{ fontSize: 11, color: BRAND.muted, marginTop: 2, lineHeight: 1.25 }}>{l}</div>
+    </div>
+  )
+  return (
+    <div style={cardS}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Mapa do dia a dia</div>
+      <div style={{ fontSize: 12, color: BRAND.muted, margin: '2px 0 10px', lineHeight: 1.45 }}>Quantas matrículas aconteceram em cada dia. Quanto mais escuro, mais matrículas. Toque num dia para ver os detalhes.</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        {kpi(hoje, 'matrículas hoje')}{kpi(best ? val(best) ?? 0 : '—', best ? `melhor dia (${fmtL(best).split(', ')[1]})` : 'melhor dia')}{kpi(media.toFixed(1).replace('.', ','), 'média por dia útil')}{kpi(total, 'no total')}
+      </div>
+      <div style={{ minHeight: 38, fontSize: 13, fontWeight: 700, color: BRAND.ink, background: '#F8FBFA', borderRadius: 10, padding: '8px 10px', marginBottom: 12, display: 'flex', alignItems: 'center' }}>
+        {sel && selD ? <span>{fmtL(sel)}: <b style={{ color: BRAND.primary }}>{kind === 'total' ? selD.t : kind === 'rem' ? selD.r : selD.n} matrícula{(kind === 'total' ? selD.t : kind === 'rem' ? selD.r : selD.n) === 1 ? '' : 's'}</b>{kind === 'total' && serie.has_split ? <span style={{ fontWeight: 600, color: BRAND.muted }}> ({selD.n} {selD.n === 1 ? 'novato' : 'novatos'}, {selD.r} {selD.r === 1 ? 'rematrícula' : 'rematrículas'})</span> : null}</span> : <span style={{ fontWeight: 600, color: BRAND.muted }}>Toque ou passe o mouse em um dia.</span>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 14 }}>
+        {[...months.entries()].map(([k, ds]) => {
+          const first = new Date(ds[0] + 'T12:00:00Z').getUTCDay()
+          return (
+            <div key={k}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: BRAND.ink, marginBottom: 5, textTransform: 'capitalize' }}>{MES[Number(k.slice(5)) - 1]}/{k.slice(2, 4)}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+                {Array.from({ length: first }).map((_, i) => <span key={'e' + i} />)}
+                {ds.map(d => {
+                  const v = val(d), fut = d > todayIso || v == null, sun = new Date(d + 'T12:00:00Z').getUTCDay() === 0
+                  return (
+                    <button key={d} type="button" aria-label={`${fmtL(d)}: ${v ?? 0}`} onClick={() => setSel(d)} onPointerEnter={e => { if (e.pointerType === 'mouse') setSel(d) }}
+                      style={{ aspectRatio: '1', borderRadius: 5, padding: 0, cursor: fut ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 9.5, fontWeight: 700,
+                        border: sel === d ? `2px solid ${BRAND.ink}` : d === todayIso ? `2px solid ${BRAND.primary}` : 'none',
+                        background: fut ? '#fff' : shade(v ?? 0), outline: fut ? '1px dashed #E3E8F0' : 'none', outlineOffset: -1, opacity: sun && !fut ? .55 : 1,
+                        color: !fut && (v ?? 0) / max > .5 ? '#fff' : '#64748B' }}>
+                      {fut ? '' : (v ?? 0) > 0 ? v : ''}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 12, fontSize: 11, color: BRAND.muted }}>
+        <span>menos</span>{['#F1F5F4', ...SCALE.slice(1)].map(c => <span key={c} style={{ width: 14, height: 14, borderRadius: 4, background: c }} />)}<span>mais</span>
+        <span style={{ marginLeft: 'auto' }}>domingos esmaecidos</span>
+      </div>
+    </div>
+  )
+}

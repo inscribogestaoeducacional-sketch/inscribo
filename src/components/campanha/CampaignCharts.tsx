@@ -125,7 +125,7 @@ export default function MetaCharts({ kind, months, cur, years, targetYear, label
       </div>
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink }}>Compensação da meta, mês a mês</div>
-        <div style={{ fontSize: 12.5, color: '#64748B', margin: '2px 0 8px' }}>O que faltou (ou sobrou) nos meses fechados é redistribuído no mês atual e nos seguintes. A linha tracejada é a meta ajustada.</div>
+        <div style={{ fontSize: 12.5, color: '#64748B', margin: '2px 0 8px' }}>O que faltou num mês soma na meta do mês seguinte; o que sobrou diminui. A linha tracejada é a meta do mês já com isso.</div>
         <CompensationChart months={months} cur={cur} kind={kind} now={now} />
       </div>
       <div style={card}>
@@ -134,19 +134,20 @@ export default function MetaCharts({ kind, months, cur, years, targetYear, label
         <CumulativeChart months={months} cur={cur} years={years} targetYear={targetYear} kind={kind} now={now} />
       </div>
       <div style={card}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Mês a mês: plano, realizado e ajuste</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Mês a mês: a meta vai acumulando</div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={{ ...th, textAlign: 'left' }}>Mês</th><th style={th}>Meta do plano</th><th style={th}>Realizado</th><th style={th}>Diferença</th><th style={th}>Meta ajustada</th>{years.filter(y => y.monthly.some(m => m[kind] > 0)).map(y => <th key={y.year} style={th}>{y.year}</th>)}</tr></thead>
+            <thead><tr><th style={{ ...th, textAlign: 'left' }}>Mês</th><th style={th}>Plano</th><th style={th}>Veio do mês anterior</th><th style={th}>Meta do mês</th><th style={th}>Realizado</th><th style={th}>Saldo p/ próximo</th>{years.filter(y => y.monthly.some(m => m[kind] > 0)).map(y => <th key={y.year} style={th}>{y.year}</th>)}</tr></thead>
             <tbody>
               {months.map((m, i) => {
-                const r = c.real[i], d = r != null ? r - c.plan[i] : null
+                const r = c.real[i], d = r != null ? r - c.effective[i] : null, ci = c.carryIn[i]
                 return (
                   <tr key={m.m} style={{ background: m.m === now ? '#FFFBEB' : undefined }}>
                     <td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(m.m + '-01')}/{m.m.slice(0, 4)}{m.m === now ? <span style={{ color: '#94A3B8', fontWeight: 500 }}> · em curso</span> : ''}</td>
-                    <td style={td}>{c.plan[i]}</td><td style={{ ...td, fontWeight: 700 }}>{r ?? '—'}</td>
-                    <td style={{ ...td, color: d == null ? '#94A3B8' : d >= 0 ? '#15803D' : '#B91C1C', fontWeight: 700 }}>{d == null ? '—' : `${d > 0 ? '+' : ''}${d}`}</td>
-                    <td style={{ ...td, fontWeight: 800, color: '#B45309' }}>{c.adjusted[i] ?? '—'}</td>
+                    <td style={td}>{c.plan[i]}</td>
+                    <td style={{ ...td, color: ci === 0 ? '#94A3B8' : ci > 0 ? '#B45309' : '#15803D', fontWeight: 700 }}>{ci === 0 ? '—' : `${ci > 0 ? '+' : ''}${ci}`}</td>
+                    <td style={{ ...td, fontWeight: 800, color: '#0F172A' }}>{c.effective[i]}</td><td style={{ ...td, fontWeight: 700 }}>{r ?? '—'}</td>
+                    <td style={{ ...td, color: d == null ? '#94A3B8' : d >= 0 ? '#15803D' : '#B91C1C', fontWeight: 700 }}>{d == null ? '—' : d === 0 ? 'bateu' : d > 0 ? `sobrou ${d}` : `faltou ${-d}`}</td>
                     {years.filter(y => y.monthly.some(mm => mm[kind] > 0)).map(y => {
                       const shift = targetYear - y.year
                       return <td key={y.year} style={{ ...td, color: '#64748B' }}>{y.monthly.find(x => `${Number(x.m.slice(0, 4)) + shift}-${x.m.slice(5, 7)}` === m.m)?.[kind] ?? 0}</td>

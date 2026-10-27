@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
+import NovosBridge from './NovosBridge'
+import { compensate } from '../../lib/campaignCompare'
 import { funnelNeeds, monthName, type FunnelRates, type HistYear, type PlanMonth } from '../../lib/campaignPlan'
 
 interface Common {
@@ -24,13 +26,14 @@ const status = (feito: number, meta: number, past: boolean) => {
 }
 const thisMonth = new Date().toISOString().slice(0, 7)
 
-export function NovatosTab({ institutionId, from, to, rates, goal, done, months, hist }: Common & { institutionId: string; from: string; to: string; rates: FunnelRates }) {
+export function NovatosTab({ institutionId, from, to, rates, goal, done, months, hist, returning = 0, returningAsNew = true }: Common & { institutionId: string; from: string; to: string; rates: FunnelRates; returning?: number; returningAsNew?: boolean }) {
   const [fun, setFun] = useState<{ months: { m: string; entraram: number; etapas: Record<string, { n: number }> }[] } | null>(null)
   useEffect(() => {
     supabase.rpc('campaign_funnel', { p_inst: institutionId, p_from: from, p_to: to, p_source: null, p_grade: null, p_assigned: null })
       .then(({ data }) => setFun(data as typeof fun))
   }, [institutionId, from, to])
   const totalNeeds = funnelNeeds(Math.max(0, goal - done), rates)
+  const ce = compensate(months, hist, 'novos')
   const leadsIn = (m: string) => fun?.months.find(x => x.m === m)?.entraram ?? 0
   const visits = (m: string) => fun?.months.find(x => x.m === m)?.etapas.visit?.n ?? 0
   const grades = (hist?.by_grade ?? []).filter(g => g.new_students > 0)
@@ -43,17 +46,19 @@ export function NovatosTab({ institutionId, from, to, rates, goal, done, months,
           <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1 }}>{totalNeeds.registrations} <span style={{ fontSize: 15, color: '#94A3B8', fontWeight: 600 }}>leads</span></div>
           <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 6 }}>{totalNeeds.schedules} agendamentos · {totalNeeds.visits} visitas, nas taxas do plano</div></div>
       </div>
+      <NovosBridge novos={done} returning={returning} returningAsNew={returningAsNew} />
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Mês a mês: novatos e o funil necessário</div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={{ ...th, textAlign: 'left' }}>Mês</th><th style={th}>Meta</th><th style={th}>Feito</th><th style={th} /><th style={th}>Leads necessários</th><th style={th}>Leads reais</th><th style={th}>Visitas necessárias</th><th style={th}>Visitas reais</th></tr></thead>
             <tbody>
-              {months.map(r => {
-                const f = funnelNeeds(r.novos, rates), feito = actual(hist, r.m, 'novos')
+              {months.map((r, i) => {
+                const meta = ce.effective[i], ci = ce.carryIn[i]
+                const f = funnelNeeds(meta, rates), feito = actual(hist, r.m, 'novos')
                 return (
-                  <tr key={r.m}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(r.m + '-01')}</td><td style={td}>{r.novos}</td><td style={td}>{feito}</td>
-                    <td style={td}>{status(feito, r.novos, r.m < thisMonth)}</td><td style={td}>{f.registrations}</td><td style={td}>{r.m <= thisMonth ? leadsIn(r.m) : '—'}</td>
+                  <tr key={r.m}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(r.m + '-01')}</td><td style={td}>{meta}{ci !== 0 && <div style={{ fontSize: 10.5, color: ci > 0 ? '#B45309' : '#15803D', fontWeight: 600 }}>{r.novos} {ci > 0 ? '+' : '−'} {Math.abs(ci)}</div>}</td><td style={td}>{feito}</td>
+                    <td style={td}>{status(feito, meta, r.m < thisMonth)}</td><td style={td}>{f.registrations}</td><td style={td}>{r.m <= thisMonth ? leadsIn(r.m) : '—'}</td>
                     <td style={td}>{f.visits}</td><td style={td}>{r.m <= thisMonth ? visits(r.m) : '—'}</td></tr>
                 )
               })}
@@ -87,6 +92,7 @@ export function NovatosTab({ institutionId, from, to, rates, goal, done, months,
 
 export function RematriculaTab({ goal, done, months, hist, pre, pending, bySegment, manualByMonth, manualCard }: Common & { pre: number; pending: number; bySegment: { name: string; pending: number }[]; manualByMonth?: Record<string, number>; manualCard?: React.ReactNode }) {
   const navigate = useNavigate()
+  const cr = compensate(months, hist, 'rematriculas')
   const go = (relations: string[]) => navigate('/transmissoes', { state: { relations } })
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -106,8 +112,8 @@ export function RematriculaTab({ goal, done, months, hist, pre, pending, bySegme
           <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Mês a mês: rematrículas meta × feito</div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={{ ...th, textAlign: 'left' }}>Mês</th><th style={th}>Meta</th><th style={th}>Feito</th><th style={th} /></tr></thead>
-            <tbody>{months.map(r => { const feito = actual(hist, r.m, 'rematriculas') + (manualByMonth?.[r.m] ?? 0); return (
-              <tr key={r.m}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(r.m + '-01')}</td><td style={td}>{r.rematriculas}</td><td style={td}>{feito}</td><td style={td}>{status(feito, r.rematriculas, r.m < thisMonth)}</td></tr>) })}</tbody>
+            <tbody>{months.map((r, i) => { const feito = actual(hist, r.m, 'rematriculas') + (manualByMonth?.[r.m] ?? 0), meta = cr.effective[i], ci = cr.carryIn[i]; return (
+              <tr key={r.m}><td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{monthName(r.m + '-01')}</td><td style={td}>{meta}{ci !== 0 && <div style={{ fontSize: 10.5, color: ci > 0 ? '#B45309' : '#15803D', fontWeight: 600 }}>{r.rematriculas} {ci > 0 ? '+' : '−'} {Math.abs(ci)}</div>}</td><td style={td}>{feito}</td><td style={td}>{status(feito, meta, r.m < thisMonth)}</td></tr>) })}</tbody>
           </table>
           <p style={{ fontSize: 12, color: BRAND.muted, margin: '10px 0 0' }}>Entram só os alunos com data de matrícula informada.</p>
         </div>

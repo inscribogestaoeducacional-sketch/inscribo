@@ -29,7 +29,7 @@ export type Counts = {
   preOnly: Record<'rematricula' | 'novato' | 'ex_aluno', number>
 }
 
-export const ORIGIN_LABEL: Record<string, string> = { rematricula: 'Rematrícula', novato: 'Novato', ex_aluno: 'Ex-aluno que voltou' }
+export const ORIGIN_LABEL: Record<string, string> = { rematricula: 'Rematrícula', novato: 'Novato', ex_aluno: 'Novo (já foi da escola)' }
 export const ORIGIN_COLOR: Record<string, string> = { rematricula: '#059669', novato: '#2563EB', ex_aluno: '#0EA5E9' }
 export const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 

@@ -3,27 +3,30 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
+import NovosBridge from '../campanha/NovosBridge'
 import { ActionBar, AnalisePanel, BarList, Kpi, KpiGrid, card, downloadCsv, logAudit, td, th, useAnalise, usePeriod } from './shared'
 
-interface G { grade_name: string; sort_order: number; is_terminal: boolean; base_prev_year: number; reenrolled: number; pending: number; left_school: number; new_students: number; graduates: number; capacity: number | null; pre_enrolled: number }
+interface G { grade_name: string; sort_order: number; is_terminal: boolean; base_prev_year: number; reenrolled: number; pending: number; left_school: number; new_students: number; returning_students?: number; graduates: number; capacity: number | null; pre_enrolled: number }
 
 export default function RematriculasReport({ institutionId, institutionName }: { institutionId: string; institutionName: string }) {
   const per = usePeriod()
   const y0 = new Date().getFullYear()
   const [year, setYear] = useState(y0 + 1)
   const [rows, setRows] = useState<G[] | null>(null); const [err, setErr] = useState('')
+  const [ras, setRas] = useState(true)
   const ai = useAnalise('rematriculas', 'Rematrículas', institutionId, institutionName, per)
   useEffect(() => {
     let alive = true; setRows(null); setErr('')
     supabase.rpc('base_reenrollment_panel', { p_institution_id: institutionId, p_target_year: year }).then(({ data, error }) => { if (!alive) return; if (error) setErr(error.message); else setRows((data ?? []) as G[]) })
+    supabase.rpc('base_returning_as_new', { p_institution_id: institutionId }).then(({ data }) => { if (alive && typeof data === 'boolean') setRas(data) })
     return () => { alive = false }
   }, [institutionId, year])
   if (err) return <div style={{ ...card, color: '#B91C1C' }}>{err.includes('permiss') ? 'Somente gestores podem ver os relatórios.' : err.includes('módulo') || err.includes('module') ? 'A Base de alunos não está ativa nesta escola, por isso não há dados de rematrícula.' : err}</div>
   const sum = (f: (g: G) => number) => (rows ?? []).reduce((a, g) => a + f(g), 0)
-  const base = sum(g => g.base_prev_year), grad = sum(g => g.graduates), rema = sum(g => g.reenrolled), pend = sum(g => g.pending), pre = sum(g => g.pre_enrolled), saiu = sum(g => g.left_school), novos = sum(g => g.new_students)
+  const base = sum(g => g.base_prev_year), grad = sum(g => g.graduates), ret = sum(g => g.returning_students ?? 0), rema = sum(g => g.reenrolled) + (ras ? 0 : ret), pend = sum(g => g.pending), pre = sum(g => g.pre_enrolled), saiu = sum(g => g.left_school), novos = sum(g => g.new_students) + (ras ? ret : 0)
   const elegiveis = Math.max(0, base - grad)
   const pct = (a: number, b: number) => b ? `${Math.round(a / b * 100)}%` : '—'
-  const linhas = (rows ?? []).map(g => ({ 'Ano letivo': year, 'Série': g.grade_name, 'Alunos no ano anterior': g.base_prev_year, 'Concluintes': g.graduates, 'Rematriculados': g.reenrolled, 'Pré-matriculados': g.pre_enrolled, 'Sem matrícula nem pré': g.pending, 'Saíram': g.left_school, 'Alunos novos': g.new_students, 'Capacidade': g.capacity, 'Taxa de rematrícula (%)': g.base_prev_year - g.graduates > 0 ? Math.round(g.reenrolled / (g.base_prev_year - g.graduates) * 100) : null }))
+  const linhas = (rows ?? []).map(g => ({ 'Ano letivo': year, 'Série': g.grade_name, 'Alunos no ano anterior': g.base_prev_year, 'Concluintes': g.graduates, 'Rematriculados': g.reenrolled, 'Pré-matriculados': g.pre_enrolled, 'Sem matrícula nem pré': g.pending, 'Saíram': g.left_school, 'Alunos novos': g.new_students + (ras ? (g.returning_students ?? 0) : 0), 'Novos que já foram da escola': g.returning_students ?? 0, 'Capacidade': g.capacity, 'Taxa de rematrícula (%)': g.base_prev_year - g.graduates > 0 ? Math.round(g.reenrolled / (g.base_prev_year - g.graduates) * 100) : null }))
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="no-print" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -39,8 +42,10 @@ export default function RematriculasReport({ institutionId, institutionName }: {
             <Kpi label="REMATRICULADOS" value={rema} color="#05907B" sub={`${pct(rema, elegiveis)} dos elegíveis`} />
             <Kpi label="PRÉ-MATRICULADOS" value={pre} color="#0EA5E9" sub="só pré-matrícula, ainda não efetivaram" />
             <Kpi label="SEM MATRÍCULA NEM PRÉ" value={pend} color="#F59E0B" sub="ainda não responderam" />
-            <Kpi label="SAÍRAM" value={saiu} color="#EF4444" sub={`${novos} alunos novos`} />
+            <Kpi label="SAÍRAM" value={saiu} color="#EF4444" sub="não voltaram" />
+            <Kpi label="ALUNOS NOVOS" value={novos} color="#7C3AED" sub={ret && ras ? `${novos - ret} novatos + ${ret} que já foram da escola` : 'nunca estudaram na escola'} />
           </KpiGrid>
+          <NovosBridge novos={novos} returning={ret} returningAsNew={ras} />
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ ...card, flex: '2 1 520px', overflowX: 'auto' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 6 }}>Por série</div>
