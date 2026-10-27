@@ -1,0 +1,32 @@
+{
+ "title": "Áion Edu: CRM e campanha de matrículas para escolas particulares",
+ "description": "CRM, WhatsApp oficial, funil e campanha de matrículas para escolas particulares. O número da Activesoft é o número final. Mensagens de atendimento incluídas no plano.",
+ "h1": "Sua campanha de matrículas, do primeiro contato à matrícula, em um lugar só",
+ "sub": "Leads, WhatsApp oficial e os números do sistema da escola juntos. Você vê quanto falta para a meta, mês a mês, e o número é o mesmo da Activesoft.",
+ "faq": [
+  {
+   "q": "Preciso trocar o número de WhatsApp da escola?",
+   "a": "Não. A escola conecta o número que já usa, pelo painel. Existem duas formas: conexão em 1 clique, que mantém o número no WhatsApp Business do celular, e conexão manual pela API, informando o Phone ID e o token."
+  },
+  {
+   "q": "As mensagens do WhatsApp são cobradas?",
+   "a": "As mensagens de atendimento estão incluídas no plano. A Áion Edu não cobra por mensagem. Só as Transmissões, que são um módulo à parte, têm cobrança própria."
+  },
+  {
+   "q": "Funciona com o sistema da minha escola?",
+   "a": "Hoje a integração pronta é com a Activesoft. Outros sistemas estão em integração. Se o da sua escola não está na lista, fale com a gente."
+  },
+  {
+   "q": "Quanto tempo leva para começar?",
+   "a": "A implantação leva até 5 dias úteis: integração com o sistema, WhatsApp, equipe cadastrada e campanha montada."
+  },
+  {
+   "q": "O que é o Raio-X?",
+   "a": "É um diagnóstico gratuito da campanha de matrículas da sua escola. Em poucos minutos você vê onde famílias estão se perdendo."
+  },
+  {
+   "q": "Funciona no celular?",
+   "a": "Sim. O app foi pensado para o celular do gestor e da equipe, com as mesmas telas do computador adaptadas."
+  }
+ ]
+}

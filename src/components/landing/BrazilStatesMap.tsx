@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react'
 // Cada estado é um <polygon>/<path> com id = sigla da UF; preenchimento e
 // tooltip são aplicados via JS a partir de `data` (não há CSS :hover fixo —
 // só estados com escola cadastrada reagem ao mouse).
-const BRAZIL_SVG_MARKUP = `
+export const BRAZIL_SVG_MARKUP = `
 <svg viewBox="0 0 353.845 367.766" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mapa do Brasil por estado">
 <style>.br-state{fill:#E2E8F0;}</style>
 <g>

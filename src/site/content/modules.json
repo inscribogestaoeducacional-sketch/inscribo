@@ -1,0 +1,737 @@
+[
+ {
+  "slug": "crm-de-leads",
+  "name": "CRM de Leads",
+  "icon": "Funnel",
+  "color": "#7C3AED",
+  "bg": "#EDE9FE",
+  "headline": "Nenhuma família esquecida no funil",
+  "sub": "Todo contato vira um card no funil da escola, com origem, série de interesse, responsável e próximo passo.",
+  "problem": "A família pergunta no Instagram, volta pelo WhatsApp, visita a escola e ninguém sabe em que ponto ela está. O lead esfria sem ninguém perceber.",
+  "solution": "O CRM da Áion Edu junta tudo num funil visual. A equipe vê em que etapa cada família está, quem cuida dela e o que falta fazer.",
+  "features": [
+   {
+    "t": "Funil em quadro ou lista",
+    "d": "Arraste o card entre as etapas. A equipe toda vê a mudança na hora."
+   },
+   {
+    "t": "Uma família, um card",
+    "d": "Família com mais de um filho aparece num card só, com a decisão de cada aluno."
+   },
+   {
+    "t": "Lembrete de follow-up",
+    "d": "Aviso automático quando o lead fica dias sem contato."
+   },
+   {
+    "t": "Motivo de perda",
+    "d": "Registre por que a família não matriculou e veja o que dá para melhorar."
+   },
+   {
+    "t": "Filtros que você usa de verdade",
+    "d": "Origem, série, turno, temperatura, responsável e o atalho do Concurso de Bolsas."
+   },
+   {
+    "t": "Histórico auditável",
+    "d": "Cada mudança de etapa fica registrada."
+   }
+  ],
+  "faq": [
+   {
+    "q": "O lead entra sozinho no funil?",
+    "a": "Sim. Leads do WhatsApp, da Vitrine e da Captação inteligente entram já com a origem marcada. Você também pode cadastrar na mão."
+   },
+   {
+    "q": "Dá para ter etapas do jeito da minha escola?",
+    "a": "Sim. A escola ajusta os nomes e as etapas do funil."
+   }
+  ],
+  "shot": "leads",
+  "group": "Comercial",
+  "paid": false,
+  "seo": "crm para escolas"
+ },
+ {
+  "slug": "whatsapp",
+  "name": "WhatsApp para atendimento",
+  "icon": "WhatsappLogo",
+  "color": "#16A34A",
+  "bg": "#D1FAE5",
+  "headline": "Toda a equipe atende pelo número da escola",
+  "sub": "Uma caixa de entrada compartilhada, com fila, histórico e atendimento sem dono duplicado.",
+  "problem": "Cada atendente responde pelo próprio celular. Quando alguém sai, leva as conversas junto. Duas pessoas respondem a mesma família.",
+  "solution": "O WhatsApp oficial da Meta conectado ao painel. A fila mostra quem está esperando, cada conversa tem um responsável e o histórico fica com a escola.",
+  "features": [
+   {
+    "t": "Fila de espera",
+    "d": "Quem chegou e ainda não tem atendente aparece no topo, com o tempo de espera."
+   },
+   {
+    "t": "Minhas conversas",
+    "d": "Cada atendente vê o que é dele. Ninguém responde por cima do colega."
+   },
+   {
+    "t": "Respostas rápidas",
+    "d": "Atalhos para as perguntas de sempre: valores, horários, documentos."
+   },
+   {
+    "t": "Chat interno",
+    "d": "A equipe conversa entre si sem aparecer para a família."
+   },
+   {
+    "t": "Ficha da família ao lado",
+    "d": "Lead, visitas e dados do contato na mesma tela da conversa."
+   },
+   {
+    "t": "Mensagens incluídas no plano",
+    "d": "A escola não paga por mensagem de atendimento."
+   }
+  ],
+  "faq": [
+   {
+    "q": "Preciso trocar o número da escola?",
+    "a": "Não. A escola conecta o número que já usa. Veja as duas formas de conectar na página de integração."
+   },
+   {
+    "q": "As mensagens têm cobrança à parte?",
+    "a": "As mensagens de atendimento estão incluídas no plano. Só as Transmissões, que são um módulo à parte, são pagas."
+   }
+  ],
+  "shot": "whatsapp",
+  "group": "Comercial",
+  "paid": false,
+  "seo": "whatsapp para escolas"
+ },
+ {
+  "slug": "robo-e-sequencia",
+  "name": "Robô e sequência automática",
+  "icon": "Robot",
+  "color": "#0EA5E9",
+  "bg": "#E0F2FE",
+  "headline": "O robô atende quando a equipe não pode",
+  "sub": "Fluxos de atendimento fora do horário e uma sequência de mensagens que retoma o lead que sumiu.",
+  "problem": "A família escreve às 21h e só recebe resposta no dia seguinte. O lead que parou de responder nunca mais é lembrado.",
+  "solution": "Um construtor visual de fluxo para o robô, sem programar, e uma sequência de retomada que manda a mensagem certa no dia certo.",
+  "features": [
+   {
+    "t": "Construtor visual de fluxo",
+    "d": "Monte menus e respostas arrastando blocos. Sem código."
+   },
+   {
+    "t": "Fora do horário",
+    "d": "O robô responde, coleta nome e série e deixa a conversa pronta para a equipe."
+   },
+   {
+    "t": "Sequência de retomada",
+    "d": "Mensagens programadas para o lead que ficou parado, com pausa se a família responder."
+   },
+   {
+    "t": "Encaminhamento por setor",
+    "d": "Matrícula, financeiro e pedagógico caem na fila certa."
+   },
+   {
+    "t": "Liga e desliga em um clique",
+    "d": "Atendimento manual e robô alternam quando a escola quiser."
+   }
+  ],
+  "faq": [
+   {
+    "q": "O robô responde como se fosse uma pessoa?",
+    "a": "Ele segue o fluxo que a escola montou. Quando a família pede para falar com alguém, a conversa vai para a fila da equipe."
+   },
+   {
+    "q": "Posso desligar a sequência?",
+    "a": "Sim, por escola ou por conversa."
+   }
+  ],
+  "shot": "robo",
+  "group": "Comercial",
+  "paid": false,
+  "seo": "chatbot whatsapp para escolas"
+ },
+ {
+  "slug": "transmissoes",
+  "name": "Transmissões",
+  "icon": "PaperPlaneTilt",
+  "color": "#0284C7",
+  "bg": "#E0F2FE",
+  "headline": "Fale com muitas famílias de uma vez, do jeito certo",
+  "sub": "Campanhas de rematrícula, eventos e captação com mensagem aprovada pela Meta, público por etiqueta e relatório de entrega.",
+  "problem": "Mandar a mesma mensagem para centenas de famílias, uma por uma, toma a semana da secretaria. E enviar do jeito errado arrisca o bloqueio do número.",
+  "solution": "O módulo Transmissões envia pelo WhatsApp oficial, com modelo de mensagem aprovado, público definido e acompanhamento de quem recebeu, leu e respondeu.",
+  "features": [
+   {
+    "t": "Público por etiqueta, turma ou lista",
+    "d": "Escolha quem recebe sem montar planilha."
+   },
+   {
+    "t": "Modelo aprovado pela Meta",
+    "d": "Mensagens dentro das regras do WhatsApp oficial."
+   },
+   {
+    "t": "Nome da família na mensagem",
+    "d": "Cada família recebe o texto com o nome e os dados dela."
+   },
+   {
+    "t": "Entregues, lidas e respondidas",
+    "d": "Veja o resultado de cada envio."
+   },
+   {
+    "t": "Limite diário e horário",
+    "d": "Os envios respeitam o limite e a janela que você define."
+   }
+  ],
+  "faq": [
+   {
+    "q": "Transmissões está incluso no plano?",
+    "a": "Não. Transmissões é um módulo à parte, com cobrança própria. As conversas de atendimento continuam incluídas no plano."
+   },
+   {
+    "q": "Posso enviar para qualquer número?",
+    "a": "Só para contatos da escola, seguindo as regras da Meta."
+   }
+  ],
+  "shot": "transmissoes",
+  "group": "Comercial",
+  "paid": true,
+  "seo": "transmissao whatsapp escola"
+ },
+ {
+  "slug": "visitas",
+  "name": "Visitas",
+  "icon": "CalendarCheck",
+  "color": "#D97706",
+  "bg": "#FEF3C7",
+  "headline": "Visita marcada é visita que acontece",
+  "sub": "Agenda de visitas com confirmação, lembrete e resultado registrado.",
+  "problem": "A visita é marcada no caderno, a família esquece e a coordenação descobre na hora que ninguém veio.",
+  "solution": "A agenda de visitas fica ligada ao lead. A família recebe confirmação e lembrete pelo WhatsApp e a equipe registra o que aconteceu.",
+  "features": [
+   {
+    "t": "Agenda por dia e por semana",
+    "d": "A equipe vê as visitas do dia e quem vai receber cada uma."
+   },
+   {
+    "t": "Confirmação e lembrete automáticos",
+    "d": "Mensagens pelo WhatsApp antes da visita."
+   },
+   {
+    "t": "Reunião online",
+    "d": "Link do Google Meet criado e enviado sozinho."
+   },
+   {
+    "t": "Resultado da visita",
+    "d": "Realizada, não compareceu ou cancelada, com observações."
+   },
+   {
+    "t": "Visita sem baixa",
+    "d": "O sistema avisa quando uma visita passou e ninguém registrou o resultado."
+   }
+  ],
+  "faq": [
+   {
+    "q": "A visita aparece no card do lead?",
+    "a": "Sim. Cada visita fica no histórico do lead e muda o alerta do funil."
+   }
+  ],
+  "shot": "visitas",
+  "group": "Comercial",
+  "paid": false,
+  "seo": ""
+ },
+ {
+  "slug": "contatos",
+  "name": "Contatos",
+  "icon": "AddressBook",
+  "color": "#2563EB",
+  "bg": "#DBEAFE",
+  "headline": "Uma base só, sem duplicados",
+  "sub": "Todos os contatos da escola, com histórico de cada família.",
+  "problem": "O mesmo pai aparece três vezes: no WhatsApp, na planilha e na secretaria. Ninguém sabe qual está atualizado.",
+  "solution": "A base de contatos reúne lead, responsável e aluno vinculado, detecta duplicados e guarda a linha do tempo de cada família.",
+  "features": [
+   {
+    "t": "Detecção de duplicados",
+    "d": "O sistema aponta contatos repetidos e junta sem perder histórico."
+   },
+   {
+    "t": "Campos personalizados",
+    "d": "A escola cria os campos que precisa."
+   },
+   {
+    "t": "Importar e exportar",
+    "d": "Planilha para dentro e para fora."
+   },
+   {
+    "t": "Linha do tempo",
+    "d": "Lead, conversas, visitas e pesquisas de cada família."
+   },
+   {
+    "t": "Aluno vinculado",
+    "d": "Veja de quem é filho cada contato."
+   }
+  ],
+  "faq": [
+   {
+    "q": "Posso importar a minha planilha?",
+    "a": "Sim. Você importa por arquivo e o sistema avisa o que está repetido."
+   }
+  ],
+  "shot": "contatos",
+  "group": "Comercial",
+  "paid": false,
+  "seo": ""
+ },
+ {
+  "slug": "captacao-inteligente",
+  "name": "Captação inteligente",
+  "icon": "Megaphone",
+  "color": "#DB2777",
+  "bg": "#FCE7F3",
+  "headline": "Saiba de qual anúncio veio cada matrícula",
+  "sub": "Links de WhatsApp por campanha, com a origem marcada na conversa e no lead.",
+  "problem": "A escola investe em anúncio e não sabe qual deu resultado. O lead chega no WhatsApp sem origem.",
+  "solution": "Cada campanha ganha um link de WhatsApp próprio. A conversa já abre marcada com a origem, e o lead entra no funil com ela.",
+  "features": [
+   {
+    "t": "Link por campanha",
+    "d": "Meta, Google, Instagram, TikTok ou site, cada um com o seu."
+   },
+   {
+    "t": "Etiqueta de origem automática",
+    "d": "A conversa já nasce com a origem."
+   },
+   {
+    "t": "Resposta automática de abertura",
+    "d": "A primeira resposta sai na hora, mesmo fora do horário."
+   },
+   {
+    "t": "Painel de resultado",
+    "d": "Conversas, matrículas e investimento por campanha."
+   },
+   {
+    "t": "Investimento por campanha",
+    "d": "Lance o investimento e veja o custo por matrícula."
+   }
+  ],
+  "faq": [
+   {
+    "q": "Funciona com anúncio do Instagram?",
+    "a": "Sim. O link serve para anúncio, bio, QR code e site."
+   }
+  ],
+  "shot": "captacao",
+  "group": "Comercial",
+  "paid": false,
+  "seo": ""
+ },
+ {
+  "slug": "vitrine",
+  "name": "Vitrine Áion",
+  "icon": "Storefront",
+  "color": "#0D9488",
+  "bg": "#CCFBF1",
+  "headline": "Um link só com tudo o que a família procura",
+  "sub": "A página da escola para bio do Instagram, anúncio e QR code.",
+  "problem": "A família pergunta onde fica, qual o horário, como matricular. A resposta está espalhada em vários lugares.",
+  "solution": "A Vitrine é uma página da escola com WhatsApp, matrícula, redes, horário, mapa e perguntas frequentes, editada pelo gestor sem programador.",
+  "features": [
+   {
+    "t": "Modelos prontos",
+    "d": "Cores e estilo da escola, em poucos minutos."
+   },
+   {
+    "t": "Blocos que você escolhe",
+    "d": "WhatsApp, matrícula, horário, mapa e perguntas frequentes."
+   },
+   {
+    "t": "Origem Vitrine nos leads",
+    "d": "Quem vem pela página entra no funil já marcado."
+   },
+   {
+    "t": "Botão ligado à Captação",
+    "d": "O WhatsApp da Vitrine leva a origem junto."
+   },
+   {
+    "t": "Desempenho",
+    "d": "Visitas e cliques dos últimos dias."
+   }
+  ],
+  "faq": [
+   {
+    "q": "A Vitrine tem endereço próprio?",
+    "a": "Sim, no endereço aionedu.com.br seguido do nome da escola."
+   }
+  ],
+  "shot": "vitrine",
+  "group": "Comercial",
+  "paid": false,
+  "seo": ""
+ },
+ {
+  "slug": "campanha-de-matriculas",
+  "name": "Campanha de Matrículas",
+  "icon": "Flag",
+  "color": "#EA580C",
+  "bg": "#FFEDD5",
+  "headline": "A meta que acumula mês a mês",
+  "sub": "Plano da campanha, funil, novatos, rematrícula e mapa de matrículas por dia.",
+  "problem": "A meta de matrícula fica numa planilha. Em novembro a escola descobre que está 30% abaixo e já não há tempo.",
+  "solution": "A Campanha de Matrículas calcula a meta de cada mês, soma o que faltou ao mês seguinte e mostra o funil, os novatos e as rematrículas em um lugar.",
+  "features": [
+   {
+    "t": "Meta cumulativa",
+    "d": "O que faltou num mês soma no seguinte. O que sobrou diminui."
+   },
+   {
+    "t": "Funil visual",
+    "d": "Cadastros, contatos, agendamentos, visitas, propostas e matrículas."
+   },
+   {
+    "t": "Mapa por dia",
+    "d": "Veja matrícula a matrícula, como o calendário da campanha."
+   },
+   {
+    "t": "Novatos e rematrículas",
+    "d": "Os dois números separados, com a meta de cada um."
+   },
+   {
+    "t": "Ligado à Activesoft",
+    "d": "O número final é o do sistema da escola."
+   },
+   {
+    "t": "Mês a mês e por série",
+    "d": "Onde está o desvio, de verdade."
+   }
+  ],
+  "faq": [
+   {
+    "q": "A campanha usa o número da Activesoft?",
+    "a": "Sim. A matrícula conta pelo sistema da escola, e o funil conta só quem entrou na campanha."
+   }
+  ],
+  "shot": "campanha",
+  "group": "Matrículas",
+  "paid": false,
+  "seo": "campanha de matriculas"
+ },
+ {
+  "slug": "base-de-alunos",
+  "name": "Base de alunos",
+  "icon": "GraduationCap",
+  "color": "#059669",
+  "bg": "#D1FAE5",
+  "headline": "O número do sistema da escola, dentro da campanha",
+  "sub": "A base de alunos lida da Activesoft, com conferência entre leads e matrículas.",
+  "problem": "O CRM diz uma coisa e o sistema da escola diz outra. Ninguém confia no número.",
+  "solution": "A Base de alunos lê os alunos e as matrículas do sistema da escola e confere com os leads. O que não fecha aparece numa lista para resolver.",
+  "features": [
+   {
+    "t": "Leitura automática",
+    "d": "A carga roda toda madrugada, sem ninguém apertar nada."
+   },
+   {
+    "t": "Conferir matrículas",
+    "d": "Alunos novos sem lead, leads sem aluno e leads repetidos."
+   },
+   {
+    "t": "Por série",
+    "d": "Quantos alunos tem cada turma e quantos faltam."
+   },
+   {
+    "t": "Histórico de anos",
+    "d": "Até 4 anos de matrículas para comparar."
+   },
+   {
+    "t": "Regras da escola",
+    "d": "Aluno que já foi da escola conta como novo ou como veterano, você escolhe."
+   }
+  ],
+  "faq": [
+   {
+    "q": "Com quais sistemas funciona?",
+    "a": "Hoje com a Activesoft. Outros sistemas estão em integração."
+   }
+  ],
+  "shot": "base",
+  "group": "Matrículas",
+  "paid": false,
+  "seo": "sistema de matricula escolar"
+ },
+ {
+  "slug": "rematricula",
+  "name": "Rematrícula",
+  "icon": "ArrowsClockwise",
+  "color": "#16A34A",
+  "bg": "#DCFCE7",
+  "headline": "Quem ainda não rematriculou, série a série",
+  "sub": "O painel que mostra quem rematriculou, quem só fez a pré e quem falta.",
+  "problem": "A secretaria não sabe quantos alunos faltam rematricular nem em que série.",
+  "solution": "O painel de rematrícula cruza a base de alunos com o ano seguinte e mostra a taxa, a pré-matrícula e a lista de quem falta contatar.",
+  "features": [
+   {
+    "t": "Taxa por série",
+    "d": "Rematriculados, pré-matriculados e a rematricular."
+   },
+   {
+    "t": "Quem saiu",
+    "d": "Alunos que não voltaram, separados de quem falta."
+   },
+   {
+    "t": "Meta por mês",
+    "d": "Meta e feito de cada mês da campanha."
+   },
+   {
+    "t": "Lista de quem falta",
+    "d": "Contato direto para a equipe chamar a família."
+   }
+  ],
+  "faq": [
+   {
+    "q": "Conta a pré-matrícula?",
+    "a": "A escola escolhe se a pré-matrícula conta como rematriculado ou aparece separada."
+   }
+  ],
+  "shot": "rematricula",
+  "group": "Matrículas",
+  "paid": false,
+  "seo": "rematricula escolar"
+ },
+ {
+  "slug": "transferencias",
+  "name": "Transferências",
+  "icon": "ArrowsLeftRight",
+  "color": "#DC2626",
+  "bg": "#FEE2E2",
+  "headline": "Entenda por que a família está saindo",
+  "sub": "Pesquisa que se adapta ao motivo e diagnóstico automático de risco.",
+  "problem": "A família pede a transferência e ninguém sabe o motivo real. A escola repete o erro no ano seguinte.",
+  "solution": "Cada transferência recebe uma pesquisa por link, com perguntas que mudam conforme o motivo. A IA resume o diagnóstico.",
+  "features": [
+   {
+    "t": "Pesquisa por link",
+    "d": "A família responde pelo celular, sem login."
+   },
+   {
+    "t": "Perguntas adaptativas",
+    "d": "O que se pergunta muda conforme o motivo declarado."
+   },
+   {
+    "t": "Diagnóstico por IA",
+    "d": "Resumo do risco e do que a escola pode fazer."
+   },
+   {
+    "t": "Status completo",
+    "d": "Aguardando, respondida, confirmada ou retida."
+   },
+   {
+    "t": "Relatório",
+    "d": "Motivos que mais aparecem, por período."
+   }
+  ],
+  "faq": [
+   {
+    "q": "A família precisa de cadastro?",
+    "a": "Não. Basta o link."
+   }
+  ],
+  "shot": "transferencias",
+  "group": "Matrículas",
+  "paid": false,
+  "seo": ""
+ },
+ {
+  "slug": "relatorios",
+  "name": "Relatórios",
+  "icon": "ChartLineUp",
+  "color": "#3B82F6",
+  "bg": "#DBEAFE",
+  "headline": "Relatório pronto para a reunião da diretoria",
+  "sub": "Leads, WhatsApp, atendimento, satisfação, matrículas e rematrículas, por período.",
+  "problem": "Montar o relatório do mês leva dias e cada pessoa usa um número diferente.",
+  "solution": "Os relatórios saem prontos, com os mesmos números do app, filtro por período, exportação e análise por IA.",
+  "features": [
+   {
+    "t": "Leads e funil",
+    "d": "Entradas, etapas e conversão por origem."
+   },
+   {
+    "t": "Atendimento",
+    "d": "Tempo de resposta e conversas por atendente."
+   },
+   {
+    "t": "Matrículas e rematrículas",
+    "d": "Os mesmos números da campanha."
+   },
+   {
+    "t": "Exportar",
+    "d": "Planilha e relatório para imprimir."
+   },
+   {
+    "t": "Análise por IA",
+    "d": "Resumo com pontos fortes e pontos de atenção."
+   }
+  ],
+  "faq": [
+   {
+    "q": "Os números batem com a campanha?",
+    "a": "Sim. Relatórios e campanha usam a mesma base."
+   }
+  ],
+  "shot": "relatorios",
+  "group": "Análise",
+  "paid": false,
+  "seo": ""
+ },
+ {
+  "slug": "pesquisas-e-nps",
+  "name": "Pesquisas e NPS",
+  "icon": "ClipboardText",
+  "color": "#F97316",
+  "bg": "#FFEDD5",
+  "headline": "Saiba o que as famílias pensam, antes de elas saírem",
+  "sub": "Pesquisa por link, nota geral e NPS calculados sozinhos.",
+  "problem": "A escola só descobre a insatisfação quando a família já foi embora.",
+  "solution": "A pesquisa vai por link. A nota e o NPS saem calculados, e a IA aponta pontos fortes, fracos e risco de não rematrícula.",
+  "features": [
+   {
+    "t": "Perguntas padrão ou suas",
+    "d": "A escola escolhe."
+   },
+   {
+    "t": "Nota e NPS automáticos",
+    "d": "Sem tabular nada."
+   },
+   {
+    "t": "Análise por IA",
+    "d": "Pontos fortes, fracos e risco."
+   },
+   {
+    "t": "Alerta de avaliação negativa",
+    "d": "A coordenação sabe na hora."
+   }
+  ],
+  "faq": [
+   {
+    "q": "Precisa instalar algo?",
+    "a": "Não. A família responde pelo link."
+   }
+  ],
+  "shot": "pesquisas",
+  "group": "Análise",
+  "paid": false,
+  "seo": ""
+ },
+ {
+  "slug": "minha-campanha",
+  "name": "Minha campanha",
+  "icon": "ListChecks",
+  "color": "#EA580C",
+  "bg": "#FFEDD5",
+  "headline": "O passo a passo da campanha, do funil ao acompanhamento",
+  "sub": "Um roteiro de 10 etapas que marca sozinho o que já foi feito.",
+  "problem": "O gestor sabe que precisa montar a campanha, mas não sabe por onde começar.",
+  "solution": "O roteiro Minha campanha mostra as etapas, quanto tempo cada uma leva e leva direto à tela certa.",
+  "features": [
+   {
+    "t": "10 etapas",
+    "d": "Funil, base de alunos, campanha, metas, sequência, vitrine, captação, transmissões, pesquisa e acompanhamento."
+   },
+   {
+    "t": "Marca sozinho",
+    "d": "O sistema confere o que consegue."
+   },
+   {
+    "t": "Tempo de cada etapa",
+    "d": "Você sabe quanto leva."
+   },
+   {
+    "t": "Aviso no Início",
+    "d": "O gestor vê a campanha % pronta ao entrar."
+   }
+  ],
+  "faq": [
+   {
+    "q": "É obrigatório seguir a ordem?",
+    "a": "Não, mas a ordem foi pensada para facilitar."
+   }
+  ],
+  "shot": "roteiro",
+  "group": "Ajuda",
+  "paid": false,
+  "seo": "como montar campanha de matricula"
+ },
+ {
+  "slug": "academia",
+  "name": "Academia",
+  "icon": "BookOpenText",
+  "color": "#05907B",
+  "bg": "#E6F7F5",
+  "headline": "A equipe aprende dentro do próprio app",
+  "sub": "Aulas curtas para o gestor e para a equipe usarem cada módulo.",
+  "problem": "O sistema entra na escola, mas ninguém tem tempo de aprender.",
+  "solution": "A Academia reúne aulas passo a passo dentro do app, por módulo e por função.",
+  "features": [
+   {
+    "t": "Aulas por módulo",
+    "d": "Do funil à campanha."
+   },
+   {
+    "t": "Para gestor e equipe",
+    "d": "Cada função vê o que precisa."
+   },
+   {
+    "t": "Sempre à mão",
+    "d": "Dentro do app, sem sair da tela."
+   }
+  ],
+  "faq": [
+   {
+    "q": "As aulas são em vídeo?",
+    "a": "São aulas passo a passo dentro do app."
+   }
+  ],
+  "shot": "academia",
+  "group": "Ajuda",
+  "paid": false,
+  "seo": ""
+ },
+ {
+  "slug": "usuarios-e-permissoes",
+  "name": "Usuários e permissões",
+  "icon": "UsersThree",
+  "color": "#4F46E5",
+  "bg": "#E0E7FF",
+  "headline": "Cada pessoa vê o que precisa ver",
+  "sub": "Gestores, coordenação e atendentes, com permissões por função.",
+  "problem": "Todos veem tudo, ou ninguém vê nada.",
+  "solution": "A escola cadastra a equipe e define quem vê todas as conversas, quem vê o histórico e quem acessa as configurações.",
+  "features": [
+   {
+    "t": "Três perfis",
+    "d": "Administrador, gestor e atendente."
+   },
+   {
+    "t": "Permissões por pessoa",
+    "d": "Ver todas as conversas, ver histórico completo."
+   },
+   {
+    "t": "Disponibilidade",
+    "d": "Marque quem está atendendo."
+   },
+   {
+    "t": "Ativar e desativar",
+    "d": "Sem perder o histórico."
+   }
+  ],
+  "faq": [
+   {
+    "q": "Posso ter várias unidades?",
+    "a": "Sim. O funil e as visitas podem ser por unidade."
+   }
+  ],
+  "shot": "usuarios",
+  "group": "Administração",
+  "paid": false,
+  "seo": ""
+ }
+]

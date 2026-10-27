@@ -27,6 +27,11 @@ import NovidadeModulo     from './pages/NovidadeModulo'
 import { NOVIDADE_VITRINE } from './pages/novidadeVitrineContent'
 import { NOVIDADE_TRANSMISSOES } from './pages/novidadeTransmissoesContent'
 import Landing            from './pages/Landing'
+import { lazy, Suspense } from 'react'
+const SiteHome = lazy(() => import('./site/Home'))
+const SiteModules = lazy(() => import('./site/pages/ModulesHub'))
+const SiteModule = lazy(() => import('./site/pages/ModuleRoute'))
+void Landing
 import ResetPassword      from './pages/ResetPassword'
 import Privacidade        from './pages/Privacidade'
 import Termos             from './pages/Termos'
@@ -280,7 +285,9 @@ function AppContent() {
   if (!user) {
     return (
       <Routes>
-        <Route path="/"               element={<Landing />} />
+        <Route path="/"               element={<Suspense fallback={<BrandLoader fullscreen label="Carregando" />}><SiteHome /></Suspense>} />
+        <Route path="/modulos"        element={<Suspense fallback={null}><SiteModules /></Suspense>} />
+        <Route path="/modulos/:slug"  element={<Suspense fallback={null}><SiteModule /></Suspense>} />
         <Route path="/privacidade"    element={<Privacidade />} />
         <Route path="/termos"         element={<Termos />} />
         <Route path="/sobre"          element={<SobreNos />} />
