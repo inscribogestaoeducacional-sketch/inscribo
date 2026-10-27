@@ -62,17 +62,18 @@ Deno.serve(async (req) => {
     if (diagnostico && typeof diagnostico === 'object' && Number.isFinite(Number(co_entidade))) {
       try {
         const num = (v: unknown) => (typeof v === 'number' && isFinite(v) ? Math.round(v) : null)
+        const small = (o: unknown) => (o && typeof o === 'object' && JSON.stringify(o).length < 60000 ? o : null)
         const txt = (v: unknown, n: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null)
         const { data: dg, error: dgErr } = await supabase.from('raiox_diagnostico').insert({
           lead_id: lead?.id ?? null,
           co_entidade: Number(co_entidade),
-          respostas: diagnostico.respostas && typeof diagnostico.respostas === 'object' ? diagnostico.respostas : {},
+          respostas: small(diagnostico.respostas) ?? {},
           pontuacao: num(diagnostico.pontuacao),
           faixa: txt(diagnostico.faixa, 20),
           instagram: txt(diagnostico.instagram, 60),
           instagram_texto: txt(diagnostico.instagram_texto, 6000),
-          instagram_dados: diagnostico.instagram_dados && typeof diagnostico.instagram_dados === 'object' ? diagnostico.instagram_dados : null,
-          outras_cidades: diagnostico.outras_cidades && typeof diagnostico.outras_cidades === 'object' ? diagnostico.outras_cidades : null,
+          instagram_dados: small(diagnostico.instagram_dados),
+          outras_cidades: small(diagnostico.outras_cidades),
         }).select('id').single()
         if (dgErr) console.error('[raio-x-lead] diagnóstico:', dgErr.message)
         else diagnostico_id = dg?.id ?? null
