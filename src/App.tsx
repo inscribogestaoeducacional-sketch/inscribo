@@ -69,6 +69,8 @@ import InternalChatWidget from './components/chat/InternalChatWidget'
 // ── Super Admin ───────────────────────────────────────────────────────────
 import AdminHome        from './components/superadmin/AdminHome'
 import AdminSchools     from './components/superadmin/AdminSchools'
+import AdminRoteiro     from './components/superadmin/AdminRoteiro'
+import RoteiroCampanha from './pages/gestor/RoteiroCampanha'
 import AdminFinancial   from './components/superadmin/AdminFinancial'
 import AdminBroadcastPricing from './components/superadmin/AdminBroadcastPricing'
 import AdminSettings    from './components/superadmin/AdminSettings'
@@ -323,6 +325,7 @@ function AppContent() {
         <Route path="/super-admin"                    element={<AdminHome />} />
         <Route path="/super-admin/crm"                element={<AdminCRM />} />
         <Route path="/super-admin/schools"              element={<AdminSchools />} />
+        <Route path="/super-admin/roteiro"              element={<AdminRoteiro />} />
         <Route path="/super-admin/schools/:id"        element={<InstitutionDetails />} />
         <Route path="/super-admin/school-groups"       element={<AdminSchoolGroups />} />
         <Route path="/super-admin/school-groups/:id"   element={<AdminSchoolGroups />} />
@@ -410,6 +413,7 @@ function AppContent() {
             {/* Fase 6.2: gestor também abre; cada item é filtrado por perfil em lib/settingsAccess.ts */}
             <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin','manager']}><SystemSettings /></ProtectedRoute>} />
             <Route path="/academia"     element={<Academia />} />
+            <Route path="/roteiro"      element={<ProtectedRoute allowedRoles={['admin','manager']}><RoteiroCampanha /></ProtectedRoute>} />
             <Route path="/profile"      element={<UserProfile />} />
             <Route path="/setup"        element={<InitialSetup />} />
             <Route path="/login"        element={<Navigate to={schoolDefault} replace />} />

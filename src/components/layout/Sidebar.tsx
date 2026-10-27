@@ -7,10 +7,11 @@ import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
+import { useRoadmap } from '../../lib/roadmap'
 import { X, SlidersHorizontal, LayoutGrid, MessageSquare } from 'lucide-react'
 import {
   House, Funnel, AddressBook, WhatsappLogo, CalendarCheck, Megaphone, Storefront, PaperPlaneTilt, Flag,
-  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle, BookOpenText,
+  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle, BookOpenText, ListChecks,
 } from '@phosphor-icons/react'
 import type { Icon as PhIcon } from '@phosphor-icons/react'
 
@@ -45,6 +46,7 @@ const NAV_CFG: NavItem[] = [
   // Administração
   { path: '/users',           label: 'Usuários',        iconBg: '#E0E7FF', iconColor: '#4F46E5', Icon: UsersThree,      roles: ['admin'], module: 'usuarios',      group: 'Administração' },
   { path: '/settings',        label: 'Configurações',   iconBg: '#E2E8F0', iconColor: '#334155', Icon: GearSix,        roles: ['admin','manager'], module: 'configuracoes', group: 'Administração' },  // Ajuda
+  { path: '/roteiro',         label: 'Minha campanha',  iconBg: '#FFEDD5', iconColor: '#EA580C', Icon: ListChecks,     roles: ['admin','manager'], module: 'roteiro', group: 'Ajuda' },
   { path: '/academia',        label: 'Academia',        iconBg: '#E6F7F5', iconColor: '#05907B', Icon: BookOpenText,   roles: ['admin','manager','user'], module: 'academia', group: 'Ajuda' },
 ]
 
@@ -128,10 +130,12 @@ export default function Sidebar() {
   const broadcastEnabled = useBroadcastEnabled(user?.institution_id)
   // Base de alunos só com o módulo liberado pela Áion pra escola.
   const baseEnabled = useBaseModuleEnabled(user?.institution_id)
+  const { state: roadmap } = useRoadmap(user?.institution_id)
   const navItems = NAV_CFG.filter(item =>
     item.roles.includes(user?.role || 'user') && isModuleEnabled(item.module)
     && (item.module !== 'transmissoes' || broadcastEnabled === true)
     && (item.module !== 'base_alunos' || baseEnabled === true)
+    && (item.module !== 'roteiro' || roadmap?.released === true)
   )
   // Título do grupo antes do primeiro sub-item visível (sem sub-item visível, sem título)
   const navEntries: (NavItem | { header: string })[] = navItems.flatMap((it, i) =>

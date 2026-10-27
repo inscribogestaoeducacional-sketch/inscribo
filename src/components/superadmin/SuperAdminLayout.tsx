@@ -12,7 +12,7 @@ import {
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
   AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3, Network,
-  MapPinned, MessageSquare, Send, LifeBuoy,
+  MapPinned, MessageSquare, Send, LifeBuoy, ListChecks,
 } from 'lucide-react'
 import {
   House, TrendUp, Tray, Buildings, TreeStructure, MapPinLine, GearSix, UsersThree, ChartLineUp, BookOpenText, WhatsappLogo, ChatCircleText,
@@ -59,6 +59,7 @@ const ADMIN_GROUPS: MenuGroup[] = [
     items: [
       { path: '/super-admin/schools',       label: 'Escolas',         icon: Building2 },
       { path: '/super-admin/school-groups', label: 'Grupos Escolares', icon: Network  },
+      { path: '/super-admin/roteiro',       label: 'Roteiro da campanha', icon: ListChecks },
     ],
   },
   {

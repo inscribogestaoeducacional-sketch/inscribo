@@ -13,7 +13,7 @@ const TITLES: [string, string][] = [
   ['/home', 'Início'], ['/atendente', 'Início'], ['/dashboard', 'Painel'], ['/leads', 'Leads'], ['/clients', 'Clientes'], ['/contacts', 'Contatos'], ['/visits', 'Visitas'],
   ['/whatsapp', 'WhatsApp'], ['/captacao', 'Captação inteligente'], ['/vitrine', 'Vitrine'], ['/transmissoes', 'Transmissões'], ['/campanha', 'Campanha de matrículas'],
   ['/base-alunos', 'Base de alunos'], ['/transferencias', 'Transferências'], ['/updates', 'Atualizações'], ['/pesquisas', 'Pesquisas'], ['/reports', 'Relatórios'],
-  ['/users', 'Usuários'], ['/settings', 'Configurações'], ['/academia', 'Academia'], ['/profile', 'Meu perfil'],
+  ['/users', 'Usuários'], ['/settings', 'Configurações'], ['/academia', 'Academia'], ['/roteiro', 'Minha campanha'], ['/profile', 'Meu perfil'],
   ['/entrar', 'Bem-vindo'], ['/login', 'Entrar'], ['/reset-password', 'Redefinir senha'], ['/privacidade', 'Política de privacidade'], ['/termos', 'Termos de uso'],
   ['/sobre', 'Sobre a Áion'], ['/parceiros', 'Parceiros'], ['/parceria-meta', 'Parceria com a Meta'],
 ]
