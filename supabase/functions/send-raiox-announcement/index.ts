@@ -8,58 +8,73 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 const LINK = 'https://aionedu.com.br/raio-x'
 const WA = 'https://wa.me/5583993444383'
 const F = `'Helvetica Neue',Helvetica,Arial,sans-serif`
-const li = (t: string) => `<li style="margin:0 0 9px;">${t}</li>`
-const h2 = (t: string) => `<p style="margin:22px 0 8px;font-size:13px;font-weight:800;letter-spacing:.08em;color:#00523C;">${t}</p>`
-const ITENS = [
-  '<b>Sua posição na cidade</b>, por etapa de ensino, entre as escolas particulares.',
-  '<b>Crescimento em 5 anos</b> da escola e da cidade, e onde os alunos saem entre uma etapa e outra.',
-  '<b>Mapa de bairros</b>: onde estão as crianças, a renda das famílias e as concorrentes.',
-  '<b>ENEM, nascimentos e estrutura</b> frente às concorrentes mais próximas.',
-  '<b>Inteligência de marketing do Instagram</b>: nota de 0 a 100, melhor formato, melhor dia para postar e os 3 ajustes que mais mudam o resultado.',
-  '<b>Nota de atendimento</b> (5 perguntas rápidas) e um <b>diagnóstico escrito por IA</b> com as 3 maiores oportunidades.',
+const SITE = 'https://www.aionedu.com.br'
+const ITENS: [string, string][] = [
+  ['Sua posição na cidade', 'Ranking entre as escolas particulares, por etapa de ensino.'],
+  ['Crescimento em 5 anos', 'Da sua escola e da cidade, e onde os alunos saem entre uma etapa e outra.'],
+  ['Mapa de bairros', 'Onde estão as crianças, a renda das famílias e as concorrentes.'],
+  ['ENEM, nascimentos e estrutura', 'Você frente às concorrentes mais próximas.'],
+  ['Instagram, de 0 a 100', 'Nota do perfil, melhor formato, melhor dia para postar e 3 ajustes.'],
+  ['Atendimento e diagnóstico por IA', 'Nota em 5 perguntas rápidas e as 3 maiores oportunidades.'],
 ]
 type Aud = 'gestores' | 'leads'
-const COPY: Record<Aud, { release: string; subject: string; titulo: string; intro: string[]; fecho: string[]; cta: string }> = {
+export const COPY: Record<Aud, { release: string; subject: string; pre: string; tag: string; titulo: string; sub: string; intro: string[]; cta: string }> = {
   gestores: {
     release: 'raiox-gestores-2026-10',
     subject: 'Novo na Áion: o Raio-X Estratégico da sua escola, grátis',
-    titulo: 'Conheça o Raio-X Estratégico',
+    pre: 'Um relatório de 16 páginas com os números públicos da sua escola e da sua cidade.',
+    tag: 'NOVIDADE NA ÁION',
+    titulo: 'Raio-X Estratégico: veja a sua escola como o mercado vê',
+    sub: 'Um relatório em PDF, grátis, feito só com dados públicos oficiais e comparando apenas escolas particulares.',
     intro: [
-      'Acabamos de lançar o <b>Raio-X Estratégico</b>: um relatório em PDF com a inteligência de mercado e de marketing da escola, feito só com dados públicos oficiais (INEP, IBGE e Ministério da Saúde) e comparando apenas escolas particulares.',
-      'É grátis, leva poucos minutos e está disponível para a sua escola agora. Gere o da sua unidade e leve os números para a próxima reunião de matrículas.',
+      'Acabamos de lançar o <b>Raio-X Estratégico</b>. Em poucos minutos você recebe a posição da sua escola na cidade, o que mudou nos últimos 5 anos e onde estão as oportunidades de matrícula.',
+      'Gere o da sua unidade e leve os números para a próxima reunião de matrículas.',
     ],
-    fecho: ['Para a parte do Instagram, basta informar o @ da escola (perfil profissional e público). Páginas sem dado público para a sua cidade não aparecem.', 'Gerou o seu? Conte para a gente o que achou: cada sugestão vira melhoria.'],
     cta: 'Gerar o Raio-X da minha escola',
   },
   leads: {
     release: 'raiox-leads-2026-10',
     subject: 'Você já planejou as matrículas 2027? Seu Raio-X grátis',
+    pre: 'Veja onde a sua escola está no mercado antes de definir as metas de 2027.',
+    tag: 'GRÁTIS, EM POUCOS MINUTOS',
     titulo: 'Você já planejou as matrículas 2027?',
+    sub: 'Gere o Raio-X Estratégico da sua escola: um relatório em PDF, feito só com dados públicos oficiais e comparando apenas escolas particulares.',
     intro: [
-      'A Áion Edu criou o <b>Raio-X Estratégico</b>: um relatório gratuito, em PDF, que mostra como a sua escola está posicionada no mercado e onde ela pode crescer. Usa só dados públicos oficiais (INEP, IBGE e Ministério da Saúde) e compara apenas escolas particulares.',
-      'Gere o da sua escola em poucos minutos, sem cartão.',
+      'Antes de definir metas e campanhas, vale saber como a sua escola está posicionada e onde ela pode crescer. É isso que o <b>Raio-X Estratégico</b> mostra, sem cartão e sem compromisso.',
     ],
-    fecho: ['Para a parte do Instagram, basta informar o @ da escola (perfil profissional e público). Páginas sem dado público para a sua cidade não aparecem.'],
     cta: 'Gerar meu Raio-X grátis',
   },
 }
-const html = (a: Aud, nome: string) => { const c = COPY[a]; return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#F0F4F8;font-family:${F};">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F0F4F8;padding:24px 0;"><tr><td align="center">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;">
-<tr><td style="background:#00523C;padding:22px 28px;"><img src="https://www.aionedu.com.br/aion-logo-full.png" alt="Áion Edu" height="34" style="display:block;height:34px;"></td></tr>
-<tr><td style="padding:28px 28px 8px;color:#1A2B4A;font-size:15px;line-height:1.55;">
-<h1 style="margin:0 0 12px;font-size:24px;line-height:1.2;color:#00523C;">${c.titulo}</h1>
-<p style="margin:0 0 12px;">Olá${nome ? `, ${nome}` : ''}!</p>
-${c.intro.map(p => `<p style="margin:0 0 12px;">${p}</p>`).join('\n')}
-${h2('O QUE VEM NO RELATÓRIO')}
-<ul style="margin:0 0 16px;padding-left:20px;">${ITENS.map(li).join('\n')}</ul>
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px;"><tr><td style="background:#00A896;border-radius:12px;"><a href="${LINK}" style="display:inline-block;padding:14px 28px;color:#ffffff;font-weight:800;font-size:15px;text-decoration:none;">${c.cta}</a></td></tr></table>
-${c.fecho.map(p => `<p style="margin:0 0 12px;">${p}</p>`).join('\n')}
-<p style="margin:0 0 12px;">Prefere conversar? <a href="${WA}" style="color:#00A896;font-weight:700;">Fale com a Áion no WhatsApp</a>, (83) 99344-4383.</p>
-<p style="margin:0 0 24px;">Um abraço,<br>Equipe Áion Soluções Tecnológicas</p>
+const card = (t: string, d: string) => `<td width="50%" valign="top" style="padding:5px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F1F8F5;border-left:4px solid #00A896;border-radius:10px;"><tr><td style="padding:13px 14px;font-family:${F};"><div style="font-size:14px;font-weight:800;color:#00382B;line-height:1.25;">${t}</div><div style="font-size:12.5px;color:#46605A;line-height:1.45;margin-top:4px;">${d}</div></td></tr></table></td>`
+const pg = (n: number, w: number) => `<td align="center" valign="top" style="padding:0 5px;"><img src="${SITE}/raiox/prev-${n}.jpg" width="${w}" alt="Página do Raio-X (exemplo com dados fictícios)" style="display:block;width:${w}px;height:auto;border-radius:6px;border:1px solid #D3E4DD;"></td>`
+const btn = (txt: string, dark: boolean) => `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${dark ? '#19D3B5' : '#00523C'};border-radius:12px;"><a href="${LINK}" style="display:inline-block;padding:15px 30px;font-family:${F};font-size:16px;font-weight:800;color:${dark ? '#00352A' : '#FFFFFF'};text-decoration:none;">${txt}</a></td></tr></table>`
+export const html = (a: Aud, nome: string) => { const c = COPY[a]; return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#E6EFEB;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#E6EFEB;">${c.pre}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#E6EFEB;padding:20px 0;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#FFFFFF;border-radius:18px;overflow:hidden;">
+<tr><td bgcolor="#003D2E" style="background:#003D2E;background-image:linear-gradient(135deg,#00523C 0%,#002A20 100%);padding:28px 32px 34px;font-family:${F};">
+<img src="${SITE}/raiox/logo-branca.png" alt="Áion Edu" width="120" style="display:block;width:120px;height:auto;margin-bottom:30px;">
+<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#19D3B5;border-radius:20px;padding:5px 12px;font-size:11px;font-weight:800;letter-spacing:.06em;color:#00352A;">${c.tag}</td></tr></table>
+<h1 style="margin:16px 0 12px;font-size:32px;line-height:1.15;color:#FFFFFF;font-weight:800;">${c.titulo}</h1>
+<p style="margin:0 0 24px;font-size:16px;line-height:1.5;color:#BFE8DF;">${c.sub}</p>
+${btn(c.cta, true)}
 </td></tr>
-<tr><td style="background:#F8FAFC;padding:16px 28px;color:#64748B;font-size:12px;text-align:center;">Áion Soluções Tecnológicas · aionedu.com.br<br>Não quer receber novidades? Avise pelo WhatsApp e retiramos o seu e-mail.</td></tr>
+<tr><td bgcolor="#EAF4F0" align="center" style="background:#EAF4F0;padding:26px 16px 22px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>${pg(1, 160)}${pg(8, 160)}${pg(6, 160)}</tr></table>
+<div style="font-family:${F};font-size:11.5px;color:#5B7770;margin-top:12px;">Páginas de exemplo, com dados fictícios. O seu relatório traz os números reais da sua escola.</div></td></tr>
+<tr><td style="padding:30px 32px 6px;font-family:${F};color:#1A2B4A;font-size:15.5px;line-height:1.6;">
+<p style="margin:0 0 12px;font-size:17px;font-weight:700;color:#00382B;">Olá${nome ? `, ${nome}` : ''}!</p>
+${c.intro.map(p => `<p style="margin:0 0 12px;">${p}</p>`).join('\n')}
+</td></tr>
+<tr><td style="padding:6px 27px 8px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>${card(...ITENS[0])}${card(...ITENS[1])}</tr><tr>${card(...ITENS[2])}${card(...ITENS[3])}</tr><tr>${card(...ITENS[4])}${card(...ITENS[5])}</tr></table></td></tr>
+<tr><td style="padding:22px 32px 8px;font-family:${F};color:#1A2B4A;font-size:14px;line-height:1.6;">
+<p style="margin:0 0 20px;color:#46605A;">Fontes: INEP, IBGE e Ministério da Saúde. Para a parte do Instagram, basta informar o @ da escola (perfil profissional e público). Páginas sem dado público para a sua cidade não aparecem no relatório.</p>
+${btn(c.cta, false)}
+<p style="margin:22px 0 0;font-size:15px;">Prefere conversar? <a href="${WA}" style="color:#007D71;font-weight:800;">Fale com a Áion no WhatsApp</a>, (83) 99344-4383.</p>
+<p style="margin:16px 0 26px;font-size:15px;">Um abraço,<br><b>Equipe Áion Soluções Tecnológicas</b></p>
+</td></tr>
+<tr><td bgcolor="#F4F8F6" align="center" style="background:#F4F8F6;padding:18px 28px;font-family:${F};font-size:12px;line-height:1.5;color:#6A817B;">Áion Soluções Tecnológicas · aionedu.com.br<br>Não quer receber novidades? Avise pelo WhatsApp e retiramos o seu e-mail.</td></tr>
 </table></td></tr></table></body></html>` }
 
 async function brevo(key: string, a: Aud, to: string, name: string) {
