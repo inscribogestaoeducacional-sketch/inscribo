@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { SHARED_CSS } from '../styles/sharedCSS'
 import AION_LOGO_B64 from '../lib/aionLogo'
+import RaioXGate from './RaioXGate'
 import { gerarRaioXBlob } from '../lib/raiox/pdf/gerar'
 import { PERGUNTAS, pontuar, respondeuTudo, type Respostas } from '../lib/raiox/atendimento'
 import { limpaTexto } from '../lib/raiox/data'
@@ -166,18 +167,6 @@ const backLinkStyle: React.CSSProperties = {
 }
 
 // ─── portão de entrada (gate) — exibido antes do fluxo de busca/formulário ───
-const GATE_ITEMS: { t: string; d: string }[] = [
-  { t: 'Sua posição na cidade', d: 'Ranking entre as escolas particulares, por etapa de ensino.' },
-  { t: 'Crescimento e perda de alunos', d: 'Quanto a escola e a cidade cresceram em 5 anos e onde os alunos saem.' },
-  { t: 'Mapa de bairros', d: 'Onde estão as crianças, a renda das famílias e as concorrentes.' },
-  { t: 'ENEM e estrutura', d: 'Sua nota frente às outras particulares e o que as concorrentes oferecem.' },
-  { t: 'Nascimentos e creche', d: 'A demanda que vem por aí nos próximos anos.' },
-  { t: 'Nota do Instagram', d: 'Se você informar o @, avaliamos o perfil e os últimos posts.' },
-  { t: 'Nota de atendimento', d: 'Seis perguntas mostram onde a matrícula escapa.' },
-  { t: 'Diagnóstico e 3 oportunidades', d: 'Um resumo escrito por IA e os caminhos de maior ganho.' },
-]
-const GATE_STEPS = ['Escolha sua escola', 'Responda 6 perguntas rápidas', 'Baixe o PDF na hora']
-
 function CheckIcon({ size = 22, color = VD }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
@@ -203,131 +192,6 @@ function SchoolIcon({ size = 20, color = VD }: { size?: number; color?: string }
       <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
       <polyline points="9 22 9 12 15 12 15 22" />
     </svg>
-  )
-}
-
-function WhatsAppIcon({ size = 18, color = '#fff' }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-    </svg>
-  )
-}
-
-function ArrowRightIcon({ size = 18, color = VD }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <line x1="4" y1="12" x2="19" y2="12" />
-      <polyline points="13 6 19 12 13 18" />
-    </svg>
-  )
-}
-
-const AION_WHATSAPP_URL = 'https://wa.me/5583993444383?text=Ol%C3%A1!%20Vi%20o%20Raio-X%20Estrat%C3%A9gico%20da%20%C3%81ion%20Edu%20e%20quero%20saber%20mais.'
-
-function GateScreen({ onStart }: { onStart: () => void }) {
-  return (
-    <div>
-      {/* ── Seção 1 — Hero principal ──────────────────────────────── */}
-      <div className="rx-gate-hero" style={{ position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center' }}>
-        <div style={{ position: 'absolute', top: -100, right: -100, width: 340, height: 340, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
-        <div style={{ position: 'absolute', bottom: -120, left: -80, width: 280, height: 280, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
-        <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
-        <div style={{ maxWidth: 680, margin: '0 auto', position: 'relative', zIndex: 1, textAlign: 'center', padding: '0 20px' }}>
-          <div className="rx-gate-anim rx-gate-anim-1" style={{
-            background: 'rgba(255,255,255,0.96)', borderRadius: 16, padding: '9px 16px', display: 'inline-flex', alignItems: 'center',
-            marginBottom: 22, boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-          }}>
-            <img src={AION_LOGO_B64} alt="Áion Edu" style={{ height: 26, objectFit: 'contain' }} />
-          </div>
-
-          <div className="rx-gate-anim rx-gate-anim-2" style={{
-            display: 'block', padding: '8px 18px', borderRadius: 999,
-            background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.3)',
-            marginBottom: 22,
-          }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Atenção, diretores e mantenedores de escolas
-            </span>
-          </div>
-
-          <h1 className="s-title rx-gate-anim rx-gate-anim-3" style={{ margin: 0, fontSize: 'clamp(28px, 6vw, 48px)', color: '#fff', lineHeight: 1.15 }}>
-            VOCÊ JÁ PLANEJOU AS MATRÍCULAS 2027?
-          </h1>
-
-          <div className="rx-gate-anim rx-gate-anim-4">
-            <p style={{ margin: '20px auto 0', fontSize: 'clamp(14px, 2.4vw, 17px)', color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, maxWidth: 480 }}>
-              Descubra gratuitamente como sua escola está posicionada no mercado e identifique oportunidades para crescer.
-            </p>
-
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 9, marginTop: 26,
-              padding: '11px 20px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.28)',
-            }}>
-              <span style={{ fontSize: 14, lineHeight: 1 }}>🟢</span>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fff' }}>Receba seu Raio-X Estratégico em poucos minutos.</span>
-            </div>
-          </div>
-
-          <div className="rx-gate-anim rx-gate-anim-5" style={{ marginTop: 34, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-            <button type="button" className="btn-white rx-gate-btn rx-gate-btn-primary" onClick={onStart} style={{ fontSize: 15, padding: '17px 44px', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-              CLIQUE AQUI E GERE AGORA SEU RAIO-X
-              <span className="rx-cta-arrow"><ArrowRightIcon size={18} color={VD} /></span>
-            </button>
-            <a
-              href={AION_WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-ghost rx-gate-btn"
-              style={{ fontSize: 13, padding: '11px 26px' }}
-            >
-              <WhatsAppIcon size={16} />
-              Falar no WhatsApp
-            </a>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Seção 2 — O que vem no relatório ───────────────────────── */}
-      <div style={{ background: '#fff', padding: 'clamp(48px, 9vw, 84px) 20px' }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', textAlign: 'center' }}>
-          <h2 className="s-title" style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 36px)', color: VD, lineHeight: 1.2 }}>
-            UM RELATÓRIO COMPLETO DA SUA ESCOLA.
-          </h2>
-          <p style={{ margin: '12px auto 0', maxWidth: 520, fontSize: 15, color: MUTED, lineHeight: 1.6 }}>
-            Até 16 páginas feitas só com dados públicos oficiais (INEP, IBGE e Ministério da Saúde), comparando apenas escolas particulares.
-          </p>
-          <div className="rx-prev" style={{ marginTop: 34, marginBottom: 30 }}>
-            {[1, 2, 6, 9].map(n => <img key={n} src={`/raiox/prev-${n}.jpg`} alt="Página do Raio-X" loading="lazy" />)}
-          </div>
-          <div className="rx-feat" style={{ textAlign: 'left' }}>
-            {GATE_ITEMS.map(it => (
-              <div key={it.t} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', borderRadius: 16, background: SOFT, border: `1px solid ${BORDER}` }}>
-                <CheckIcon size={22} />
-                <div><div style={{ fontSize: 14.5, fontWeight: 800, color: TEXT }}>{it.t}</div><div style={{ fontSize: 12.5, color: MUTED, marginTop: 2, lineHeight: 1.5 }}>{it.d}</div></div>
-              </div>
-            ))}
-          </div>
-          <p style={{ margin: '14px 0 0', fontSize: 12, color: MUTED }}>Páginas sem dado público para a sua escola ou cidade não aparecem.</p>
-
-          <div style={{ marginTop: 40, display: 'flex', flexWrap: 'wrap', gap: 14, justifyContent: 'center' }}>
-            {GATE_STEPS.map((t, i) => (
-              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg, ${VD}, ${VM})`, color: '#fff', fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</div>
-                <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>{t}</span>
-              </div>
-            ))}
-          </div>
-
-          <p style={{ margin: '32px 0 0', fontSize: 18, fontWeight: 800, color: VD }}>Tudo isso gratuitamente.</p>
-          <div style={{ marginTop: 22 }}>
-            <button type="button" className="btn-g rx-gate-btn" onClick={onStart} style={{ fontSize: 15, padding: '17px 44px' }}>
-              FAZER MEU RAIO-X
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -660,7 +524,7 @@ export default function RaioXPage() {
   if (showGate) {
     return (
       <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        <GateScreen onStart={() => setShowGate(false)} />
+        <RaioXGate onStart={() => setShowGate(false)} />
       </div>
     )
   }
@@ -895,7 +759,7 @@ export default function RaioXPage() {
           {step === 'atend' && selectedSchool && (
             <form onSubmit={handleSubmit}>
               <h2 className="s-title" style={headingStyle}>Como é o atendimento da sua escola?</h2>
-              <p style={{ margin: '0 0 4px', fontSize: 13, color: MUTED }}>Seis perguntas rápidas. Elas geram a nota de atendimento do seu relatório.</p>
+              <p style={{ margin: '0 0 4px', fontSize: 13, color: MUTED }}>Cinco perguntas rápidas geram a nota de atendimento do seu relatório. O resto é opcional.</p>
               {PERGUNTAS.filter(q => !q.opcional).map((q, i) => (
                 <div key={q.id}>
                   <label style={labelStyle}>{i + 1}. {q.t} *</label>
@@ -908,8 +772,8 @@ export default function RaioXPage() {
                   </div>
                 </div>
               ))}
-              {(() => { const q = PERGUNTAS.find(x => x.opcional)!; return (
-                <div>
+              {PERGUNTAS.filter(q => q.opcional).map(q => (
+                <div key={q.id}>
                   <label style={labelStyle}>{q.t}</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     {q.opcoes.map(o => {
@@ -918,8 +782,8 @@ export default function RaioXPage() {
                         style={{ padding: '9px 13px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${on ? VM : BORDER}`, background: on ? SOFT : '#fff', color: on ? VD : TEXT }}>{o.t}</button>
                     })}
                   </div>
-                  {respostas[q.id] && respostas[q.id] !== '0' ? <input className="inp" style={{ marginTop: 8 }} value={outrasCidades} onChange={e => setOutrasCidades(e.target.value)} placeholder="Quais cidades? (opcional)" /> : null}
-                </div>) })()}
+                  {q.id === 'outras' && respostas[q.id] && respostas[q.id] !== '0' ? <input className="inp" style={{ marginTop: 8 }} value={outrasCidades} onChange={e => setOutrasCidades(e.target.value)} placeholder="Quais cidades? (opcional)" /> : null}
+                </div>))}
 
               <label style={labelStyle}>Instagram da escola (opcional)</label>
               <input className="inp" value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@suaescola" autoCapitalize="none" />

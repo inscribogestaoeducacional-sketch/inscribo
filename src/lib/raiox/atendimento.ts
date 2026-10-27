@@ -1,4 +1,4 @@
-// Diagnóstico de atendimento: 6 perguntas pontuadas (0 a 100) + 1 opcional.
+// Diagnóstico de atendimento: 5 perguntas pontuadas (0 a 100) + 2 opcionais.
 // Os pesos são da Áion; nenhuma resposta é inventada: sem resposta, não há nota.
 export interface Opcao { v: string; t: string; p: number }
 export interface Pergunta { id: string; t: string; icon: string; peso: number; opcoes: Opcao[]; opcional?: boolean }
@@ -6,7 +6,7 @@ export interface Pergunta { id: string; t: string; icon: string; peso: number; o
 export const PERGUNTAS: Pergunta[] = [
   { id: 'tempo', t: 'Quanto tempo a escola leva para responder um contato novo?', icon: 'timer', peso: 25, opcoes: [
     { v: 'ate5', t: 'Menos de 5 minutos', p: 1 }, { v: 'ate60', t: 'Até 1 hora', p: 0.7 }, { v: 'dia', t: 'No mesmo dia', p: 0.3 }, { v: 'prox', t: 'Só no dia seguinte', p: 0 }] },
-  { id: 'volume', t: 'Quantos contatos de famílias novas chegam por mês?', icon: 'inbox', peso: 0, opcoes: [
+  { id: 'volume', t: 'Quantos contatos de famílias novas chegam por mês? (opcional)', icon: 'inbox', peso: 0, opcional: true, opcoes: [
     { v: '0-10', t: 'Até 10', p: 0 }, { v: '11-50', t: '11 a 50', p: 0 }, { v: '51-150', t: '51 a 150', p: 0 }, { v: '151-300', t: '151 a 300', p: 0 }, { v: '300+', t: 'Mais de 300', p: 0 }] },
   { id: 'visita', t: 'De cada 10 famílias que pedem informação, quantas visitam a escola?', icon: 'door', peso: 20, opcoes: [
     { v: '0-2', t: '0 a 2', p: 0 }, { v: '3-4', t: '3 ou 4', p: 0.4 }, { v: '5-6', t: '5 ou 6', p: 0.75 }, { v: '7+', t: '7 ou mais', p: 1 }] },

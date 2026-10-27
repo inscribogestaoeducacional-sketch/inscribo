@@ -26,7 +26,7 @@ export function PageAtendimento({ c }: { c: RaioXCtx }) {
   const fx: [string, string, string][] = [['80 a 100', 'Atendimento forte', C.TURQ], ['50 a 79', 'Atendimento com falhas', C.AMBAR], ['0 a 49', 'Matrículas se perdendo no caminho', C.CORAL]]
   return (
     <Pg>
-      <Hero pill="Diagnóstico de atendimento" title={A ? `Atendimento do ${c.nome}: nota ${A.pontuacao} de 100` : 'Seis perguntas mostram quantas matrículas o atendimento deixa passar'} lead={A ? `**${FAIXA_TXT[A.faixa]}.** Respostas informadas pela própria escola no site da Áion.` : 'Os dados públicos mostram o mercado. Esta etapa mostra a escola por dentro: quem responde, quanto demora e de onde vêm as matrículas.'}
+      <Hero pill="Diagnóstico de atendimento" title={A ? `Atendimento do ${c.nome}: nota ${A.pontuacao} de 100` : 'Cinco perguntas mostram quantas matrículas o atendimento deixa passar'} lead={A ? `**${FAIXA_TXT[A.faixa]}.** Respostas informadas pela própria escola no site da Áion.` : 'Os dados públicos mostram o mercado. Esta etapa mostra a escola por dentro: quem responde, quanto demora e de onde vêm as matrículas.'}
         side={A ? <View style={{ backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 28, padding: 14, paddingBottom: 10 }}><Medidor nota={A.pontuacao} cor="#FFD166" w={236} branco /></View> : undefined} />
       <Sec first><Card style={{ paddingVertical: 4, paddingHorizontal: 22 }}>
         {Q.map(([ic, t, o, op], i) => <View key={i} style={{ flexDirection: 'row', gap: 14, alignItems: 'center', paddingVertical: 10, borderTopWidth: i ? 1 : 0, borderTopColor: C.LINHA }}>
@@ -37,8 +37,8 @@ export function PageAtendimento({ c }: { c: RaioXCtx }) {
       <Sec><H2>Como a nota de 0 a 100 funciona</H2><View style={{ flexDirection: 'row', gap: 12 }}>
         {fx.map(([a, t, cor]) => <View key={a} style={{ flex: 1, borderRadius: 22, paddingVertical: 16, paddingHorizontal: 16, backgroundColor: cor }}><Text style={num(34, '#fff')}>{a}</Text><Text style={{ ...txt(13.5, '#fff', 700), marginTop: 6 }}>{t}</Text></View>)}
       </View></Sec>
-      <Sec><Card style={{ backgroundColor: '#FFF6DC', borderColor: '#FFE9B0', paddingVertical: 12, flexDirection: 'row', gap: 12, alignItems: 'center' }}><IconBox name="bulb" size={32} bg="#FFE9A8" color="#8a5a00" /> <Rich t={A ? 'Esta é a única página preenchida pela **própria escola**. A nota soma tempo de resposta, visitas, atendimento fora do horário, origem das matrículas e rematrícula; o volume de contatos é só contexto.' : 'Esta é a única página preenchida pela **própria escola**, no site. Nenhuma resposta é inventada: sem resposta, a nota não aparece.'} style={{ ...txt(13, '#4a3b00'), flex: 1 }} /></Card></Sec>
-      <Serve a="Seis perguntas sobre o atendimento, com nota de 0 a 100." b="Ver onde a matrícula escapa entre o contato e a rematrícula." c="O **robô** responde na hora e o **CRM** registra a origem." />
+      <Sec><Card style={{ backgroundColor: '#FFF6DC', borderColor: '#FFE9B0', paddingVertical: 12, flexDirection: 'row', gap: 12, alignItems: 'center' }}><IconBox name="bulb" size={32} bg="#FFE9A8" color="#8a5a00" /> <Rich t={A ? 'Esta é a única página preenchida pela **própria escola**. A nota soma tempo de resposta, visitas, atendimento fora do horário, origem das matrículas e rematrícula.' : 'Esta é a única página preenchida pela **própria escola**, no site. Nenhuma resposta é inventada: sem resposta, a nota não aparece.'} style={{ ...txt(13, '#4a3b00'), flex: 1 }} /></Card></Sec>
+      <Serve a="Cinco perguntas sobre o atendimento, com nota de 0 a 100." b="Ver onde a matrícula escapa entre o contato e a rematrícula." c="O **robô** responde na hora e o **CRM** registra a origem." />
       <Foot fonte="respostas da própria escola, informadas no site da Áion" rodape={rod(c)} />
     </Pg>
   )
