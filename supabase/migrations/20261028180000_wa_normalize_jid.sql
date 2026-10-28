@@ -26,10 +26,11 @@ create or replace function public.whatsapp_conversations_normalize_jid()
 returns trigger language plpgsql as $$
 declare n text;
 begin
+  if new.institution_id is not null then return new; end if;   -- só o Inbox da Áion; escolas não mudam
   n := public.wa_normalize_jid(new.remote_jid);
   if n is null or n = new.remote_jid then return new; end if;
   if exists (select 1 from public.whatsapp_conversations c
-             where c.institution_id is not distinct from new.institution_id and c.remote_jid = new.remote_jid) then
+             where c.institution_id is null and c.remote_jid = new.remote_jid) then
     return new;
   end if;
   new.remote_jid := n;

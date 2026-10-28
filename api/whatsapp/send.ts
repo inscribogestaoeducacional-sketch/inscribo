@@ -428,16 +428,20 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     // api/whatsapp/webhook.ts (processAionMessage) pra conversas novas.
     let resolvedConversationId: string | undefined = conversation_id || undefined
     if (isAionSend && !resolvedConversationId) {
-      const jid = String(to).includes('@') ? to : `${to}@s.whatsapp.net`
-      const { data: existingConv } = await supabase
+      // O webhook grava a conversa da Áion SEM "@s.whatsapp.net". Aqui procuramos nas duas formas
+      // (e na forma antiga sem o 9º dígito) e, se for criar, criamos já no padrão do webhook —
+      // antes o sufixo fazia a conversa existente não ser achada e nascia uma duplicada.
+      const jid = metaTo
+      const { data: existingRows } = await supabase
         .from('whatsapp_conversations')
-        .select('id')
+        .select('id, remote_jid')
         .eq('is_aion_inbox', true)
-        .eq('remote_jid', jid)
-        .maybeSingle()
+        .in('remote_jid', brPhoneVariants(metaTo))
+      const existingConv = (existingRows || []).find((r: any) => r.remote_jid === metaTo) ?? (existingRows || [])[0]
 
       if (existingConv) {
         resolvedConversationId = existingConv.id
+        storeJid = existingConv.remote_jid
       } else {
         const { data: newConv, error: newConvErr } = await supabase
           .from('whatsapp_conversations')
@@ -507,7 +511,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     if (resolvedConversationId) {
       convSelect = convSelect.eq('id', resolvedConversationId)
     } else if (isAionSend) {
-      convSelect = convSelect.eq('is_aion_inbox', true).eq('remote_jid', to)
+      convSelect = convSelect.eq('is_aion_inbox', true).eq('remote_jid', storeJid)
     } else {
       convSelect = convSelect.eq('institution_id', institution_id).eq('remote_jid', storeJid)
     }
@@ -525,7 +529,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     if (resolvedConversationId) {
       await convUpdate.eq('id', resolvedConversationId)
     } else if (isAionSend) {
-      await convUpdate.eq('is_aion_inbox', true).eq('remote_jid', to)
+      await convUpdate.eq('is_aion_inbox', true).eq('remote_jid', storeJid)
     } else {
       await convUpdate.eq('institution_id', institution_id).eq('remote_jid', storeJid)
     }
