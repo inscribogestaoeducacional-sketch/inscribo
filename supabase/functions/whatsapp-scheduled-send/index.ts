@@ -123,9 +123,9 @@ serve(async (req) => {
           preview = text
         }
 
-        // ── Se a conversa estiver fechada, reabre e reatribui ao atendente
-        // que agendou — mesma lógica validada de webhook.ts (reopen block):
-        // só preserva o dono se ele ainda existir e estiver ativo. ──
+        // ── Conversa precisa existir. A reabertura (se estiver fechada) só acontece DEPOIS que a
+        // Meta aceitar o envio — antes ela reabria primeiro e, se o envio falhasse, a conversa
+        // ficava "aguardando" sem mensagem nenhuma. ──
         const { data: conv } = await supabase
           .from('whatsapp_conversations')
           .select('id, status, assigned_user_id')
@@ -135,41 +135,6 @@ serve(async (req) => {
         if (!conv) {
           await fail('Conversa não encontrada')
           continue
-        }
-
-        if (conv.status === 'closed') {
-          let reopenAssigneeId: string | null = null
-          let reopenAssigneeName: string | null = null
-          if (row.created_by) {
-            const { data: stillActiveUser } = await supabase
-              .from('users')
-              .select('id, full_name, active')
-              .eq('id', row.created_by)
-              .maybeSingle()
-            if (stillActiveUser?.active) {
-              reopenAssigneeId   = stillActiveUser.id
-              reopenAssigneeName = stillActiveUser.full_name
-            }
-          }
-
-          await supabase.from('whatsapp_conversations')
-            .update({
-              status:              'waiting',
-              assigned_user_id:    reopenAssigneeId,
-              assigned_user_name:  reopenAssigneeName,
-              bot_active:          false,
-            })
-            .eq('id', conv.id)
-
-          await supabase.from('whatsapp_conversation_events').insert({
-            institution_id: row.institution_id,
-            remote_jid:     row.remote_jid,
-            event_type:     'reopened',
-            description:    reopenAssigneeName
-              ? `Mensagem agendada reabriu a conversa, encerrada anteriormente — voltou para ${reopenAssigneeName}`
-              : 'Mensagem agendada reabriu a conversa, encerrada anteriormente — voltou para fila',
-            metadata:       { previous_status: 'closed', reason: 'scheduled_message', scheduled_message_id: row.id },
-          })
         }
 
         // ── Número + envio via Cloud API ──
@@ -255,6 +220,43 @@ serve(async (req) => {
         await supabase.from('whatsapp_conversations')
           .update({ last_message: preview, last_message_at: new Date().toISOString() })
           .eq('id', row.conversation_id)
+
+        // ── Reabre e reatribui ao atendente que agendou (mesma lógica do reopen de webhook.ts:
+        // só preserva o dono se ele ainda existir e estiver ativo). ──
+        if (conv.status === 'closed') {
+          let reopenAssigneeId: string | null = null
+          let reopenAssigneeName: string | null = null
+          if (row.created_by) {
+            const { data: stillActiveUser } = await supabase
+              .from('users')
+              .select('id, full_name, active')
+              .eq('id', row.created_by)
+              .maybeSingle()
+            if (stillActiveUser?.active) {
+              reopenAssigneeId   = stillActiveUser.id
+              reopenAssigneeName = stillActiveUser.full_name
+            }
+          }
+
+          await supabase.from('whatsapp_conversations')
+            .update({
+              status:              'waiting',
+              assigned_user_id:    reopenAssigneeId,
+              assigned_user_name:  reopenAssigneeName,
+              bot_active:          false,
+            })
+            .eq('id', conv.id)
+
+          await supabase.from('whatsapp_conversation_events').insert({
+            institution_id: row.institution_id,
+            remote_jid:     row.remote_jid,
+            event_type:     'reopened',
+            description:    reopenAssigneeName
+              ? `Mensagem agendada reabriu a conversa, encerrada anteriormente — voltou para ${reopenAssigneeName}`
+              : 'Mensagem agendada reabriu a conversa, encerrada anteriormente — voltou para fila',
+            metadata:       { previous_status: 'closed', reason: 'scheduled_message', scheduled_message_id: row.id },
+          })
+        }
 
         sent++
       } catch (err) {
