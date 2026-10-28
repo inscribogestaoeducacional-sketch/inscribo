@@ -86,7 +86,7 @@ html, body { width: 100%; min-height: 100%; }
 .font-display { font-family: var(--font-display); letter-spacing: -.02em; }
 
 /* Celular: espaço pra barra de abas flutuante */
-@media (max-width: 767px) { main { padding-bottom: 88px; } body.aion-wa-chat .aion-dock, body.aion-wa-chat .aion-topbar { display: none !important; } body.aion-wa-chat main { padding-bottom: 0 !important; } }
+@media (max-width: 767px) { main { padding-bottom: 88px; } body.aion-wa-chat .aion-dock, body.aion-wa-chat .aion-topbar { display: none !important; } body.aion-wa-chat main { padding-bottom: 0 !important; } body.aion-wa-chat .aion-wa-tabs { display: none !important; } body.aion-wa-chat main > .aion-page { height: 100%; } .aion-wa-tabs { padding: 8px 12px 0 !important; } .aion-wa-tabs::-webkit-scrollbar { display: none; } }
 
 /* ====== BODY ====== */
 body {

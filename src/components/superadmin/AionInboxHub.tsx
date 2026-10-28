@@ -2429,6 +2429,15 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
   const activeConv = conversations.find(c => c.id === activeId) ?? null
 
+  // Celular: conversa aberta ocupa a tela toda (some a barra de baixo, a de cima e as abas), como no WhatsApp
+  const chatOpenMobile = isMobile && mobilePanel === 'chat' && !!activeConv
+  useEffect(() => {
+    document.body.classList.toggle('aion-wa-chat', chatOpenMobile)
+    return () => document.body.classList.remove('aion-wa-chat')
+  }, [chatOpenMobile])
+  const [showFilters, setShowFilters] = useState(false)
+  const [infoSheet, setInfoSheet] = useState(false) // celular: painel do contato sobe de baixo
+
   const getDefaultVarValue = (index: number): string => {
     const defaults: Record<number, string> = {
       1: activeConv?.name || '',
@@ -4148,8 +4157,8 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           </div>
 
           {/* Search */}
-          <div style={{ padding: '8px 12px', flexShrink: 0, background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
-            <div style={{ position: 'relative' }}>
+          <div style={{ padding: '8px 12px', flexShrink: 0, background: '#FFFFFF', borderBottom: '1px solid #D1FAE5', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
               <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
               <input
                 type="text"
@@ -4161,10 +4170,16 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                 onBlur={e => (e.currentTarget.style.borderColor = '#D1FAE5')}
               />
             </div>
+            {isMobile && (
+              <button onClick={() => setShowFilters(v => !v)} style={{ position: 'relative', height: 36, padding: '0 12px', borderRadius: 10, border: '1px solid #D1FAE5', background: showFilters ? '#E6F7F5' : '#fff', color: '#05907B', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                Filtros
+                {(statusFilter !== 'abertos' || readFilter !== 'all' || assignFilter !== 'all') && <span style={{ position: 'absolute', top: 5, right: 5, width: 8, height: 8, borderRadius: 4, background: '#7C3AED' }} />}
+              </button>
+            )}
           </div>
 
-          {/* Filters — Botconversa style */}
-          <div style={{ borderBottom: '1px solid #D1FAE5' }}>
+          {/* Filters — Botconversa style (no celular ficam atrás do botão Filtros) */}
+          <div style={{ borderBottom: '1px solid #D1FAE5', display: isMobile && !showFilters ? 'none' : 'block' }}>
             {/* Row 1: Status + Atribuição dropdowns */}
             <div style={{ display: 'flex', padding: '8px 12px', gap: 8 }}>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -4270,7 +4285,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           {activeConv && (
             <div style={{ flexShrink: 0, position: 'relative', background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDFB 100%)', borderBottom: '1px solid #D1FAE5', minHeight: 64, boxShadow: '0 2px 8px rgba(0,168,150,0.06)' }}>
               {/* Header row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', height: 64 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '8px 12px' : '0 16px', ...(isMobile ? { minHeight: 64 } : { height: 64 }) }}>
                 {isMobile && (
                   <button
                     onClick={() => setMobilePanel('list')}
@@ -4294,7 +4309,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{activeConv.name}</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0, ...(isMobile ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : {}) }}>{activeConv.name}</p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>
                       {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
@@ -4319,7 +4334,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {[
                     { icon: Search, key: 'search', active: showMsgSearch, onClick: () => { setShowMsgSearch(v => !v); if (showMsgSearch) setMsgSearchText('') }, title: 'Buscar mensagens' },
-                    { icon: Info,   key: 'info',   active: showContactInfo, onClick: () => setShowContactInfo(v => !v), title: 'Informações do contato' },
+                    { icon: Info,   key: 'info',   active: isMobile ? infoSheet : showContactInfo, onClick: () => (isMobile ? setInfoSheet(v => !v) : setShowContactInfo(v => !v)), title: 'Informações do contato' },
                     { icon: MoreVertical, key: 'more', active: showMoreMenu, onClick: () => setShowMoreMenu(v => !v), title: 'Mais opções' },
                   ].map(btn => {
                     const IconComp = btn.icon
@@ -4933,8 +4948,17 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         </div>
 
         {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
-        {showContactInfo && !isMobile && (
-          <div style={{ width: 280, flexShrink: 0, background: '#FFFFFF', borderLeft: '1px solid #D1FAE5', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {(isMobile ? infoSheet && !!activeConv : showContactInfo) && (
+          <>
+          {isMobile && <div onClick={() => setInfoSheet(false)} style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(26,43,74,.38)' }} />}
+          <div style={isMobile
+            ? { position: 'fixed', left: 0, right: 0, bottom: 0, top: '9dvh', zIndex: 1150, background: '#FFFFFF', borderRadius: '24px 24px 0 0', boxShadow: '0 -10px 40px rgba(26,43,74,.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }
+            : { width: 280, flexShrink: 0, background: '#FFFFFF', borderLeft: '1px solid #D1FAE5', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {isMobile && (
+              <button onClick={() => setInfoSheet(false)} aria-label="Fechar" style={{ alignSelf: 'center', width: '100%', height: 26, border: 'none', background: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ width: 40, height: 5, borderRadius: 3, background: '#CBD5E1' }} />
+              </button>
+            )}
             {activeConv ? (
             <>
             {/* Header bar */}
@@ -5610,6 +5634,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
               </div>
             )}
           </div>
+          </>
         )}
 
         {/* Send error toast */}

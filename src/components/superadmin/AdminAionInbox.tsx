@@ -3477,14 +3477,14 @@ export default function AdminAionInbox() {
     <SuperAdminLayout>
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         {/* Tab bar */}
-        <div style={{ display: 'flex', gap: 4, padding: '12px 20px 0', borderBottom: '1px solid #E2E8F0', background: '#fff', flexShrink: 0 }}>
+        <div className="aion-wa-tabs aion-hscroll" style={{ display: 'flex', gap: 4, padding: '12px 20px 0', borderBottom: '1px solid #E2E8F0', background: '#fff', flexShrink: 0, overflowX: 'auto', whiteSpace: 'nowrap', scrollbarWidth: 'none' }}>
           {tabs.map(({ key, label, Icon }) => {
             const active = tab === key
             return (
               <button key={key} onClick={() => setTab(key)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 7,
-                  padding: '9px 18px', fontSize: 13, fontWeight: active ? 700 : 500,
+                  padding: '9px 16px', fontSize: 13, fontWeight: active ? 700 : 500, flexShrink: 0, whiteSpace: 'nowrap',
                   color: active ? '#05907B' : '#64748B', background: 'transparent',
                   border: 'none', borderBottom: active ? '2.5px solid #05907B' : '2.5px solid transparent',
                   marginBottom: -1, cursor: 'pointer', borderRadius: '6px 6px 0 0', transition: 'color 0.15s',
