@@ -4,7 +4,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 const BREVO_KEY = Deno.env.get('BREVO_API_KEY')
 const FROM_EMAIL = 'noreply@aionedu.com.br'
 const FROM_NAME = 'Aion Edu'
-const LOGO_URL = 'https://www.aionedu.com.br/aion-logo-full.png'
+const BANNER_URL = 'https://aionedu.com.br/brand/email-banner.png'
 const SUPPORT_WA = 'https://wa.me/5583985556393'
 // Numero comercial (vendas/demo) — mesmo usado em RaioXPage.tsx, Landing.tsx e Footer.tsx.
 const SALES_WA = 'https://wa.me/5583993444383'
@@ -23,23 +23,16 @@ const CORS = {
 const FONT_STACK = `'Helvetica Neue',Helvetica,Arial,sans-serif`
 
 const footerLink = (label: string, url: string) =>
-  `<td style="padding:0 10px;"><a href="${url}" style="font-family:${FONT_STACK};color:rgba(255,255,255,0.75);font-size:12px;font-weight:600;text-decoration:none;">${label}</a></td>`
-const footerDivider = () =>
-  `<td style="color:rgba(255,255,255,0.25);font-size:12px;">&middot;</td>`
+  `<a class="em-link" href="${url}" style="font-family:${FONT_STACK};color:#05907B;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;">${label}</a>`
 
-// Dark mode: a maioria dos e-mails abaixo usa cores fixas dentro do cartao
-// branco (badges/boxes com cores semanticas variadas por template — ver
-// helpers h1/box), entao o cartao de conteudo permanece SEMPRE branco,
-// independente do tema do cliente (evita qualquer risco de contraste ruim
-// nas 14 combinacoes de cor ja usadas pelos templates). O que de fato adapta
-// ao dark mode e a "moldura" ao redor do cartao (bg do body/tabela externa),
-// via custom property com fallback inline (var() + declaracao dupla) + classe
-// com !important como reforco pra clientes que nao entendem var() em style
-// inline mas entendem @media dentro de <style> (Gmail, Outlook novo). Cabecalho
-// e rodape ja sao escuros por design e nao mudam entre os dois temas.
+// Modelo unico dos e-mails da Aion Edu.
+// - Cabecalho e uma IMAGEM pronta (logo sobre faixa verde): imagens nao sao invertidas por Gmail/Outlook no modo escuro
+//   e nao dependem de filtro CSS (que a maioria dos clientes ignora).
+// - Cores sempre com bgcolor/atributos inline (funciona em qualquer cliente) + um tema escuro desenhado de verdade
+//   para quem suporta prefers-color-scheme (Apple Mail, iOS, Outlook) e [data-ogsc] (Outlook.com/app).
 const wrap = (content: string, preheader = '') => `
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -47,46 +40,47 @@ const wrap = (content: string, preheader = '') => `
   <meta name="supported-color-schemes" content="light dark">
   <meta name="x-apple-disable-message-reformatting">
   <title>Aion Edu</title>
-  ${preheader ? `<span style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${preheader}</span>` : ''}
   <style>
     :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    img { -ms-interpolation-mode: bicubic; }
+    @media only screen and (max-width: 620px) { .em-pad { padding: 28px 22px !important; } .em-wrap { padding: 0 !important; } }
     @media (prefers-color-scheme: dark) {
-      .aion-canvas { background-color: #0B1220 !important; }
+      .em-bg { background-color: #0B1220 !important; }
+      .em-card { background-color: #111C2E !important; border-color: #1E2D45 !important; }
+      .em-h { color: #F1F5F9 !important; }
+      .em-t { color: #CBD5E1 !important; }
+      .em-foot { background-color: #0D1626 !important; border-color: #1E2D45 !important; }
+      .em-muted { color: #94A3B8 !important; }
+      .em-link { color: #2DD4BF !important; }
+      .em-line { border-top-color: #1E2D45 !important; }
     }
+    [data-ogsc] .em-h { color: #F1F5F9 !important; } [data-ogsc] .em-t { color: #CBD5E1 !important; } [data-ogsc] .em-muted { color: #94A3B8 !important; } [data-ogsc] .em-link { color: #2DD4BF !important; }
+    [data-ogsb] .em-bg { background-color: #0B1220 !important; } [data-ogsb] .em-card { background-color: #111C2E !important; } [data-ogsb] .em-foot { background-color: #0D1626 !important; }
   </style>
 </head>
-<body class="aion-canvas" style="margin:0;padding:0;background-color:#F0F4F8;background-color:var(--aion-canvas,#F0F4F8);font-family:${FONT_STACK};">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="aion-canvas" style="background-color:#F0F4F8;background-color:var(--aion-canvas,#F0F4F8);padding:40px 0;">
+<body class="em-bg" bgcolor="#EEF4F3" style="margin:0;padding:0;background-color:#EEF4F3;font-family:${FONT_STACK};-webkit-text-size-adjust:100%;">
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${preheader}</div>` : ''}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="em-bg" bgcolor="#EEF4F3" style="background-color:#EEF4F3;">
     <tr>
-      <td align="center">
+      <td align="center" class="em-wrap" style="padding:28px 12px;">
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
           <tr>
-            <td style="background:linear-gradient(135deg,#00523C 0%,#00A896 100%);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
-              <img src="${LOGO_URL}" alt="Aion Edu" height="44" style="display:block;margin:0 auto;border:0;outline:none;filter:brightness(0) invert(1);" />
-              <p style="font-family:${FONT_STACK};color:rgba(255,255,255,0.85);margin:14px 0 0;font-size:13px;letter-spacing:0.5px;">Sistema de Gestao Educacional</p>
+            <td bgcolor="#00695F" style="background-color:#00695F;border-radius:20px 20px 0 0;line-height:0;font-size:0;">
+              <img src="${BANNER_URL}" width="600" alt="Aion Edu" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;border-radius:20px 20px 0 0;background-color:#00695F;color:#ffffff;font-family:${FONT_STACK};font-size:20px;font-weight:700;line-height:1.4;">
             </td>
           </tr>
           <tr>
-            <td style="background-color:#ffffff;padding:40px;border-left:1px solid #E2E8F0;border-right:1px solid #E2E8F0;">
+            <td class="em-card em-pad" bgcolor="#ffffff" style="background-color:#ffffff;padding:36px 40px;border-left:1px solid #E2E8F0;border-right:1px solid #E2E8F0;">
               ${content}
             </td>
           </tr>
           <tr>
-            <td style="background-color:#1A2B4A;border-radius:0 0 16px 16px;padding:32px 40px;text-align:center;">
-              <p style="font-family:${FONT_STACK};color:rgba(255,255,255,0.9);font-size:13px;margin:0 0 6px;font-weight:600;">Aion Solucoes Tecnologicas LTDA</p>
-              <p style="font-family:${FONT_STACK};color:rgba(255,255,255,0.55);font-size:12px;margin:0 0 18px;">CNPJ: 65.835.064/0001-58 &middot; Patos/PB</p>
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 18px;">
-                <tr>
-                  ${footerLink('&#128172; Suporte', SUPPORT_WA)}
-                  ${footerDivider()}
-                  ${footerLink('&#128222; Comercial', SALES_WA)}
-                  ${footerDivider()}
-                  ${footerLink('&#127760; aionedu.com.br', SITE_URL)}
-                  ${footerDivider()}
-                  ${footerLink('&#128247; @aioneduu', INSTAGRAM_URL)}
-                </tr>
-              </table>
-              <p style="font-family:${FONT_STACK};color:rgba(255,255,255,0.3);font-size:11px;margin:0;">&copy; ${new Date().getFullYear()} Aion Edu &middot; Todos os direitos reservados</p>
+            <td class="em-foot" bgcolor="#F5FAF9" style="background-color:#F5FAF9;border:1px solid #E2E8F0;border-radius:0 0 20px 20px;padding:24px 32px;text-align:center;">
+              <p class="em-muted" style="font-family:${FONT_STACK};color:#334155;font-size:13px;margin:0 0 4px;font-weight:700;">Aion Solucoes Tecnologicas LTDA</p>
+              <p class="em-muted" style="font-family:${FONT_STACK};color:#64748B;font-size:12px;margin:0 0 14px;">CNPJ: 65.835.064/0001-58 &middot; Patos/PB</p>
+              <p style="margin:0;line-height:2;">
+                ${footerLink('Suporte', SUPPORT_WA)} &nbsp;&middot;&nbsp; ${footerLink('Comercial', SALES_WA)} &nbsp;&middot;&nbsp; ${footerLink('aionedu.com.br', SITE_URL)} &nbsp;&middot;&nbsp; ${footerLink('@aioneduu', INSTAGRAM_URL)}
+              </p>
             </td>
           </tr>
         </table>
@@ -97,11 +91,11 @@ const wrap = (content: string, preheader = '') => `
 </html>
 `
 
-const btn = (text: string, url: string, color = '#00A896') => `
-  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto;">
+const btn = (text: string, url: string, color = '#05907B') => `
+  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px auto;">
     <tr>
-      <td style="background-color:${color};border-radius:10px;">
-        <a href="${url}" style="display:inline-block;font-family:${FONT_STACK};padding:14px 36px;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;letter-spacing:0.3px;">${text}</a>
+      <td bgcolor="${color}" style="background-color:${color};border-radius:12px;">
+        <a href="${url}" style="display:inline-block;font-family:${FONT_STACK};padding:15px 38px;color:#ffffff;font-size:16px;font-weight:800;text-decoration:none;border-radius:12px;">${text}</a>
       </td>
     </tr>
   </table>
@@ -115,10 +109,10 @@ const badge = (text: string, bgColor = '#00A896', textColor?: string) => {
 }
 
 const h1 = (text: string, color = '#1A2B4A') =>
-  `<h1 style="font-family:${FONT_STACK};color:${color};font-size:24px;font-weight:800;line-height:1.3;margin:16px 0 8px;">${text}</h1>`
+  `<h1 class="${color === '#1A2B4A' || color === '#00523C' || color === '#166534' ? 'em-h' : ''}" style="font-family:${FONT_STACK};color:${color};font-size:24px;font-weight:800;line-height:1.3;margin:16px 0 8px;">${text}</h1>`
 
 const p = (text: string) =>
-  `<p style="font-family:${FONT_STACK};color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">${text}</p>`
+  `<p class="em-t" style="font-family:${FONT_STACK};color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">${text}</p>`
 
 const box = (content: string, bgColor = '#F0FDF4', borderColor = '#BBF7D0', textColor = '#166534') => `
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
@@ -132,7 +126,7 @@ const box = (content: string, bgColor = '#F0FDF4', borderColor = '#BBF7D0', text
 
 const infoBox = box
 
-const divider = () => `<hr style="border:none;border-top:1px solid #E2E8F0;margin:24px 0;">`
+const divider = () => `<hr class="em-line" style="border:none;border-top:1px solid #E2E8F0;margin:24px 0;">`
 
 const supportLine = () =>
   `<p style="font-family:${FONT_STACK};color:#94A3B8;font-size:13px;text-align:center;margin:0;">Duvidas? <a href="${SUPPORT_WA}" style="color:#00A896;text-decoration:none;font-weight:600;">Fale com seu consultor via WhatsApp</a></p>`
@@ -395,19 +389,19 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
   }),
 
   proposal: (data) => ({
-    subject: `Proposta da Aion Edu para ${data.school_name || 'sua escola'}`,
+    subject: `Proposta da Áion Edu para ${data.school_name || 'sua escola'}`,
     html: wrap(`
       <p style="margin:0 0 4px;">${badge('Proposta comercial', '#00523C', '#ffffff')}</p>
       ${h1(`Proposta para ${data.school_name || 'sua escola'}`, '#00523C')}
-      ${p(`Ola, <strong>${data.client_name || 'prezado(a)'}</strong>! Preparamos a proposta da Aion Edu para a sua escola. Ela esta em anexo neste e-mail, em PDF, pronta para ler no celular.`)}
-      ${p('Nela voce encontra o que o sistema faz para o atendimento e para a gestao, os custos do WhatsApp explicados com exemplos e o investimento.')}
-      ${data.pdf_url ? btn('Abrir a proposta (PDF)', data.pdf_url, '#00A896') : ''}
-      ${data.valid_until ? `<p style="color:#94A3B8;font-size:13px;text-align:center;margin:0 0 4px;">Proposta valida ate ${data.valid_until}</p>` : ''}
+      ${p(`Olá, <strong>${data.client_name || 'prezado(a)'}</strong>! Preparamos a proposta da Áion Edu para a sua escola. Ela está em anexo neste e-mail, em PDF, pronta para ler no celular.`)}
+      ${p('Nela você encontra o que o sistema faz para o atendimento e para a gestão, os custos do WhatsApp explicados com exemplos e o investimento.')}
+      ${data.pdf_url ? btn('Abrir a proposta (PDF)', data.pdf_url) : ''}
+      ${data.valid_until ? `<p class="em-muted" style="font-family:${FONT_STACK};color:#64748B;font-size:13px;text-align:center;margin:0 0 4px;">Proposta válida até ${data.valid_until}</p>` : ''}
       ${divider()}
-      <p style="color:#475569;font-size:14px;margin:0 0 4px;"><strong>Seu consultor:</strong></p>
-      <p style="color:#475569;font-size:14px;margin:0 0 4px;">${data.consultant_name || 'Equipe Aion Edu'}</p>
-      ${data.consultant_phone ? `<p style="color:#475569;font-size:14px;margin:0;"><a href="https://wa.me/55${String(data.consultant_phone).replace(/\D/g,'')}" style="color:#00A896;text-decoration:none;">WhatsApp: ${data.consultant_phone}</a></p>` : ''}
-    `, `A proposta da Aion Edu para ${data.school_name || 'sua escola'} esta em anexo`)
+      <p class="em-h" style="font-family:${FONT_STACK};color:#1A2B4A;font-size:14px;font-weight:800;margin:0 0 4px;">Seu consultor</p>
+      <p class="em-t" style="font-family:${FONT_STACK};color:#475569;font-size:14px;margin:0 0 4px;">${data.consultant_name || 'Equipe Áion Edu'}</p>
+      ${data.consultant_phone ? `<p style="margin:0;"><a class="em-link" href="https://wa.me/55${String(data.consultant_phone).replace(/\D/g,'').replace(/^55/, '')}" style="font-family:${FONT_STACK};color:#05907B;font-size:14px;font-weight:700;text-decoration:none;">WhatsApp: ${data.consultant_phone}</a></p>` : ''}
+    `, `A proposta da Áion Edu para ${data.school_name || 'sua escola'} está em anexo`)
   }),
 
   nota_fiscal_emitida: (data) => ({

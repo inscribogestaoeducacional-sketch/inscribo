@@ -10,7 +10,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || Deno.env.get('APP_SUPABASE_
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('APP_SERVICE_ROLE_KEY')!
 const BREVO_KEY = Deno.env.get('BREVO_API_KEY')
 const FROM = { name: 'Aion Edu', email: 'noreply@aionedu.com.br' }
-const LOGO = 'https://www.aionedu.com.br/aion-logo-full.png'
+const BANNER = 'https://aionedu.com.br/brand/email-banner.png'
 const SALES_WA = 'https://wa.me/5583993444383'
 const TZ = 'America/Fortaleza'
 const DAY = 86400000
@@ -34,17 +34,34 @@ function fill(t: string, v: Record<string, string>) {
   return String(t || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (v[k] ?? ''))
 }
 
-function html(body: string, buttonLabel: string | null, buttonUrl: string | null, signName: string, preheader: string) {
-  const paras = body.split(/\n\s*\n/).map(p => `<p style="font-family:${FONT};color:#475569;font-size:15px;line-height:1.7;margin:0 0 18px;">${esc(p.trim()).replace(/\n/g, '<br>')}</p>`).join('')
-  const btn = buttonLabel && buttonUrl ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px auto;"><tr><td style="background-color:#00A896;border-radius:10px;"><a href="${esc(buttonUrl)}" style="display:inline-block;font-family:${FONT};padding:14px 34px;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;">${esc(buttonLabel)}</a></td></tr></table>` : ''
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Aion Edu</title></head>
-<body style="margin:0;padding:0;background-color:#F0F4F8;font-family:${FONT};">
-<span style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(preheader)}</span>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F0F4F8;padding:32px 0;"><tr><td align="center">
+function html(body: string, buttonLabel: string | null, buttonUrl: string | null, signName: string, preheader: string, signPhone?: string | null) {
+  const paras = body.split(/\n\s*\n/).map(p => `<p class="em-t" style="font-family:${FONT};color:#475569;font-size:16px;line-height:1.7;margin:0 0 18px;">${esc(p.trim()).replace(/\n/g, '<br>')}</p>`).join('')
+  const btn = buttonLabel && buttonUrl ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 8px;"><tr><td bgcolor="#05907B" style="background-color:#05907B;border-radius:12px;"><a href="${esc(buttonUrl)}" style="display:inline-block;font-family:${FONT};padding:15px 34px;color:#ffffff;font-size:16px;font-weight:800;text-decoration:none;border-radius:12px;">${esc(buttonLabel)}</a></td></tr></table>` : ''
+  const initial = esc((signName.trim()[0] || 'A').toUpperCase())
+  const sign = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:30px 0 0;"><tr>
+    <td width="48" height="48" align="center" valign="middle" bgcolor="#05907B" style="width:48px;height:48px;border-radius:24px;background-color:#05907B;color:#ffffff;font-family:${FONT};font-size:20px;font-weight:800;">${initial}</td>
+    <td style="padding-left:14px;font-family:${FONT};"><div class="em-h" style="color:#1A2B4A;font-size:15px;font-weight:800;line-height:1.3;">${esc(signName)}</div><div class="em-muted" style="color:#64748B;font-size:13px;line-height:1.4;">Aion Edu${signPhone ? ' &middot; ' + esc(signPhone) : ''}</div></td></tr></table>`
+  return `<!DOCTYPE html><html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><meta name="x-apple-disable-message-reformatting"><title>Aion Edu</title>
+<style>
+:root { color-scheme: light dark; supported-color-schemes: light dark; }
+@media only screen and (max-width: 620px) { .em-pad { padding: 28px 22px !important; } .em-wrap { padding: 0 !important; } }
+@media (prefers-color-scheme: dark) {
+  .em-bg { background-color: #0B1220 !important; }
+  .em-card { background-color: #111C2E !important; border-color: #1E2D45 !important; }
+  .em-h { color: #F1F5F9 !important; } .em-t { color: #CBD5E1 !important; } .em-muted { color: #94A3B8 !important; }
+  .em-foot { background-color: #0D1626 !important; border-color: #1E2D45 !important; }
+  .em-link { color: #2DD4BF !important; }
+}
+[data-ogsc] .em-h { color: #F1F5F9 !important; } [data-ogsc] .em-t { color: #CBD5E1 !important; } [data-ogsc] .em-muted { color: #94A3B8 !important; } [data-ogsc] .em-link { color: #2DD4BF !important; }
+[data-ogsb] .em-bg { background-color: #0B1220 !important; } [data-ogsb] .em-card { background-color: #111C2E !important; } [data-ogsb] .em-foot { background-color: #0D1626 !important; }
+</style></head>
+<body class="em-bg" bgcolor="#EEF4F3" style="margin:0;padding:0;background-color:#EEF4F3;font-family:${FONT};-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${esc(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="em-bg" bgcolor="#EEF4F3" style="background-color:#EEF4F3;"><tr><td align="center" class="em-wrap" style="padding:28px 12px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-<tr><td style="background:linear-gradient(135deg,#00523C 0%,#00A896 100%);border-radius:16px 16px 0 0;padding:28px 40px;text-align:center;"><img src="${LOGO}" alt="Aion Edu" height="40" style="display:block;margin:0 auto;border:0;filter:brightness(0) invert(1);" /></td></tr>
-<tr><td style="background-color:#ffffff;padding:36px 40px;border-left:1px solid #E2E8F0;border-right:1px solid #E2E8F0;">${paras}${btn}<p style="font-family:${FONT};color:#475569;font-size:15px;line-height:1.6;margin:8px 0 0;">Um abraço,<br><strong>${esc(signName)}</strong><br>Aion Edu</p></td></tr>
-<tr><td style="background-color:#1A2B4A;border-radius:0 0 16px 16px;padding:24px 40px;text-align:center;"><p style="font-family:${FONT};color:rgba(255,255,255,0.9);font-size:13px;margin:0 0 4px;font-weight:600;">Aion Soluções Tecnológicas LTDA</p><p style="font-family:${FONT};color:rgba(255,255,255,0.55);font-size:12px;margin:0;">CNPJ: 65.835.064/0001-58 · Patos/PB · aionedu.com.br</p></td></tr>
+<tr><td bgcolor="#00695F" style="background-color:#00695F;border-radius:20px 20px 0 0;line-height:0;font-size:0;"><img src="${BANNER}" width="600" alt="Aion Edu" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:20px 20px 0 0;background-color:#00695F;color:#ffffff;font-family:${FONT};font-size:20px;font-weight:700;line-height:1.4;"></td></tr>
+<tr><td class="em-card em-pad" bgcolor="#ffffff" style="background-color:#ffffff;padding:36px 40px;border-left:1px solid #E2E8F0;border-right:1px solid #E2E8F0;">${paras}${btn}${sign}</td></tr>
+<tr><td class="em-foot" bgcolor="#F5FAF9" style="background-color:#F5FAF9;border:1px solid #E2E8F0;border-radius:0 0 20px 20px;padding:22px 32px;text-align:center;"><p class="em-muted" style="font-family:${FONT};color:#334155;font-size:13px;margin:0 0 4px;font-weight:700;">Aion Soluções Tecnológicas LTDA</p><p class="em-muted" style="font-family:${FONT};color:#64748B;font-size:12px;margin:0;">CNPJ 65.835.064/0001-58 &middot; Patos/PB &middot; <a class="em-link" href="https://aionedu.com.br" style="color:#05907B;text-decoration:none;font-weight:700;">aionedu.com.br</a></p></td></tr>
 </table></td></tr></table></body></html>`
 }
 
@@ -84,7 +101,7 @@ serve(async (req) => {
       const label = body.button_label ? fill(body.button_label, v) : null
       const url = body.button_kind === 'whatsapp' ? wa : body.button_kind === 'proposal' ? 'https://aionedu.com.br' : null
       const subject = '[TESTE] ' + fill(body.subject, v)
-      await brevo(body.to.trim(), subject, html(fill(body.body, v), label, url, v.consultor, subject), 'teste')
+      await brevo(body.to.trim(), subject, html(fill(body.body, v), label, url, v.consultor, subject, me?.phone), 'teste')
       return new Response(JSON.stringify({ ok: true }), { headers: CORS })
     }
 
@@ -184,7 +201,7 @@ serve(async (req) => {
       const url = kind === 'whatsapp' ? wa : kind === 'proposal' ? (c.pdf || null) : null
       try {
         const subject = fill(c.flow.subject, v)
-        await brevo(c.to, subject, html(fill(c.flow.body, v), c.flow.button_label ? fill(c.flow.button_label, v) : null, url, consultor, subject), c.flow.key)
+        await brevo(c.to, subject, html(fill(c.flow.body, v), c.flow.button_label ? fill(c.flow.button_label, v) : null, url, consultor, subject, cons?.phone), c.flow.key)
         await sb.from('crm_email_log').update({ status: 'sent' }).eq('id', ins.data.id)
         try { await sb.rpc('crm_log_event', { p_lead: c.lead.id, p_name: c.lead.school_name, p_event: 'email_flow', p_detail: { flow: c.flow.key, label: c.flow.label } }) } catch (_) { /* histórico é opcional */ }
         sentToday.add(c.lead.id); sent++
