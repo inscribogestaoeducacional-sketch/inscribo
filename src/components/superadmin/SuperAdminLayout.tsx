@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { syncMissingDefaultTemplates } from '../../lib/submitDefaultTemplates'
 import { useAlertNotifications } from '../../hooks/useAlertNotifications'
 import AlertNotificationList from '../layout/AlertNotificationList'
+import { PillTabs } from '../mobile/PillTabs'
 import { AppDock, MenuSheet, BottomSheet, SheetRow, ProfileHero, PageAnim, goTo, useIsMobile, DOCK_SPACE } from '../mobile/MobileShell'
 import {
   Home, Building2, DollarSign, FileText, Settings, Gift,
@@ -37,56 +38,40 @@ interface Notification {
 }
 
 // ─── menus ────────────────────────────────────────────────────────────────
-interface MenuItem { path: string; label: string; icon: any; exact?: boolean }
+interface MenuTab { path: string; label: string }
+interface MenuItem { path: string; label: string; icon: any; exact?: boolean; tabs?: MenuTab[]; match?: string[] }
 interface MenuGroup { title: string; items: MenuItem[] }
 
+// Menu enxuto: cada item é um grupo de telas que já existiam, com abas em cima.
+const P = '/super-admin'
 const ADMIN_GROUPS: MenuGroup[] = [
   {
-    title: 'Visão geral',
+    title: 'Principal',
     items: [
-      { path: '/super-admin',            label: 'Dashboard',     icon: Home, exact: true },
+      { path: P, label: 'Início', icon: Home, exact: true },
+      { path: `${P}/crm`, label: 'Vendas', icon: TrendingUp, tabs: [
+        { path: `${P}/crm`, label: 'CRM' }, { path: `${P}/indicacoes`, label: 'Indicações' }, { path: `${P}/consultants`, label: 'Consultores' } ] },
+      { path: `${P}/schools`, label: 'Escolas', icon: Building2, match: [`${P}/institutions`], tabs: [
+        { path: `${P}/schools`, label: 'Escolas' }, { path: `${P}/roteiro`, label: 'Implantação' }, { path: `${P}/school-groups`, label: 'Grupos' } ] },
+      { path: `${P}/financial`, label: 'Financeiro', icon: DollarSign, tabs: [
+        { path: `${P}/financial`, label: 'Financeiro' }, { path: `${P}/transmissoes/precos`, label: 'Transmissões' }, { path: `${P}/whatsapp`, label: 'Uso do WhatsApp' } ] },
     ],
   },
   {
-    title: 'Comercial',
+    title: 'Operação',
     items: [
-      { path: '/super-admin/crm',        label: 'CRM Comercial', icon: TrendingUp  },
-      { path: '/super-admin/indicacoes', label: 'Indicações',    icon: Gift        },
-      { path: '/super-admin/aion-inbox', label: 'Inbox Áion',    icon: Inbox       },
-    ],
-  },
-  {
-    title: 'Escolas',
-    items: [
-      { path: '/super-admin/schools',       label: 'Escolas',         icon: Building2 },
-      { path: '/super-admin/school-groups', label: 'Grupos Escolares', icon: Network  },
-      { path: '/super-admin/roteiro',       label: 'Roteiro da campanha', icon: ListChecks },
-    ],
-  },
-  {
-    title: 'Marketing',
-    items: [
-      { path: '/super-admin/site', label: 'Site (visitas)', icon: Globe },
-      { path: '/super-admin/showcase-schools', label: 'Escolas em Destaque', icon: MapPinned },
+      { path: `${P}/aion-inbox`, label: 'Atendimento', icon: Inbox, tabs: [
+        { path: `${P}/aion-inbox`, label: 'WhatsApp' }, { path: `${P}/support`, label: 'Central de dúvidas' },
+        { path: `${P}/whatsapp-templates`, label: 'Templates' }, { path: `${P}/updates`, label: 'Atualizações' } ] },
+      { path: `${P}/site`, label: 'Marketing', icon: Globe, tabs: [
+        { path: `${P}/site`, label: 'Site' }, { path: `${P}/showcase-schools`, label: 'Escolas em destaque' }, { path: `${P}/market-intelligence`, label: 'Mercado' } ] },
     ],
   },
   {
     title: 'Sistema',
     items: [
-      { path: '/super-admin/settings',              label: 'Configurações',   icon: Settings      },
-      { path: '/super-admin/consultants',            label: 'Consultores',    icon: Users         },
-      { path: '/super-admin/market-intelligence',    label: 'Intel. Mercado', icon: BarChart3     },
-      { path: '/super-admin/updates',                label: 'Atualizações',   icon: BookOpen      },
-      { path: '/super-admin/support',                label: 'Suporte (dúvidas)', icon: LifeBuoy   },
-      { path: '/super-admin/whatsapp',                label: 'WhatsApp',       icon: MessageCircle },
-      { path: '/super-admin/whatsapp-templates',      label: 'Templates Automáticos', icon: MessageSquare },
-    ],
-  },
-  {
-    title: 'Financeiro',
-    items: [
-      { path: '/super-admin/financial',  label: 'Financeiro',    icon: DollarSign  },
-      { path: '/super-admin/transmissoes/precos', label: 'Transmissões', icon: Send },
+      { path: `${P}/settings`, label: 'Configurações', icon: Settings, tabs: [
+        { path: `${P}/settings`, label: 'Plataforma' }, { path: `${P}/profile`, label: 'Meu perfil' } ] },
     ],
   },
 ]
@@ -247,19 +232,31 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
 
   const isActive = (path: string, exact?: boolean) =>
     exact ? location.pathname === path : location.pathname.startsWith(path)
+  // item do menu = ativo em qualquer uma das suas abas
+  const itemActive = (m: MenuItem) =>
+    m.tabs ? [...m.tabs.map(t => t.path), ...(m.match || [])].some(t => isActive(t)) : isActive(m.path, m.exact)
+  const tabBadge = (path: string) => path === '/super-admin/crm' ? overdueFollowups : path === '/super-admin/support' ? supportOpen : path === '/super-admin/indicacoes' ? refNovas : 0
+  const itemBadge = (m: MenuItem) => (m.tabs ? m.tabs : [{ path: m.path }]).reduce((n, t) => n + tabBadge(t.path), 0)
+  // abas do grupo atual (só quando o grupo tem mais de uma tela)
+  const hub = isConsultant ? undefined : ADMIN_MENU_FLAT.find(m => m.tabs && itemActive(m))
+  const hubValue = hub?.tabs ? [...hub.tabs].filter(t => isActive(t.path)).sort((a, b) => b.path.length - a.path.length)[0]?.path ?? hub.tabs[0].path : ''
+  const hubBar = hub?.tabs ? (
+    <PillTabs tabs={hub.tabs.map(t => [t.path, tabBadge(t.path) > 0 ? `${t.label} (${tabBadge(t.path)})` : t.label] as [string, string])} value={hubValue}
+      onChange={to => { if (to !== location.pathname) goTo(navigate, to) }} tour="abas-grupo" />
+  ) : null
 
   // badges totais no sino
   const totalBadge = unread + overdueFollowups + todayMeetings + alertsUnread
 
   // label da página atual
-  const currentLabel = flatMenuItems.find(m => isActive(m.path, m.exact))?.label || 'Admin Geral'
+  const currentLabel = flatMenuItems.find(m => itemActive(m))?.label || 'Admin Geral'
 
   const renderNavItem = (item: MenuItem) => {
-    const active = isActive(item.path, item.exact)
+    const active = itemActive(item)
     const Icon   = item.icon
 
     // badge por item
-    const badge = item.path === '/super-admin/crm' ? overdueFollowups : item.path === '/super-admin/support' ? supportOpen : item.path === '/super-admin/indicacoes' ? refNovas : 0
+    const badge = itemBadge(item)
 
     return (
       <Link key={item.path} to={item.path}
@@ -295,15 +292,15 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     const ico = (it: MenuItem) => PH_ICON[it.icon.displayName || ''] || it.icon
     const wanted = isConsultant
       ? CONSULTANT_MENU
-      : ['/super-admin', '/super-admin/crm', '/super-admin/schools', '/super-admin/financial'].map(pp => ADMIN_MENU_FLAT.find(m => m.path === pp)!).filter(Boolean)
+      : ['/super-admin', '/super-admin/crm', '/super-admin/schools'].map(pp => ADMIN_MENU_FLAT.find(m => m.path === pp)!).filter(Boolean)
     const inbox = isConsultant ? undefined : ADMIN_MENU_FLAT.find(m => m.path === '/super-admin/aion-inbox')
     const bar = wanted.slice(0, inbox ? 3 : 4)
     const onBar = (m: MenuItem) => bar.includes(m) || m === inbox
-    const act = (m: MenuItem) => isActive(m.path, m.exact)
+    const act = (m: MenuItem) => itemActive(m)
     const go = (to: string) => { setMenuOpen(false); setProfileOpen(false); setNotifOpen(false); if (to !== location.pathname) goTo(navigate, to) }
     const groups = (isConsultant ? [{ title: 'Menu', items: CONSULTANT_MENU }] : ADMIN_GROUPS).map((g, gi) => ({
       title: g.title,
-      modules: g.items.filter(m => !onBar(m)).map(m => ({ key: m.path, label: m.label, Icon: ico(m) as any, tint: gi, active: act(m), badge: m.path === '/super-admin/crm' ? overdueFollowups : m.path === '/super-admin/support' ? supportOpen : m.path === '/super-admin/indicacoes' ? refNovas : 0, onPress: () => go(m.path) })),
+      modules: g.items.filter(m => !onBar(m)).map(m => ({ key: m.path, label: m.label, Icon: ico(m) as any, tint: gi, active: act(m), badge: isConsultant ? (m.path === '/super-admin/crm' ? overdueFollowups : 0) : itemBadge(m), onPress: () => go(m.path) })),
     })).filter(g => g.modules.length)
     const onDock = ADMIN_MENU_FLAT.concat(CONSULTANT_MENU).some(m => onBar(m) && act(m))
     const empty = notifications.length === 0 && overdueFollowups === 0 && todayMeetings === 0 && alerts.length === 0
@@ -321,11 +318,12 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
             style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--aion-grad)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>{initials}</button>
         </header>
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)', paddingBottom: DOCK_SPACE }}>
+          {hubBar && <div style={{ padding: '10px 12px 0' }}>{hubBar}</div>}
           <PageAnim pathKey={location.pathname}>{children}</PageAnim>
         </main>
         <AppDock
-          items={bar.map(m => ({ key: m.path, label: m.label.replace('CRM Comercial', 'CRM').replace('Minhas Escolas', 'Escolas'), Icon: ico(m) as any, active: act(m) && !menuOpen, badge: m.path === '/super-admin/crm' ? overdueFollowups : undefined, onPress: () => go(m.path) }))}
-          center={inbox ? { key: inbox.path, label: 'Inbox', Icon: ico(inbox) as any, active: act(inbox) && !menuOpen, onPress: () => go(inbox.path) } : undefined}
+          items={bar.map(m => ({ key: m.path, label: m.label.replace('CRM Comercial', 'CRM').replace('Minhas Escolas', 'Escolas'), Icon: ico(m) as any, active: act(m) && !menuOpen, badge: (isConsultant ? (m.path === '/super-admin/crm' ? overdueFollowups : 0) : itemBadge(m)) || undefined, onPress: () => go(m.path) }))}
+          center={inbox ? { key: inbox.path, label: 'Atender', Icon: ico(inbox) as any, active: act(inbox) && !menuOpen, badge: itemBadge(inbox) || undefined, onPress: () => go(inbox.path) } : undefined}
           menuOpen={menuOpen} menuActive={!onDock} onMenu={() => setMenuOpen(v => !v)} />
         <MenuSheet open={menuOpen} onClose={() => setMenuOpen(false)} groups={groups} />
         <BottomSheet open={notifOpen} onClose={() => setNotifOpen(false)} label="Notificações" height="82dvh">
@@ -587,6 +585,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
 
         {/* Conteúdo */}
         <div className="flex-1 overflow-auto">
+          {hubBar && <div className="px-6 pt-4">{hubBar}</div>}
           {children}
         </div>
       </div>
