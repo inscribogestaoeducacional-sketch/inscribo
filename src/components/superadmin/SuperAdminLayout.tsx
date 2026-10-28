@@ -6,18 +6,17 @@ import { supabase } from '../../lib/supabase'
 import { syncMissingDefaultTemplates } from '../../lib/submitDefaultTemplates'
 import { useAlertNotifications } from '../../hooks/useAlertNotifications'
 import AlertNotificationList from '../layout/AlertNotificationList'
-import { PillTabs } from '../mobile/PillTabs'
 import { AppDock, MenuSheet, BottomSheet, SheetRow, ProfileHero, PageAnim, goTo, useIsMobile, DOCK_SPACE } from '../mobile/MobileShell'
 import {
   Home, Building2, DollarSign, FileText, Settings, Gift,
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
   AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3, Network,
-  MapPinned, MessageSquare, Send, LifeBuoy, ListChecks, Globe,
+  MapPinned, MessageSquare, Send, LifeBuoy, ListChecks, Globe, Calendar,
 } from 'lucide-react'
 import {
   House, TrendUp, Tray, Buildings, TreeStructure, MapPinLine, GearSix, UsersThree, ChartLineUp, BookOpenText, WhatsappLogo, ChatCircleText,
-  CurrencyCircleDollar, PaperPlaneTilt, FileText as PhFileText, GlobeHemisphereWest,
+  CurrencyCircleDollar, PaperPlaneTilt, FileText as PhFileText, GlobeHemisphereWest, Gift as PhGift, ListChecks as PhListChecks, Lifebuoy, UserGear, CalendarCheck,
 } from '@phosphor-icons/react'
 
 // Ícones duotone do Modelo C no lugar dos de traço
@@ -25,6 +24,7 @@ const PH_ICON: Record<string, any> = {
   Home: House, TrendingUp: TrendUp, Inbox: Tray, Building2: Buildings, Network: TreeStructure, MapPinned: MapPinLine, Settings: GearSix,
   Users: UsersThree, BarChart3: ChartLineUp, BookOpen: BookOpenText, MessageCircle: WhatsappLogo, MessageSquare: ChatCircleText,
   Globe: GlobeHemisphereWest, DollarSign: CurrencyCircleDollar, Send: PaperPlaneTilt, FileText: PhFileText,
+  Gift: PhGift, ListChecks: PhListChecks, LifeBuoy: Lifebuoy, UserCog: UserGear, Calendar: CalendarCheck,
 }
 
 // ─── tipos ────────────────────────────────────────────────────────────────
@@ -35,45 +35,51 @@ interface Notification {
   type: 'info' | 'warning' | 'urgent'
   read: boolean
   created_at: string
+  url?: string | null
+  src?: 'user' | 'system'
 }
 
 // ─── menus ────────────────────────────────────────────────────────────────
-interface MenuTab { path: string; label: string }
-interface MenuItem { path: string; label: string; icon: any; exact?: boolean; tabs?: MenuTab[]; match?: string[] }
+interface MenuItem { path: string; label: string; icon: any; exact?: boolean; match?: string[] }
 interface MenuGroup { title: string; items: MenuItem[] }
 
-// Menu enxuto: cada item é um grupo de telas que já existiam, com abas em cima.
+// Menu no padrão das escolas: títulos de grupo e, embaixo, cada módulo como item do menu.
 const P = '/super-admin'
 const ADMIN_GROUPS: MenuGroup[] = [
-  {
-    title: 'Principal',
-    items: [
-      { path: P, label: 'Início', icon: Home, exact: true },
-      { path: `${P}/crm`, label: 'Vendas', icon: TrendingUp, tabs: [
-        { path: `${P}/crm`, label: 'CRM' }, { path: `${P}/indicacoes`, label: 'Indicações' }, { path: `${P}/consultants`, label: 'Consultores' } ] },
-      { path: `${P}/schools`, label: 'Escolas', icon: Building2, match: [`${P}/institutions`], tabs: [
-        { path: `${P}/schools`, label: 'Escolas' }, { path: `${P}/roteiro`, label: 'Roteiro da campanha' }, { path: `${P}/school-groups`, label: 'Grupos' } ] },
-      { path: `${P}/financial`, label: 'Financeiro', icon: DollarSign, tabs: [
-        { path: `${P}/financial`, label: 'Financeiro' }, { path: `${P}/transmissoes/precos`, label: 'Transmissões' }, { path: `${P}/whatsapp`, label: 'Uso do WhatsApp' } ] },
-    ],
-  },
-  {
-    title: 'Operação',
-    items: [
-      { path: `${P}/aion-inbox`, label: 'Atendimento', icon: Inbox, tabs: [
-        { path: `${P}/aion-inbox`, label: 'WhatsApp' }, { path: `${P}/support`, label: 'Central de dúvidas' },
-        { path: `${P}/whatsapp-templates`, label: 'Templates' }, { path: `${P}/updates`, label: 'Atualizações' } ] },
-      { path: `${P}/site`, label: 'Marketing', icon: Globe, tabs: [
-        { path: `${P}/site`, label: 'Site' }, { path: `${P}/showcase-schools`, label: 'Escolas em destaque' }, { path: `${P}/market-intelligence`, label: 'Mercado' } ] },
-    ],
-  },
-  {
-    title: 'Sistema',
-    items: [
-      { path: `${P}/settings`, label: 'Configurações', icon: Settings, tabs: [
-        { path: `${P}/settings`, label: 'Plataforma' }, { path: `${P}/profile`, label: 'Meu perfil' } ] },
-    ],
-  },
+  { title: 'Principal', items: [
+    { path: P, label: 'Início', icon: Home, exact: true },
+  ] },
+  { title: 'Vendas', items: [
+    { path: `${P}/crm`, label: 'CRM', icon: TrendingUp },
+    { path: `${P}/agenda`, label: 'Agenda', icon: Calendar },
+    { path: `${P}/indicacoes`, label: 'Indicações', icon: Gift },
+    { path: `${P}/consultants`, label: 'Consultores', icon: Users },
+  ] },
+  { title: 'Escolas', items: [
+    { path: `${P}/schools`, label: 'Escolas', icon: Building2, match: [`${P}/institutions`] },
+    { path: `${P}/roteiro`, label: 'Roteiro da campanha', icon: ListChecks },
+    { path: `${P}/school-groups`, label: 'Grupos', icon: Network },
+  ] },
+  { title: 'Financeiro', items: [
+    { path: `${P}/financial`, label: 'Financeiro', icon: DollarSign },
+    { path: `${P}/transmissoes/precos`, label: 'Transmissões', icon: Send },
+    { path: `${P}/whatsapp`, label: 'Uso do WhatsApp', icon: BarChart3 },
+  ] },
+  { title: 'Atendimento', items: [
+    { path: `${P}/aion-inbox`, label: 'WhatsApp', icon: Inbox },
+    { path: `${P}/support`, label: 'Central de dúvidas', icon: LifeBuoy },
+    { path: `${P}/whatsapp-templates`, label: 'Templates', icon: FileText },
+    { path: `${P}/updates`, label: 'Atualizações', icon: BookOpen },
+  ] },
+  { title: 'Marketing', items: [
+    { path: `${P}/site`, label: 'Site', icon: Globe },
+    { path: `${P}/showcase-schools`, label: 'Escolas em destaque', icon: MessageSquare },
+    { path: `${P}/market-intelligence`, label: 'Mercado', icon: MapPinned },
+  ] },
+  { title: 'Sistema', items: [
+    { path: `${P}/settings`, label: 'Configurações', icon: Settings },
+    { path: `${P}/profile`, label: 'Meu perfil', icon: UserCog },
+  ] },
 ]
 
 const ADMIN_MENU_FLAT = ADMIN_GROUPS.flatMap(g => g.items)
@@ -81,6 +87,7 @@ const ADMIN_MENU_FLAT = ADMIN_GROUPS.flatMap(g => g.items)
 const CONSULTANT_MENU: MenuItem[] = [
   { path: '/super-admin/consultant',           label: 'Dashboard',      icon: Home,      exact: true },
   { path: '/super-admin/crm',                  label: 'CRM Comercial',  icon: TrendingUp            },
+  { path: '/super-admin/agenda',               label: 'Agenda',         icon: Calendar              },
   { path: '/super-admin/consultant/schools',   label: 'Minhas Escolas', icon: Building2             },
   { path: '/super-admin/consultant/contracts', label: 'Contratos',      icon: FileText              },
 ]
@@ -168,15 +175,16 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     setOpenGroups(prev => ({ ...prev, [title]: !prev[title] }))
   }
 
+  // Sino: avisos pessoais (lembretes de reunião etc.) + avisos gerais da plataforma
   const loadNotifications = async () => {
     try {
-      const { data } = await supabase
-        .from('system_notifications')
-        .select('id, title, message, type, read, created_at')
-        .is('institution_id', null)
-        .order('created_at', { ascending: false })
-        .limit(20)
-      const list = (data || []) as Notification[]
+      const [mine, sys] = await Promise.all([
+        supabase.from('user_notifications').select('id, title, body, url, created_at, read_at').order('created_at', { ascending: false }).limit(30),
+        supabase.from('system_notifications').select('id, title, message, severity, created_at, read_at, action_url').is('institution_id', null).order('created_at', { ascending: false }).limit(20),
+      ])
+      const a: Notification[] = (mine.data || []).map((n: any) => ({ id: n.id, title: n.title, message: n.body || '', type: 'info' as const, read: !!n.read_at, created_at: n.created_at, url: n.url, src: 'user' as const }))
+      const b: Notification[] = (sys.data || []).map((n: any) => ({ id: n.id, title: n.title, message: n.message || '', type: (n.severity === 'urgent' || n.severity === 'warning' ? n.severity : 'info') as Notification['type'], read: !!n.read_at, created_at: n.created_at, url: n.action_url, src: 'system' as const }))
+      const list = [...a, ...b].sort((x, y) => +new Date(y.created_at) - +new Date(x.created_at)).slice(0, 40)
       setNotifications(list)
       setUnread(list.filter(n => !n.read).length)
     } catch { /* tabela pode não existir ainda */ }
@@ -203,16 +211,32 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         .eq('status', 'scheduled')
         .gte('scheduled_at', start.toISOString())
         .lte('scheduled_at', end.toISOString())
-      setTodayMeetings(count || 0)
+      const crm = await supabase
+        .from('crm_meetings')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'scheduled')
+        .gte('scheduled_at', start.toISOString())
+        .lte('scheduled_at', end.toISOString())
+      setTodayMeetings((count || 0) + (crm.count || 0))
     } catch { /* tabela pode não existir ainda */ }
   }
 
   const markAllRead = async () => {
     if (alertsUnread) markAlertsRead(null)
-    const ids = notifications.filter(n => !n.read).map(n => n.id)
-    if (!ids.length) return
-    await supabase.from('system_notifications').update({ read: true }).in('id', ids)
+    const now = new Date().toISOString()
+    const mine = notifications.filter(n => !n.read && n.src === 'user').map(n => n.id)
+    const sys = notifications.filter(n => !n.read && n.src === 'system').map(n => n.id)
+    if (mine.length) await supabase.from('user_notifications').update({ read_at: now }).in('id', mine)
+    if (sys.length) await supabase.from('system_notifications').update({ read_at: now }).in('id', sys)
     loadNotifications()
+  }
+
+  const openNotif = async (n: Notification) => {
+    if (!n.read) {
+      await supabase.from(n.src === 'system' ? 'system_notifications' : 'user_notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id)
+      loadNotifications()
+    }
+    if (n.url && n.url.startsWith('/')) { setNotifOpen(false); setMenuOpen(false); navigate(n.url) }
   }
 
   const handleLogout = async () => {
@@ -231,19 +255,12 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   }
 
   const isActive = (path: string, exact?: boolean) =>
-    exact ? location.pathname === path : location.pathname.startsWith(path)
-  // item do menu = ativo em qualquer uma das suas abas
+    exact ? location.pathname === path : (location.pathname === path || location.pathname.startsWith(path + '/'))
   const itemActive = (m: MenuItem) =>
-    m.tabs ? [...m.tabs.map(t => t.path), ...(m.match || [])].some(t => isActive(t)) : isActive(m.path, m.exact)
+    [m.path, ...(m.match || [])].some(t => isActive(t, m.exact && t === m.path))
   const tabBadge = (path: string) => path === '/super-admin/crm' ? overdueFollowups : path === '/super-admin/support' ? supportOpen : path === '/super-admin/indicacoes' ? refNovas : 0
-  const itemBadge = (m: MenuItem) => (m.tabs ? m.tabs : [{ path: m.path }]).reduce((n, t) => n + tabBadge(t.path), 0)
-  // abas do grupo atual (só quando o grupo tem mais de uma tela)
-  const hub = isConsultant ? undefined : ADMIN_MENU_FLAT.find(m => m.tabs && itemActive(m))
-  const hubValue = hub?.tabs ? [...hub.tabs].filter(t => isActive(t.path)).sort((a, b) => b.path.length - a.path.length)[0]?.path ?? hub.tabs[0].path : ''
-  const hubBar = hub?.tabs ? (
-    <PillTabs tabs={hub.tabs.map(t => [t.path, tabBadge(t.path) > 0 ? `${t.label} (${tabBadge(t.path)})` : t.label] as [string, string])} value={hubValue}
-      onChange={to => { if (to !== location.pathname) goTo(navigate, to) }} tour="abas-grupo" />
-  ) : null
+  const itemBadge = (m: MenuItem) => tabBadge(m.path)
+  const hubBar = null
 
   // badges totais no sino
   const totalBadge = unread + overdueFollowups + todayMeetings + alertsUnread
@@ -331,9 +348,9 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
             {(unread > 0 || alertsUnread > 0) && <button type="button" onClick={markAllRead} className="aion-tap" style={{ alignSelf: 'flex-end', border: 'none', background: 'none', color: '#05907B', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Marcar tudo como lido</button>}
             <AlertNotificationList alerts={alerts} onMarkRead={markAlertsRead} onNavigate={() => setNotifOpen(false)} />
             {overdueFollowups > 0 && <SheetRow Icon={AlertCircle} label={`${overdueFollowups} follow-up${overdueFollowups > 1 ? 's' : ''} vencido${overdueFollowups > 1 ? 's' : ''} no CRM`} hint="Ver no CRM" onPress={() => go('/super-admin/crm')} />}
-            {todayMeetings > 0 && <SheetRow Icon={AlertCircle} label={`${todayMeetings} reunião${todayMeetings > 1 ? 'ões' : ''} hoje`} hint="Ver em Escolas" onPress={() => go('/super-admin/schools')} />}
+            {todayMeetings > 0 && <SheetRow Icon={AlertCircle} label={`${todayMeetings} reunião${todayMeetings > 1 ? 'ões' : ''} hoje`} hint="Ver na agenda" onPress={() => go('/super-admin/agenda')} />}
             {notifications.map(n => (
-              <div key={n.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: '#fff', border: '1px solid #E8EDF5', borderRadius: 16, padding: '12px 14px' }}>
+              <div key={n.id} onClick={() => openNotif(n)} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: '#fff', border: '1px solid #E8EDF5', borderRadius: 16, padding: '12px 14px', cursor: n.url ? 'pointer' : 'default' }}>
                 <NotifIcon type={n.type} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>{n.title}</p>
@@ -490,14 +507,14 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                   )}
 
                   {todayMeetings > 0 && (
-                    <Link to="/super-admin/schools" onClick={() => setNotifOpen(false)}
+                    <Link to="/super-admin/agenda" onClick={() => setNotifOpen(false)}
                       className="flex items-start gap-3 px-4 py-3 bg-cyan-50 border-b border-cyan-100 hover:bg-cyan-100 transition-colors">
                       <AlertCircle className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="text-sm font-semibold text-cyan-700">
                           {todayMeetings} reunião{todayMeetings > 1 ? 'ões' : ''} hoje
                         </p>
-                        <p className="text-xs text-cyan-500 mt-0.5">Ver em Escolas →</p>
+                        <p className="text-xs text-cyan-500 mt-0.5">Ver na agenda →</p>
                       </div>
                     </Link>
                   )}
@@ -509,8 +526,8 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                         <p className="text-sm">Tudo em ordem!</p>
                       </div>
                     ) : notifications.map(n => (
-                      <div key={n.id}
-                        className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${!n.read ? 'bg-blue-50/60' : ''}`}>
+                      <div key={n.id} onClick={() => openNotif(n)}
+                        className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${n.url ? 'cursor-pointer' : ''} ${!n.read ? 'bg-blue-50/60' : ''}`}>
                         <NotifIcon type={n.type} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-gray-900 leading-snug">{n.title}</p>

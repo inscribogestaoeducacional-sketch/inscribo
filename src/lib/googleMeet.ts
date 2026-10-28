@@ -4,6 +4,7 @@ export interface GoogleMeetResult {
   meet_link: string | null
   calendar_link: string | null
   event_id: string | null
+  ok?: boolean
   error?: string
 }
 
@@ -13,13 +14,18 @@ export function buildEndDatetime(startIso: string, durationMin: number): string 
   return start.toISOString()
 }
 
-export async function createGoogleMeet(params: {
-  title: string
+export interface GoogleMeetParams {
+  action?: 'create' | 'update' | 'cancel'
+  event_id?: string | null
+  title?: string
   description?: string
-  start_datetime: string
-  end_datetime: string
+  start_datetime?: string
+  end_datetime?: string
   attendees?: string[]
-}): Promise<GoogleMeetResult> {
+  send_updates?: boolean // true = o Google envia o e-mail de convite/atualização/cancelamento
+}
+
+export async function createGoogleMeet(params: GoogleMeetParams): Promise<GoogleMeetResult> {
   try {
     const { data, error } = await supabase.functions.invoke('create-google-meet', {
       body: params,

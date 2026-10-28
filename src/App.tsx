@@ -85,6 +85,7 @@ import AdminFinancial   from './components/superadmin/AdminFinancial'
 import AdminBroadcastPricing from './components/superadmin/AdminBroadcastPricing'
 import AdminSettings    from './components/superadmin/AdminSettings'
 import AdminCRM         from './components/superadmin/AdminCRM'
+import AdminAgenda      from './components/superadmin/AdminAgenda'
 import AdminConsultants from './components/superadmin/AdminConsultants'
 import AdminUpdates     from './components/superadmin/AdminUpdates'
 import AdminProfile     from './components/superadmin/AdminProfile.tsx'
@@ -350,6 +351,7 @@ function AppContent() {
       <Routes>
         <Route path="/super-admin"                    element={<AdminHome />} />
         <Route path="/super-admin/crm"                element={<AdminCRM />} />
+        <Route path="/super-admin/agenda"             element={<AdminAgenda />} />
         <Route path="/super-admin/schools"              element={<AdminSchools />} />
         <Route path="/super-admin/roteiro"              element={<AdminRoteiro />} />
         <Route path="/super-admin/schools/:id"        element={<InstitutionDetails />} />

@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildContractVars, renderContractHtml } from '../../lib/contractPreview'
 import {
   Plus, X, Search, Phone, Mail, MapPin,
@@ -13,7 +13,9 @@ import {
   Video, Users, ExternalLink, Link2, FileText,
 } from 'lucide-react'
 import ProposalGenerator from './ProposalGenerator'
-import LeadModal, { type Lead, type Stage, STAGES, ORIGINS, inp, lbl, timeAgo } from '../shared/LeadModal'
+import CrmBoard, { type BoardMeeting } from './CrmBoard'
+import LeadSheet from './LeadSheet'
+import { type Lead, type Stage, STAGES, ORIGINS, inp, lbl, timeAgo } from '../shared/LeadModal'
 
 function fmtBRL(n?: number) {
   if (!n) return '—'
@@ -24,123 +26,6 @@ function isDueSoon(d?: string) {
   if (!d) return false
   const ms = new Date(d).getTime() - Date.now()
   return ms > 0 && ms < 48 * 3600000
-}
-
-// ─── Lead Card ────────────────────────────────────────────────────────────
-function LeadCard({ lead, stage, consultants, meetingCount, onClick, onMoveStage, onDelete, onGenerateProposal }: {
-  lead: Lead; stage: typeof STAGES[0]; consultants: any[]
-  meetingCount: number
-  onClick: () => void; onMoveStage: (to: Stage) => void; onDelete: () => void
-  onGenerateProposal: () => void
-}) {
-  const [menu, setMenu] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const overdue = isOverdue(lead.next_followup)
-  const soon    = isDueSoon(lead.next_followup)
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3.5 cursor-pointer hover:shadow-md transition-all hover:border-gray-200 group" onClick={onClick}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-gray-900 text-sm leading-tight truncate">{lead.school_name}</p>
-          <p className="text-xs text-gray-400 mt-0.5 truncate">{lead.name}</p>
-        </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-          <button onClick={onGenerateProposal} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50" title="Gerar Proposta">
-            <FileText size={14} />
-          </button>
-          <div className="relative" ref={menuRef}>
-            <button onClick={() => setMenu(!menu)} className="p-1 hover:bg-gray-100 rounded">
-              <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-            </button>
-            {menu && (
-              <div className="absolute right-0 top-6 bg-white border border-gray-200 rounded-xl shadow-xl z-50 w-44 py-1 overflow-hidden">
-                <p className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Mover para</p>
-                {STAGES.filter(s => s.id !== lead.stage).map(s => (
-                  <button key={s.id} onClick={() => { onMoveStage(s.id); setMenu(false) }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 font-semibold" style={{ color: s.color }}>
-                    → {s.label}
-                  </button>
-                ))}
-                <div className="border-t border-gray-100 mt-1" />
-                <button onClick={() => { onDelete(); setMenu(false) }}
-                  className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-50 font-semibold flex items-center gap-1.5">
-                  <Trash2 className="w-3 h-3" /> Excluir lead
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {(lead.city || lead.state) && (
-        <div className="flex items-center gap-1 text-xs text-gray-400 mb-2">
-          <MapPin className="w-3 h-3 flex-shrink-0" />
-          {[lead.city, lead.state].filter(Boolean).join('/')}
-        </div>
-      )}
-
-      {lead.monthly_value && (
-        <div className="flex items-center gap-1 text-xs font-semibold text-gray-700 mb-2">
-          <DollarSign className="w-3 h-3 text-green-500" />
-          {fmtBRL(lead.monthly_value)}/mês
-        </div>
-      )}
-
-      <div className="flex items-center gap-1.5 flex-wrap mb-1">
-        {lead.origin && (
-          <span className="inline-block text-xs px-2 py-0.5 rounded-full font-medium"
-            style={{ background: stage.bg, color: stage.color, border: `1px solid ${stage.border}` }}>
-            {lead.origin}
-          </span>
-        )}
-        {meetingCount > 0 && (
-          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-600 border border-blue-100">
-            <Video className="w-3 h-3" />{meetingCount}
-          </span>
-        )}
-        {lead.converted_institution_id && (
-          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-600 border border-emerald-100">
-            <Building2 className="w-3 h-3" />Escola
-          </span>
-        )}
-        {lead.has_proposal && (
-          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Proposta</span>
-        )}
-      </div>
-
-      {lead.next_followup && (
-        <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg mt-1 font-medium
-          ${overdue ? 'bg-red-50 text-red-600' : soon ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500'}`}>
-          {overdue ? <AlertCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-          {new Date(lead.next_followup).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
-        </div>
-      )}
-
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
-        <span className="text-xs text-gray-400">{timeAgo(lead.updated_at || lead.created_at)}</span>
-      </div>
-
-      {(lead.stage === 'fechado' || lead.stage === 'cliente') && !lead.converted_institution_id && (
-        <div className="mt-2 w-full py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xs font-bold rounded-lg text-center"
-          onClick={e => { e.stopPropagation(); onClick() }}>
-          🏫 Iniciar onboarding →
-        </div>
-      )}
-
-      {lead.converted_institution_id && (
-        <div className="mt-2 w-full py-1.5 bg-gray-100 text-gray-500 text-xs font-semibold rounded-lg text-center">
-          ✓ Escola criada
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ─── Onboarding Modal — 3-step wizard ────────────────────────────────────
@@ -570,16 +455,12 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
 // ─── MAIN ─────────────────────────────────────────────────────────────────
 export default function AdminCRM() {
   const navigate = useNavigate()
+  const [qs, setQs] = useSearchParams()
+  const [initialTab, setInitialTab] = useState<'meetings' | undefined>(undefined)
   const [leads, setLeads]               = useState<Lead[]>([])
   const [consultants, setConsultants]   = useState<any[]>([])
-  const [meetingCounts, setMeetingCounts] = useState<Record<string, number>>({})
+  const [meetings, setMeetings]     = useState<BoardMeeting[]>([])
   const [loading, setLoading]           = useState(true)
-  const [search, setSearch]             = useState('')
-  const [filterStage, setFilterStage]   = useState<Stage | 'all'>('all')
-  const [filterConsultant, setFilterConsultant] = useState('')
-  const [filterOrigin, setFilterOrigin] = useState('')
-  const [showOverdueOnly, setShowOverdueOnly] = useState(false)
-  const [view, setView]                 = useState<'kanban' | 'list'>('kanban')
   const [selectedLead, setSelectedLead] = useState<Lead | null | 'new'>(null)
   const [onboardingLead, setOnboardingLead] = useState<Lead | null>(null)
   const [proposalLead, setProposalLead] = useState<Lead | null>(null)
@@ -588,6 +469,14 @@ export default function AdminCRM() {
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
 
   const cancelledRef = useRef(false)
+
+  // vindo da Agenda: ?lead=<id>&tab=meetings abre a ficha direto na aba Reuniões
+  useEffect(() => {
+    const id = qs.get('lead'); if (!id || !leads.length) return
+    const l = leads.find(x => x.id === id)
+    if (l) { setInitialTab(qs.get('tab') === 'meetings' ? 'meetings' : undefined); setSelectedLead(l) }
+    qs.delete('lead'); qs.delete('tab'); setQs(qs, { replace: true })
+  }, [leads, qs, setQs])
 
   useEffect(() => {
     cancelledRef.current = false
@@ -600,30 +489,15 @@ export default function AdminCRM() {
     const [leadsRes, consultRes, meetingsRes] = await Promise.all([
       supabase.from('crm_leads').select('*').order('updated_at', { ascending: false }),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
-      supabase.from('crm_meetings').select('lead_id').eq('status', 'scheduled'),
+      supabase.from('crm_meetings').select('lead_id, scheduled_at').eq('status', 'scheduled'),
     ])
     if (cancelledRef.current) return
     setLeads(leadsRes.data || [])
     setConsultants(consultRes.data || [])
 
-    const counts: Record<string, number> = {}
-    for (const m of (meetingsRes.data || [])) {
-      counts[m.lead_id] = (counts[m.lead_id] || 0) + 1
-    }
-    setMeetingCounts(counts)
+    setMeetings((meetingsRes.data || []) as BoardMeeting[])
     setLoading(false)
   }
-
-  const filteredLeads = leads.filter(l => {
-    const matchSearch     = !search || [l.school_name, l.name, l.city, l.email, l.phone].some(f => f?.toLowerCase().includes(search.toLowerCase()))
-    const matchStage      = filterStage === 'all' || l.stage === filterStage
-    const matchConsultant = !filterConsultant || l.consultant_id === filterConsultant
-    const matchOrigin     = !filterOrigin || l.origin === filterOrigin
-    const matchOverdue    = !showOverdueOnly || isOverdue(l.next_followup)
-    return matchSearch && matchStage && matchConsultant && matchOrigin && matchOverdue
-  })
-
-  const overdueCount = leads.filter(l => isOverdue(l.next_followup) && !['fechado','cliente'].includes(l.stage)).length
 
   const handleSaveLead = async (form: Partial<Lead>) => {
     try {
@@ -644,14 +518,35 @@ export default function AdminCRM() {
   }
 
   const handleMoveStage = async (lead: Lead, to: Stage) => {
-    await supabase.from('crm_leads').update({ stage: to, updated_at: new Date().toISOString() }).eq('id', lead.id)
+    const before = leads
+    setLeads(ls => ls.map(l => (l.id === lead.id ? { ...l, stage: to, updated_at: new Date().toISOString() } : l)))
+    const { error } = await supabase.from('crm_leads').update({ stage: to, updated_at: new Date().toISOString() }).eq('id', lead.id)
+    if (error) { setLeads(before); showToast(`Não foi possível mover: ${error.message}`, false); return }
+    showToast(`Movido para ${STAGES.find(s => s.id === to)?.label.replace(/[^\p{L}\s]/gu, '').trim()}`)
     loadData()
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Excluir este lead?')) return
-    await supabase.from('crm_leads').delete().eq('id', id)
+    const lead = leads.find(l => l.id === id)
+    if (!confirm(`Excluir ${lead?.school_name ? `"${lead.school_name}"` : 'este lead'}? As reuniões, o histórico de contatos e as propostas dele também serão apagados.`)) return
+    let msg = ''
+    const rpc = await supabase.rpc('crm_delete_lead', { p_id: id })
+    if (!rpc.error) {
+      const r = rpc.data as { ok?: boolean; error?: string } | null
+      if (r && r.ok === false) msg = r.error || 'Não foi possível excluir.'
+    } else {
+      // função ainda não existe no banco: faz os mesmos passos pelo próprio app
+      const com = await supabase.from('consultant_commissions').select('id', { count: 'exact', head: true }).eq('lead_id', id)
+      if ((com.count || 0) > 0) msg = 'Este lead tem comissão de consultor registrada. Exclua ou ajuste a comissão antes.'
+      else {
+        await supabase.from('whatsapp_conversations').update({ aion_lead_id: null }).eq('aion_lead_id', id)
+        const { error } = await supabase.from('crm_leads').delete().eq('id', id)
+        if (error) msg = error.message
+      }
+    }
+    if (msg) { showToast(msg, false); return }
     showToast('Lead excluído.')
+    setSelectedLead(null)
     loadData()
   }
 
@@ -666,215 +561,40 @@ export default function AdminCRM() {
     navigate(`/super-admin/schools/${institutionId}`)
   }
 
-  const kpis = {
-    total:        leads.length,
-    active:       leads.filter(l => !['fechado','cliente'].includes(l.stage)).length,
-    closed:       leads.filter(l => l.stage === 'fechado').length,
-    clients:      leads.filter(l => l.stage === 'cliente').length,
-    mrr_pipeline: leads.filter(l => l.monthly_value).reduce((s, l) => s + (l.monthly_value || 0), 0),
-  }
-
   return (
     <SuperAdminLayout>
-      <div className="p-8 space-y-6">
-
-        {toast && (
-          <div className={`fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold
-            ${toast.ok ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
-            {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-            {toast.msg}
-          </div>
-        )}
-
-        <div className="aion-band flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="aion-band-title">CRM Comercial</h1>
-            <p className="aion-band-sub">Pipeline de prospecção e fechamento</p>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            {overdueCount > 0 && (
-              <button onClick={() => setShowOverdueOnly(!showOverdueOnly)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border transition-all
-                  ${showOverdueOnly ? 'bg-red-500 text-white border-red-500' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'}`}>
-                <AlertCircle className="w-4 h-4" /> {overdueCount} vencido{overdueCount > 1 ? 's' : ''}
-              </button>
-            )}
-            <div className="flex border border-gray-200 rounded-xl overflow-hidden">
-              <button onClick={() => setView('kanban')} className={`px-3 py-2 text-sm font-semibold transition-colors ${view === 'kanban' ? 'bg-cyan-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>Kanban</button>
-              <button onClick={() => setView('list')} className={`px-3 py-2 text-sm font-semibold transition-colors ${view === 'list' ? 'bg-cyan-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>Lista</button>
-            </div>
-            <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500"><RefreshCw className="w-4 h-4" /></button>
-            <button onClick={() => setSelectedLead('new')}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm">
-              <Plus className="w-4 h-4" /> Novo lead
-            </button>
-          </div>
+      {toast && (
+        <div className={`fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold
+          ${toast.ok ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+          {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {toast.msg}
         </div>
+      )}
 
-        <div className="aion-snap grid grid-cols-2 lg:grid-cols-5 gap-4">
-          {[
-            { label: 'Total leads',  value: kpis.total,   icon: TrendingUp, color: 'text-blue-600',    bg: 'bg-blue-50'    },
-            { label: 'Em andamento', value: kpis.active,  icon: Clock,      color: 'text-cyan-600',    bg: 'bg-cyan-50'    },
-            { label: 'Fechados',     value: kpis.closed,  icon: Star,       color: 'text-green-600',   bg: 'bg-green-50'   },
-            { label: 'Clientes',     value: kpis.clients, icon: Building2,  color: 'text-emerald-700', bg: 'bg-emerald-50' },
-            { label: 'MRR pipeline', value: kpis.mrr_pipeline > 0 ? kpis.mrr_pipeline.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—', icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-50' },
-          ].map(k => {
-            const Icon = k.icon
-            return (
-              <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-gray-500 font-medium">{k.label}</p>
-                  <div className={`w-7 h-7 rounded-lg ${k.bg} flex items-center justify-center`}>
-                    <Icon className={`w-3.5 h-3.5 ${k.color}`} />
-                  </div>
-                </div>
-                <p className="text-xl font-bold text-gray-900">{loading ? '—' : k.value}</p>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none"
-              placeholder="Buscar escola, contato, cidade..." value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <select className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-cyan-500 outline-none"
-            value={filterStage} onChange={e => setFilterStage(e.target.value as any)}>
-            <option value="all">Todos os estágios</option>
-            {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-          <select className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-cyan-500 outline-none"
-            value={filterConsultant} onChange={e => setFilterConsultant(e.target.value)}>
-            <option value="">Todos os consultores</option>
-            {consultants.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-          </select>
-          <select className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-cyan-500 outline-none"
-            value={filterOrigin} onChange={e => setFilterOrigin(e.target.value)}>
-            <option value="">Todas as origens</option>
-            {ORIGINS.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-
-        {view === 'kanban' && (
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            {STAGES.map(stage => {
-              const stageLeads = filteredLeads.filter(l => l.stage === stage.id)
-              const stageValue = stageLeads.reduce((s, l) => s + (l.monthly_value || 0), 0)
-              return (
-                <div key={stage.id} className="flex-shrink-0 w-64">
-                  <div className="flex items-center justify-between mb-3 px-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold" style={{ color: stage.color }}>{stage.label}</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: stage.bg, color: stage.color }}>{stageLeads.length}</span>
-                    </div>
-                    {stageValue > 0 && <span className="text-xs text-gray-400 font-semibold">{stageValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>}
-                  </div>
-                  <div className="space-y-3 min-h-[200px]">
-                    {stageLeads.map(lead => (
-                      <LeadCard key={lead.id} lead={lead} stage={stage} consultants={consultants}
-                        meetingCount={meetingCounts[lead.id] || 0}
-                        onClick={() => setSelectedLead(lead)}
-                        onMoveStage={to => handleMoveStage(lead, to)}
-                        onDelete={() => handleDelete(lead.id)}
-                        onGenerateProposal={() => setProposalLead(lead)}
-                      />
-                    ))}
-                    {stageLeads.length === 0 && (
-                      <div className="border-2 border-dashed border-gray-100 rounded-xl py-8 text-center text-gray-300">
-                        <p className="text-xs">Sem leads</p>
-                      </div>
-                    )}
-                    <button onClick={() => setSelectedLead({ stage: stage.id } as any)}
-                      className="w-full py-2 border border-dashed border-gray-200 rounded-xl text-xs text-gray-400 hover:border-cyan-300 hover:text-cyan-500 transition-colors font-medium">
-                      + Adicionar
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {view === 'list' && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    {['Escola','Contato','Localização','Estágio','Valores','Follow-up','Ações'].map(h => (
-                      <th key={h} className="px-4 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filteredLeads.length === 0 ? (
-                    <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">
-                      <TrendingUp className="w-10 h-10 mx-auto mb-2 text-gray-200" />
-                      <p className="text-sm">Nenhum lead encontrado</p>
-                    </td></tr>
-                  ) : filteredLeads.map(lead => {
-                    const stage   = STAGES.find(s => s.id === lead.stage) || STAGES[0]
-                    const overdue = isOverdue(lead.next_followup)
-                    return (
-                      <tr key={lead.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedLead(lead)}>
-                        <td className="px-4 py-3.5">
-                          <p className="font-semibold text-gray-900 text-sm">{lead.school_name}</p>
-                          {(meetingCounts[lead.id] || 0) > 0 && (
-                            <span className="inline-flex items-center gap-1 text-xs text-blue-500 mt-0.5">
-                              <Video className="w-3 h-3" />{meetingCounts[lead.id]} reunião
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <p className="text-sm text-gray-700">{lead.name}</p>
-                          {lead.phone && <p className="text-xs text-gray-400">{lead.phone}</p>}
-                        </td>
-                        <td className="px-4 py-3.5 text-sm text-gray-500">{[lead.city, lead.state].filter(Boolean).join('/')}</td>
-                        <td className="px-4 py-3.5">
-                          <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: stage.color, background: stage.bg }}>{stage.label}</span>
-                        </td>
-                        <td className="px-4 py-3.5 text-xs text-gray-600">
-                          {lead.monthly_value && <p className="font-semibold">{fmtBRL(lead.monthly_value)}/mês</p>}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          {lead.next_followup ? (
-                            <span className={`text-xs font-medium ${overdue ? 'text-red-600' : 'text-gray-500'}`}>
-                              {overdue && '⚠️ '}{new Date(lead.next_followup).toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })}
-                            </span>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => setProposalLead(lead)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Gerar Proposta">
-                              <FileText className="w-3.5 h-3.5" />
-                            </button>
-                            {(lead.stage === 'fechado' || lead.stage === 'cliente') && !lead.converted_institution_id && (
-                              <button onClick={() => setOnboardingLead(lead)} className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded-lg font-bold hover:bg-green-100">🏫</button>
-                            )}
-                            <button onClick={() => handleDelete(lead.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
+      <CrmBoard
+        leads={leads}
+        consultants={consultants}
+        meetings={meetings}
+        loading={loading}
+        onOpenLead={l => setSelectedLead(l)}
+        onNewLead={stage => setSelectedLead(stage ? ({ stage } as any) : 'new')}
+        onProposal={l => setProposalLead(l)}
+        onMove={handleMoveStage}
+        onDelete={handleDelete}
+        onOnboard={l => setOnboardingLead(l)}
+      />
 
       {selectedLead !== null && (
-        <LeadModal
+        <LeadSheet
+          key={selectedLead === 'new' ? 'new' : (selectedLead as Lead).id || 'new-stage'}
           lead={selectedLead === 'new' ? null : selectedLead}
           consultants={consultants}
-          onClose={() => setSelectedLead(null)}
+          initialTab={initialTab}
+          onClose={() => { setSelectedLead(null); setInitialTab(undefined) }}
           onSave={handleSaveLead}
-          onStartOnboarding={lead => { setSelectedLead(null); setOnboardingLead(lead) }}
+          onDelete={handleDelete}
+          onProposal={l => { setSelectedLead(null); setProposalLead(l) }}
+          onOnboard={lead => { setSelectedLead(null); setOnboardingLead(lead) }}
         />
       )}
 

@@ -63,6 +63,15 @@ const MEETING_TYPES = [
 export const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all bg-white'
 export const lbl = 'block text-xs font-semibold text-gray-600 mb-1.5'
 
+// ISO (UTC) -> valor de <input type="datetime-local"> no horário local
+export function toLocalInput(iso?: string | null) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 export function timeAgo(date: string) {
   const diff = Date.now() - new Date(date).getTime()
   const mins = Math.floor(diff / 60000)
@@ -73,7 +82,7 @@ export function timeAgo(date: string) {
 }
 
 // ─── CRM Meeting Modal ────────────────────────────────────────────────────
-function CRMeetingModal({ lead, meeting, consultants, onClose, onSave }: {
+export function CRMeetingModal({ lead, meeting, consultants, onClose, onSave }: {
   lead: Lead; meeting?: CRMeeting | null; consultants: any[]
   onClose: () => void; onSave: () => void
 }) {
@@ -81,7 +90,7 @@ function CRMeetingModal({ lead, meeting, consultants, onClose, onSave }: {
   const [form, setForm] = useState({
     title:        meeting?.title        || `Reunião — ${lead.school_name}`,
     type:         meeting?.type         || 'video' as CRMeeting['type'],
-    scheduled_at: meeting?.scheduled_at?.slice(0, 16) || '',
+    scheduled_at: toLocalInput(meeting?.scheduled_at),
     duration_min: meeting?.duration_min ?? 30,
     meet_link:    meeting?.meet_link    || '',
     attendees:    (meeting?.attendees   || []) as string[],
@@ -129,11 +138,10 @@ function CRMeetingModal({ lead, meeting, consultants, onClose, onSave }: {
       status:       form.status,
       updated_at:   new Date().toISOString(),
     }
-    if (isNew) {
-      await supabase.from('crm_meetings').insert({ ...payload, created_at: new Date().toISOString() })
-    } else {
-      await supabase.from('crm_meetings').update(payload).eq('id', meeting!.id)
-    }
+    const res = isNew
+      ? await supabase.from('crm_meetings').insert({ ...payload, created_at: new Date().toISOString() })
+      : await supabase.from('crm_meetings').update(payload).eq('id', meeting!.id)
+    if (res.error) { setError(`Não foi possível salvar: ${res.error.message}`); setSaving(false); return }
     setSaving(false)
     onSave()
   }
