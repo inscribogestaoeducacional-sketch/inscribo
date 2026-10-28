@@ -52,7 +52,7 @@ const ADMIN_GROUPS: MenuGroup[] = [
       { path: `${P}/crm`, label: 'Vendas', icon: TrendingUp, tabs: [
         { path: `${P}/crm`, label: 'CRM' }, { path: `${P}/indicacoes`, label: 'Indicações' }, { path: `${P}/consultants`, label: 'Consultores' } ] },
       { path: `${P}/schools`, label: 'Escolas', icon: Building2, match: [`${P}/institutions`], tabs: [
-        { path: `${P}/schools`, label: 'Escolas' }, { path: `${P}/roteiro`, label: 'Implantação' }, { path: `${P}/school-groups`, label: 'Grupos' } ] },
+        { path: `${P}/schools`, label: 'Escolas' }, { path: `${P}/roteiro`, label: 'Roteiro da campanha' }, { path: `${P}/school-groups`, label: 'Grupos' } ] },
       { path: `${P}/financial`, label: 'Financeiro', icon: DollarSign, tabs: [
         { path: `${P}/financial`, label: 'Financeiro' }, { path: `${P}/transmissoes/precos`, label: 'Transmissões' }, { path: `${P}/whatsapp`, label: 'Uso do WhatsApp' } ] },
     ],
