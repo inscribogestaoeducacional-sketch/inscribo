@@ -6,6 +6,7 @@ import {
   X, Phone, MessageCircle, Mail, FileText, Trash2, Edit2, Plus, Send, Video, Users, Calendar, StickyNote, ExternalLink,
   CheckCircle2, AlertCircle, Clock, Building2, Zap, Save, ArrowRight,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useIsMobile } from '../mobile/MobileShell'
@@ -52,12 +53,13 @@ const btn = (kind: 'primary' | 'ghost' | 'danger' | 'soft', extra: React.CSSProp
   color: kind === 'primary' ? '#fff' : kind === 'danger' ? '#DC2626' : kind === 'soft' ? BRAND.primaryDark : BRAND.ink, ...extra,
 })
 
-export default function LeadSheet({ lead: initial, consultants, initialTab, onClose, onSave, onDelete, onProposal, onOnboard }: {
-  lead: Lead | null; initialTab?: Tab; consultants: { id: string; full_name: string; email: string }[]
+export default function LeadSheet({ lead: initial, consultants, initialTab, hideChat, onClose, onSave, onDelete, onProposal, onOnboard }: {
+  lead: Lead | null; initialTab?: Tab; hideChat?: boolean; consultants: { id: string; full_name: string; email: string }[]
   onClose: () => void; onSave: (form: Partial<Lead>) => Promise<void>; onDelete: (id: string) => void
   onProposal: (l: Lead) => void; onOnboard: (l: Lead) => void
 }) {
   const mobile = useIsMobile()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const isNew = !initial?.id
   const base: Partial<Lead> = useMemo(() => initial || { stage: 'interesse', origin: 'Indicação' }, [initial])
@@ -215,7 +217,7 @@ export default function LeadSheet({ lead: initial, consultants, initialTab, onCl
             </div>
             {!isNew && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                {form.phone && <a href={waLink(form.phone)} target="_blank" rel="noreferrer" style={{ ...btn('ghost', { background: '#fff', color: '#15803D', textDecoration: 'none', minHeight: 38 }) }}><MessageCircle size={15} />WhatsApp</a>}
+                {form.phone && !hideChat && <button type="button" onClick={() => navigate(`/super-admin/aion-inbox?phone=${encodeURIComponent(form.phone || '')}&name=${encodeURIComponent(form.name || '')}`)} style={btn('ghost', { background: '#fff', color: '#15803D', minHeight: 38 })}><MessageCircle size={15} />Abrir conversa</button>}
                 {form.phone && <a href={`tel:${form.phone.replace(/\D/g, '')}`} style={{ ...btn('ghost', { background: '#fff', color: '#1D4ED8', textDecoration: 'none', minHeight: 38 }) }}><Phone size={15} />Ligar</a>}
                 {form.email && <a href={`mailto:${form.email}`} style={{ ...btn('ghost', { background: '#fff', color: '#7C3AED', textDecoration: 'none', minHeight: 38 }) }}><Mail size={15} />E-mail</a>}
                 <button type="button" onClick={() => onProposal(lead)} style={btn('ghost', { background: '#fff', color: '#B45309', minHeight: 38 })}><FileText size={15} />Proposta</button>

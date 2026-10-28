@@ -14,7 +14,8 @@ import { getInitials } from '../../lib/initials'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { getAuthHeaders, getBearerHeader } from '../../lib/authHeaders'
-import LeadModal, { STAGES as CRM_STAGES } from '../shared/LeadModal'
+import { STAGES as CRM_STAGES } from '../shared/LeadModal'
+import LeadSheet from './LeadSheet'
 import ProposalForm from './ProposalForm'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia } from '../../lib/whatsappTemplate'
 import {
@@ -4016,9 +4017,11 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         </div>
       )}
 
-      {/* Lead Modal */}
+      {/* Ficha do lead — a mesma do CRM (LeadSheet) */}
       {showLeadModal && (
-        <LeadModal
+        <LeadSheet
+          key={leadData?.id || 'novo'}
+          hideChat
           lead={leadData ?? null}
           consultants={crmConsultants}
           onClose={() => setShowLeadModal(false)}
@@ -4029,7 +4032,19 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
               phone: form.phone || activeConv?.phone,
             })
           }}
-          onStartOnboarding={() => navigate('/super-admin/crm')}
+          onDelete={async (id) => {
+            if (!confirm('Excluir este lead? As reuniões, o histórico de contatos e as propostas dele também serão apagados.')) return
+            const r = await supabase.rpc('crm_delete_lead', { p_id: id })
+            const out = r.data as { ok?: boolean; error?: string } | null
+            if (r.error || (out && out.ok === false)) { setSendError(out?.error || r.error?.message || 'Não foi possível excluir.'); return }
+            setLeadData(null)
+            setConversations(prev => prev.map(c => c.lead_id === id ? { ...c, lead_id: undefined } : c))
+            setShowLeadModal(false)
+            setHubToast('Lead excluído.')
+            setTimeout(() => setHubToast(null), 3000)
+          }}
+          onProposal={() => { setShowLeadModal(false); setShowProposalGenerator(true) }}
+          onOnboard={() => navigate('/super-admin/crm')}
         />
       )}
 
