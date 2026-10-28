@@ -180,6 +180,7 @@ export default function LeadSheet({ lead: initial, consultants, initialTab, onCl
       case 'meeting_deleted': return { text: `Reunião excluída: ${d.title}`, icon: Trash2, color: '#DC2626' }
       case 'meeting_status': return { text: `Reunião "${d.title}": ${d.to === 'completed' ? 'realizada' : d.to === 'cancelled' ? 'cancelada' : 'agendada'}`, icon: Video, color: '#2563EB' }
       case 'meeting_rescheduled': return { text: `Reunião "${d.title}" remarcada para ${d.to ? when(d.to) : ''}`, icon: Calendar, color: '#2563EB' }
+      case 'email_flow': return { text: `E-mail automático enviado: ${d.label || d.flow}`, icon: Mail, color: '#8B5CF6' }
       case 'proposal_created': return { text: 'Proposta criada', icon: FileText, color: '#D97706' }
       case 'proposal_status': return { text: `Proposta: ${propStatus(d.from)[0]} → ${propStatus(d.to)[0]}`, icon: FileText, color: '#D97706' }
       default: return { text: e.event, icon: Clock, color: '#64748B' }

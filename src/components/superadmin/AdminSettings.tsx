@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { platformAdmin, type MaskedSecret } from '../../lib/platformAdmin'
 import SuperAdminLayout from './SuperAdminLayout'
+import CrmEmailFlows from './CrmEmailFlows'
 import {
   Settings, Save, Eye, EyeOff, CheckCircle2, AlertTriangle,
   DollarSign, FileText, Mail, MessageCircle, Building2,
@@ -284,6 +285,7 @@ export default function AdminSettings() {
   const [saving, setSaving] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [settingsTab, setSettingsTab] = useState<'geral' | 'emails'>(() => new URLSearchParams(window.location.search).get('aba') === 'emails' ? 'emails' : 'geral')
 
   const [aionWA, setAionWA]           = useState<AionWAConfig>({ phone_number_id: '', waba_id: '', access_token: '', phone_number: '', display_name: '', connected: false, webhook_verified: false })
   const [aionSaving, setAionSaving]   = useState(false)
@@ -480,6 +482,16 @@ export default function AdminSettings() {
           </button>
         </div>
 
+        <div role="tablist" className="flex gap-2">
+          {([['geral', 'Geral'], ['emails', 'E-mails do CRM']] as const).map(([id, l]) => (
+            <button key={id} role="tab" aria-selected={settingsTab === id} onClick={() => setSettingsTab(id)}
+              className={`px-4 min-h-[40px] rounded-xl text-sm font-bold border transition-colors ${settingsTab === id ? 'bg-teal-50 border-teal-300 text-teal-800' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>{l}</button>
+          ))}
+        </div>
+
+        {settingsTab === 'emails' && <CrmEmailFlows />}
+
+        {settingsTab === 'geral' && (<>
         {/* ── 1. Plataforma ── */}
         <Section icon={Building2} title="Dados da plataforma" subtitle="Nome, CNPJ, endereço e contato da Áion Edu" color="gray" defaultOpen>
           <div className="grid grid-cols-2 gap-4">
@@ -870,6 +882,7 @@ export default function AdminSettings() {
           </div>
         </Section>
 
+        </>)}
       </div>
     </SuperAdminLayout>
   )
