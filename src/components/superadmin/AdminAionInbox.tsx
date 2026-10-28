@@ -7,6 +7,7 @@ import SuperAdminLayout from './SuperAdminLayout'
 import AionInboxHub from './AionInboxHub'
 import HubErrorBoundary from '../whatsapp/HubErrorBoundary'
 import FlowEditor from '../whatsapp/FlowEditor'
+import RobotEditor from '../whatsapp/robot/RobotEditor'
 import { Card, Title, Switch, GhostButton } from '../management/settings/ui'
 import {
   Settings, MessageCircle, GitBranch, QrCode, Megaphone,
@@ -3243,6 +3244,7 @@ export default function AdminAionInbox() {
   const [checking, setChecking]         = useState(true)
   const [isConnected, setIsConnected]   = useState(false)
   const [aionPlatformId, setAionPlatformId] = useState<string>('')
+  const [robotCanvas, setRobotCanvas] = useState(false) // true = editor de caixinhas (modo avançado)
   // Permite deep-link (ex: navigate('/super-admin/aion-inbox?tab=settings')
   // vindo do próprio AionInboxHub quando falta configurar templates/conexão).
   const initialTab = (searchParams.get('tab') as Tab | null)
@@ -3333,7 +3335,9 @@ export default function AdminAionInbox() {
           {tab === 'inbox' && <HubErrorBoundary><AionInboxHub isAionInbox={true} /></HubErrorBoundary>}
           {tab === 'flow' && (
             aionPlatformId
-              ? <FlowEditor institutionId={aionPlatformId} ownerType="platform" onClose={() => setTab('inbox')} />
+              ? (robotCanvas
+                  ? <FlowEditor institutionId={aionPlatformId} ownerType="platform" onClose={() => setRobotCanvas(false)} />
+                  : <RobotEditor ownerId={aionPlatformId} ownerType="platform" onClose={() => setTab('inbox')} onOpenCanvas={() => setRobotCanvas(true)} />)
               : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                   <Loader2 style={{ width: 28, height: 28, color: '#05907B', animation: 'spin 1s linear infinite' }} />
                 </div>
