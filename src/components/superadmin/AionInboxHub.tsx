@@ -1814,7 +1814,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       const initialConvs = await loadMessages()
       setActiveId(prev => prev ?? (initialConvs?.[0]?.id ?? null))
       if (isAionInbox) {
-        // Time Áion pra transferência/atribuição — mesmo padrão de AionWhatsAppHub.tsx
+        // Time Áion pra transferência/atribuição
         // (consultores + admin_geral), já que `users` aqui não é escopado por institution_id.
         supabase.from('users').select('id, full_name, email, user_type, role')
           .or('user_type.eq.consultant,role.eq.admin_geral')

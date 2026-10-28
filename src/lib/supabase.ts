@@ -839,7 +839,7 @@ export class DatabaseService {
 
   // WhatsApp Messages
   // ATENÇÃO: histórico institucional inteiro, não de uma conversa — só usada
-  // por AionWhatsAppHub.tsx/AionInboxHub.tsx (telas internas Áion, baixo
+  // por AionInboxHub.tsx (telas internas Áion, baixo
   // volume de acesso). WhatsAppHub.tsx (usada por todo atendente de toda
   // escola) parou de chamar esta função — carrega só whatsapp_conversations e
   // busca mensagens por conversa sob demanda (getConversationMessages), que é
