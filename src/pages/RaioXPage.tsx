@@ -315,6 +315,7 @@ export default function RaioXPage() {
 
   // Cada busca ganha um número; resposta atrasada (rede lenta no celular) não sobrescreve a mais nova.
   const citySeq = useRef(0)
+  const schoolSeq = useRef(0)
   async function runCitySearch(term: string) {
     const my = ++citySeq.current
     setCitySearching(true)
@@ -337,17 +338,13 @@ export default function RaioXPage() {
   }, [searchStage, selectedUf, selectedCity]) // eslint-disable-line
 
   async function loadSchools() {
+    const seq = ++schoolSeq.current
     setLoadingSchools(true)
     setSchoolsError(null)
-    const { data, error } = await supabase
-      .from('inep_escolas')
-      // só particulares em atividade; escolas sem matrícula de educação básica (ex.: técnicas) ficam de fora
-      .select('co_entidade, no_entidade, no_municipio, sg_uf, qt_mat_total, ano_censo, qt_mat_inf, qt_mat_fund, qt_mat_med')
-      .eq('sg_uf', selectedUf)
-      .eq('no_municipio', selectedCity)
-      .eq('tp_dependencia', 4)
-      .eq('tp_situacao_funcionamento', 1)
-      .order('ano_censo', { ascending: false })
+    // a função do banco junta as duas grafias da cidade (ex.: "João" e "Jo?o"), pega o ano mais recente
+    // de cada escola e traz só particulares em atividade com matrícula na educação básica
+    const { data, error } = await supabase.rpc('raiox_escolas', { p_uf: selectedUf, p_cidade: selectedCity })
+    if (seq !== schoolSeq.current) return // resposta velha: o usuário já mudou de cidade
     setLoadingSchools(false)
 
     if (error) {
@@ -356,21 +353,15 @@ export default function RaioXPage() {
       return
     }
 
-    // a mesma escola aparece uma vez por ano do censo — mantém só o ano mais recente
-    const seen = new Set<string>()
-    const deduped: SchoolResult[] = []
-    for (const row of (data ?? []) as (SchoolResult & { qt_mat_inf: number | null; qt_mat_fund: number | null; qt_mat_med: number | null })[]) {
-      if (seen.has(row.co_entidade)) continue
-      if ((row.qt_mat_inf ?? 0) + (row.qt_mat_fund ?? 0) + (row.qt_mat_med ?? 0) <= 0) continue
-      seen.add(row.co_entidade)
-      deduped.push(row)
-    }
-    deduped.sort((a, b) => a.no_entidade.localeCompare(b.no_entidade, 'pt-BR'))
-    setAllSchools(deduped)
+    const lista = ((data ?? []) as SchoolResult[]).map(r => ({ ...r, no_municipio: selectedCity }))
+    lista.sort((a, b) => limpaTexto(a.no_entidade).localeCompare(limpaTexto(b.no_entidade), 'pt-BR'))
+    setAllSchools(lista)
   }
 
+  // filtro do nome: ignora acento e maiúsculas (no celular o teclado costuma mudar a letra)
+  const norm = (t: string) => limpaTexto(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const schoolResults = schoolQuery.trim()
-    ? allSchools.filter(s => s.no_entidade.toLowerCase().includes(schoolQuery.trim().toLowerCase()))
+    ? allSchools.filter(s => norm(s.no_entidade).includes(norm(schoolQuery)))
     : allSchools
 
   function pickUf(uf: string) {
@@ -395,6 +386,8 @@ export default function RaioXPage() {
   }
 
   function backToCity() {
+    schoolSeq.current++
+    setLoadingSchools(false)
     setSearchStage('city')
     setAllSchools([])
     setSchoolQuery('')
@@ -625,6 +618,7 @@ export default function RaioXPage() {
                     className="inp"
                     value={schoolQuery}
                     onChange={e => setSchoolQuery(e.target.value)}
+                    autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} enterKeyHint="search"
                     placeholder="Filtrar pelo nome da escola"
                   />
                   {schoolsError && <p style={errStyle}>{schoolsError}</p>}
@@ -706,24 +700,24 @@ export default function RaioXPage() {
               </div>
 
               <label style={labelStyle}>Nome do diretor(a) *</label>
-              <input className="inp" value={directorName} onChange={e => setDirectorName(e.target.value)} required placeholder="Seu nome completo" />
+              <input className="inp" value={directorName} onChange={e => setDirectorName(e.target.value)} required autoComplete="name" autoCapitalize="words" enterKeyHint="next" placeholder="Seu nome completo" />
 
               <label style={labelStyle}>Cargo *</label>
-              <input className="inp" value={role} onChange={e => setRole(e.target.value)} required placeholder="Ex: Diretor(a), Coordenador(a) Pedagógico(a)" />
+              <input className="inp" value={role} onChange={e => setRole(e.target.value)} required autoComplete="organization-title" enterKeyHint="next" placeholder="Ex: Diretor(a), Coordenador(a) Pedagógico(a)" />
 
               <div className="rx-grid2">
                 <div>
                   <label style={labelStyle}>WhatsApp *</label>
-                  <input className="inp" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} required placeholder="(00) 00000-0000" />
+                  <input className="inp" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} required type="tel" inputMode="tel" autoComplete="tel" enterKeyHint="next" placeholder="(00) 00000-0000" />
                 </div>
                 <div>
                   <label style={labelStyle}>Cidade *</label>
-                  <input className="inp" value={city} onChange={e => setCity(e.target.value)} required placeholder="Sua cidade" />
+                  <input className="inp" value={city} onChange={e => setCity(e.target.value)} required autoComplete="address-level2" enterKeyHint="next" placeholder="Sua cidade" />
                 </div>
               </div>
 
               <label style={labelStyle}>E-mail *</label>
-              <input className="inp" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" />
+              <input className="inp" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" />
 
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 18, cursor: 'pointer' }}>
                 <input type="checkbox" checked={lgpdAccepted} onChange={e => setLgpdAccepted(e.target.checked)} style={{ marginTop: 2, width: 18, height: 18, flexShrink: 0, accentColor: VM }} />
@@ -769,7 +763,7 @@ export default function RaioXPage() {
                 </div>
               ))}
               <label style={labelStyle}>Instagram da escola (opcional)</label>
-              <input className="inp" value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@suaescola" autoCapitalize="none" />
+              <input className="inp" value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@suaescola" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" />
               <p style={{ ...hintStyle, textAlign: 'left', marginTop: 6 }}>Com o @, o relatório inclui a nota do Instagram. Só lemos o que é público e o perfil precisa ser profissional.</p>
               {igAviso && (
                 <div>
