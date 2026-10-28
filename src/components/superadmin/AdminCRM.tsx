@@ -12,7 +12,7 @@ import {
   Bell, ChevronDown, StickyNote, Send, Zap, EyeOff,
   Video, Users, ExternalLink, Link2, FileText,
 } from 'lucide-react'
-import ProposalGenerator from './ProposalGenerator'
+import ProposalForm from './ProposalForm'
 import CrmBoard, { type BoardMeeting } from './CrmBoard'
 import LeadSheet from './LeadSheet'
 import { type Lead, type Stage, STAGES, ORIGINS, inp, lbl, timeAgo } from '../shared/LeadModal'
@@ -608,10 +608,10 @@ export default function AdminCRM() {
       )}
 
       {proposalLead && (
-        <ProposalGenerator
+        <ProposalForm
           lead={proposalLead}
           onClose={() => setProposalLead(null)}
-          onSave={() => { setProposalLead(null); loadData() }}
+          onDone={msg => { setProposalLead(null); loadData(); if (msg) showToast(msg, !/erro|não saiu/i.test(msg)) }}
         />
       )}
 

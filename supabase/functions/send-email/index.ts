@@ -395,35 +395,19 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
   }),
 
   proposal: (data) => ({
-    subject: `Proposta Comercial Aion Edu — ${data.school_name || 'sua escola'}`,
+    subject: `Proposta da Aion Edu para ${data.school_name || 'sua escola'}`,
     html: wrap(`
-      <p style="margin:0 0 4px;">${badge('Proposta Comercial', '#00523C', '#ffffff')}</p>
+      <p style="margin:0 0 4px;">${badge('Proposta comercial', '#00523C', '#ffffff')}</p>
       ${h1(`Proposta para ${data.school_name || 'sua escola'}`, '#00523C')}
-      ${p(`Ola, <strong>${data.client_name || 'prezado(a)'}</strong>! Preparamos uma proposta exclusiva para a sua escola. Confira os valores e condicoes especiais abaixo.`)}
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;border-radius:12px;overflow:hidden;border:1px solid #BBF7D0;">
-        <tr style="background:#00523C;">
-          <th style="padding:12px 16px;text-align:left;color:#ffffff;font-size:13px;font-weight:700;">Item</th>
-          <th style="padding:12px 16px;text-align:right;color:#ffffff;font-size:13px;font-weight:700;">Normal</th>
-          <th style="padding:12px 16px;text-align:right;color:#00FFD0;font-size:13px;font-weight:700;">Especial</th>
-        </tr>
-        <tr style="background:#F0FDF4;">
-          <td style="padding:12px 16px;font-size:14px;color:#166534;">Implantacao</td>
-          <td style="padding:12px 16px;text-align:right;font-size:14px;color:#64748B;text-decoration:line-through;">${data.implementation_normal_fmt || 'R$ 999,00'}</td>
-          <td style="padding:12px 16px;text-align:right;font-size:15px;font-weight:700;color:#00523C;">${data.implementation_special_fmt || 'R$ 499,00'}</td>
-        </tr>
-        <tr style="background:#ffffff;">
-          <td style="padding:12px 16px;font-size:14px;color:#166534;">Mensalidade</td>
-          <td style="padding:12px 16px;text-align:right;font-size:14px;color:#64748B;text-decoration:line-through;">${data.monthly_normal_fmt || 'R$ 749,00'}</td>
-          <td style="padding:12px 16px;text-align:right;font-size:15px;font-weight:700;color:#00523C;">${data.monthly_special_fmt || 'R$ 570,00'}</td>
-        </tr>
-      </table>
-      ${data.validity_days ? `<p style="color:#94A3B8;font-size:13px;text-align:center;margin:0 0 4px;">Proposta valida por ${data.validity_days} dias</p>` : ''}
-      ${btn('Ver Proposta Online', data.proposal_url || '#', '#00A896')}
+      ${p(`Ola, <strong>${data.client_name || 'prezado(a)'}</strong>! Preparamos a proposta da Aion Edu para a sua escola. Ela esta em anexo neste e-mail, em PDF, pronta para ler no celular.`)}
+      ${p('Nela voce encontra o que o sistema faz para o atendimento e para a gestao, os custos do WhatsApp explicados com exemplos e o investimento.')}
+      ${data.pdf_url ? btn('Abrir a proposta (PDF)', data.pdf_url, '#00A896') : ''}
+      ${data.valid_until ? `<p style="color:#94A3B8;font-size:13px;text-align:center;margin:0 0 4px;">Proposta valida ate ${data.valid_until}</p>` : ''}
       ${divider()}
       <p style="color:#475569;font-size:14px;margin:0 0 4px;"><strong>Seu consultor:</strong></p>
       <p style="color:#475569;font-size:14px;margin:0 0 4px;">${data.consultant_name || 'Equipe Aion Edu'}</p>
-      ${data.consultant_phone ? `<p style="color:#475569;font-size:14px;margin:0;"><a href="https://wa.me/55${data.consultant_phone.replace(/\D/g,'')}" style="color:#00A896;text-decoration:none;">WhatsApp: ${data.consultant_phone}</a></p>` : ''}
-    `, `Nova proposta da Aion Edu para ${data.school_name}`)
+      ${data.consultant_phone ? `<p style="color:#475569;font-size:14px;margin:0;"><a href="https://wa.me/55${String(data.consultant_phone).replace(/\D/g,'')}" style="color:#00A896;text-decoration:none;">WhatsApp: ${data.consultant_phone}</a></p>` : ''}
+    `, `A proposta da Aion Edu para ${data.school_name || 'sua escola'} esta em anexo`)
   }),
 
   nota_fiscal_emitida: (data) => ({
@@ -497,6 +481,9 @@ serve(async (req) => {
     // Nota Fiscal — Brevo busca o arquivo pela URL e anexa de verdade ao
     // e-mail (além do link clicavel já no corpo do template, redundância
     // proposital caso o fetch da Brevo falhe por algum motivo).
+    if (type === 'proposal' && data?.pdf_url) {
+      brevoBody.attachment = [{ url: data.pdf_url, name: `Proposta-Aion-Edu-${String(data.school_name || 'escola').replace(/[^A-Za-z0-9]+/g, '-')}.pdf` }]
+    }
     if (type === 'nota_fiscal_emitida' && data?.invoice_url_pdf) {
       brevoBody.attachment = [{ url: data.invoice_url_pdf, name: `NF-${data.invoice_number || 'documento'}.pdf` }]
     }

@@ -15,7 +15,7 @@ import { platformAdmin } from '../../lib/platformAdmin'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { getAuthHeaders, getBearerHeader } from '../../lib/authHeaders'
 import LeadModal, { STAGES as CRM_STAGES } from '../shared/LeadModal'
-import ProposalGenerator from './ProposalGenerator'
+import ProposalForm from './ProposalForm'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia } from '../../lib/whatsappTemplate'
 import {
   fetchTemplateMeta, fetchHiddenTemplateNames, variableLabel, templateDisplayName, filterTemplatesForContext,
@@ -4079,16 +4079,11 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       )}
 
       {showProposalGenerator && leadData && (
-        <ProposalGenerator
-          lead={{
-            id: leadData.id,
-            name: leadData.name,
-            school_name: leadData.school_name,
-            email: leadData.email,
-            phone: leadData.phone,
-          }}
+        <ProposalForm
+          lead={{ id: leadData.id, name: leadData.name, school_name: leadData.school_name, email: leadData.email, phone: leadData.phone } as any}
           onClose={() => setShowProposalGenerator(false)}
-          onGenerated={pdfUrl => { setShowProposalGenerator(false); handleAttachProposalPdf(pdfUrl) }}
+          onDone={() => setShowProposalGenerator(false)}
+          onGenerated={pdfUrl => handleAttachProposalPdf(pdfUrl)}
         />
       )}
 

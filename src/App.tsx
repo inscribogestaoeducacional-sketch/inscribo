@@ -20,7 +20,6 @@ import InitialSetup from './components/auth/InitialSetup'
 // ── Public pages ──────────────────────────────────────────────────────────
 import TransferSurveyPage from './pages/survey/TransferSurveyPage'
 import SatisfactionPage   from './pages/survey/SatisfactionPage'
-import ProposalView       from './pages/ProposalView'
 import RaioXPage          from './pages/RaioXPage'
 import NovidadeCaptacao   from './pages/NovidadeCaptacao'
 import NovidadeModulo     from './pages/NovidadeModulo'
@@ -264,9 +263,6 @@ function AppContent() {
   }
   if (pathname.startsWith('/satisfaction/')) {
     return <Routes><Route path="/satisfaction/:token" element={<SatisfactionPage />} /></Routes>
-  }
-  if (pathname.startsWith('/proposta/')) {
-    return <Routes><Route path="/proposta/:token" element={<ProposalView />} /></Routes>
   }
   if (pathname.startsWith('/raio-x')) {
     return <Routes><Route path="/raio-x" element={<RaioXPage />} /></Routes>
