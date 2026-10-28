@@ -178,6 +178,8 @@ Deno.serve(async (req) => {
         contact_name: directorTrim,
         timestamp: new Date().toISOString(),
         status: results.whatsapp ? 'sent' : 'failed',
+        // Guarda o motivo do erro da Meta pra aparecer na conversa (antes ficava só no log).
+        error_details: results.whatsapp ? null : [{ message: results.error || 'Falha ao enviar' }],
         direction: 'outbound',
         is_aion_inbox: true,
       })
