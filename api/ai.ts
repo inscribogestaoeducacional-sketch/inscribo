@@ -108,6 +108,7 @@ function parseJsonLoose(raw: string): unknown {
 
 // ── IA de escrita do WhatsApp (barata): modelo pequeno, só o texto necessário ──
 const WA_FAST_MODEL = 'claude-haiku-4-5-20251001'
+const AION_TENANT = '00000000-0000-0000-0000-000000000000'
 const WA_DAILY_LIMIT: Record<string, number> = { improve: 80, summary: 40 }
 async function callClaudeFast(system: string, user: string, maxTokens: number): Promise<{ text: string; inTok: number; outTok: number }> {
   const response = await fetch(ANTHROPIC_API_URL, {
@@ -422,6 +423,10 @@ async function resolveCaller(req: VercelRequest, action: string, payload: Record
     if (row.user_type === 'admin_geral') {
       return { ok: true, caller: { institutionId: requested, userId: data.user.id, surveyTransfer: null } }
     }
+    // Equipe da Áion (consultor) usa só a IA de escrita/resumo do WhatsApp da Áion — sem escola
+    if (row.user_type === 'consultant' && (action === 'wa_improve' || action === 'wa_summary')) {
+      return { ok: true, caller: { institutionId: null, userId: data.user.id, surveyTransfer: null } }
+    }
     const own: string | null = row.user_type === 'gestor_rede' ? row.active_institution_id : row.institution_id
     if (!own) return { ok: false, status: 403, error: 'Usuário sem escola vinculada.' }
     if (requested && requested !== own) return { ok: false, status: 403, error: 'Esta escola não pertence ao seu usuário.' }
@@ -568,10 +573,13 @@ Regras:
 
     // ── WHATSAPP: melhorar texto / resumir conversa (modelo pequeno, limite diário por pessoa) ──
     if (action === 'wa_improve' || action === 'wa_summary') {
-      if (!caller.institutionId || !caller.userId) return res.status(401).json({ error: 'Login obrigatório.' })
+      if (!caller.userId) return res.status(401).json({ error: 'Login obrigatório.' })
+      // Sem escola = inbox da Áion (Super Admin): o limite diário usa um "inquilino" fixo
+      const aion = !caller.institutionId
+      const tenant = caller.institutionId ?? AION_TENANT
       const kind = action === 'wa_improve' ? 'improve' : 'summary'
       const supa = getSupabaseAdmin()
-      const { data: okRow } = await supa.rpc('wa_ai_consume', { p_inst: caller.institutionId, p_user: caller.userId, p_kind: kind, p_limit: WA_DAILY_LIMIT[kind] })
+      const { data: okRow } = await supa.rpc('wa_ai_consume', { p_inst: tenant, p_user: caller.userId, p_kind: kind, p_limit: WA_DAILY_LIMIT[kind] })
       if (!okRow) return res.status(429).json({ error: `Você usou o limite diário de ${WA_DAILY_LIMIT[kind]} usos da IA. Ele renova amanhã.` })
 
       if (action === 'wa_improve') {
@@ -582,9 +590,9 @@ Regras:
         const rule = mode === 'custom'
           ? `Reescreva seguindo este pedido do atendente: "${String(instruction ?? '').slice(0, 200)}".`
           : (WA_MODES[String(mode)] || WA_MODES.fix)
-        const system = 'Você ajuda atendentes de escolas particulares brasileiras a escrever mensagens de WhatsApp para famílias. Responda SOMENTE com o texto final da mensagem, em português do Brasil, sem aspas, sem explicações. Mantenha nomes, números, datas, horários, links e emojis do original; nunca invente preços, datas, vagas ou promessas.'
+        const system = (aion ? 'Você ajuda a equipe comercial da Áion Edu (sistema para escolas particulares) a escrever mensagens de WhatsApp para gestores de escolas. ' : 'Você ajuda atendentes de escolas particulares brasileiras a escrever mensagens de WhatsApp para famílias. ') + 'Responda SOMENTE com o texto final da mensagem, em português do Brasil, sem aspas, sem explicações. Mantenha nomes, números, datas, horários, links e emojis do original; nunca invente preços, datas, vagas ou promessas.'
         const out = await callClaudeFast(system, `${rule}\n\nMensagem:\n${clean}`, Math.min(700, Math.ceil(clean.length / 2) + 160))
-        await supa.rpc('wa_ai_add_tokens', { p_inst: caller.institutionId, p_user: caller.userId, p_kind: kind, p_in: out.inTok, p_out: out.outTok })
+        await supa.rpc('wa_ai_add_tokens', { p_inst: tenant, p_user: caller.userId, p_kind: kind, p_in: out.inTok, p_out: out.outTok })
         return res.json({ result: out.text.replace(/^["“]|["”]$/g, '') })
       }
 
@@ -592,27 +600,32 @@ Regras:
       if (!conversationId) return res.status(400).json({ error: 'conversationId é obrigatório' })
       // A tela pode mandar o id interno (uuid) ou o número/JID da conversa.
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId)
-      const baseSel = 'id, institution_id, remote_jid, last_message_at, ai_summary, ai_summary_at'
+      const baseSel = 'id, institution_id, remote_jid, last_message_at, ai_summary, ai_summary_at, is_aion_inbox'
+      const jidOnly = conversationId.split('@')[0]
       const convQ = isUuid
         ? supa.from('whatsapp_conversations').select(baseSel).eq('id', conversationId).maybeSingle()
-        : supa.from('whatsapp_conversations').select(baseSel).eq('institution_id', caller.institutionId)
-            .eq('remote_jid', conversationId.split('@')[0]).maybeSingle()
+        : aion
+          ? supa.from('whatsapp_conversations').select(baseSel).eq('is_aion_inbox', true).eq('remote_jid', jidOnly).maybeSingle()
+          : supa.from('whatsapp_conversations').select(baseSel).eq('institution_id', caller.institutionId!).eq('remote_jid', jidOnly).maybeSingle()
       const { data: conv } = await convQ
-      if (!conv || conv.institution_id !== caller.institutionId) return res.status(403).json({ error: 'Conversa não encontrada.' })
+      if (!conv || (aion ? !(conv as any).is_aion_inbox : conv.institution_id !== caller.institutionId)) return res.status(403).json({ error: 'Conversa não encontrada.' })
       if (conv.ai_summary && conv.ai_summary_at && (!conv.last_message_at || new Date(conv.ai_summary_at) >= new Date(conv.last_message_at))) {
         return res.json({ result: conv.ai_summary, cached: true })
       }
-      const { data: msgs } = await supa.from('whatsapp_messages')
+      const msgQ = supa.from('whatsapp_messages')
         .select('content, from_me, message_type, created_at')
-        .eq('remote_jid', conv.remote_jid).eq('institution_id', caller.institutionId)
+        .eq('remote_jid', conv.remote_jid)
+      const { data: msgs } = await (aion ? msgQ.eq('is_aion_inbox', true) : msgQ.eq('institution_id', caller.institutionId!))
         .order('timestamp', { ascending: false }).limit(30)
       const lines = (msgs ?? []).reverse()
         .filter(m => m.content && !['reaction'].includes(String(m.message_type)))
-        .map(m => `${m.from_me ? 'Escola' : 'Família'}: ${String(m.content).replace(/\s+/g, ' ').slice(0, 280)}`)
+        .map(m => `${m.from_me ? (aion ? 'Áion' : 'Escola') : (aion ? 'Contato' : 'Família')}: ${String(m.content).replace(/\s+/g, ' ').slice(0, 280)}`)
       if (lines.length < 2) return res.json({ result: 'Ainda não há conversa suficiente para resumir.' })
-      const system = 'Você resume conversas de WhatsApp entre uma escola particular e uma família. Em português do Brasil, em até 4 frases curtas e sem markdown: o que a família quer (série, turno, valores, visita), o que já foi respondido e qual é o próximo passo. Não invente nada que não esteja na conversa.'
+      const system = aion
+        ? 'Você resume conversas de WhatsApp entre a equipe comercial da Áion Edu (sistema para escolas particulares) e um contato de escola. Em português do Brasil, em até 4 frases curtas e sem markdown: o que o contato quer, o que já foi respondido e qual é o próximo passo comercial. Não invente nada que não esteja na conversa.'
+        : 'Você resume conversas de WhatsApp entre uma escola particular e uma família. Em português do Brasil, em até 4 frases curtas e sem markdown: o que a família quer (série, turno, valores, visita), o que já foi respondido e qual é o próximo passo. Não invente nada que não esteja na conversa.'
       const out = await callClaudeFast(system, lines.join('\n').slice(0, 7000), 260)
-      await supa.rpc('wa_ai_add_tokens', { p_inst: caller.institutionId, p_user: caller.userId, p_kind: kind, p_in: out.inTok, p_out: out.outTok })
+      await supa.rpc('wa_ai_add_tokens', { p_inst: tenant, p_user: caller.userId, p_kind: kind, p_in: out.inTok, p_out: out.outTok })
       await supa.from('whatsapp_conversations').update({ ai_summary: out.text, ai_summary_at: new Date().toISOString() }).eq('id', conv.id)
       return res.json({ result: out.text })
     }

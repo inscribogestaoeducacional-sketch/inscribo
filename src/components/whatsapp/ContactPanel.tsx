@@ -78,6 +78,10 @@ export interface ContactPanelProps {
   // abas
   timelineSlot: ReactNode
   familyLoader?: () => Promise<FamilyData>
+  // Super Admin (inbox da Áion): mesmo desenho, sem o que é só de escola
+  variant?: 'school' | 'aion'
+  leadStageKey?: string; leadTitle?: string
+  extraActions?: { key: string; label: string; icon: ReactNode; onClick: () => void }[]
 }
 
 export interface FamilyData {
@@ -113,11 +117,12 @@ export default function ContactPanel(p: ContactPanelProps) {
   const [nameDraft, setNameDraft] = useState('')
   const [addingTag, setAddingTag] = useState(false)
   const isGroup = conv.isGroup
+  const aion = p.variant === 'aion'
 
   const tabs: { key: PanelTab; label: string; icon: ReactNode }[] = [
     { key: 'details', label: 'Detalhes', icon: <Info size={14} /> },
-    ...(isGroup ? [] : [{ key: 'family' as PanelTab, label: 'Família', icon: <Users size={14} /> }]),
-    { key: 'history', label: 'Linha do tempo', icon: <Clock size={14} /> },
+    ...(isGroup || aion ? [] : [{ key: 'family' as PanelTab, label: 'Família', icon: <Users size={14} /> }]),
+    ...(aion && !p.timelineSlot ? [] : [{ key: 'history' as PanelTab, label: 'Linha do tempo', icon: <Clock size={14} /> }]),
   ]
 
   return (
@@ -156,18 +161,20 @@ export default function ContactPanel(p: ContactPanelProps) {
 function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: boolean) => void; nameDraft: string; setNameDraft: (v: string) => void; addingTag: boolean; setAddingTag: (v: boolean) => void }) {
   const { conv, lead } = p
   const isGroup = conv.isGroup
+  const aion = p.variant === 'aion'
   const winMs = conv.last_customer_message_at ? Date.now() - new Date(conv.last_customer_message_at).getTime() : Infinity
   const winOpen = winMs < 24 * 3600000
   const winLeft = Math.max(0, 24 - winMs / 3600000)
   const digits = (conv.phone || '').replace(/\D/g, '')
   const actions: { key: string; label: string; icon: ReactNode; onClick?: () => void; href?: string; tone?: 'warn' }[] = []
-  if (!isGroup && p.canSchedule) actions.push({ key: 'ag', label: 'Agendar visita', icon: <Calendar size={18} />, onClick: p.onScheduleVisit })
+  if (!isGroup && p.canSchedule && !aion) actions.push({ key: 'ag', label: 'Agendar visita', icon: <Calendar size={18} />, onClick: p.onScheduleVisit })
   if (!isGroup && digits.length >= 10) actions.push({ key: 'tel', label: 'Ligar', icon: <Phone size={18} />, href: `tel:+${digits.startsWith('55') ? digits : '55' + digits}` })
   if (!isGroup) actions.push({ key: 'msg', label: 'Agendar msg', icon: <CalendarClock size={18} />, onClick: p.onScheduleMsg })
   if (!isGroup && !winOpen) actions.push({ key: 'tpl', label: 'Modelo', icon: <BadgeCheck size={18} />, onClick: p.onOpenTemplate, tone: 'warn' })
   if (!isGroup) actions.push({ key: 'ficha', label: 'Ficha', icon: <BookUser size={18} />, onClick: p.onFicha })
-  const typeOpts: [string, string, string][] = [['lead', 'Nova família', '#00695F'], ['client', 'Cliente', '#047857'], ['supplier', 'Fornecedor', '#7C3AED'], ['other', 'Outro', '#64748B']]
-  const stageOn = (k: string) => lead?.status === k
+  ;(p.extraActions || []).forEach(a => actions.push({ ...a }))
+  const typeOpts: [string, string, string][] = [['lead', aion ? 'Lead' : 'Nova família', '#00695F'], ['client', 'Cliente', '#047857'], ['supplier', 'Fornecedor', '#7C3AED'], ['other', 'Outro', '#64748B']]
+  const stageOn = (k: string) => (p.leadStageKey ?? lead?.status) === k
 
   const saveName = async () => { if (await p.onRename(p.nameDraft)) p.setEditing(false) }
 
@@ -313,15 +320,15 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
 
       {!isGroup && p.summarySlot}
 
-      {!isGroup && <SchoolRelationCard institutionId={p.institutionId} phone={conv.phone} />}
+      {!isGroup && !aion && <SchoolRelationCard institutionId={p.institutionId} phone={conv.phone} />}
 
       {!isGroup && (
         <div className="ld-in" style={card}>
-          <Head icon={<Target size={15} />} title="No funil" extra={conv.lead_id && lead ? <button onClick={p.onOpenLead} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: BRAND.primaryDark, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Ver lead <ExternalLink size={12} /></button> : undefined} />
+          <Head icon={<Target size={15} />} title={aion ? 'Lead no CRM' : 'No funil'} extra={conv.lead_id && lead ? <button onClick={p.onOpenLead} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: BRAND.primaryDark, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Ver lead <ExternalLink size={12} /></button> : undefined} />
           {conv.lead_id ? (lead ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink }}>{lead.responsible_name || '—'}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.ink }}>{p.leadTitle || lead.responsible_name || '—'}</div>
                 <div style={{ fontSize: 12, color: '#64748B' }}>{p.leadInfo}</div>
               </div>
               <div>
@@ -331,10 +338,12 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
                 </div>
               </div>
               <button onClick={p.onEditLead} style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${BRAND.line}`, background: '#fff', borderRadius: 10, padding: '7px 11px', fontSize: 12.5, fontWeight: 700, color: '#334155', cursor: 'pointer', fontFamily: 'inherit' }}><Pencil size={13} /> Editar lead</button>
-              <div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>Visitas</div>
-                {p.visitsSlot}
-              </div>
+              {!aion && (
+                <div>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>Visitas</div>
+                  {p.visitsSlot}
+                </div>
+              )}
             </div>
           ) : <div style={{ display: 'flex', justifyContent: 'center', padding: 10 }}><Loader2 size={18} className="animate-spin" color={BRAND.primary} /></div>)
             : p.linkingLead ? (
@@ -350,7 +359,7 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 12.5, color: '#64748B' }}>Esta conversa ainda não está no funil de matrículas.</div>
+                <div style={{ fontSize: 12.5, color: '#64748B' }}>{aion ? 'Esta conversa ainda não é um lead do CRM.' : 'Esta conversa ainda não está no funil de matrículas.'}</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={p.onCreateLead} style={{ flex: 1, padding: '9px 0', fontSize: 13, fontWeight: 800, color: '#fff', background: GRAD, border: 'none', borderRadius: 11, cursor: 'pointer', fontFamily: 'inherit' }}>+ Criar lead</button>
                   <button onClick={() => p.setLinkingLead(true)} style={{ flex: 1, padding: '9px 0', fontSize: 13, fontWeight: 700, color: BRAND.primaryDark, background: '#fff', border: `1px solid ${BRAND.softLine}`, borderRadius: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'inherit' }}><Link2 size={14} /> Ligar a um lead</button>
@@ -360,9 +369,9 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
         </div>
       )}
 
-      {!isGroup && conv.lead_id && lead && <LeadSequenceCard institutionId={p.institutionId} leadId={conv.lead_id} phone={conv.phone} leadStatus={lead.status} userId={p.currentUserId} />}
+      {!isGroup && !aion && conv.lead_id && lead && <LeadSequenceCard institutionId={p.institutionId} leadId={conv.lead_id} phone={conv.phone} leadStatus={lead.status} userId={p.currentUserId} />}
 
-      <div className="ld-in" style={card}>
+      {!(aion && !p.canNote) && <div className="ld-in" style={card}>
         <Head icon={<StickyNote size={15} />} title="Anotações da equipe" extra={p.notes.length ? <span style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, background: BRAND.softer, borderRadius: 999, padding: '1px 8px' }}>{p.notes.length}</span> : undefined} />
         {p.canNote && (
           <div style={{ display: 'flex', gap: 6, marginBottom: p.notes.length ? 10 : 0 }}>
@@ -395,13 +404,13 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
             </div>
           )
         })}
-      </div>
+      </div>}
 
       {!isGroup && (
         <div className="ld-in" style={card}>
           <Head icon={<CalendarClock size={15} />} title="Mensagens agendadas" extra={<button onClick={p.onScheduleMsg} style={{ border: 'none', background: BRAND.softer, color: BRAND.primaryDark, borderRadius: 999, padding: '4px 10px', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>+ Agendar</button>} />
           {p.scheduled.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: '#94A3B8' }}>Nada agendado. Use para lembrar a família de um retorno, uma visita ou um prazo.</div>
+            <div style={{ fontSize: 12.5, color: '#94A3B8' }}>{aion ? 'Nada agendado. Use para lembrar o contato de um retorno ou de uma reunião.' : 'Nada agendado. Use para lembrar a família de um retorno, uma visita ou um prazo.'}</div>
           ) : p.scheduled.map(m => {
             const tone = m.status === 'sent' ? ['#15803D', '#F0FDF4', 'Enviada'] : m.status === 'failed' ? ['#B91C1C', '#FEF2F2', 'Falhou'] : ['#00695F', '#F0FDFB', 'Agendada']
             const d = new Date(m.scheduled_for)

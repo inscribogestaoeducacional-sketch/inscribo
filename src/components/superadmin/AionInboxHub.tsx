@@ -16,6 +16,10 @@ import { normalizeBrazilianInput } from '../../lib/phone'
 import { getAuthHeaders, getBearerHeader } from '../../lib/authHeaders'
 import { STAGES as CRM_STAGES } from '../shared/LeadModal'
 import LeadSheet from './LeadSheet'
+import ContactPanel, { type PanelTab } from '../whatsapp/ContactPanel'
+import WaImproveButton from '../whatsapp/WaImproveButton'
+import WaComposerSheet from '../whatsapp/WaComposerSheet'
+import WaSummarySection from '../whatsapp/WaSummarySection'
 import ProposalForm from './ProposalForm'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia } from '../../lib/whatsappTemplate'
 import {
@@ -2436,6 +2440,8 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     return () => document.body.classList.remove('aion-wa-chat')
   }, [chatOpenMobile])
   const [showFilters, setShowFilters] = useState(false)
+  const [showPlusSheet, setShowPlusSheet] = useState(false)
+  const [rightPanelTab, setRightPanelTab] = useState<PanelTab>('details')
   const [infoSheet, setInfoSheet] = useState(false) // celular: painel do contato sobe de baixo
 
   const getDefaultVarValue = (index: number): string => {
@@ -3624,6 +3630,30 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     }
   }
 
+  const saveContactName = async (name: string): Promise<boolean> => {
+    const nm = name.trim()
+    if (!nm || !activeId) return false
+    skipNextNameUpdateRef.current = activeId
+    const { error } = await supabase.from('whatsapp_conversations').update({ contact_name: nm }).eq('is_aion_inbox', true).eq('remote_jid', rawJid(activeId))
+    if (error) { setSendError('Não consegui salvar o nome.'); return false }
+    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, name: nm } : c))
+    return true
+  }
+
+  const toggleBotAion = async () => {
+    if (!activeId || !activeConv) return
+    const newBotActive = !activeConv.bot_active
+    const botUpdate = newBotActive
+      ? { bot_active: true, assigned_user_id: null, assigned_user_name: null }
+      : { bot_active: false, assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' }
+    await supabase.from('whatsapp_conversations').update(botUpdate).eq('is_aion_inbox', true).eq('remote_jid', rawJid(activeId))
+    setConversations(prev => prev.map(c => c.id === activeId
+      ? { ...c, bot_active: newBotActive, ...(newBotActive ? { assigned_user_id: undefined, assigned_user_name: undefined } : { assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' as ConvStatus }) }
+      : c))
+    setHubToast(newBotActive ? 'Robô ativado' : 'Robô desativado — atendimento assumido por você')
+    setTimeout(() => setHubToast(null), 3000)
+  }
+
   const openScheduleModal = () => {
     setScheduleTemplateName('')
     setScheduleTemplateVars({})
@@ -4127,33 +4157,32 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         {/* ── Col 1: Conversation List ──────────────────────────────────────────── */}
         <div style={{ width: isMobile ? '100%' : 320, flexShrink: 0, display: isMobile && mobilePanel === 'chat' ? 'none' : 'flex', flexDirection: 'column', background: '#FFFFFF', borderRight: '1px solid #D1FAE5', overflow: 'hidden' }}>
 
-          {/* Header */}
-          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <MessageCircle style={{ width: 18, height: 18, color: '#05907B' }} />
+          {/* Header: faixa em degradê, igual ao WhatsApp das escolas */}
+          <div style={{ flexShrink: 0, position: 'relative', overflow: 'hidden', background: 'var(--aion-grad)', color: '#fff', padding: `12px ${isMobile ? 12 : 16}px 12px` }}>
+            <span aria-hidden style={{ position: 'absolute', width: 170, height: 170, right: -50, top: -95, borderRadius: 999, background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,.22), rgba(255,255,255,.04) 60%, transparent 70%)', pointerEvents: 'none' }} />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 11, background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.28)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <MessageCircle style={{ width: 17, height: 17, color: '#fff' }} />
+                </div>
+                <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>WhatsApp</span>
+                {totalUnread > 0 && (
+                  <span style={{ background: 'rgba(255,255,255,.22)', border: '1px solid rgba(255,255,255,.3)', color: '#fff', fontSize: 11, fontWeight: 800, padding: '1px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center' }}>{totalUnread}</span>
+                )}
+                {waitingQueueConvs.length > 0 && (
+                  <span title="Conversas aguardando atendimento" style={{ background: '#fff', color: '#B45309', fontSize: 11, fontWeight: 800, padding: '1px 8px', borderRadius: 9999 }}>⏳ {waitingQueueConvs.length}</span>
+                )}
               </div>
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>WhatsApp</span>
-              {totalUnread > 0 && (
-                <span style={{ background: '#05907B', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center' }}>
-                  {totalUnread}
-                </span>
-              )}
-              {waitingQueueConvs.length > 0 && (
-                <span title="Conversas aguardando atendimento" style={{ background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 3 }}>
-                  ⏳ {waitingQueueConvs.length}
-                </span>
-              )}
+              <button
+                style={{ width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: 'none', cursor: 'pointer', color: '#00695F', boxShadow: '0 8px 18px -10px rgba(0,0,0,.45)', transition: 'transform .15s' }}
+                title="Nova conversa"
+                onClick={() => setShowNewConvModal(true)}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.07)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'none')}
+              >
+                <Plus style={{ width: 16, height: 16 }} />
+              </button>
             </div>
-            <button
-              style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05907B', border: 'none', cursor: 'pointer', color: '#fff', transition: 'background 0.15s' }}
-              title="Nova conversa"
-              onClick={() => setShowNewConvModal(true)}
-              onMouseEnter={e => (e.currentTarget.style.background = '#00695F')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#05907B')}
-            >
-              <Plus style={{ width: 16, height: 16 }} />
-            </button>
           </div>
 
           {/* Search */}
@@ -4170,16 +4199,10 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                 onBlur={e => (e.currentTarget.style.borderColor = '#D1FAE5')}
               />
             </div>
-            {isMobile && (
-              <button onClick={() => setShowFilters(v => !v)} style={{ position: 'relative', height: 36, padding: '0 12px', borderRadius: 10, border: '1px solid #D1FAE5', background: showFilters ? '#E6F7F5' : '#fff', color: '#05907B', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-                Filtros
-                {(statusFilter !== 'abertos' || readFilter !== 'all' || assignFilter !== 'all') && <span style={{ position: 'absolute', top: 5, right: 5, width: 8, height: 8, borderRadius: 4, background: '#7C3AED' }} />}
-              </button>
-            )}
           </div>
 
-          {/* Filters — Botconversa style (no celular ficam atrás do botão Filtros) */}
-          <div style={{ borderBottom: '1px solid #D1FAE5', display: isMobile && !showFilters ? 'none' : 'block' }}>
+          {/* Filters — Botconversa style  */}
+          <div style={{ borderBottom: '1px solid #D1FAE5', display: 'block' }}>
             {/* Row 1: Status + Atribuição dropdowns */}
             <div style={{ display: 'flex', padding: '8px 12px', gap: 8 }}>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -4732,6 +4755,12 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
               </div>
             )}
 
+            {isMobile && <WaComposerSheet open={showPlusSheet} onClose={() => setShowPlusSheet(false)} text={inputText}
+              onApply={t => setInputText(t)} onError={m => { setHubToast(m); setTimeout(() => setHubToast(null), 4000) }}
+              onAttach={() => { setShowAttach(true); setShowQuickReplies(false); setShowEmojiPicker(false) }}
+              onQuick={() => { setShowQuickReplies(true); setShowAttach(false); setShowEmojiPicker(false) }}
+              onEmoji={() => { setShowEmojiPicker(true); setShowAttach(false); setShowQuickReplies(false) }} />}
+
             {/* Emoji picker */}
             {showEmojiPicker && (
               <div ref={emojiPickerRef} style={{ position: 'absolute', bottom: 72, left: 0, zIndex: 40 }}>
@@ -4862,7 +4891,13 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {[
+                {isMobile && (
+                  <button type="button" onClick={() => { inputRef.current?.blur(); setShowPlusSheet(true) }} aria-label="Mais opções" className="aion-tap" disabled={windowExpired}
+                    style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0, border: '1.5px solid #D1FAE5', background: '#F0FDFB', color: '#05907B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: windowExpired ? .5 : 1 }}>
+                    <Plus size={22} />
+                  </button>
+                )}
+                {!isMobile && [
                   { icon: Paperclip, active: showAttach, onClick: () => { setShowAttach(v => !v); setShowQuickReplies(false) }, title: 'Anexar arquivo' },
                   { icon: Zap,       active: showQuickReplies, onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false) }, title: 'Respostas rápidas' },
                   { icon: Smile,     active: showEmojiPicker,  onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emojis' },
@@ -4908,10 +4943,10 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     }
                     if (!windowExpired && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
                   }}
-                  placeholder={windowExpired ? 'Janela de 24h expirada' : 'Digite uma mensagem...'}
+                  placeholder={windowExpired ? 'Janela expirada' : (isMobile ? 'Mensagem' : 'Digite uma mensagem...')}
                   rows={1}
                   style={{
-                    flex: 1, padding: '10px 18px', fontSize: 14,
+                    flex: 1, padding: '10px 18px', fontSize: isMobile ? 16 : 14,
                     background: windowExpired ? '#F9FAFB' : '#F0FDFB',
                     border: `1.5px solid ${windowExpired ? '#E5E7EB' : '#D1FAE5'}`,
                     borderRadius: 28,
@@ -4924,6 +4959,11 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                   onFocus={e => { e.currentTarget.style.borderColor = '#05907B'; e.currentTarget.style.background = '#FFFFFF' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
                 />
+                {!isMobile && !windowExpired && inputText.trim().length >= 3 && (
+                  <WaImproveButton text={inputText}
+                    onApply={t => { setInputText(t); inputRef.current?.focus() }}
+                    onError={m => { setHubToast(m); setTimeout(() => setHubToast(null), 4000) }} />
+                )}
                 {inputText.trim() ? (
                   <button onClick={handleSend}
                     style={{ width: 44, height: 44, borderRadius: '50%', background: '#05907B', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s, transform 0.15s' }}
@@ -4947,694 +4987,60 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           </>
         </div>
 
-        {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
+        {/* ── Col 3: painel do contato — o mesmo ContactPanel do WhatsApp das escolas ── */}
         {(isMobile ? infoSheet && !!activeConv : showContactInfo) && (
-          <>
-          {isMobile && <div onClick={() => setInfoSheet(false)} style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(26,43,74,.38)' }} />}
-          <div style={isMobile
-            ? { position: 'fixed', left: 0, right: 0, bottom: 0, top: '9dvh', zIndex: 1150, background: '#FFFFFF', borderRadius: '24px 24px 0 0', boxShadow: '0 -10px 40px rgba(26,43,74,.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }
-            : { width: 280, flexShrink: 0, background: '#FFFFFF', borderLeft: '1px solid #D1FAE5', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {isMobile && (
-              <button onClick={() => setInfoSheet(false)} aria-label="Fechar" style={{ alignSelf: 'center', width: '100%', height: 26, border: 'none', background: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ width: 40, height: 5, borderRadius: 3, background: '#CBD5E1' }} />
-              </button>
-            )}
-            {activeConv ? (
-            <>
-            {/* Header bar */}
-            <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5', padding: '10px 14px' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>Detalhes</span>
-              <button onClick={exportConversation} title="Exportar conversa"
-                style={{ padding: '8px 10px', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', flexShrink: 0, transition: 'color 0.15s' }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#05907B')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}
-              >
-                <Download size={14} />
-              </button>
+          activeConv ? (
+            <ContactPanel
+              variant="aion"
+              conv={{ id: activeConv.id, name: activeConv.name, phone: activeConv.phone, isGroup: activeConv.isGroup, profile_picture_url: activeConv.profile_picture_url, contact_type: activeConv.contact_type, tags: activeConv.tags, status: activeConv.status as any, assigned_user_id: activeConv.assigned_user_id, assigned_user_name: activeConv.assigned_user_name, bot_active: activeConv.bot_active, lead_id: activeConv.lead_id, last_customer_message_at: (activeConv as any).last_customer_message_at }}
+              tab={rightPanelTab} onTab={setRightPanelTab}
+              isMobile={isMobile} onBack={() => (isMobile ? setInfoSheet(false) : setShowContactInfo(false))} onExport={exportConversation}
+              institutionId="" currentUserId={user?.id}
+              onRename={saveContactName} onType={handleContactType}
+              tags={hubTags} onAddTag={handleAddTag} onRemoveTag={handleRemoveTag}
+              canSchedule={false}
+              onScheduleVisit={() => {}}
+              onScheduleMsg={openScheduleModal}
+              onOpenTemplate={() => setShowTemplateModal(true)}
+              onFicha={() => { if (isMobile) setInfoSheet(false); if (leadData) setShowLeadModal(true); else handleContactType('lead') }}
+              extraActions={leadData ? [{ key: 'prop', label: 'Proposta', icon: <FileText size={18} />, onClick: () => { if (isMobile) setInfoSheet(false); setShowProposalGenerator(true) } }] : []}
+              onStatus={handleStatusChange}
+              users={users as any} transferring={transferring} setTransferring={setTransferring}
+              transferTarget={transferTarget} setTransferTarget={setTransferTarget}
+              onTransfer={activeConv.status === 'closed' ? handleAssignFromClosed : handleTransfer}
+              onBotToggle={toggleBotAion} onConclude={() => handleCloseConversation()} onLeave={handleLeaveConversation}
+              lead={leadData}
+              leadStageKey={leadData?.stage}
+              leadTitle={leadData ? [leadData.name, leadData.school_name].filter(Boolean).join(' · ') : ''}
+              leadInfo={leadData ? ([leadData.city && `${leadData.city}${leadData.state ? '/' + leadData.state : ''}`, leadData.origin].filter(Boolean).join(' · ') || 'Lead') : ''}
+              stages={CRM_STAGES.map(st => ({ key: st.id, label: st.label, accent: st.color }))}
+              onStage={k => handleSaveLead({ stage: k })} onEditLead={() => setShowLeadModal(true)}
+              onOpenLead={() => setShowLeadModal(true)}
+              onCreateLead={() => handleContactType('lead')}
+              linkingLead={linkingLead} setLinkingLead={setLinkingLead}
+              leadSearch={leadSearch} onSearchLeads={searchLeads} leadResults={leadResults as any} onLinkLead={handleLinkLead}
+              visitsSlot={null}
+              summarySlot={activeConv.id && !activeConv.isGroup ? (
+                <WaSummarySection conversationId={activeConv.id} onError={m => { setHubToast(m); setTimeout(() => setHubToast(null), 4000) }} />
+              ) : null}
+              notes={[]} notesLoading={false} canNote={false}
+              newNote="" setNewNote={() => {}} savingNote={false} onAddNote={() => {}}
+              editingNoteId={null} editingNoteText="" setEditingNoteText={() => {}}
+              onStartEditNote={() => {}} onSaveEditNote={() => {}} onCancelEditNote={() => {}} savingEditNote={false}
+              onDeleteNote={() => {}}
+              scheduled={scheduledMessages.map(m => ({ id: m.id, scheduled_for: m.send_at, status: 'pending', label: m.message_type === 'template' ? 'Modelo agendado' : 'Mensagem agendada', content: m.content }))}
+              onCancelScheduled={cancelScheduledMessage}
+              timelineSlot={null}
+            />
+          ) : (
+            <div style={{ width: 330, flexShrink: 0, background: '#fff', borderLeft: '1px solid #E3E8F0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 24 }}>
+              <div style={{ width: 56, height: 56, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                <MessageCircle style={{ width: 26, height: 26, color: '#05907B' }} />
+              </div>
+              <p style={{ color: '#1A2B4A', fontSize: 13, fontWeight: 600, margin: '0 0 4px' }}>Selecione uma conversa</p>
+              <p style={{ color: '#94A3B8', fontSize: 12, margin: 0 }}>para ver os detalhes do contato</p>
             </div>
-
-            <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
-
-                {/* Concluir / Sair buttons */}
-                {activeConv.status !== 'closed' && (
-                  <div style={{ padding: '10px 12px', borderBottom: '1px solid #e2f5f3', background: '#f0fdfb', display: 'flex', flexDirection: 'column', gap: 7 }}>
-                    <button onClick={handleCloseConversation}
-                      style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'var(--aion-grad)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 3px 10px rgba(13,148,136,0.35)', transition: 'all 0.2s' }}
-                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 5px 16px rgba(13,148,136,0.45)' }}
-                      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 3px 10px rgba(13,148,136,0.35)' }}>
-                      ✅ Concluir Atendimento
-                    </button>
-                    {activeConv.assigned_user_id && (
-                      <button onClick={handleLeaveConversation}
-                        style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, cursor: 'pointer', transition: 'all 0.2s' }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
-                        🚪 Sair do Atendimento
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* ── SEÇÃO: CONTATO ─────────────────────────────────────────── */}
-                <div style={{ borderBottom: '1px solid #e2f5f3' }}>
-                  <button onClick={() => setCollapseContact(v => !v)}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Contato</span>
-                    {collapseContact
-                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
-                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
-                  </button>
-                  {!collapseContact && (
-                    <div style={{ padding: '0 0 12px' }}>
-                      {/* Avatar + name + phone */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 16px 12px', background: 'linear-gradient(180deg, #f0fdfb 0%, #ffffff 100%)' }}>
-                        <div style={{ width: 64, height: 64, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10, overflow: 'hidden', fontSize: 24, fontWeight: 700, color: '#fff', background: activeConv.profile_picture_url ? 'transparent' : getAvatarBgColor(activeConv.name), boxShadow: '0 3px 12px rgba(13,148,136,0.3)', border: '2.5px solid white' }}>
-                          {activeConv.profile_picture_url
-                            ? <img src={activeConv.profile_picture_url} alt={activeConv.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : activeConv.isGroup
-                            ? <Users style={{ width: 26, height: 26, color: 'rgba(255,255,255,0.9)' }} />
-                            : getInitials(activeConv.name)}
-                        </div>
-                        <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', textAlign: 'center', margin: 0 }}>{activeConv.name}</p>
-                        <p style={{ fontSize: 12, color: '#64748B', marginTop: 2, textAlign: 'center' }}>
-                          {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                        </p>
-                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-                          {activeConv.contact_type && activeConv.contact_type !== 'unknown' && (
-                            <span style={{
-                              fontSize: 11, padding: '2px 10px', borderRadius: 9999, fontWeight: 600,
-                              background: activeConv.contact_type === 'lead' ? '#e6f7f5' : activeConv.contact_type === 'client' ? '#d1fae5' : activeConv.contact_type === 'supplier' ? '#ede9fe' : '#f1f5f9',
-                              color: activeConv.contact_type === 'lead' ? '#0d9488' : activeConv.contact_type === 'client' ? '#059669' : activeConv.contact_type === 'supplier' ? '#7C3AED' : '#64748B',
-                            }}>
-                              {activeConv.contact_type === 'lead' ? 'Lead' : activeConv.contact_type === 'client' ? 'Cliente' : activeConv.contact_type === 'supplier' ? 'Fornecedor' : activeConv.contact_type}
-                            </span>
-                          )}
-                          {activeConv.isGroup && (
-                            <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 9999, fontWeight: 600, background: '#ede9fe', color: '#7C3AED' }}>Grupo</span>
-                          )}
-                          {activeConv.labels.map(lb => (
-                            <span key={lb.text} className={`text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>{lb.text}</span>
-                          ))}
-                        </div>
-                        {!activeConv.isGroup && (
-                          <button onClick={() => { setEditingContact(v => !v); if (!editingContact) setEditForm({ name: activeConv.name, contact_type: activeConv.contact_type || '', notes: '' }) }}
-                            style={{ marginTop: 8, fontSize: 11, border: '1px solid #d1fae5', color: '#0d9488', background: 'transparent', padding: '4px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                            ✏️ Editar contato
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Inline edit form */}
-                      {editingContact && (
-                        <div style={{ padding: '0 12px 12px' }}>
-                          <div style={{ background: '#f0fdfb', borderRadius: 10, padding: '10px 12px', border: '1px solid #d1fae5', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Nome</label>
-                              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))}
-                                style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Tipo</label>
-                              <select value={editForm.contact_type} onChange={e => setEditForm(f => ({...f, contact_type: e.target.value}))}
-                                style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
-                                <option value="">Desconhecido</option>
-                                <option value="lead">Lead</option>
-                                <option value="client">Cliente</option>
-                                <option value="supplier">Fornecedor</option>
-                                <option value="other">Outro</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Nota interna</label>
-                              <textarea value={editForm.notes || ''}
-                                onChange={e => setEditForm(f => ({...f, notes: e.target.value}))}
-                                placeholder="Anotações sobre este contato..."
-                                rows={3}
-                                style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                            </div>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <button onClick={async () => {
-                                if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
-                                const rJid = rawJid(activeId)
-                                if (editForm.name && editForm.name !== activeConv.name) {
-                                  skipNextNameUpdateRef.current = activeId
-                                  setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
-                                  if (isAionInbox) {
-                                    await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
-                                      .eq('is_aion_inbox', true).eq('remote_jid', rJid)
-                                  } else {
-                                    await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
-                                      .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
-                                    const normPhone = (() => {
-                                      let d = rJid.replace(/@.*/, '').replace(/\D/g, '')
-                                      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-                                      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-                                      if (d.length === 11) d = '55' + d
-                                      return d
-                                    })()
-                                    await supabase.from('whatsapp_contacts')
-                                      .update({ name: editForm.name })
-                                      .eq('institution_id', effectiveInstitutionId)
-                                      .eq('phone', normPhone)
-                                    console.log('[SYNC NAME] atualizado em whatsapp_contacts:', normPhone)
-                                  }
-                                }
-                                if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
-                                  if (isAionInbox) {
-                                    await supabase.from('whatsapp_conversations').update({ contact_type: editForm.contact_type }).eq('is_aion_inbox', true).eq('remote_jid', rJid)
-                                  } else {
-                                    await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, editForm.contact_type)
-                                  }
-                                  setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
-                                }
-                                if (editForm.notes !== undefined) {
-                                  if (isAionInbox) {
-                                    await supabase.from('whatsapp_conversations')
-                                      .update({ notes: editForm.notes })
-                                      .eq('is_aion_inbox', true)
-                                      .eq('remote_jid', rJid)
-                                  } else {
-                                    await supabase.from('whatsapp_conversations')
-                                      .update({ notes: editForm.notes })
-                                      .eq('institution_id', effectiveInstitutionId)
-                                      .eq('remote_jid', rJid)
-                                  }
-                                }
-                                setEditingContact(false)
-                              }}
-                                style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#0d9488', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
-                                Salvar
-                              </button>
-                              <button onClick={() => setEditingContact(false)}
-                                style={{ padding: '6px 10px', fontSize: 12, color: '#64748B', border: '1px solid #d1fae5', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Who is this contact? */}
-                      {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
-                        <div style={{ margin: '0 12px', padding: '10px 12px', background: '#fffbeb', borderRadius: 10, border: '1px solid #fde68a' }}>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: '#d97706', margin: '0 0 8px' }}>Quem é esse contato?</p>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                            {[
-                              { key: 'lead',     label: '🎯 Lead',         bg: '#0d9488', color: '#fff',    onClick: () => handleContactType('lead') },
-                              { key: 'client',   label: '✅ Cliente',      bg: '#d1fae5', color: '#059669', onClick: () => handleContactType('client') },
-                              { key: 'supplier', label: '🏢 Fornecedor',    bg: '#ede9fe', color: '#7C3AED', onClick: () => handleContactType('supplier') },
-                              { key: 'other',    label: 'Outro',            bg: '#f1f5f9', color: '#64748B', onClick: () => handleContactType('other') },
-                            ].map(opt => (
-                              <button key={opt.key} onClick={opt.onClick}
-                                style={{ padding: '7px 5px', fontSize: 11, fontWeight: 500, background: '#fff', color: '#64748B', border: '1px solid #e2f5f3', borderRadius: 7, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center' }}
-                                onMouseEnter={e => { e.currentTarget.style.background = opt.bg; e.currentTarget.style.color = opt.color; e.currentTarget.style.borderColor = opt.bg }}
-                                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.borderColor = '#e2f5f3' }}>
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── SEÇÃO: ATENDIMENTO ─────────────────────────────────────── */}
-                <div style={{ borderBottom: '1px solid #e2f5f3' }}>
-                  <button onClick={() => setCollapseAtendimento(v => !v)}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Atendimento</span>
-                    {collapseAtendimento
-                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
-                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
-                  </button>
-                  {!collapseAtendimento && (
-                    <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-                      {/* 24h window — usa last_customer_message_at (não a lista de mensagens
-                          filtrada por RLS) para dar o mesmo resultado pra qualquer atendente
-                          atribuído, independente do que ele pode ver do histórico. */}
-                      {!activeConv.isGroup && (() => {
-                        const msElapsed    = activeConv.last_customer_message_at
-                          ? Date.now() - new Date(activeConv.last_customer_message_at).getTime()
-                          : Infinity
-                        const windowOpen   = msElapsed < 24 * 3600000
-                        const hoursLeft    = Math.max(0, 24 - msElapsed / 3600000)
-                        const hh           = Math.floor(hoursLeft)
-                        const mm           = Math.round((hoursLeft - hh) * 60)
-                        return (
-                          <div style={{ padding: '8px 10px', borderRadius: 9, display: 'flex', alignItems: 'center', gap: 8, background: windowOpen ? '#d1fae5' : '#fee2e2', border: `1px solid ${windowOpen ? '#a7f3d0' : '#fecaca'}` }}>
-                            <span style={{ fontSize: 13 }}>{windowOpen ? '🟢' : '🔴'}</span>
-                            <div style={{ flex: 1 }}>
-                              <p style={{ fontSize: 11, fontWeight: 700, color: windowOpen ? '#059669' : '#dc2626', margin: 0 }}>
-                                {windowOpen ? 'Janela aberta' : 'Janela expirada'}
-                              </p>
-                              <p style={{ fontSize: 11, color: windowOpen ? '#065f46' : '#991b1b', margin: 0 }}>
-                                {windowOpen ? `Expira em ${hh}h ${mm}min` : 'Use template para iniciar'}
-                              </p>
-                            </div>
-                            {!windowOpen && (
-                              <button onClick={() => setShowTemplateModal(true)}
-                                style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 7, background: '#dc2626', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-                                Template
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })()}
-
-                      {/* Status */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Status</label>
-                        <select value={activeConv.status} onChange={e => handleStatusChange(e.target.value as ConvStatus)}
-                          style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
-                          <option value="waiting">Aguardando</option>
-                          <option value="open">Em Atendimento</option>
-                          <option value="closed">Concluído</option>
-                        </select>
-                      </div>
-
-                      {/* Attendant */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Atendente</label>
-                        {transferring ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                            <select value={transferTarget} onChange={e => setTransferTarget(e.target.value)}
-                              style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
-                              <option value="">Selecionar atendente...</option>
-                              {users.filter(u => u.id !== activeConv.assigned_user_id).map(u => (
-                                <option key={u.id} value={u.id}>{u.full_name}</option>
-                              ))}
-                            </select>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <button onClick={activeConv.status === 'closed' ? handleAssignFromClosed : handleTransfer} disabled={!transferTarget}
-                                style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#0d9488', border: 'none', borderRadius: 7, cursor: 'pointer', opacity: !transferTarget ? 0.4 : 1 }}>
-                                {activeConv.status === 'closed' ? 'Atribuir' : 'Transferir'}
-                              </button>
-                              <button onClick={() => { setTransferring(false); setTransferTarget('') }}
-                                style={{ padding: '6px 10px', fontSize: 12, color: '#64748B', border: '1px solid #d1fae5', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        ) : activeConv.status === 'closed' ? (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: 12, color: '#94A3B8' }}>—</span>
-                            <button onClick={() => setTransferring(true)}
-                              style={{ fontSize: 11, border: '1px solid #0d9488', color: '#0d9488', background: 'transparent', padding: '3px 9px', borderRadius: 7, fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' }}
-                              onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
-                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                              Atribuir
-                            </button>
-                          </div>
-                        ) : activeConv.assigned_user_id ? (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f0fdfb', borderRadius: 8, border: '1px solid #d1fae5' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                                {getInitials(activeConv.assigned_user_name || '').slice(0, 1)}
-                              </div>
-                              <span style={{ fontSize: 12, color: '#1A2B4A', fontWeight: 500 }}>{activeConv.assigned_user_name}</span>
-                            </div>
-                            <button onClick={() => setTransferring(true)}
-                              style={{ fontSize: 11, color: '#0d9488', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer' }}>
-                              Trocar
-                            </button>
-                          </div>
-                        ) : (
-                          <button onClick={() => setTransferring(true)}
-                            style={{ width: '100%', padding: '7px 0', fontSize: 12, color: '#64748B', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = '#0d9488'; e.currentTarget.style.color = '#0d9488'; e.currentTarget.style.background = '#e6f7f5' }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1fae5'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.background = 'transparent' }}>
-                            + Atribuir atendente
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Bot toggle */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Robô</label>
-                        <button
-                          onClick={async () => {
-                            if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
-                            const newBotActive = !activeConv.bot_active
-                            const botUpdate = newBotActive
-                              ? { bot_active: true, assigned_user_id: null, assigned_user_name: null }
-                              : { bot_active: false, assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' }
-                            if (isAionInbox) {
-                              await supabase.from('whatsapp_conversations')
-                                .update(botUpdate)
-                                .eq('is_aion_inbox', true)
-                                .eq('remote_jid', rawJid(activeId))
-                            } else {
-                              await supabase.from('whatsapp_conversations')
-                                .update(botUpdate)
-                                .eq('institution_id', effectiveInstitutionId)
-                                .eq('remote_jid', rawJid(activeId))
-                            }
-                            setConversations(prev => prev.map(c =>
-                              c.id === activeId
-                                ? { ...c, bot_active: newBotActive, ...(newBotActive
-                                    ? { assigned_user_id: undefined, assigned_user_name: undefined }
-                                    : { assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' as ConvStatus }) }
-                                : c
-                            ))
-                            setHubToast(newBotActive ? 'Robô ativado' : 'Robô desativado — atendimento assumido por você')
-                            setTimeout(() => setHubToast(null), 3000)
-                          }}
-                          style={{
-                            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '8px 12px',
-                            background: activeConv.bot_active ? '#d1fae5' : '#f1f5f9',
-                            border: `1px solid ${activeConv.bot_active ? '#a7f3d0' : '#e2e8f0'}`,
-                            borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s',
-                          }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                            <span style={{ fontSize: 14 }}>🤖</span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: activeConv.bot_active ? '#059669' : '#64748B' }}>
-                              Robô {activeConv.bot_active ? 'ativo' : 'inativo'}
-                            </span>
-                          </div>
-                          <div style={{
-                            width: 32, height: 18, borderRadius: 9999,
-                            background: activeConv.bot_active ? '#05907B' : '#CBD5E1',
-                            position: 'relative', transition: 'background 0.2s', flexShrink: 0,
-                          }}>
-                            <div style={{
-                              position: 'absolute', top: 2,
-                              left: activeConv.bot_active ? 16 : 2,
-                              width: 14, height: 14, borderRadius: '50%', background: '#fff',
-                              transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                            }} />
-                          </div>
-                        </button>
-                      </div>
-
-                      {/* Tags */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Etiquetas</label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                          {(activeConv.tags || []).length === 0 && hubTags.length === 0 && (
-                            <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Configure etiquetas em Configurações → Etiquetas</span>
-                          )}
-                          {(activeConv.tags || []).map(tag => {
-                            const color = hubTags.find(t => t.name === tag)?.color || '#6366f1'
-                            return (
-                              <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, padding: '2px 7px', borderRadius: 9999, fontWeight: 600, color: '#fff', background: color }}>
-                                {tag}
-                                <button onClick={() => handleRemoveTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: '0 0 0 2px', lineHeight: 1 }}>×</button>
-                              </span>
-                            )
-                          })}
-                          {addingTag ? (
-                            hubTags.length > 0 ? (
-                              <select autoFocus value={newTag}
-                                onChange={e => { if (e.target.value) handleAddTag(e.target.value); else { setAddingTag(false); setNewTag('') } }}
-                                onBlur={() => { setAddingTag(false); setNewTag('') }}
-                                style={{ fontSize: 11, padding: '2px 7px', borderRadius: 9999, border: '1px dashed #d1fae5', background: '#fff', color: '#1A2B4A', outline: 'none', cursor: 'pointer' }}>
-                                <option value="">Selecionar etiqueta...</option>
-                                {hubTags.filter(t => !(activeConv?.tags || []).includes(t.name)).map(t => (
-                                  <option key={t.id} value={t.name}>{t.name}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input autoFocus value={newTag} onChange={e => setNewTag(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') handleAddTag(newTag); if (e.key === 'Escape') { setAddingTag(false); setNewTag('') } }}
-                                onBlur={() => { if (newTag.trim()) handleAddTag(newTag); else { setAddingTag(false); setNewTag('') } }}
-                                placeholder="Nova etiqueta..."
-                                style={{ fontSize: 11, padding: '2px 7px', borderRadius: 9999, border: '1px dashed #d1fae5', background: 'transparent', color: '#1A2B4A', outline: 'none', width: 110 }}
-                                maxLength={20} />
-                            )
-                          ) : hubTags.length > 0 ? (
-                            <button onClick={() => setAddingTag(true)}
-                              style={{ fontSize: 11, padding: '2px 9px', borderRadius: 9999, border: '1px dashed #d1fae5', color: '#0d9488', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s' }}
-                              onMouseEnter={e => { e.currentTarget.style.borderColor = '#0d9488'; e.currentTarget.style.background = '#e6f7f5' }}
-                              onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1fae5'; e.currentTarget.style.background = 'transparent' }}>
-                              + Etiqueta
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── SEÇÃO: LEAD VINCULADO ───────────────────────────────────── */}
-                {!activeConv.isGroup && (
-                  <div style={{ borderBottom: '1px solid #e2f5f3' }}>
-                    <button onClick={() => setCollapseLead(v => !v)}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Lead Vinculado</span>
-                      {collapseLead
-                        ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
-                        : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
-                    </button>
-                    {!collapseLead && (
-                      <div style={{ padding: '0 12px 12px' }}>
-                        {activeConv.lead_id ? (
-                          leadData ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              {/* Lead data header */}
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: '#f0fdfb', borderRadius: 9, border: '1px solid #d1fae5' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <User style={{ width: 13, height: 13, color: '#0d9488', flexShrink: 0 }} />
-                                  <div>
-                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{leadData.name || '—'}</p>
-                                    {leadData.school_name && (
-                                      <p style={{ margin: 0, fontSize: 11, color: '#64748B' }}>{leadData.school_name}</p>
-                                    )}
-                                  </div>
-                                </div>
-                                <button onClick={() => setShowLeadModal(true)}
-                                  style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 7, border: '1px solid #d1fae5', color: '#0d9488', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}
-                                  onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
-                                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                  ✏️ Editar
-                                </button>
-                              </div>
-
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '0 2px' }}>
-                                {leadData.city && (
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                                    <span style={{ color: '#64748B' }}>Cidade</span>
-                                    <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.city}{leadData.state ? `/${leadData.state}` : ''}</span>
-                                  </div>
-                                )}
-                                {leadData.email && (
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, gap: 8 }}>
-                                    <span style={{ color: '#64748B', flexShrink: 0 }}>E-mail</span>
-                                    <span style={{ color: '#1A2B4A', fontWeight: 500, wordBreak: 'break-all', textAlign: 'right' }}>{leadData.email}</span>
-                                  </div>
-                                )}
-                                {/* Funil de estágios do CRM comercial (crm_leads.stage) */}
-                                {(() => {
-                                  const curIdx = CRM_STAGES.findIndex(s => s.id === leadData.stage)
-                                  return (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                                        {CRM_STAGES.map((stage, idx) => {
-                                          const done   = idx < curIdx
-                                          const active = idx === curIdx
-                                          return (
-                                            <React.Fragment key={stage.id}>
-                                              <div
-                                                title={stage.label}
-                                                onClick={() => handleSaveLead({ stage: stage.id })}
-                                                style={{
-                                                  width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
-                                                  background: done || active ? stage.color : '#E2E8F0',
-                                                  border: active ? `2.5px solid ${stage.color}` : '2px solid transparent',
-                                                  boxSizing: 'border-box',
-                                                  boxShadow: active ? `0 0 0 2px ${stage.bg}` : 'none',
-                                                  transition: 'all 0.15s',
-                                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                }}
-                                              >
-                                                {done && <span style={{ fontSize: 8, color: '#fff', fontWeight: 700 }}>✓</span>}
-                                              </div>
-                                              {idx < CRM_STAGES.length - 1 && (
-                                                <div style={{ flex: 1, height: 2, background: done ? '#05907B' : '#E2E8F0', transition: 'background 0.15s' }} />
-                                              )}
-                                            </React.Fragment>
-                                          )
-                                        })}
-                                      </div>
-                                      <div style={{ display: 'flex' }}>
-                                        {CRM_STAGES.map((stage, idx) => (
-                                          <span key={stage.id}
-                                            onClick={() => handleSaveLead({ stage: stage.id })}
-                                            style={{
-                                              flex: 1, fontSize: 9, textAlign: 'center', lineHeight: 1.2, cursor: 'pointer',
-                                              color: idx <= curIdx ? '#0d9488' : '#94A3B8',
-                                              fontWeight: idx === curIdx ? 700 : 400,
-                                            }}>
-                                            {stage.label}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )
-                                })()}
-                                {leadData.origin && (
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                                    <span style={{ color: '#64748B' }}>Origem</span>
-                                    <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.origin}</span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Actions row */}
-                              <button onClick={() => setShowLeadModal(true)}
-                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', background: 'transparent', border: '1px solid #d1fae5', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#0d9488', fontWeight: 600, transition: 'all 0.15s' }}
-                                onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
-                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
-                                <User style={{ width: 12, height: 12 }} />
-                                Ver Lead Completo
-                              </button>
-                              <button onClick={() => setShowProposalGenerator(true)}
-                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', background: '#0d9488', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#fff', fontWeight: 600, transition: 'all 0.15s' }}
-                                onMouseEnter={e => (e.currentTarget.style.background = '#0c8377')}
-                                onMouseLeave={e => (e.currentTarget.style.background = '#0d9488')}>
-                                <FileText style={{ width: 12, height: 12 }} />
-                                Gerar Proposta
-                              </button>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
-                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#0d9488] border-t-transparent" />
-                            </div>
-                          )
-                        ) : linkingLead ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                            <input autoFocus value={leadSearch} onChange={e => searchLeads(e.target.value)}
-                              placeholder="Buscar lead por nome, escola ou tel..."
-                              style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
-                            {leadResults.map(l => (
-                              <button key={l.id} onClick={() => handleLinkLead(l.id)}
-                                style={{ width: '100%', textAlign: 'left', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
-                                onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
-                                onMouseLeave={e => (e.currentTarget.style.background = '#f0fdfb')}>
-                                <p style={{ fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{l.name}</p>
-                                <p style={{ color: '#64748B', margin: 0 }}>{l.school_name}{l.city ? ` · ${l.city}` : ''}</p>
-                              </button>
-                            ))}
-                            <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
-                              style={{ fontSize: 12, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 0' }}>
-                              Cancelar
-                            </button>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <button onClick={() => setLinkingLead(true)}
-                              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#1A2B4A', fontWeight: 500, transition: 'all 0.15s' }}
-                              onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
-                              onMouseLeave={e => { e.currentTarget.style.background = '#f0fdfb'; e.currentTarget.style.borderColor = '#d1fae5' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <User style={{ width: 13, height: 13, color: '#0d9488' }} />
-                                <span>Vincular a um Lead</span>
-                              </div>
-                              <ChevronRight style={{ width: 13, height: 13, color: '#94A3B8' }} />
-                            </button>
-                            {(!activeConv.contact_type || activeConv.contact_type === 'unknown') && (
-                              <button onClick={() => {
-                                setLeadData({
-                                  name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '',
-                                  phone: activeConv.phone,
-                                  stage: 'interesse',
-                                  origin: 'WhatsApp',
-                                })
-                                setShowLeadModal(true)
-                              }}
-                                style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#0d9488', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}
-                                onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
-                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
-                                + Criar Lead
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ── SEÇÃO: MENSAGENS AGENDADAS (só Inbox Áion) ──────────────── */}
-                {isAionInbox && !activeConv.isGroup && (
-                  <div style={{ borderBottom: '1px solid #e2f5f3' }}>
-                    <button onClick={() => setCollapseScheduled(v => !v)}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mensagens Agendadas{scheduledMessages.length > 0 ? ` (${scheduledMessages.length})` : ''}</span>
-                      {collapseScheduled
-                        ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
-                        : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
-                    </button>
-                    {!collapseScheduled && (
-                      <div style={{ padding: '0 12px 12px' }}>
-                        {loadingScheduled ? (
-                          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#0d9488] border-t-transparent" />
-                          </div>
-                        ) : scheduledMessages.length === 0 ? (
-                          <div style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '6px 0' }}>
-                            Nenhuma mensagem agendada pra este contato.
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {scheduledMessages.map(m => (
-                              <div key={m.id} style={{ background: '#fff', border: '1px solid #d1fae5', borderRadius: 8, padding: '8px 10px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <Clock style={{ width: 11, height: 11 }} />
-                                    {new Date(m.send_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                  </span>
-                                  <button onClick={() => cancelScheduledMessage(m.id)} title="Cancelar"
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 2, flexShrink: 0 }}>
-                                    <X style={{ width: 13, height: 13 }} />
-                                  </button>
-                                </div>
-                                <p style={{ fontSize: 12, color: '#64748B', margin: '4px 0 0', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any }}>
-                                  {m.content}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <button onClick={openScheduleModal}
-                          style={{ width: '100%', marginTop: 8, padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#0d9488', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
-                          + Agendar mensagem
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-
-              </div>
-            </>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: 32 }}>
-                <div style={{ width: 56, height: 56, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, fontSize: 28 }}>
-                  💬
-                </div>
-                <p style={{ color: '#1A2B4A', fontSize: 13, fontWeight: 500, margin: '0 0 4px' }}>Selecione uma conversa</p>
-                <p style={{ color: '#94A3B8', fontSize: 12, margin: 0 }}>
-                  para ver os detalhes do contato
-                </p>
-              </div>
-            )}
-          </div>
-          </>
+          )
         )}
 
         {/* Send error toast */}
