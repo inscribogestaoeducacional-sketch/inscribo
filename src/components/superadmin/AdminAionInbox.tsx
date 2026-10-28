@@ -8,6 +8,7 @@ import AionInboxHub from './AionInboxHub'
 import HubErrorBoundary from '../whatsapp/HubErrorBoundary'
 import FlowEditor from '../whatsapp/FlowEditor'
 import RobotEditor from '../whatsapp/robot/RobotEditor'
+import WhatsAppHealthCard from './WhatsAppHealthCard'
 import { Card, Title, Switch, GhostButton } from '../management/settings/ui'
 import {
   Settings, MessageCircle, GitBranch, QrCode, Megaphone,
@@ -167,6 +168,7 @@ function SettingsTab({ aionPlatformId, onEditBot }: { aionPlatformId: string; on
 
       {/* Respostas Rápidas */}
       <QuickRepliesSection platformWhatsappId={aionPlatformId} />
+      <WhatsAppHealthCard />
     </div>
   )
 }
