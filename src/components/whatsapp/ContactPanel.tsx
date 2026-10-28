@@ -375,7 +375,7 @@ function Details(p: ContactPanelProps & { editing: boolean; setEditing: (v: bool
         <Head icon={<StickyNote size={15} />} title="Anotações da equipe" extra={p.notes.length ? <span style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark, background: BRAND.softer, borderRadius: 999, padding: '1px 8px' }}>{p.notes.length}</span> : undefined} />
         {p.canNote && (
           <div style={{ display: 'flex', gap: 6, marginBottom: p.notes.length ? 10 : 0 }}>
-            <textarea value={p.newNote} onChange={e => p.setNewNote(e.target.value)} placeholder="Escreva algo sobre esta família — só a equipe vê" rows={2}
+            <textarea value={p.newNote} onChange={e => p.setNewNote(e.target.value)} placeholder={aion ? 'Escreva algo sobre este lead — só a equipe vê' : 'Escreva algo sobre esta família — só a equipe vê'} rows={2}
               style={{ flex: 1, padding: '8px 10px', fontSize: 13, background: BRAND.bg, border: `1px solid ${BRAND.line}`, borderRadius: 10, color: BRAND.ink, outline: 'none', resize: 'vertical', fontFamily: 'inherit', minWidth: 0 }} />
             <button onClick={p.onAddNote} disabled={!p.newNote.trim() || p.savingNote} aria-label="Salvar anotação"
               style={{ alignSelf: 'stretch', width: 40, border: 'none', borderRadius: 10, background: GRAD, color: '#fff', cursor: 'pointer', opacity: !p.newNote.trim() || p.savingNote ? .45 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Send size={15} /></button>

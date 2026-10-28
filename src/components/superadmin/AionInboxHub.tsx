@@ -20,6 +20,7 @@ import ContactPanel, { type PanelTab } from '../whatsapp/ContactPanel'
 import WaImproveButton from '../whatsapp/WaImproveButton'
 import WaComposerSheet from '../whatsapp/WaComposerSheet'
 import WaSummarySection from '../whatsapp/WaSummarySection'
+import AionContactTimeline from './AionContactTimeline'
 import ProposalForm from './ProposalForm'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia } from '../../lib/whatsappTemplate'
 import {
@@ -2441,6 +2442,15 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   }, [chatOpenMobile])
   const [showFilters, setShowFilters] = useState(false)
   const [showPlusSheet, setShowPlusSheet] = useState(false)
+  // Anotações da equipe = contatos do tipo "nota" do lead (crm_interactions), as mesmas da ficha do CRM
+  const [leadNotes, setLeadNotes] = useState<{ id: string; content: string; author_id: string; author_name: string; created_at: string }[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
+  const [newNote, setNewNote] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingNoteText, setEditingNoteText] = useState('')
+  const [savingNoteEdit, setSavingNoteEdit] = useState(false)
+  const [timelineKey, setTimelineKey] = useState(0)
   const [rightPanelTab, setRightPanelTab] = useState<PanelTab>('details')
   const [infoSheet, setInfoSheet] = useState(false) // celular: painel do contato sobe de baixo
 
@@ -3629,6 +3639,45 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       setLoadingAionTemplates(false)
     }
   }
+
+  const loadLeadNotes = async (leadId: string) => {
+    setNotesLoading(true)
+    const { data } = await supabase.from('crm_interactions').select('id, content, created_by, created_at').eq('lead_id', leadId).eq('type', 'note').order('created_at', { ascending: false })
+    const rows = (data || []) as any[]
+    const ids = Array.from(new Set(rows.map(r => r.created_by).filter(Boolean)))
+    const names: Record<string, string> = {}
+    if (ids.length) {
+      const { data: us } = await supabase.from('users').select('id, full_name').in('id', ids)
+      ;(us || []).forEach((u: any) => { names[u.id] = u.full_name })
+    }
+    setLeadNotes(rows.map(r => ({ id: r.id, content: r.content, author_id: r.created_by, author_name: names[r.created_by] || 'Equipe', created_at: r.created_at })))
+    setNotesLoading(false)
+  }
+  const addLeadNote = async () => {
+    const lid = leadData?.id
+    if (!lid || !newNote.trim()) return
+    setSavingNote(true)
+    const { error } = await supabase.from('crm_interactions').insert({ lead_id: lid, type: 'note', content: newNote.trim(), created_by: user?.id ?? null })
+    setSavingNote(false)
+    if (error) { setSendError('Não consegui salvar a anotação.'); return }
+    setNewNote(''); loadLeadNotes(lid); setTimelineKey(k => k + 1)
+  }
+  const saveLeadNoteEdit = async () => {
+    if (!editingNoteId || !editingNoteText.trim()) return
+    setSavingNoteEdit(true)
+    const { error } = await supabase.from('crm_interactions').update({ content: editingNoteText.trim() }).eq('id', editingNoteId)
+    setSavingNoteEdit(false)
+    if (error) { setSendError('Não consegui salvar a anotação.'); return }
+    setEditingNoteId(null); setEditingNoteText('')
+    if (leadData?.id) { loadLeadNotes(leadData.id); setTimelineKey(k => k + 1) }
+  }
+  const deleteLeadNote = async (id: string) => {
+    if (!confirm('Apagar esta anotação?')) return
+    const { error } = await supabase.from('crm_interactions').delete().eq('id', id)
+    if (error) { setSendError('Não consegui apagar a anotação.'); return }
+    if (leadData?.id) { loadLeadNotes(leadData.id); setTimelineKey(k => k + 1) }
+  }
+  useEffect(() => { if (leadData?.id) loadLeadNotes(leadData.id); else setLeadNotes([]) }, [leadData?.id])
 
   const saveContactName = async (name: string): Promise<boolean> => {
     const nm = name.trim()
@@ -5023,14 +5072,15 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
               summarySlot={activeConv.id && !activeConv.isGroup ? (
                 <WaSummarySection conversationId={activeConv.id} onError={m => { setHubToast(m); setTimeout(() => setHubToast(null), 4000) }} />
               ) : null}
-              notes={[]} notesLoading={false} canNote={false}
-              newNote="" setNewNote={() => {}} savingNote={false} onAddNote={() => {}}
-              editingNoteId={null} editingNoteText="" setEditingNoteText={() => {}}
-              onStartEditNote={() => {}} onSaveEditNote={() => {}} onCancelEditNote={() => {}} savingEditNote={false}
-              onDeleteNote={() => {}}
+              notes={leadNotes} notesLoading={notesLoading} canNote={!!leadData?.id}
+              newNote={newNote} setNewNote={setNewNote} savingNote={savingNote} onAddNote={addLeadNote}
+              editingNoteId={editingNoteId} editingNoteText={editingNoteText} setEditingNoteText={setEditingNoteText}
+              onStartEditNote={n => { setEditingNoteId(n.id); setEditingNoteText(n.content) }} onSaveEditNote={saveLeadNoteEdit}
+              onCancelEditNote={() => { setEditingNoteId(null); setEditingNoteText('') }} savingEditNote={savingNoteEdit}
+              onDeleteNote={deleteLeadNote}
               scheduled={scheduledMessages.map(m => ({ id: m.id, scheduled_for: m.send_at, status: 'pending', label: m.message_type === 'template' ? 'Modelo agendado' : 'Mensagem agendada', content: m.content }))}
               onCancelScheduled={cancelScheduledMessage}
-              timelineSlot={null}
+              timelineSlot={leadData?.id ? <AionContactTimeline leadId={leadData.id} reloadKey={timelineKey} /> : null}
             />
           ) : (
             <div style={{ width: 330, flexShrink: 0, background: '#fff', borderLeft: '1px solid #E3E8F0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 24 }}>

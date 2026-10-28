@@ -3510,6 +3510,29 @@ async function detectAionQueue(rawPhone: string, supabase: ReturnType<typeof cre
   return 'general'
 }
 
+// Lead e WhatsApp são a mesma coisa no Inbox Áion: acha o lead do CRM pelo telefone (ou cria, em
+// "interesse"/origem WhatsApp, se for número novo) e amarra na conversa (aion_lead_id).
+async function linkAionLead(supabase: any, rawPhone: string, remoteJid: string, name: string, createIfMissing: boolean) {
+  try {
+    const clean = rawPhone.replace(/^55/, '')
+    const { data: found } = await supabase.from('crm_leads').select('id').ilike('phone', `%${clean}%`).limit(1)
+    let leadId: string | null = found?.[0]?.id ?? null
+    if (!leadId && createIfMissing) {
+      const now = new Date().toISOString()
+      const { data: ins, error } = await supabase.from('crm_leads')
+        .insert({ name, phone: rawPhone, origin: 'whatsapp', stage: 'interesse', created_at: now, updated_at: now })
+        .select('id').maybeSingle()
+      if (error) console.error('❌ [aion] erro ao criar lead automático:', error)
+      leadId = ins?.id ?? null
+    }
+    if (!leadId) return
+    const { error: linkErr } = await supabase.from('whatsapp_conversations')
+      .update({ aion_lead_id: leadId })
+      .eq('is_aion_inbox', true).eq('remote_jid', remoteJid).is('aion_lead_id', null)
+    if (linkErr) console.error('❌ [aion] erro ao ligar lead à conversa:', linkErr)
+  } catch (e) { console.error('❌ [aion] linkAionLead:', e) }
+}
+
 async function processAionMessage({
   msg,
   value,
@@ -3743,7 +3766,10 @@ async function processAionMessage({
       aionFlow = legacyFlow
     }
 
-    if (!aionFlow?.bot_flow?.nodes?.length) return
+    if (!aionFlow?.bot_flow?.nodes?.length) {
+      await linkAionLead(supabase, rawPhone, remoteJid, contactName, true)
+      return
+    }
 
     // Keyword / QR Code detection
     const trimmedText = text.trim().toUpperCase()
@@ -3805,6 +3831,7 @@ async function processAionMessage({
             if (insertLeadErr) console.error('❌ [aion] erro ao criar crm_leads (keyword):', insertLeadErr)
           }
         }
+        await linkAionLead(supabase, rawPhone, remoteJid, contactName, false)
         if (keyword.tag) {
           const { data: convTagData, error: convTagErr } = await supabase
             .from('whatsapp_conversations')
@@ -3853,6 +3880,8 @@ async function processAionMessage({
         if (insertLeadErr2) console.error('❌ [aion] erro ao criar crm_leads (general):', insertLeadErr2)
       }
     }
+
+    await linkAionLead(supabase, rawPhone, remoteJid, contactName, true)
 
     // Fetch conversation bot state
     const { data: convState, error: convStateErr } = await supabase
