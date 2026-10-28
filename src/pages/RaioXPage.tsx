@@ -308,34 +308,27 @@ export default function RaioXPage() {
   useEffect(() => {
     if (searchStage !== 'city' || !selectedUf) return
     const term = cityQuery.trim()
-    if (term.length < 1) { setCityResults([]); setCityError(null); return }
+    if (term.length < 1) { citySeq.current++; setCitySearching(false); setCityResults([]); setCityError(null); return }
     const timer = setTimeout(() => runCitySearch(term), 300)
     return () => clearTimeout(timer)
   }, [cityQuery, searchStage, selectedUf])
 
+  // Cada busca ganha um número; resposta atrasada (rede lenta no celular) não sobrescreve a mais nova.
+  const citySeq = useRef(0)
   async function runCitySearch(term: string) {
+    const my = ++citySeq.current
     setCitySearching(true)
     setCityError(null)
-    const safeTerm = term.replace(/[,()%*]/g, ' ').trim()
-    if (!safeTerm) { setCitySearching(false); setCityResults([]); return }
-
-    const { data, error } = await supabase
-      .from('inep_escolas')
-      .select('no_municipio')
-      .eq('sg_uf', selectedUf)
-      .ilike('no_municipio', `%${safeTerm}%`)
-      .limit(500)
+    // A busca ignora acento e maiúscula no banco (função raiox_cidades), então "joao", "João" e "JOAO" acham a mesma cidade.
+    const { data, error } = await supabase.rpc('raiox_cidades', { p_uf: selectedUf, p_q: term })
+    if (my !== citySeq.current) return
     setCitySearching(false)
-
     if (error) {
       setCityError('Não foi possível buscar agora. Tente novamente.')
       setCityResults([])
       return
     }
-
-    const uniq = Array.from(new Set((data ?? []).map(r => r.no_municipio).filter((v): v is string => !!v)))
-    uniq.sort((a, b) => a.localeCompare(b, 'pt-BR'))
-    setCityResults(uniq.slice(0, 10))
+    setCityResults(((data as string[] | null) ?? []).filter(Boolean))
   }
 
   // ── passo 3: pré-carrega todas as escolas da cidade escolhida (universo já pequeno) ─
@@ -600,6 +593,11 @@ export default function RaioXPage() {
                     onChange={e => setCityQuery(e.target.value)}
                     placeholder="Nome da cidade"
                     autoFocus
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    enterKeyHint="search"
                   />
                   {cityError && <p style={errStyle}>{cityError}</p>}
                   {citySearching && <p style={hintStyle}>Buscando...</p>}
