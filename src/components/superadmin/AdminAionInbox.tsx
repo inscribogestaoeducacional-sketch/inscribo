@@ -7,11 +7,13 @@ import SuperAdminLayout from './SuperAdminLayout'
 import AionInboxHub from './AionInboxHub'
 import HubErrorBoundary from '../whatsapp/HubErrorBoundary'
 import FlowEditor from '../whatsapp/FlowEditor'
+import { Card, Title, Switch, GhostButton } from '../management/settings/ui'
 import {
   Settings, MessageCircle, GitBranch, QrCode, Megaphone,
   Plus, Trash2, Copy, Check, ToggleLeft, ToggleRight, Save, Loader2,
   TrendingUp, Users, Clock, Edit2, Send, AlertCircle, X,
   Search, Upload, Download, FileText, Radio, ChevronRight, UserX, Percent,
+  Bot,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia, type MediaHeaderFormat } from '../../lib/whatsappTemplate'
@@ -116,224 +118,54 @@ const DAYS = [
 
 // ─── SettingsTab ──────────────────────────────────────────────────────────────
 
-function SettingsTab({ aionPlatformId }: { aionPlatformId: string }) {
-  const [flow, setFlow]           = useState<AionFlow | null>(null)
-  const [consultants, setConsultants] = useState<ConsultantUser[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [saving, setSaving]       = useState(false)
-  const [saved, setSaved]         = useState(false)
+function SettingsTab({ aionPlatformId, onEditBot }: { aionPlatformId: string; onEditBot: () => void }) {
+  // O robô da Áion é o mesmo editor visual das escolas (aba "Fluxo do Bot"): o fluxo e o liga/desliga
+  // ficam em whatsapp_flows (platform_whatsapp_id). Aqui só liga/desliga e atalho para editar.
+  const [row, setRow] = useState<{ id: string; is_active: boolean; bot_enabled: boolean; bot_flow: any } | null | undefined>(undefined)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    Promise.all([
-      supabase
-        .from('aion_flows')
-        .select('*')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-        .then(({ data }) => setFlow(data as AionFlow | null)),
-      supabase
-        .from('users')
-        .select('id, full_name, email')
-        .or('role.eq.consultant,role.eq.admin_geral,role.eq.superadmin,user_type.eq.consultant')
-        .then(({ data }) => setConsultants((data as ConsultantUser[]) ?? [])),
-    ]).then(() => setLoading(false))
-  }, [])
+    if (!aionPlatformId) return
+    supabase.from('whatsapp_flows').select('id, is_active, bot_enabled, bot_flow')
+      .eq('platform_whatsapp_id', aionPlatformId).maybeSingle()
+      .then(({ data }) => setRow((data as any) ?? null))
+  }, [aionPlatformId])
 
-  const save = async () => {
-    if (!flow) return
+  const setBot = async (on: boolean) => {
+    if (!row) return
     setSaving(true)
-    await supabase
-      .from('aion_flows')
-      .update({
-        is_active:              flow.is_active,
-        bot_enabled:            flow.bot_enabled,
-        welcome_message:        flow.welcome_message,
-        off_hours_message:      flow.off_hours_message,
-        working_days:           flow.working_days,
-        working_start:          flow.working_start,
-        working_end:            flow.working_end,
-        default_assignee_id:    flow.default_assignee_id ?? null,
-        satisfaction_enabled:   flow.satisfaction_enabled ?? false,
-        satisfaction_message:   flow.satisfaction_message ?? '',
-        updated_at:             new Date().toISOString(),
-      })
-      .eq('id', flow.id)
+    const { error } = await supabase.from('whatsapp_flows')
+      .update({ bot_enabled: on, is_active: on ? true : row.is_active, updated_at: new Date().toISOString() }).eq('id', row.id)
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+    if (!error) setRow({ ...row, bot_enabled: on, is_active: on ? true : row.is_active })
   }
 
-  const toggleDay = (key: string) => {
-    if (!flow) return
-    const days = flow.working_days.includes(key)
-      ? flow.working_days.filter(d => d !== key)
-      : [...flow.working_days, key]
-    setFlow({ ...flow, working_days: days })
-  }
-
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300 }}>
-        <Loader2 style={{ width: 28, height: 28, color: '#05907B', animation: 'spin 1s linear infinite' }} />
-      </div>
-    )
-  }
-
-  if (!flow) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
-        Nenhuma configuração encontrada. Execute a migration no Supabase primeiro.
-      </div>
-    )
-  }
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0',
-    borderRadius: 8, fontSize: 14, color: '#1A2B4A', background: '#fff',
-    outline: 'none', boxSizing: 'border-box',
-  }
-  const labelStyle: React.CSSProperties = {
-    fontSize: 12, fontWeight: 600, color: '#64748B',
-    textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, display: 'block',
-  }
-  const cardStyle: React.CSSProperties = {
-    background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '18px 20px', marginBottom: 16,
-  }
-
+  const blocks = (row?.bot_flow?.nodes || []).length
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '28px 24px' }}>
-
-      {/* Header toggles */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-        {([
-          { key: 'is_active',   label: 'Fluxo Ativo',      desc: 'Ativa o processamento de fluxo' },
-          { key: 'bot_enabled', label: 'Bot Habilitado',    desc: 'Responde mensagens automaticamente' },
-        ] as const).map(({ key, label, desc }) => (
-          <div key={key}
-            style={{ flex: 1, ...cardStyle, marginBottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-            onClick={() => setFlow({ ...flow, [key]: !flow[key] })}
-          >
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{label}</div>
-              <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{desc}</div>
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Card>
+        <Title Icon={Bot} title="Robô de atendimento" help="Atende na hora, mostra o menu e passa a conversa para a pessoa certa." />
+        {row === undefined ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Loader2 style={{ width: 24, height: 24, color: '#05907B', animation: 'spin 1s linear infinite' }} /></div>
+        ) : row === null ? (
+          <div style={{ fontSize: 13, color: '#64748B', marginBottom: 12 }}>O robô ainda não foi criado. Abra o editor para montar o menu.</div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Switch on={!!row.bot_enabled && !!row.is_active} onChange={setBot} disabled={saving} labelText="Robô ligado" />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>{row.bot_enabled && row.is_active ? 'Robô ligado' : 'Robô desligado'}</div>
+                <div style={{ fontSize: 12.5, color: '#64748B' }}>{blocks} blocos no fluxo</div>
+              </div>
             </div>
-            {flow[key]
-              ? <ToggleRight style={{ width: 32, height: 32, color: '#05907B' }} />
-              : <ToggleLeft  style={{ width: 32, height: 32, color: '#94A3B8' }} />}
+            <GhostButton onClick={onEditBot}><Bot size={14} /> Editar robô</GhostButton>
           </div>
-        ))}
-      </div>
-
-      {/* Mensagem de boas-vindas */}
-      <div style={cardStyle}>
-        <label style={labelStyle}>Mensagem de Boas-Vindas</label>
-        <textarea
-          value={flow.welcome_message}
-          onChange={e => setFlow({ ...flow, welcome_message: e.target.value })}
-          rows={4}
-          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }}
-        />
-      </div>
-
-      {/* Mensagem fora do horário */}
-      <div style={cardStyle}>
-        <label style={labelStyle}>Mensagem Fora do Horário</label>
-        <textarea
-          value={flow.off_hours_message}
-          onChange={e => setFlow({ ...flow, off_hours_message: e.target.value })}
-          rows={3}
-          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }}
-        />
-      </div>
-
-      {/* Horário de atendimento */}
-      <div style={cardStyle}>
-        <label style={labelStyle}>Horário de Atendimento</label>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-          {DAYS.map(d => (
-            <button key={d.key} onClick={() => toggleDay(d.key)}
-              style={{
-                padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                border: '1.5px solid',
-                borderColor: flow.working_days.includes(d.key) ? '#05907B' : '#E2E8F0',
-                background: flow.working_days.includes(d.key) ? '#E6F7F5' : '#F8FAFC',
-                color: flow.working_days.includes(d.key) ? '#05907B' : '#64748B',
-                cursor: 'pointer',
-              }}>
-              {d.label}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ ...labelStyle, marginBottom: 4 }}>Início</label>
-            <input type="time" value={flow.working_start}
-              onChange={e => setFlow({ ...flow, working_start: e.target.value })}
-              style={{ ...inputStyle }} />
-          </div>
-          <div style={{ paddingTop: 20, color: '#94A3B8', fontSize: 18 }}>–</div>
-          <div style={{ flex: 1 }}>
-            <label style={{ ...labelStyle, marginBottom: 4 }}>Fim</label>
-            <input type="time" value={flow.working_end}
-              onChange={e => setFlow({ ...flow, working_end: e.target.value })}
-              style={{ ...inputStyle }} />
-          </div>
-        </div>
-      </div>
-
-      {/* Atendente padrão */}
-      <div style={cardStyle}>
-        <label style={labelStyle}>Atendente Padrão para Novas Conversas</label>
-        <select value={flow.default_assignee_id || ''}
-          onChange={e => setFlow({ ...flow, default_assignee_id: e.target.value || null })}
-          style={inputStyle}>
-          <option value="">— Nenhum (sem atribuição automática) —</option>
-          {consultants.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-        </select>
-      </div>
-
-      {/* Pesquisa de satisfação */}
-      <div style={cardStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>Pesquisa de Satisfação</div>
-            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Enviar mensagem ao concluir atendimento</div>
-          </div>
-          <div onClick={() => setFlow({ ...flow, satisfaction_enabled: !flow.satisfaction_enabled })} style={{ cursor: 'pointer' }}>
-            {flow.satisfaction_enabled
-              ? <ToggleRight style={{ width: 28, height: 28, color: '#05907B' }} />
-              : <ToggleLeft  style={{ width: 28, height: 28, color: '#94A3B8' }} />}
-          </div>
-        </div>
-        {flow.satisfaction_enabled && (
-          <textarea
-            value={flow.satisfaction_message || ''}
-            onChange={e => setFlow({ ...flow, satisfaction_message: e.target.value })}
-            rows={3}
-            placeholder="Ex: Como foi seu atendimento? Responda de 1 a 5."
-            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }}
-          />
         )}
-      </div>
+        {row === null && <GhostButton onClick={onEditBot}><Bot size={14} /> Abrir editor</GhostButton>}
+      </Card>
 
       {/* Respostas Rápidas */}
       <QuickRepliesSection platformWhatsappId={aionPlatformId} />
-
-      {/* Salvar */}
-      <button onClick={save} disabled={saving}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '10px 24px', background: saved ? '#10B981' : '#05907B',
-          color: '#fff', fontSize: 14, fontWeight: 700, borderRadius: 10,
-          border: 'none', cursor: saving ? 'not-allowed' : 'pointer',
-          opacity: saving ? 0.7 : 1, transition: 'background 0.2s',
-        }}>
-        {saving ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
-          : saved  ? <Check style={{ width: 16, height: 16 }} />
-          : <Save  style={{ width: 16, height: 16 }} />}
-        {saving ? 'Salvando…' : saved ? 'Salvo!' : 'Salvar Configurações'}
-      </button>
     </div>
   )
 }
@@ -3509,7 +3341,7 @@ export default function AdminAionInbox() {
           {tab === 'qrcodes'    && <div style={{ overflowY: 'auto', height: '100%' }}><CampaignsTab /></div>}
           {tab === 'contacts'   && <div style={{ overflowY: 'auto', height: '100%' }}><ContactsTab aionPlatformId={aionPlatformId} /></div>}
           {tab === 'broadcasts' && <div style={{ overflowY: 'auto', height: '100%' }}><BroadcastsTab aionPlatformId={aionPlatformId} /></div>}
-          {tab === 'settings'   && <div style={{ overflowY: 'auto', height: '100%' }}><SettingsTab aionPlatformId={aionPlatformId} /></div>}
+          {tab === 'settings'   && <div style={{ overflowY: 'auto', height: '100%' }}><SettingsTab aionPlatformId={aionPlatformId} onEditBot={() => setTab('flow')} /></div>}
         </div>
       </div>
     </SuperAdminLayout>
