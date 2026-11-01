@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { submitDefaultTemplates } from '../../lib/submitDefaultTemplates'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase, INSTITUTION_COLUMNS } from '../../lib/supabase'
+import { fmtBRL, fmtDate, fmtDateTime, daysLate } from './escolas/format'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { applyCampaignCycle, toReenrollFraction } from '../../lib/campaignApply'
 import { useAuth } from '../../contexts/AuthContext'
@@ -37,20 +38,6 @@ const CHARGE_TYPE_LABELS: Record<string, string> = {
   extra_conversations: 'Conversas extras',
 }
 
-function fmtBRL(n: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n || 0)
-}
-function fmtDate(s?: string | null) {
-  if (!s) return '—'
-  return new Date(s).toLocaleDateString('pt-BR')
-}
-function fmtDateTime(s?: string | null) {
-  if (!s) return '—'
-  return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-}
-function daysLate(due: string) {
-  return Math.max(0, Math.floor((Date.now() - new Date(due + 'T12:00:00').getTime()) / 86400000))
-}
 
 // Parser best-effort pra period (funnel_metrics) / month_year (marketing_campaigns) —
 // SÓ usado pra pré-marcar sugestões no modal de exclusão de campanha (ver

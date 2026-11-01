@@ -1,19 +1,38 @@
 // src/components/superadmin/AdminSchools.tsx
-import { submitDefaultTemplates } from '../../lib/submitDefaultTemplates'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, WHATSAPP_PHONE_COLUMNS } from '../../lib/supabase'
-import { platformAdmin } from '../../lib/platformAdmin'
 import { toReenrollFraction } from '../../lib/campaignApply'
-import { loadSavedWhatsApp, resolveWabaForSave, auditWhatsAppSave, assertIsPhoneNumber, WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../lib/whatsappSaveGuard'
 import SuperAdminLayout from './SuperAdminLayout'
+import { fmtBRLOrDash } from './escolas/format'
 import {
-  Building2, Search, Megaphone, Edit2, AlertTriangle,
-  CheckCircle2, X, Plus, RefreshCw, Eye, EyeOff,
-  MapPin, Mail, User, Shield, ChevronRight, ChevronLeft,
-  DollarSign, FileText, Gift, Lock, Unlock, Trash2,
-  Clock, Send, Copy, ExternalLink, Filter, Phone,
-  AlertCircle, Info, MessageCircle, Wifi, WifiOff
+  Building2,
+  Search,
+  Megaphone,
+  Edit2,
+  AlertTriangle,
+  CheckCircle2,
+  X,
+  Plus,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  MapPin,
+  Mail,
+  Shield,
+  ChevronRight,
+  ChevronLeft,
+  DollarSign,
+  Gift,
+  Lock,
+  Unlock,
+  Trash2,
+  Copy,
+  ExternalLink,
+  Phone,
+  AlertCircle,
+  Info,
+  MessageCircle
 } from 'lucide-react'
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -836,412 +855,6 @@ function NewSchoolWizard({
   )
 }
 
-// ─── School Detail Modal (com aba WhatsApp) ────────────────────────────────
-function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }: {
-  inst: any
-  consultants: any[]
-  getCycleBadge: (id: string) => { label: string; color: string; bg: string }
-  onClose: () => void
-  onEdit: () => void
-}) {
-  const [tab, setTab]         = useState<'info' | 'whatsapp' | 'templates'>('info')
-  const [waConfig, setWaConfig] = useState<any>(null)
-  const [waLoading, setWaLoading] = useState(false)
-  const [waForm, setWaForm]   = useState({ phone_id: '', phone_number: '', display_name: '', waba_id: '' })
-  const [waVerifying, setWaVerifying] = useState(false)
-  const [waError, setWaError] = useState('')
-  const [waSaved, setWaSaved] = useState(false)
-  const [usage, setUsage]     = useState({ count: 0, limit: 1000 })
-  const [waTemplates, setWaTemplates]         = useState<any[]>([])
-  const [loadingTemplates, setLoadingTemplates] = useState(false)
-  const [showAddTemplate, setShowAddTemplate]   = useState(false)
-  const [newTemplate, setNewTemplate]           = useState({ name: '', category: 'UTILITY', body: '' })
-  const [sendingNewTemplate, setSendingNewTemplate] = useState(false)
-
-  useEffect(() => { if (tab === 'whatsapp') loadWaConfig() }, [tab])
-
-  const loadWaConfig = async () => {
-    setWaLoading(true)
-    try {
-      const [instRes, waRes] = await Promise.all([
-        supabase.from('institutions')
-          .select('whatsapp_phone_id,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
-          .eq('id', inst.id).single(),
-        supabase.from('whatsapp_phone_numbers')
-          .select(WHATSAPP_PHONE_COLUMNS)
-          .eq('institution_id', inst.id)
-          .maybeSingle(),
-      ])
-      if (instRes.data) setWaConfig(instRes.data)
-      const wa = waRes.data
-      if (wa) {
-        setWaForm({
-          phone_id:     wa.phone_number_id || '',
-          phone_number: wa.phone_number || '',
-          display_name: wa.display_name || '',
-          waba_id:      wa.waba_id || '',
-        })
-        const monthYear = new Date().toISOString().slice(0, 7)
-        const { data: u } = await supabase.from('whatsapp_usage').select('conversation_count,monthly_limit').eq('institution_id', inst.id).eq('month_year', monthYear).maybeSingle()
-        if (u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
-      } else if (instRes.data?.whatsapp_phone_id) {
-        setWaForm({
-          phone_id:     instRes.data.whatsapp_phone_id || '',
-          phone_number: instRes.data.whatsapp_phone_number || '',
-          display_name: instRes.data.whatsapp_display_name || '',
-          waba_id:      '',
-        })
-      }
-    } catch {}
-    setWaLoading(false)
-  }
-
-  // Templates padrão no WABA da escola — roda no servidor (platform-admin),
-  // que pula o WABA da Áion e os que já existem lá.
-  const createDefaultTemplates = async (wabaId: string): Promise<void> => {
-    if (!wabaId) return
-    try {
-      const r = await platformAdmin<{ created: string[]; errors: string[] }>('create_default_templates', { waba_id: wabaId })
-      r.created.forEach(n => console.log(`[templates] criado ${n} no WABA ${wabaId}`))
-      r.errors.forEach(e => console.error('[templates] erro ao criar:', e))
-    } catch (e) {
-      console.error('[templates] erro ao criar templates padrão:', e)
-    }
-  }
-
-  const loadWaTemplates = async () => {
-    setLoadingTemplates(true)
-    try {
-      const { data: waPhoneRow } = await supabase
-        .from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', inst.id).maybeSingle()
-      const wabaId = waPhoneRow?.waba_id
-      if (!wabaId) { setWaTemplates([]); return }
-      // Busca na Meta pelo servidor (platform-admin) — sem token no navegador.
-      const data = { data: (await platformAdmin<{ templates: any[] }>('list_templates', { waba_id: wabaId })).templates }
-      setWaTemplates(data.data || [])
-    } catch (e) {
-      console.error('[templates] erro ao carregar:', e)
-    } finally {
-      setLoadingTemplates(false)
-    }
-  }
-
-  const handleAddTemplate = async () => {
-    if (!newTemplate.name || !newTemplate.body) return
-    setSendingNewTemplate(true)
-    try {
-      const { data: waPhoneRow } = await supabase
-        .from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', inst.id).maybeSingle()
-      const wabaId = waPhoneRow?.waba_id
-      if (!wabaId) throw new Error('WABA ID não configurado')
-      // Criação na Meta pelo servidor (platform-admin) — erro da Meta volta na exceção.
-      await platformAdmin('create_template', {
-        waba_id: wabaId,
-        template: {
-          name: newTemplate.name.toLowerCase().replace(/\s+/g, '_'),
-          language: 'pt_BR',
-          category: newTemplate.category,
-          components: [{ type: 'BODY', text: newTemplate.body }],
-        },
-      })
-      setShowAddTemplate(false)
-      setNewTemplate({ name: '', category: 'UTILITY', body: '' })
-      loadWaTemplates()
-    } catch (e) {
-      console.error('[templates] erro ao criar:', e)
-    } finally {
-      setSendingNewTemplate(false)
-    }
-  }
-
-  const handleSaveWa = async () => {
-    if (!waForm.phone_id) { setWaError('Phone Number ID é obrigatório.'); return }
-    setWaVerifying(true); setWaError(''); setWaSaved(false)
-    try {
-      // Teste do número na Meta pelo servidor (platform-admin) — o token global
-      // não vem pro navegador. wa_waba_id não é segredo: continua lido direto.
-      const { data: wabaSetting } = await supabase
-        .from('platform_settings').select('key, value').eq('key', 'wa_waba_id')
-      const settingsMap: Record<string, string> = {}
-      wabaSetting?.forEach((r: any) => { settingsMap[r.key] = r.value })
-      const testData: any = await platformAdmin('phone_info', { phone_id: waForm.phone_id })
-      assertIsPhoneNumber(waForm.phone_id, testData)
-      const verifiedName  = (testData as any).verified_name || waForm.display_name
-      const verifiedPhone = waForm.phone_number || (testData as any).display_phone_number || ''
-      const AION_WABA_ID = settingsMap['wa_waba_id'] || ''
-      const wabaToSubscribe = waForm.waba_id?.trim() || ''
-      // Lido antes de gravar qualquer coisa: se o WABA for recusado, nada muda.
-      const saved = await loadSavedWhatsApp(inst.id)
-      const effectiveWabaId = resolveWabaForSave(wabaToSubscribe, saved, AION_WABA_ID)
-
-      await supabase.from('institutions').update({
-        whatsapp_phone_id:     waForm.phone_id,
-        whatsapp_phone_number: verifiedPhone,
-        whatsapp_display_name: verifiedName,
-        whatsapp_connected:    true,
-      }).eq('id', inst.id)
-
-      const waRow = {
-        phone_number_id: waForm.phone_id,
-        phone_number:    verifiedPhone,
-        display_name:    verifiedName,
-        waba_id:         effectiveWabaId,
-        is_active:       true,
-        use_meta_api:    true,
-      }
-      const { error: waErr } = await supabase.from('whatsapp_phone_numbers')
-        .upsert({ institution_id: inst.id, ...waRow }, { onConflict: 'institution_id' })
-      if (waErr) throw new Error(waErr.message)
-      await auditWhatsAppSave(inst.id, saved, waRow)
-
-      if (wabaToSubscribe && wabaToSubscribe !== AION_WABA_ID) {
-        try {
-          const subscribeData = await platformAdmin<{ success: boolean; error: string | null }>('subscribe_app', { waba_id: wabaToSubscribe })
-          if (subscribeData.success) {
-            console.log('[WA] WABA inscrito com sucesso:', wabaToSubscribe)
-          } else {
-            console.warn('[WA] Falha ao inscrever WABA:', subscribeData)
-          }
-        } catch (e) {
-          console.error('[WA] Erro ao inscrever WABA:', e)
-        }
-      }
-
-      // Criar templates padrão no WABA da escola
-      await createDefaultTemplates(effectiveWabaId)
-      await submitDefaultTemplates(inst.id)
-
-      setWaSaved(true)
-      await loadWaConfig()
-    } catch (e) {
-      setWaError((e as Error).message)
-    } finally {
-      setWaVerifying(false)
-    }
-  }
-
-  const getConsultantName = (id: string) => consultants.find(c => c.id === id)?.full_name || '—'
-  const usagePct  = Math.min(100, Math.round((usage.count / usage.limit) * 100))
-  const usageColor = usagePct >= 90 ? '#EF4444' : usagePct >= 70 ? '#F59E0B' : '#10B981'
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">{inst.name}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{inst.city && inst.state ? `${inst.city}/${inst.state}` : ''}</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1 px-4 pt-3 border-b border-gray-100">
-          {[{ id: 'info', label: 'Detalhes' }, { id: 'whatsapp', label: 'WhatsApp' }, { id: 'templates', label: 'Templates' }].map(t => (
-            <button key={t.id} onClick={() => { setTab(t.id as any); if (t.id === 'templates') loadWaTemplates() }}
-              className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors -mb-px
-                ${tab === t.id ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6">
-
-          {/* ── Aba Detalhes ── */}
-          {tab === 'info' && (
-            <div className="space-y-2.5 text-sm">
-              {[
-                ['Nome',       inst.name],
-                ['CNPJ',       inst.cnpj || '—'],
-                ['Cidade/UF',  inst.city && inst.state ? `${inst.city}/${inst.state}` : '—'],
-                ['E-mail',     inst.email || '—'],
-                ['Telefone',   inst.phone || '—'],
-                ['Plano',      PLANS.find(p => p.value === inst.plan)?.label || inst.plan || '—'],
-                ['Status',     PLAN_STATUS.find(s => s.value === inst.plan_status)?.label || inst.plan_status || '—'],
-                ['Mensalidade', inst.monthly_value ? `R$ ${Number(inst.monthly_value).toLocaleString('pt-BR')}` : '—'],
-                ['Implantação', inst.implementation_value ? `R$ ${Number(inst.implementation_value).toLocaleString('pt-BR')}` : '—'],
-                ['Consultor',  getConsultantName(inst.consultant_id)],
-                ['Campanha',   getCycleBadge(inst.id).label],
-                ['Criado em',  new Date(inst.created_at).toLocaleDateString('pt-BR')],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-2 py-1.5 border-b border-gray-50">
-                  <span className="text-gray-400 font-medium">{k}</span>
-                  <span className="text-gray-900 font-semibold text-right">{v}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── Aba WhatsApp ── */}
-          {tab === 'whatsapp' && (
-            <div className="space-y-4">
-              {waLoading ? (
-                <div className="flex justify-center py-8">
-                  <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : (
-                <>
-                  {/* Status */}
-                  <div className={`flex items-center gap-3 p-3 rounded-xl border ${waConfig?.whatsapp_connected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-                    {waConfig?.whatsapp_connected
-                      ? <><Wifi className="w-4 h-4 text-green-600 flex-shrink-0" /><div><p className="text-sm font-bold text-green-700">Conectado</p>{waConfig.whatsapp_phone_number && <p className="text-xs text-green-600">{waConfig.whatsapp_phone_number}</p>}{waConfig.whatsapp_display_name && <p className="text-xs text-green-500">{waConfig.whatsapp_display_name}</p>}</div></>
-                      : <><WifiOff className="w-4 h-4 text-gray-400 flex-shrink-0" /><p className="text-sm font-semibold text-gray-500">Não conectado</p></>
-                    }
-                    {waConfig?.whatsapp_connected && (
-                      <div className="ml-auto text-right">
-                        <p className="text-xs text-gray-400">Conversas/mês</p>
-                        <p className="text-sm font-bold" style={{ color: usageColor }}>{usage.count}/{usage.limit.toLocaleString('pt-BR')}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {waConfig?.whatsapp_connected && (
-                    <div>
-                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
-                        <div className="h-full rounded-full" style={{ width: `${usagePct}%`, background: usageColor }} />
-                      </div>
-                      <p className="text-xs text-gray-400">Custo estimado: {usage.count > 1000 ? `R$ ${((usage.count - 1000) * 0.005).toFixed(2).replace('.', ',')}` : 'R$ 0,00'}</p>
-                    </div>
-                  )}
-
-                  {/* Formulário de configuração */}
-                  <div className="space-y-3 pt-2">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Configurar número</p>
-                    {[
-                      { label: 'Phone Number ID (Meta)',                        key: 'phone_id',     type: 'text', placeholder: '1007880222413531' },
-                      { label: 'Número de telefone',                            key: 'phone_number', type: 'text', placeholder: '5583999990001' },
-                      { label: 'Nome de exibição no WhatsApp',                  key: 'display_name', type: 'text', placeholder: 'Colégio São João' },
-                      { label: WABA_FIELD_LABEL, key: 'waba_id',      type: 'text', placeholder: WABA_FIELD_PLACEHOLDER },
-                    ].map(f => (
-                      <div key={f.key}>
-                        <label className={lbl}>{f.label}</label>
-                        <input type={f.type} className={inp} placeholder={f.placeholder}
-                          value={(waForm as any)[f.key]}
-                          onChange={e => setWaForm(prev => ({ ...prev, [f.key]: e.target.value }))} />
-                      </div>
-                    ))}
-
-                    {waError && (
-                      <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
-                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />{waError}
-                      </div>
-                    )}
-                    {waSaved && (
-                      <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl text-xs text-green-700">
-                        <CheckCircle2 className="w-3.5 h-3.5" />WhatsApp configurado e verificado!
-                      </div>
-                    )}
-
-                    <button onClick={handleSaveWa} disabled={waVerifying || !waForm.phone_id}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
-                      {waVerifying
-                        ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Verificando...</>
-                        : <><CheckCircle2 className="w-4 h-4" />Salvar e verificar</>
-                      }
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Templates tab */}
-          {tab === 'templates' && (
-            <div className="p-4 overflow-y-auto flex-1">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-semibold text-gray-700">Templates WhatsApp</p>
-                <button onClick={() => setShowAddTemplate(true)}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-xl text-xs font-semibold hover:bg-cyan-100">
-                  <Plus className="w-3 h-3" /> Adicionar
-                </button>
-              </div>
-
-              {loadingTemplates ? (
-                <div className="flex justify-center py-8"><div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>
-              ) : waTemplates.length === 0 ? (
-                <p className="text-sm text-gray-400 italic text-center py-8">Nenhum template encontrado.</p>
-              ) : (
-                <div className="space-y-2">
-                  {waTemplates.map((tpl: any) => {
-                    const sc: Record<string, string> = {
-                      APPROVED: 'bg-green-100 text-green-700',
-                      PENDING:  'bg-yellow-100 text-yellow-700',
-                      REJECTED: 'bg-red-100 text-red-700',
-                    }
-                    const bodyComp = tpl.components?.find((c: any) => c.type === 'BODY')
-                    return (
-                      <div key={tpl.id} className="border border-gray-100 rounded-xl p-3 bg-gray-50">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <span className="font-mono text-xs font-bold text-gray-800">{tpl.name}</span>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{tpl.category}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${sc[tpl.status] || 'bg-gray-100 text-gray-600'}`}>{tpl.status}</span>
-                        </div>
-                        {bodyComp?.text && (
-                          <p className="text-xs text-gray-500 truncate">{bodyComp.text}</p>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {showAddTemplate && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[300] p-4">
-                  <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-gray-900">Novo Template</h3>
-                      <button onClick={() => setShowAddTemplate(false)}><X className="w-4 h-4 text-gray-400" /></button>
-                    </div>
-                    <div className="space-y-3">
-                      <div>
-                        <label className={lbl}>Nome (snake_case)</label>
-                        <input className={inp} placeholder="ex: boas_vindas" value={newTemplate.name}
-                          onChange={e => setNewTemplate(p => ({ ...p, name: e.target.value.toLowerCase().replace(/\s+/g,'_') }))} />
-                      </div>
-                      <div>
-                        <label className={lbl}>Categoria</label>
-                        <select className={inp} value={newTemplate.category}
-                          onChange={e => setNewTemplate(p => ({ ...p, category: e.target.value }))}>
-                          <option value="UTILITY">UTILITY</option>
-                          <option value="MARKETING">MARKETING</option>
-                          <option value="AUTHENTICATION">AUTHENTICATION</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className={lbl}>Texto do corpo</label>
-                        <textarea className={inp} rows={3} placeholder="Olá, {{1}}!"
-                          value={newTemplate.body}
-                          onChange={e => setNewTemplate(p => ({ ...p, body: e.target.value }))} />
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <button onClick={() => setShowAddTemplate(false)} className="flex-1 py-2 border border-gray-200 rounded-xl text-sm text-gray-600">Cancelar</button>
-                      <button onClick={handleAddTemplate} disabled={sendingNewTemplate || !newTemplate.name || !newTemplate.body}
-                        className="flex-1 py-2 bg-cyan-600 text-white rounded-xl text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-1">
-                        {sendingNewTemplate && <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                        Enviar para aprovação
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 flex gap-2">
-          <button onClick={onEdit} className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-50">Editar</button>
-          <button onClick={onClose} className="flex-1 py-2.5 bg-gray-900 text-white rounded-xl font-semibold text-sm">Fechar</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────
 export default function AdminSchools() {
   const navigate = useNavigate()
@@ -1261,7 +874,6 @@ export default function AdminSchools() {
   const [showWizard, setShowWizard] = useState(false)
   const [editModal, setEditModal] = useState<any | null>(null)
   const [releaseModal, setReleaseModal] = useState<any | null>(null)
-  const [detailModal, setDetailModal] = useState<any | null>(null)
 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -1416,7 +1028,6 @@ export default function AdminSchools() {
             phone_number_id: editForm.wa_phone_number_id.trim(),
             phone_number:    editForm.wa_phone_number.trim() || null,
             display_name:    editForm.wa_display_name.trim() || null,
-            waba_id:         null,
             is_active:       editForm.wa_is_active,
             use_meta_api:    true,
           }, { onConflict: 'institution_id' })
@@ -1523,8 +1134,6 @@ export default function AdminSchools() {
     }
   }
 
-  const fmtBRL = (n: number) => n?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || '—'
-
   return (
     <SuperAdminLayout>
       <div className="p-8 space-y-6">
@@ -1534,7 +1143,7 @@ export default function AdminSchools() {
         <div className="aion-band flex items-center justify-between">
           <div>
             <h1 className="aion-band-title">Escolas</h1>
-            <p className="aion-band-sub">{institutions.length} instituição{institutions.length !== 1 ? 'ões' : ''} cadastrada{institutions.length !== 1 ? 's' : ''}</p>
+            <p className="aion-band-sub">{institutions.length} {institutions.length !== 1 ? 'escolas cadastradas' : 'escola cadastrada'}</p>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
@@ -1671,8 +1280,8 @@ export default function AdminSchools() {
                           <span className="text-xs text-purple-600 font-semibold">Gratuito</span>
                         ) : (
                           <div className="text-xs text-gray-500">
-                            <p className="font-semibold text-gray-700">{fmtBRL(inst.monthly_value)}/mês</p>
-                            {inst.implementation_value > 0 && <p className="text-gray-400">Impl.: {fmtBRL(inst.implementation_value)}</p>}
+                            <p className="font-semibold text-gray-700">{fmtBRLOrDash(inst.monthly_value)}/mês</p>
+                            {inst.implementation_value > 0 && <p className="text-gray-400">Impl.: {fmtBRLOrDash(inst.implementation_value)}</p>}
                           </div>
                         )}
                       </td>
@@ -1880,17 +1489,6 @@ export default function AdminSchools() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* ── MODAL: Detalhes ─────────────────────────────────── */}
-      {detailModal && (
-        <SchoolDetailModal
-          inst={detailModal}
-          consultants={consultants}
-          getCycleBadge={getCycleBadge}
-          onClose={() => setDetailModal(null)}
-          onEdit={() => { setDetailModal(null); openEdit(detailModal) }}
-        />
       )}
 
     </SuperAdminLayout>
