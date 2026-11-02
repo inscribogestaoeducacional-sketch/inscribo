@@ -33,6 +33,7 @@ import DetailFinancialTab from './escolas/DetailFinancialTab'
 import DetailTemplatesTab from './escolas/DetailTemplatesTab'
 import DetailWhatsAppTab from './escolas/DetailWhatsAppTab'
 import DetailUsersTab from './escolas/DetailUsersTab'
+import DetailSummaryTab from './escolas/DetailSummaryTab'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { applyCampaignCycle, toReenrollFraction } from '../../lib/campaignApply'
 import { useAuth } from '../../contexts/AuthContext'
@@ -206,10 +207,12 @@ export default function InstitutionDetails() {
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false)
   const [advancingPhase,     setAdvancingPhase]     = useState(false)
 
-  // Gestão da escola tabs
-  // ?tab=whatsapp abre direto na aba WhatsApp (links dos alertas do sino)
-  const [mgmtTab, setMgmtTab] = useState<'users' | 'whatsapp' | 'financial' | 'templates' | 'campaigns' | 'broadcast' | 'base'>(
-    () => (new URLSearchParams(window.location.search).get('tab') === 'whatsapp' ? 'whatsapp' : 'users'))
+  // Abas da página da escola. ?tab=whatsapp abre direto na aba WhatsApp (links dos alertas do sino)
+  type PageTab = 'resumo' | 'impl' | 'equipe' | 'whatsapp' | 'financeiro' | 'campanhas' | 'modulos'
+  const [pageTab, setPageTab] = useState<PageTab>(
+    () => (new URLSearchParams(window.location.search).get('tab') === 'whatsapp' ? 'whatsapp' : 'resumo'))
+  const [waSub, setWaSub] = useState<'conexao' | 'templates'>('conexao')
+  const [modSub, setModSub] = useState<'broadcast' | 'base'>('broadcast')
 
   // Templates tab state
   const [waTemplates, setWaTemplates] = useState<any[]>([])
@@ -1263,6 +1266,7 @@ export default function InstitutionDetails() {
   const st = STATUS_MAP[institution.plan_status] || { l: institution.plan_status, c: '#6b7280', bg: '#f3f4f6' }
   const implPayment    = payments.find(p => p.payment_type === 'implementation')
   const monthlyPayments = payments.filter(p => p.payment_type === 'monthly')
+  const manageTabs = institution?.plan_status === 'active' || institution?.plan_status === 'pending_payment'
   const contractSt     = contract ? (CONTRACT_STATUS[contract.status] || CONTRACT_STATUS.draft) : null
   const usagePct       = Math.min(100, Math.round((waUsage.count / waUsage.limit) * 100))
   // Sempre o valor real gravado em onboarding_processes.current_phase — sem
@@ -1492,6 +1496,41 @@ export default function InstitutionDetails() {
           })}
         </div>
 
+        {/* ── Barra de abas ── */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-3 pt-2 overflow-x-auto">
+          <div className="flex gap-1 min-w-max">
+            {([
+              { id: 'resumo', label: 'Resumo', show: true },
+              { id: 'impl', label: 'Implantação', show: true },
+              { id: 'equipe', label: 'Equipe', show: manageTabs },
+              { id: 'whatsapp', label: 'WhatsApp', show: manageTabs },
+              { id: 'financeiro', label: 'Financeiro', show: manageTabs },
+              { id: 'campanhas', label: 'Campanhas', show: manageTabs },
+              { id: 'modulos', label: 'Módulos', show: manageTabs },
+            ] as const).filter(t => t.show).map(t => (
+              <button key={t.id}
+                onClick={() => { setPageTab(t.id); if (t.id === 'whatsapp' && waSub === 'templates') loadWaTemplates() }}
+                className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-colors -mb-px border-b-2 whitespace-nowrap ${
+                  pageTab === t.id ? 'text-cyan-700 border-cyan-500 bg-cyan-50' : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {pageTab === 'resumo' && <DetailSummaryTab institution={institution} users={users} payments={payments} cycles={cycles} changeRequests={changeRequests} contract={contract} contractSt={contractSt} onboardingProcess={onboardingProcess} onboardingTasks={onboardingTasks} currentPhaseIdx={currentPhaseIdx} waConnected={waConnected} waSaved={waSaved} waUsage={waUsage} consultantName={consultants.find(c => c.id === institution.consultant_id)?.full_name || ''} goTab={t => setPageTab(t as PageTab)} />}
+
+        {pageTab === 'impl' && institution.plan === 'gratuito' && !onboardingProcess && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
+            <Rocket className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+            <p className="text-base font-bold text-gray-800">Sem implantação</p>
+            <p className="text-sm text-gray-500 mt-1">Esta escola é gratuita e não passa pela jornada de implantação.</p>
+          </div>
+        )}
+
+        {pageTab === 'impl' && !(institution.plan === 'gratuito' && !onboardingProcess) && (
+        <>
         {/* ── Jornada de implantação: stepper horizontal compacto ── */}
         {onboardingProcess && (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -1798,7 +1837,7 @@ export default function InstitutionDetails() {
                                 </p>
                               </div>
                               <button
-                                onClick={() => { setMgmtTab('campaigns'); document.getElementById('mgmt-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
+                                onClick={() => { setPageTab('campanhas'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                                 className="flex items-center gap-1.5 px-3.5 py-2 bg-orange-500 text-white rounded-xl text-xs font-semibold flex-shrink-0 hover:bg-orange-600 transition-colors">
                                 <Megaphone className="w-3.5 h-3.5" /> Ir para Campanhas
                               </button>
@@ -1824,103 +1863,6 @@ export default function InstitutionDetails() {
                               {renderMeetingList('monthly')}
                             </div>
                           </div>
-                          {/* Financial history */}
-                          <div className="p-5">
-                            <div className="flex items-center justify-between mb-3">
-                              <p className="text-sm font-semibold text-gray-700">Histórico financeiro</p>
-                              <button onClick={() => setShowNewCharge(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-xl text-xs font-semibold">
-                                <Plus className="w-3 h-3" /> Nova cobrança
-                              </button>
-                            </div>
-                            {monthlyPayments.length === 0 ? (
-                              <p className="text-sm text-gray-400 italic">Nenhuma mensalidade registrada.</p>
-                            ) : (
-                              <div className="overflow-x-auto -mx-1">
-                                <table className="w-full text-sm">
-                                  <thead><tr className="border-b border-gray-100">{['Descrição','Valor','Vencimento','Status',''].map(h => <th key={h} className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase">{h}</th>)}</tr></thead>
-                                  <tbody className="divide-y divide-gray-50">
-                                    {monthlyPayments.map(p => {
-                                      const pst = PAYMENT_STATUS[p.status] || PAYMENT_STATUS.pending
-                                      const late = p.status === 'overdue' ? daysLate(p.due_date) : 0
-                                      return (
-                                        <tr key={p.id} className="hover:bg-gray-50">
-                                          <td className="px-2 py-2 text-gray-700">{p.description || 'Mensalidade'}</td>
-                                          <td className="px-2 py-2 font-semibold text-gray-900">{fmtBRL(p.amount)}</td>
-                                          <td className="px-2 py-2 text-gray-500">{fmtDate(p.due_date)}{late > 0 && <span className="ml-1 text-xs text-red-500 font-bold">{late}d</span>}</td>
-                                          <td className="px-2 py-2"><span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ color: pst.c, background: pst.bg }}>{pst.l}</span></td>
-                                          <td className="px-2 py-2">
-                                            <div className="flex gap-1">
-                                              {p.asaas_charge_url && <><button onClick={() => handleResendPaymentEmail(p)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Send className="w-3.5 h-3.5" /></button><button onClick={() => handleSendWhatsAppPayment(p)} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg"><MessageCircle className="w-3.5 h-3.5" /></button><a href={p.asaas_charge_url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg"><ExternalLink className="w-3.5 h-3.5" /></a></>}
-                                              {!p.asaas_charge_url && p.status !== 'paid' && <button onClick={() => handleGenerateLink(p.id)} className="px-2 py-1 text-xs bg-gray-100 border border-gray-200 text-gray-600 rounded-lg font-semibold">🔗 Link</button>}
-                                              {p.status === 'pending' && <button onClick={() => handleMarkPaid(p.id, false)} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg"><CheckCircle2 className="w-3.5 h-3.5" /></button>}
-                                              {p.status !== 'paid' && p.status !== 'cancelled' && <button onClick={() => handleCancelPayment(p.id, p.asaas_payment_id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Ban className="w-3.5 h-3.5" /></button>}
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      )
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* WhatsApp status */}
-                          <div className="p-5">
-                            <p className="text-sm font-semibold text-gray-700 mb-3">WhatsApp</p>
-                            <div className={`flex items-center gap-3 p-4 rounded-xl border ${waConnected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-                              {waConnected
-                                ? <><Wifi className="w-5 h-5 text-green-600 flex-shrink-0" /><div><p className="font-bold text-green-700 text-sm">Conectado</p>{institution.whatsapp_display_name && <p className="text-xs text-green-600">{institution.whatsapp_display_name}</p>}</div><div className="ml-auto text-right"><p className="text-xs text-gray-400">Este mês</p><p className="font-bold text-gray-900">{waUsage.count}<span className="text-xs font-normal text-gray-400">/{waUsage.limit}</span></p></div></>
-                                : <><WifiOff className="w-5 h-5 text-gray-400 flex-shrink-0" /><p className="text-sm font-semibold text-gray-500">{waInvalidRecord ? 'Cadastro inválido (sem conta própria)' : 'Não configurado'}</p></>
-                              }
-                            </div>
-                            <div className="mt-3 space-y-3">
-                              {[
-                                { k: 'phone_id',     l: 'Phone Number ID',   placeholder: '1007880222413531' },
-                                { k: 'phone_number', l: 'Número',            placeholder: '+55 83 99999-9999' },
-                                { k: 'display_name', l: 'Nome de exibição',  placeholder: 'Colégio São João' },
-                                { k: 'waba_id',      l: WABA_FIELD_LABEL, placeholder: WABA_FIELD_PLACEHOLDER },
-                              ].map(f => (
-                                <div key={f.k}>
-                                  <label className={lbl}>{f.l}</label>
-                                  <input className={inp} placeholder={f.placeholder} value={(waForm as any)[f.k]} onChange={e => setWaForm(p => ({ ...p, [f.k]: e.target.value }))} />
-                                </div>
-                              ))}
-                              <button onClick={handleSaveWhatsApp} disabled={savingWa}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
-                                {savingWa ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Salvar e verificar
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Users */}
-                          <div className="p-5">
-                            <div className="flex items-center justify-between mb-3">
-                              <p className="text-sm font-semibold text-gray-700">Usuários ({users.length})</p>
-                              <button onClick={() => setShowNewUser(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-xl text-xs font-semibold">
-                                <Plus className="w-3 h-3" /> Novo usuário
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {users.length === 0 ? <p className="text-sm text-gray-400 italic">Nenhum usuário cadastrado.</p> : users.map(u => (
-                                <div key={u.id} className="bg-gray-50 rounded-xl border border-gray-200 p-3">
-                                  <div className="flex items-start justify-between mb-2">
-                                    <div><p className="font-bold text-gray-900 text-sm">{u.full_name}</p><p className="text-xs text-gray-400">{u.email}</p></div>
-                                    <div className="flex gap-1">
-                                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{u.role}</span>
-                                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${u.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>{u.active ? 'Ativo' : 'Inativo'}</span>
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button onClick={() => handleToggleUser(u)} className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold border ${u.active ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-green-50 text-green-600 border-green-200'}`}>
-                                      {u.active ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}{u.active ? 'Desativar' : 'Ativar'}
-                                    </button>
-                                    <button onClick={() => handleDeleteUser(u)} title="Remover desta escola" className="p-1.5 bg-red-50 text-red-500 border border-red-200 rounded-lg"><UserX className="w-3.5 h-3.5" /></button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -1938,63 +1880,40 @@ export default function InstitutionDetails() {
             )
           })}
         </div>
+        </>
+        )}
 
-        {/* ── Gestão da escola ── */}
-        {(institution.plan_status === 'active' || institution.plan_status === 'pending_payment') && (
-          <div id="mgmt-section" className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden scroll-mt-4">
-            <div className="px-6 pt-5 pb-0 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900 mb-4">Gestão da escola</h2>
-              <div className="flex gap-1">
-                {([
-                  { id: 'users',     label: 'Usuários' },
-                  { id: 'whatsapp',  label: 'WhatsApp' },
-                  { id: 'templates', label: 'Templates' },
-                  { id: 'financial', label: 'Financeiro' },
-                  { id: 'campaigns', label: 'Campanhas' },
-                  { id: 'broadcast', label: 'Transmissões' },
-                  { id: 'base',      label: 'Base de alunos' },
-                ] as const).map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      setMgmtTab(t.id)
-                      if (t.id === 'templates') loadWaTemplates()
-                    }}
-                    className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors -mb-px border-b-2 ${
-                      mgmtTab === t.id
-                        ? 'text-cyan-700 border-cyan-500 bg-cyan-50'
-                        : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+        {/* ── Gestão: cada assunto numa aba só ── */}
+        {manageTabs && pageTab !== 'resumo' && pageTab !== 'impl' && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="p-6">
-
-              {/* Tab: Usuários */}
-              {mgmtTab === 'users' && <DetailUsersTab handleDeleteUser={handleDeleteUser} handleReactivateLink={handleReactivateLink} handleToggleUser={handleToggleUser} removedLinks={removedLinks} setShowNewUser={setShowNewUser} setShowRemoved={setShowRemoved} showRemoved={showRemoved} users={users} />}
-
-              {/* Tab: WhatsApp */}
-              {mgmtTab === 'whatsapp' && <DetailWhatsAppTab handleSaveWhatsApp={handleSaveWhatsApp} handleUpdateLimit={handleUpdateLimit} hasOwnNumber={hasOwnNumber} id={id} institution={institution} isSuperAdmin={isSuperAdmin} loadAll={loadAll} newLimit={newLimit} ownWaba={ownWaba} savingWa={savingWa} setChargeForm={setChargeForm} setNewLimit={setNewLimit} setShowNewCharge={setShowNewCharge} setWaForm={setWaForm} updatingLimit={updatingLimit} usagePct={usagePct} waConnected={waConnected} waForm={waForm} waInvalidRecord={waInvalidRecord} waSaved={waSaved} waUsage={waUsage} />}
-
-              {/* Tab: Templates */}
-              {mgmtTab === 'templates' && <DetailTemplatesTab handleAddTemplate={handleAddTemplate} handleSyncTemplateDefinitions={handleSyncTemplateDefinitions} loadWaTemplates={loadWaTemplates} loadingTemplates={loadingTemplates} newTemplate={newTemplate} sendingNewTemplate={sendingNewTemplate} setNewTemplate={setNewTemplate} setShowAddTemplate={setShowAddTemplate} showAddTemplate={showAddTemplate} syncingDefs={syncingDefs} waTemplates={waTemplates} />}
-
-              {/* Tab: Financeiro */}
-              {mgmtTab === 'financial' && <DetailFinancialTab copied={copied} copyToClipboard={copyToClipboard} handleCancelPayment={handleCancelPayment} handleGenerateLink={handleGenerateLink} handleMarkPaid={handleMarkPaid} handleResendPaymentEmail={handleResendPaymentEmail} handleSendWhatsAppPayment={handleSendWhatsAppPayment} payments={payments} setShowNewCharge={setShowNewCharge} />}
-
-              {/* Tab: Transmissões (resumo, configuração do módulo, crédito) */}
-              {mgmtTab === 'broadcast' && id && <InstitutionBroadcastTab institutionId={id} />}
-
-              {/* Tab: Base de alunos (módulo por escola) */}
-              {mgmtTab === 'base' && id && <InstitutionBaseModuleTab institutionId={id} />}
-
-              {/* Tab: Campanhas */}
-              {mgmtTab === 'campaigns' && <DetailCampaignsTab archivingCampaignId={archivingCampaignId} changeRequests={changeRequests} cycles={cycles} deletingCampaignId={deletingCampaignId} handleApproveChangeRequest={handleApproveChangeRequest} handleArchiveCampaign={handleArchiveCampaign} handleDeleteCampaign={handleDeleteCampaign} handleReleaseCampaign={handleReleaseCampaign} id={id} isSuperAdmin={isSuperAdmin} openDeleteCampaignReview={openDeleteCampaignReview} openEditCampaign={openEditCampaign} openLimitedEdit={openLimitedEdit} releasingCycleId={releasingCycleId} reviewLoadingCycleId={reviewLoadingCycleId} reviewingRequestId={reviewingRequestId} setEditingCampaignId={setEditingCampaignId} setNewCampaignForm={setNewCampaignForm} setRejectReason={setRejectReason} setRejectingRequest={setRejectingRequest} setShowNewCampaign={setShowNewCampaign} users={users} />}
-
+              {pageTab === 'equipe' && <DetailUsersTab handleDeleteUser={handleDeleteUser} handleReactivateLink={handleReactivateLink} handleToggleUser={handleToggleUser} removedLinks={removedLinks} setShowNewUser={setShowNewUser} setShowRemoved={setShowRemoved} showRemoved={showRemoved} users={users} />}
+              {pageTab === 'whatsapp' && (
+                <div className="space-y-5">
+                  <div className="flex gap-2">
+                    {([{ id: 'conexao', label: 'Conexão' }, { id: 'templates', label: 'Templates' }] as const).map(t => (
+                      <button key={t.id} onClick={() => { setWaSub(t.id); if (t.id === 'templates') loadWaTemplates() }}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${waSub === t.id ? 'bg-cyan-50 text-cyan-700 border-cyan-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>{t.label}</button>
+                    ))}
+                  </div>
+                  {waSub === 'conexao' && <DetailWhatsAppTab handleSaveWhatsApp={handleSaveWhatsApp} handleUpdateLimit={handleUpdateLimit} hasOwnNumber={hasOwnNumber} id={id} institution={institution} isSuperAdmin={isSuperAdmin} loadAll={loadAll} newLimit={newLimit} ownWaba={ownWaba} savingWa={savingWa} setChargeForm={setChargeForm} setNewLimit={setNewLimit} setShowNewCharge={setShowNewCharge} setWaForm={setWaForm} updatingLimit={updatingLimit} usagePct={usagePct} waConnected={waConnected} waForm={waForm} waInvalidRecord={waInvalidRecord} waSaved={waSaved} waUsage={waUsage} />}
+                  {waSub === 'templates' && <DetailTemplatesTab handleAddTemplate={handleAddTemplate} handleSyncTemplateDefinitions={handleSyncTemplateDefinitions} loadWaTemplates={loadWaTemplates} loadingTemplates={loadingTemplates} newTemplate={newTemplate} sendingNewTemplate={sendingNewTemplate} setNewTemplate={setNewTemplate} setShowAddTemplate={setShowAddTemplate} showAddTemplate={showAddTemplate} syncingDefs={syncingDefs} waTemplates={waTemplates} />}
+                </div>
+              )}
+              {pageTab === 'financeiro' && <DetailFinancialTab copied={copied} copyToClipboard={copyToClipboard} handleCancelPayment={handleCancelPayment} handleGenerateLink={handleGenerateLink} handleMarkPaid={handleMarkPaid} handleResendPaymentEmail={handleResendPaymentEmail} handleSendWhatsAppPayment={handleSendWhatsAppPayment} payments={payments} setShowNewCharge={setShowNewCharge} />}
+              {pageTab === 'modulos' && id && (
+                <div className="space-y-5">
+                  <div className="flex gap-2">
+                    {([{ id: 'broadcast', label: 'Transmissões' }, { id: 'base', label: 'Base de alunos' }] as const).map(t => (
+                      <button key={t.id} onClick={() => setModSub(t.id)}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${modSub === t.id ? 'bg-cyan-50 text-cyan-700 border-cyan-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>{t.label}</button>
+                    ))}
+                  </div>
+                  {modSub === 'broadcast' && <InstitutionBroadcastTab institutionId={id} />}
+                  {modSub === 'base' && <InstitutionBaseModuleTab institutionId={id} />}
+                </div>
+              )}
+              {pageTab === 'campanhas' && <DetailCampaignsTab archivingCampaignId={archivingCampaignId} changeRequests={changeRequests} cycles={cycles} deletingCampaignId={deletingCampaignId} handleApproveChangeRequest={handleApproveChangeRequest} handleArchiveCampaign={handleArchiveCampaign} handleDeleteCampaign={handleDeleteCampaign} handleReleaseCampaign={handleReleaseCampaign} id={id} isSuperAdmin={isSuperAdmin} openDeleteCampaignReview={openDeleteCampaignReview} openEditCampaign={openEditCampaign} openLimitedEdit={openLimitedEdit} releasingCycleId={releasingCycleId} reviewLoadingCycleId={reviewLoadingCycleId} reviewingRequestId={reviewingRequestId} setEditingCampaignId={setEditingCampaignId} setNewCampaignForm={setNewCampaignForm} setRejectReason={setRejectReason} setRejectingRequest={setRejectingRequest} setShowNewCampaign={setShowNewCampaign} users={users} />}
             </div>
           </div>
         )}
