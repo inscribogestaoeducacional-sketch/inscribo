@@ -12,18 +12,18 @@ export default function DetailFinancialTab({ copied, copyToClipboard, handleCanc
                 return (
                   <div>
                     {/* KPIs */}
-                    <div className="grid grid-cols-3 gap-4 mb-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
                       <div className="bg-green-50 border border-green-100 rounded-xl p-4 text-center">
                         <p className="text-xs font-semibold text-green-600 mb-1">Total pago</p>
-                        <p className="text-lg font-bold text-green-700">{fmtBRL(totalPaid)}</p>
+                        <p className="text-lg font-bold text-green-700 break-words">{fmtBRL(totalPaid)}</p>
                       </div>
                       <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-center">
                         <p className="text-xs font-semibold text-amber-600 mb-1">Em aberto</p>
-                        <p className="text-lg font-bold text-amber-700">{fmtBRL(totalOpen)}</p>
+                        <p className="text-lg font-bold text-amber-700 break-words">{fmtBRL(totalOpen)}</p>
                       </div>
                       <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
                         <p className="text-xs font-semibold text-blue-600 mb-1">Próx. vencimento</p>
-                        <p className="text-lg font-bold text-blue-700">{nextDue ? fmtDate(nextDue.due_date) : '—'}</p>
+                        <p className="text-lg font-bold text-blue-700 break-words">{nextDue ? fmtDate(nextDue.due_date) : '—'}</p>
                       </div>
                     </div>
 

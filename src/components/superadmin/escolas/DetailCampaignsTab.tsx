@@ -43,7 +43,7 @@ export default function DetailCampaignsTab({ archivingCampaignId, changeRequests
                                   {c.released_at && <span className="ml-2 text-green-600 font-medium">· Liberada em {fmtDate(c.released_at)}</span>}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+                              <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
                                 {isDraftLike && (
                                   <>
                                     <button

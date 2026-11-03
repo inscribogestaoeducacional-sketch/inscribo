@@ -1497,8 +1497,8 @@ export default function InstitutionDetails() {
         </div>
 
         {/* ── Barra de abas ── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-3 pt-2 overflow-x-auto">
-          <div className="flex gap-1 min-w-max">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-2">
+          <div className="flex flex-wrap gap-1.5">
             {([
               { id: 'resumo', label: 'Resumo', show: true },
               { id: 'impl', label: 'Implantação', show: true },
@@ -1510,8 +1510,8 @@ export default function InstitutionDetails() {
             ] as const).filter(t => t.show).map(t => (
               <button key={t.id}
                 onClick={() => { setPageTab(t.id); if (t.id === 'whatsapp' && waSub === 'templates') loadWaTemplates() }}
-                className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-colors -mb-px border-b-2 whitespace-nowrap ${
-                  pageTab === t.id ? 'text-cyan-700 border-cyan-500 bg-cyan-50' : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50'
+                className={`px-3.5 py-2 text-sm font-semibold rounded-xl transition-colors whitespace-nowrap ${
+                  pageTab === t.id ? 'text-white bg-gradient-to-r from-teal-600 to-emerald-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                 }`}>
                 {t.label}
               </button>
@@ -1546,7 +1546,7 @@ export default function InstitutionDetails() {
                 const Icon = phase.icon
                 return (
                   <Fragment key={phase.id}>
-                    <div className="flex flex-col items-center gap-1.5 flex-shrink-0" style={{ width: 76 }}>
+                    <div className="flex flex-col items-center gap-1.5 flex-shrink-0 w-14 sm:w-[76px]">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${state === 'done' ? 'bg-green-500' : state === 'active' ? 'ring-4' : 'bg-gray-100'}`}
                         style={state === 'active' ? { background: phase.color, boxShadow: `0 0 0 4px ${phase.color}22` } : {}}>
                         {state === 'done'
@@ -1554,7 +1554,7 @@ export default function InstitutionDetails() {
                           : <Icon className="w-4 h-4" style={{ color: state === 'active' ? '#fff' : '#9ca3af' }} />
                         }
                       </div>
-                      <span className={`text-[11px] font-semibold text-center leading-tight ${state === 'active' ? 'text-gray-900' : state === 'done' ? 'text-gray-500' : 'text-gray-300'}`}>{phase.label}</span>
+                      <span className={`text-[9px] sm:text-[11px] font-semibold text-center leading-tight whitespace-nowrap ${state === 'active' ? 'text-gray-900' : state === 'done' ? 'text-gray-500' : 'text-gray-300'}`}>{phase.label.length > 11 ? <><span className="sm:hidden">{phase.label.slice(0, 5)}.</span><span className="hidden sm:inline">{phase.label}</span></> : phase.label}</span>
                     </div>
                     {idx < TIMELINE_PHASES.length - 1 && <div className={`flex-1 h-0.5 -mt-5 ${idx < currentPhaseIdx ? 'bg-green-300' : 'bg-gray-200'}`} />}
                   </Fragment>
