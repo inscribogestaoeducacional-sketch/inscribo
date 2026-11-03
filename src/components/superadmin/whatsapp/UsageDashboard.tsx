@@ -428,7 +428,7 @@ const CAT_LABEL: Record<string, string> = { MARKETING: 'Marketing', UTILITY: 'Ut
 function MetaReport({ from, to, institutionId, names }: { from: string; to: string; institutionId?: string; names: Record<string, string> }) {
   const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle')
   const [err, setErr] = useState('')
-  const [schools, setSchools] = useState<{ institution_id: string; waba_id: string; rows: { category: string; volume: number; cost: number }[]; error: string | null }[]>([])
+  const [schools, setSchools] = useState<{ institution_id: string; waba_id: string; rows: { category: string; type?: string; volume: number; cost: number }[]; error: string | null }[]>([])
   useEffect(() => { setState('idle'); setSchools([]); setErr('') }, [from, to, institutionId])
 
   const load = async () => {
@@ -439,7 +439,9 @@ function MetaReport({ from, to, institutionId, names }: { from: string; to: stri
   }
   const shown = institutionId ? schools.filter(x => x.institution_id === institutionId) : schools
   const money = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-  const cats = [...new Set(shown.flatMap(x => x.rows.map(r => r.category)))].sort()
+  const keyOf = (r: { category: string; type?: string }) => `${r.category}|${r.type ?? 'REGULAR'}`
+  const cats = [...new Set(shown.flatMap(x => x.rows.map(keyOf)))].sort()
+  const label = (k: string) => { const [c, t] = k.split('|'); if (c === 'SERVICE') return t === 'FREE_CUSTOMER_SERVICE' ? 'Atendimento grátis' : t === 'FREE_ENTRY_POINT' ? 'Entrada grátis' : 'Atendimento cobrado'; return CAT_LABEL[c] ?? c }
   const total = sum(shown, x => sum(x.rows, r => r.cost))
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -458,7 +460,7 @@ function MetaReport({ from, to, institutionId, names }: { from: string; to: stri
           <table className="w-full text-sm">
             <thead><tr className="text-xs text-gray-500 bg-gray-50">
               <th className="px-3 py-2 text-left font-semibold">Escola</th>
-              {cats.map(c => <th key={c} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{CAT_LABEL[c] ?? c}</th>)}
+              {cats.map(c => <th key={c} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{label(c)}</th>)}
               <th className="px-3 py-2 text-right font-semibold">Total</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
@@ -466,7 +468,7 @@ function MetaReport({ from, to, institutionId, names }: { from: string; to: stri
                 <tr key={x.institution_id}>
                   <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap">{names[x.institution_id] ?? x.waba_id}</td>
                   {x.error ? <td colSpan={cats.length + 1} className="px-3 py-2 text-xs text-amber-700">{x.error}</td> : (<>
-                    {cats.map(c => { const r = x.rows.find(y => y.category === c); return <td key={c} className="px-3 py-2 text-right">{r ? <>{money(r.cost)} <span className="text-[11px] text-gray-400">({fmt(r.volume)})</span></> : <span className="text-gray-300">—</span>}</td> })}
+                    {cats.map(c => { const r = x.rows.find(y => keyOf(y) === c); return <td key={c} className="px-3 py-2 text-right">{r ? <>{money(r.cost)} <span className="text-[11px] text-gray-400">({fmt(r.volume)})</span></> : <span className="text-gray-300">—</span>}</td> })}
                     <td className="px-3 py-2 text-right font-bold">{money(sum(x.rows, r => r.cost))}</td>
                   </>)}
                 </tr>

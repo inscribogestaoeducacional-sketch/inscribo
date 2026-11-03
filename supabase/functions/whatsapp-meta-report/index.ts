@@ -27,8 +27,8 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}))
     const from = String(body.from ?? ''), to = String(body.to ?? '')
     if (!DATE_RE.test(from) || !DATE_RE.test(to) || from > to) return json(400, { error: 'Período inválido' })
-    const start = Math.floor(new Date(`${from}T00:00:00Z`).getTime() / 1000)
-    const end = Math.floor(new Date(`${to}T00:00:00Z`).getTime() / 1000) + 86400
+    const start = Math.floor(new Date(`${from}T00:00:00-03:00`).getTime() / 1000)
+    const end = Math.floor(new Date(`${to}T00:00:00-03:00`).getTime() / 1000) + 86400
 
     const sb = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
     const { data: tok } = await sb.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
@@ -42,16 +42,17 @@ serve(async (req) => {
 
     const schools = await Promise.all(list.map(async (p) => {
       try {
-        const f = `pricing_analytics.start(${start}).end(${end}).granularity(DAILY).dimensions(["PRICING_CATEGORY"])`
+        const f = `pricing_analytics.start(${start}).end(${end}).granularity(DAILY).dimensions(["PRICING_CATEGORY","PRICING_TYPE"])`
         const r = await fetch(`${GRAPH}/${p.waba_id}?fields=${encodeURIComponent(f)}`, {
           headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000),
         })
         const d: any = await r.json().catch(() => null)
         if (!r.ok) return { institution_id: p.institution_id, waba_id: p.waba_id, rows: [], error: d?.error?.message || `Meta respondeu ${r.status}`, code: d?.error?.code ?? null }
-        const acc = new Map<string, { category: string; volume: number; cost: number }>()
+        const acc = new Map<string, { category: string; type: string; volume: number; cost: number }>()
         for (const blk of d?.pricing_analytics?.data ?? []) for (const pt of blk?.data_points ?? []) {
-          const k = String(pt.pricing_category ?? 'OUTRO')
-          const cur = acc.get(k) ?? { category: k, volume: 0, cost: 0 }
+          const cat = String(pt.pricing_category ?? 'OUTRO'), typ = String(pt.pricing_type ?? 'REGULAR')
+          const k = `${cat}|${typ}`
+          const cur = acc.get(k) ?? { category: cat, type: typ, volume: 0, cost: 0 }
           cur.volume += Number(pt.volume) || 0; cur.cost += Number(pt.cost) || 0
           acc.set(k, cur)
         }
