@@ -32,3 +32,26 @@ export function PipelineBar({ inst }: { inst: any }) {
     </div>
   )
 }
+
+// Etapa real da implantação (onboarding_processes.current_phase), a mesma da página da escola
+import { TIMELINE_PHASES } from './detailConsts'
+
+export function getStage(inst: any, phase?: string | null): { label: string; color: string; bg: string; step?: number } {
+  const idx = TIMELINE_PHASES.findIndex(p => p.id === phase)
+  if (idx >= 0) {
+    const ph = TIMELINE_PHASES[idx]
+    return { label: ph.label, color: ph.color, bg: ph.color + '18', step: idx + 1 }
+  }
+  if (inst.plan === 'gratuito') return { label: 'Sem implantação', color: '#7c3aed', bg: '#f5f3ff' }
+  if (inst.plan_status === 'pending_contract') return { label: 'Contrato', color: '#6366f1', bg: '#eef2ff', step: 1 }
+  return { label: 'Não iniciada', color: '#9ca3af', bg: '#f3f4f6' }
+}
+
+export function StageBadge({ inst, phase }: { inst: any; phase?: string | null }) {
+  const st = getStage(inst, phase)
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ color: st.color, background: st.bg }}>
+      {st.label}{st.step ? <span className="opacity-60 font-medium">{st.step}/{TIMELINE_PHASES.length}</span> : null}
+    </span>
+  )
+}

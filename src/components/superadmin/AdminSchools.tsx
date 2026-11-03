@@ -6,7 +6,7 @@ import { toReenrollFraction } from '../../lib/campaignApply'
 import SuperAdminLayout from './SuperAdminLayout'
 import { fmtBRLOrDash } from './escolas/format'
 import { Skeleton, ToastBar, type ToastT, inp, lbl } from './escolas/ui'
-import { PipelineBar } from './escolas/pipeline'
+import { StageBadge } from './escolas/pipeline'
 import { PLANS, PLAN_STATUS } from './escolas/constants'
 import NewSchoolWizard from './escolas/NewSchoolWizard'
 import {
@@ -23,7 +23,8 @@ import {
   Unlock,
   Trash2,
   Phone,
-  MessageCircle
+  MessageCircle,
+  MoreVertical
 } from 'lucide-react'
 
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────
@@ -36,6 +37,9 @@ export default function AdminSchools() {
   const [waNumbers, setWaNumbers]   = useState<Record<string, any>>({})
   const [waUsageMap, setWaUsageMap] = useState<Record<string, { initiated: number; limit: number }>>({})
 
+  const [phaseMap, setPhaseMap] = useState<Record<string, string>>({})
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -77,7 +81,7 @@ export default function AdminSchools() {
   const loadData = async () => {
     setLoading(true)
     const monthYear = new Date().toISOString().slice(0, 7)
-    const [instRes, consultRes, cycleRes, waRes, usageRes, changeReqRes] = await Promise.all([
+    const [instRes, consultRes, cycleRes, waRes, usageRes, changeReqRes, procRes] = await Promise.all([
       supabase.from('institutions').select('id, name, city, state, email, phone, plan, plan_status, monthly_value, consultant_id, created_at, address, cnpj').order('name'),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('campaign_cycles')
@@ -88,6 +92,7 @@ export default function AdminSchools() {
         .select('institution_id, initiated_count, limit_count')
         .eq('month_year', monthYear),
       supabase.from('campaign_change_requests').select('institution_id').eq('status', 'pending'),
+      supabase.from('onboarding_processes').select('institution_id, current_phase'),
     ])
     if (cancelledRef.current) return
     if (instRes.error) console.error('institutions error:', instRes.error)
@@ -103,6 +108,9 @@ export default function AdminSchools() {
       usageMap[r.institution_id] = { initiated: r.initiated_count || 0, limit: r.limit_count || 1000 }
     }
     setWaUsageMap(usageMap)
+    const phMap: Record<string, string> = {}
+    for (const r of (procRes.data || [])) if (r.current_phase) phMap[r.institution_id] = r.current_phase
+    setPhaseMap(phMap)
     const pendingMap: Record<string, number> = {}
     for (const r of (changeReqRes.data || [])) pendingMap[r.institution_id] = (pendingMap[r.institution_id] || 0) + 1
     setPendingChangeCounts(pendingMap)
@@ -305,22 +313,49 @@ export default function AdminSchools() {
     }
   }
 
+  const openRelease = (inst: any) => {
+    const bestCycle = getBestCycle(inst.id)
+    setReleaseModal(inst)
+    setReleaseYear(bestCycle?.target_school_year ?? bestCycle?.year ?? new Date().getFullYear() + 1)
+  }
+
+  const actionsMenu = (inst: any) => (
+    <div className="relative" onClick={e => e.stopPropagation()}>
+      <button onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); const below = window.innerHeight - r.bottom > 260; setMenuPos({ top: below ? r.bottom + 4 : Math.max(8, r.top - 224), right: window.innerWidth - r.right }); setMenuFor(menuFor === inst.id ? null : inst.id) }} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="Mais ações" aria-label="Mais ações">
+        <MoreVertical className="w-4 h-4" />
+      </button>
+      {menuFor === inst.id && (
+        <div style={{ top: menuPos.top, right: menuPos.right }} className="fixed z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 text-sm">
+          <button onClick={() => { setMenuFor(null); openEdit(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-gray-700 text-left"><Edit2 className="w-3.5 h-3.5" /> Editar dados</button>
+          <button onClick={() => { setMenuFor(null); openRelease(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-gray-700 text-left"><Megaphone className="w-3.5 h-3.5" /> Liberar campanha</button>
+          {inst.plan_status === 'suspended' ? (
+            <button onClick={() => { setMenuFor(null); handleReactivate(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-green-50 text-green-700 text-left"><Unlock className="w-3.5 h-3.5" /> Reativar</button>
+          ) : (
+            <button onClick={() => { setMenuFor(null); handleSuspend(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-orange-50 text-orange-600 text-left"><Lock className="w-3.5 h-3.5" /> Suspender</button>
+          )}
+          <div className="my-1 border-t border-gray-100" />
+          <button onClick={() => { setMenuFor(null); handleDelete(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-red-50 text-red-600 text-left"><Trash2 className="w-3.5 h-3.5" /> Excluir escola</button>
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <SuperAdminLayout>
-      <div className="p-8 space-y-6">
+      <div className="p-4 md:p-8 space-y-4 md:space-y-6" onClick={() => menuFor && setMenuFor(null)}>
         {toast && <ToastBar toast={toast} onClose={() => setToast(null)} />}
 
         {/* Header */}
-        <div className="aion-band flex items-center justify-between">
+        <div className="aion-band flex items-center justify-between gap-3">
           <div>
             <h1 className="aion-band-title">Escolas</h1>
             <p className="aion-band-sub">{institutions.length} {institutions.length !== 1 ? 'escolas cadastradas' : 'escola cadastrada'}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
             <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
               <RefreshCw className="w-4 h-4" />
             </button>
-            <button onClick={() => setShowWizard(true)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm hover:from-cyan-600 hover:to-blue-700">
+            <button onClick={() => setShowWizard(true)} className="flex items-center gap-2 px-4 py-2.5 whitespace-nowrap bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm hover:from-cyan-600 hover:to-blue-700">
               <Plus className="w-4 h-4" /> Nova escola
             </button>
           </div>
@@ -359,24 +394,24 @@ export default function AdminSchools() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full text-[13px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {['Escola','Localização','Consultor','Status / Plano','Pipeline','Campanha','WhatsApp','Financeiro','Ações'].map(h => (
-                    <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                  {["Escola","Consultor",'Plano','Etapa','Campanha','WhatsApp','Financeiro','Ações'].map(h => (
+                    <th key={h} className="px-2.5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   Array(5).fill(0).map((_, i) => (
-                    <tr key={i}>{Array(9).fill(0).map((_, j) => <td key={j} className="px-5 py-4"><Skeleton h="h-4" w="w-20" /></td>)}</tr>
+                    <tr key={i}>{Array(8).fill(0).map((_, j) => <td key={j} className="px-5 py-4"><Skeleton h="h-4" w="w-20" /></td>)}</tr>
                   ))
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-5 py-16 text-center">
+                    <td colSpan={8} className="px-5 py-16 text-center">
                       <Building2 className="w-10 h-10 mx-auto mb-2 text-gray-200" />
                       <p className="text-sm text-gray-400">{search ? 'Nenhuma escola encontrada' : 'Nenhuma escola cadastrada'}</p>
                       {!search && <button onClick={() => setShowWizard(true)} className="mt-2 text-sm text-cyan-600 font-semibold">+ Criar primeira escola</button>}
@@ -387,36 +422,31 @@ export default function AdminSchools() {
                   const cycleBadge = getCycleBadge(inst.id)
                   return (
                     <tr key={inst.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3.5">
+                      <td className="px-2.5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 flex items-center justify-center flex-shrink-0">
                             <Building2 className="w-4 h-4 text-cyan-600" />
                           </div>
                           <div>
                             <p className="font-semibold text-gray-900 text-sm">{inst.name}</p>
+                            <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" />{inst.city && inst.state ? `${inst.city}, ${inst.state}` : '—'}</p>
                             {inst.email && <p className="text-xs text-gray-400">{inst.email}</p>}
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-1 text-sm text-gray-500">
-                          <MapPin className="w-3.5 h-3.5" />
-                          {inst.city && inst.state ? `${inst.city}, ${inst.state}` : '—'}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600">
+                      <td className="px-2.5 py-3.5 text-sm text-gray-600">
                         {getConsultantName(inst.consultant_id)}
                       </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: planBadge.color, background: planBadge.bg }}>
+                      <td className="px-2.5 py-3.5">
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ color: planBadge.color, background: planBadge.bg }}>
                           {planBadge.label}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <PipelineBar inst={inst} />
+                      <td className="px-2.5 py-3.5">
+                        <StageBadge inst={inst} phase={phaseMap[inst.id]} />
                       </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: cycleBadge.color, background: cycleBadge.bg }}>
+                      <td className="px-2.5 py-3.5">
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ color: cycleBadge.color, background: cycleBadge.bg }}>
                           {cycleBadge.label}
                         </span>
                         {!!pendingChangeCounts[inst.id] && (
@@ -425,7 +455,7 @@ export default function AdminSchools() {
                           </span>
                         )}
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-2.5 py-3.5">
                         {waNumbers[inst.id]?.is_active
                           ? <div className="flex flex-col gap-0.5">
                               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full" title={waNumbers[inst.id]?.phone_number || ''}>
@@ -446,43 +476,22 @@ export default function AdminSchools() {
                               </span>
                         }
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-2.5 py-3.5">
                         {inst.plan === 'gratuito' ? (
                           <span className="text-xs text-purple-600 font-semibold">Gratuito</span>
                         ) : (
                           <div className="text-xs text-gray-500">
                             <p className="font-semibold text-gray-700">{fmtBRLOrDash(inst.monthly_value)}/mês</p>
-                            {inst.implementation_value > 0 && <p className="text-gray-400">Impl.: {fmtBRLOrDash(inst.implementation_value)}</p>}
+                            {inst.implementation_value > 0 && <p className="text-gray-400">Impl. {fmtBRLOrDash(inst.implementation_value)}</p>}
                           </div>
                         )}
                       </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => navigate(`/super-admin/schools/${inst.id}`)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg" title="Detalhes">
-                            <Eye className="w-3.5 h-3.5" />
+                      <td className="px-2.5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => navigate(`/super-admin/schools/${inst.id}`)} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 font-semibold">
+                            <Eye className="w-3.5 h-3.5" /> Detalhes
                           </button>
-                          <button onClick={() => openEdit(inst)} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="Editar">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => {
-                            const bestCycle = getBestCycle(inst.id)
-                            setReleaseModal(inst)
-                            setReleaseYear(bestCycle?.target_school_year ?? bestCycle?.year ?? new Date().getFullYear() + 1)
-                          }} className="flex items-center gap-1 text-xs px-2 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 font-medium">
-                            <Megaphone className="w-3 h-3" /> Liberar
-                          </button>
-                          {inst.plan_status === 'suspended' ? (
-                            <button onClick={() => handleReactivate(inst)} className="p-1.5 text-green-500 hover:text-green-700 hover:bg-green-50 rounded-lg" title="Reativar">
-                              <Unlock className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <button onClick={() => handleSuspend(inst)} className="p-1.5 text-orange-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg" title="Suspender">
-                              <Lock className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button onClick={() => handleDelete(inst)} className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Excluir">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {actionsMenu(inst)}
                         </div>
                       </td>
                     </tr>
@@ -496,6 +505,46 @@ export default function AdminSchools() {
               Mostrando {filtered.length} de {institutions.length} escola{institutions.length !== 1 ? 's' : ''}
             </div>
           )}
+        </div>
+        {/* Cards (celular) */}
+        <div className="md:hidden space-y-3">
+          {loading ? (
+            Array(3).fill(0).map((_, i) => <div key={i} className="bg-white rounded-2xl border border-gray-200 p-4"><Skeleton h="h-4" w="w-40" /></div>)
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-200 py-12 text-center">
+              <Building2 className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+              <p className="text-sm text-gray-400">{search ? 'Nenhuma escola encontrada' : 'Nenhuma escola cadastrada'}</p>
+            </div>
+          ) : filtered.map(inst => {
+            const planBadge = getPlanBadge(inst)
+            const cycleBadge = getCycleBadge(inst.id)
+            const wa = waNumbers[inst.id]
+            return (
+              <div key={inst.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <button onClick={() => navigate(`/super-admin/schools/${inst.id}`)} className="flex items-start gap-3 min-w-0 text-left">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 flex items-center justify-center flex-shrink-0"><Building2 className="w-4 h-4 text-cyan-600" /></div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-gray-900 text-sm leading-snug">{inst.name}</p>
+                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" />{inst.city && inst.state ? `${inst.city}, ${inst.state}` : '—'}</p>
+                    </div>
+                  </button>
+                  {actionsMenu(inst)}
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ color: planBadge.color, background: planBadge.bg }}>{planBadge.label}</span>
+                  <StageBadge inst={inst} phase={phaseMap[inst.id]} />
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style={{ color: cycleBadge.color, background: cycleBadge.bg }}>{cycleBadge.label}</span>
+                  {!!pendingChangeCounts[inst.id] && <span className="text-xs font-semibold px-2 py-1 rounded-full text-amber-700 bg-amber-50 border border-amber-200">⏳ {pendingChangeCounts[inst.id]}</span>}
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-100 text-xs">
+                  <div><p className="text-gray-400">WhatsApp</p><p className={`font-semibold ${wa?.is_active ? 'text-green-700' : wa ? 'text-yellow-700' : 'text-gray-400'}`}>{wa?.is_active ? 'Ativo' : wa ? 'Inativo' : 'Pendente'}</p>{wa?.is_active && waUsageMap[inst.id] && <p className="text-[10px] text-gray-400">{waUsageMap[inst.id].initiated}/{waUsageMap[inst.id].limit} conv.</p>}</div>
+                  <div><p className="text-gray-400">Mensalidade</p><p className="font-semibold text-gray-700">{inst.plan === 'gratuito' ? 'Gratuito' : `${fmtBRLOrDash(inst.monthly_value)}/mês`}</p></div>
+                  <div><p className="text-gray-400">Consultor</p><p className="font-semibold text-gray-700 truncate">{getConsultantName(inst.consultant_id)}</p></div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 

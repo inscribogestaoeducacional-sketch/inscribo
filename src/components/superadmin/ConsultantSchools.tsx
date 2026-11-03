@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
+import { StageBadge } from './escolas/pipeline'
 import {
   Building2, CheckCircle2, Circle, X, Plus, Calendar,
   BookOpen, Clock, CheckCheck, AlertTriangle, ChevronDown,
@@ -54,6 +55,8 @@ function healthBg(score: number) {
 export default function ConsultantSchools() {
   const [implementations, setImplementations] = useState<any[]>([])
   const [trainings, setTrainings] = useState<any[]>([])
+  const [myInstitutions, setMyInstitutions] = useState<any[]>([])
+  const [phaseMap, setPhaseMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'schools' | 'trainings' | 'suggest'>('schools')
@@ -99,10 +102,16 @@ export default function ConsultantSchools() {
 
   const loadData = async (uid: string) => {
     setLoading(true)
-    const [iRes, tRes] = await Promise.all([
+    const [iRes, tRes, mRes, pRes] = await Promise.all([
       supabase.from('school_implementations').select('*').eq('consultant_id', uid).order('created_at', { ascending: false }),
       supabase.from('trainings').select('*, institutions(name)').eq('consultant_id', uid).order('scheduled_at', { ascending: false }),
+      supabase.from('institutions').select('id, name, city, state, plan, plan_status, created_at').eq('consultant_id', uid).order('name'),
+      supabase.from('onboarding_processes').select('institution_id, current_phase'),
     ])
+    setMyInstitutions(mRes.data || [])
+    const ph: Record<string, string> = {}
+    for (const r of (pRes.data || [])) if (r.current_phase) ph[r.institution_id] = r.current_phase
+    setPhaseMap(ph)
     setImplementations(iRes.data || [])
     setTrainings(tRes.data || [])
     setLoading(false)
@@ -228,7 +237,7 @@ export default function ConsultantSchools() {
         <div className="aion-band flex items-center justify-between">
           <div>
             <h1 className="aion-band-title">Minhas Escolas</h1>
-            <p className="aion-band-sub">{implementations.length} escola{implementations.length !== 1 ? 's' : ''} em acompanhamento</p>
+            <p className="aion-band-sub">{Math.max(implementations.length, myInstitutions.length)} escola{Math.max(implementations.length, myInstitutions.length) !== 1 ? 's' : ''} sob sua responsabilidade</p>
           </div>
           {activeTab === 'trainings' && (
             <button
@@ -266,7 +275,26 @@ export default function ConsultantSchools() {
         {/* ── Tab: Escolas ── */}
         {activeTab === 'schools' && (
           <>
-            {implementations.length === 0 ? (
+            {myInstitutions.length > 0 && (
+              <div className="mb-6">
+                <h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><Building2 className="w-4 h-4 text-cyan-600" /> Minhas escolas ({myInstitutions.length})</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {myInstitutions.map(inst => (
+                    <div key={inst.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                      <p className="font-bold text-gray-900 text-sm leading-snug">{inst.name}</p>
+                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" />{inst.city && inst.state ? `${inst.city}, ${inst.state}` : '—'}</p>
+                      <div className="flex flex-wrap gap-1.5 mt-3">
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style={inst.plan === 'gratuito' ? { color: '#7c3aed', background: '#f5f3ff' } : inst.plan_status === 'active' ? { color: '#16a34a', background: '#f0fdf4' } : inst.plan_status === 'suspended' ? { color: '#dc2626', background: '#fef2f2' } : { color: '#d97706', background: '#fffbeb' }}>
+                          {inst.plan === 'gratuito' ? 'Gratuito' : inst.plan_status === 'active' ? 'Ativo' : inst.plan_status === 'suspended' ? 'Suspenso' : 'Em implantação'}
+                        </span>
+                        <StageBadge inst={inst} phase={phaseMap[inst.id]} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {implementations.length === 0 && myInstitutions.length > 0 ? null : implementations.length === 0 ? (
               <div className="bg-white rounded-2xl border border-gray-200 p-16 text-center">
                 <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                 <p className="text-gray-500 font-medium">Nenhuma escola em acompanhamento</p>
