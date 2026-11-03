@@ -39,6 +39,7 @@ export default function AdminSchools() {
 
   const [phaseMap, setPhaseMap] = useState<Record<string, string>>({})
   const [menuFor, setMenuFor] = useState<string | null>(null)
+  const isDesktop = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -72,6 +73,14 @@ export default function AdminSchools() {
     loadData()
     return () => { cancelledRef.current = true }
   }, [])
+
+  useEffect(() => {
+    if (!menuFor) return
+    const close = () => setMenuFor(null)
+    window.addEventListener('resize', close)
+    window.addEventListener('scroll', close, true)
+    return () => { window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true) }
+  }, [menuFor])
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
@@ -320,29 +329,40 @@ export default function AdminSchools() {
   }
 
   const actionsMenu = (inst: any) => (
-    <div className="relative" onClick={e => e.stopPropagation()}>
-      <button onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); const below = window.innerHeight - r.bottom > 260; setMenuPos({ top: below ? r.bottom + 4 : Math.max(8, r.top - 224), right: window.innerWidth - r.right }); setMenuFor(menuFor === inst.id ? null : inst.id) }} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="Mais ações" aria-label="Mais ações">
-        <MoreVertical className="w-4 h-4" />
-      </button>
-      {menuFor === inst.id && (
-        <div style={{ top: menuPos.top, right: menuPos.right }} className="fixed z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 text-sm">
-          <button onClick={() => { setMenuFor(null); openEdit(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-gray-700 text-left"><Edit2 className="w-3.5 h-3.5" /> Editar dados</button>
-          <button onClick={() => { setMenuFor(null); openRelease(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-gray-700 text-left"><Megaphone className="w-3.5 h-3.5" /> Liberar campanha</button>
-          {inst.plan_status === 'suspended' ? (
-            <button onClick={() => { setMenuFor(null); handleReactivate(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-green-50 text-green-700 text-left"><Unlock className="w-3.5 h-3.5" /> Reativar</button>
-          ) : (
-            <button onClick={() => { setMenuFor(null); handleSuspend(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-orange-50 text-orange-600 text-left"><Lock className="w-3.5 h-3.5" /> Suspender</button>
-          )}
-          <div className="my-1 border-t border-gray-100" />
-          <button onClick={() => { setMenuFor(null); handleDelete(inst) }} className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-red-50 text-red-600 text-left"><Trash2 className="w-3.5 h-3.5" /> Excluir escola</button>
-        </div>
-      )}
+    <button onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); const below = window.innerHeight - r.bottom > 260; setMenuPos({ top: below ? r.bottom + 4 : Math.max(8, r.top - 224), right: window.innerWidth - r.right }); setMenuFor(menuFor === inst.id ? null : inst.id) }}
+      className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="Mais ações" aria-label="Mais ações">
+      <MoreVertical className="w-4 h-4" />
+    </button>
+  )
+
+  // Menu de ações: um só para a página. No celular é uma janela fixa na parte de baixo;
+  // no computador abre ao lado do botão e fecha ao rolar (não fica solto).
+  const menuInst = menuFor ? institutions.find(i => i.id === menuFor) : null
+  const menuItem = 'w-full flex items-center gap-3 px-4 py-3 md:px-3.5 md:py-2 text-sm text-left'
+  const menuPanel = menuInst && (
+    <div className="fixed inset-0 z-[300]" onClick={() => setMenuFor(null)}>
+      <div className="absolute inset-0 bg-black/40 md:bg-transparent" />
+      <div onClick={e => e.stopPropagation()}
+        style={isDesktop ? { top: menuPos.top, right: menuPos.right } : undefined}
+        className="absolute bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto md:w-52 bg-white rounded-t-2xl md:rounded-xl border border-gray-200 shadow-xl py-2 md:py-1.5">
+        <p className="md:hidden px-4 pb-2 text-xs font-semibold text-gray-400 truncate">{menuInst.name}</p>
+        <button onClick={() => { setMenuFor(null); openEdit(menuInst) }} className={`${menuItem} hover:bg-gray-50 text-gray-700`}><Edit2 className="w-4 h-4" /> Editar dados</button>
+        <button onClick={() => { setMenuFor(null); openRelease(menuInst) }} className={`${menuItem} hover:bg-gray-50 text-gray-700`}><Megaphone className="w-4 h-4" /> Liberar campanha</button>
+        {menuInst.plan_status === 'suspended' ? (
+          <button onClick={() => { setMenuFor(null); handleReactivate(menuInst) }} className={`${menuItem} hover:bg-green-50 text-green-700`}><Unlock className="w-4 h-4" /> Reativar</button>
+        ) : (
+          <button onClick={() => { setMenuFor(null); handleSuspend(menuInst) }} className={`${menuItem} hover:bg-orange-50 text-orange-600`}><Lock className="w-4 h-4" /> Suspender</button>
+        )}
+        <div className="my-1 border-t border-gray-100" />
+        <button onClick={() => { setMenuFor(null); handleDelete(menuInst) }} className={`${menuItem} hover:bg-red-50 text-red-600`}><Trash2 className="w-4 h-4" /> Excluir escola</button>
+        <button onClick={() => setMenuFor(null)} className="md:hidden w-full px-4 py-3 mt-1 border-t border-gray-100 text-sm font-semibold text-gray-500">Cancelar</button>
+      </div>
     </div>
   )
 
   return (
     <SuperAdminLayout>
-      <div className="p-4 md:p-8 space-y-4 md:space-y-6" onClick={() => menuFor && setMenuFor(null)}>
+      <div className="p-4 md:p-8 space-y-4 md:space-y-6">
         {toast && <ToastBar toast={toast} onClose={() => setToast(null)} />}
 
         {/* Header */}
@@ -547,6 +567,8 @@ export default function AdminSchools() {
           })}
         </div>
       </div>
+
+      {menuPanel}
 
       {/* ── WIZARD ─────────────────────────────────────────── */}
       {showWizard && (
