@@ -139,7 +139,7 @@ export default function DetailSummaryTab(p: Props) {
             {waConnected ? <><Wifi className="w-4 h-4 text-green-600" /><span className="text-green-700">Conectado</span></> : <><WifiOff className="w-4 h-4 text-gray-400" /><span className="text-gray-500">Não conectado</span></>}
           </div>
           {waSaved?.phone_number && <Row l="Número" v={waSaved.phone_number} />}
-          <Row l="Conversas no mês" v={`${waUsage.count} de ${waUsage.limit}`} />
+          <Row l="Mensagens no mês" v={waUsage.count.toLocaleString('pt-BR')} />
         </Card>
 
         <Card icon={Megaphone} color="#ea580c" title="Campanha" tab={manage ? 'campanhas' : undefined} goTab={goTab} action="Ver">

@@ -43,6 +43,7 @@ import SuperAdminLayout from './SuperAdminLayout'
 import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError'
 import InstitutionBroadcastTab from './InstitutionBroadcastTab'
 import InstitutionBaseModuleTab from './InstitutionBaseModuleTab'
+import UsageDashboard from './whatsapp/UsageDashboard'
 import {
   loadSavedWhatsApp,
   resolveWabaForSave,
@@ -53,6 +54,9 @@ import {
   WABA_FIELD_PLACEHOLDER
 } from '../../lib/whatsappSaveGuard'
 import {
+  LayoutGrid,
+  ListChecks,
+  Boxes,
   Users,
   DollarSign,
   CheckCircle2,
@@ -213,7 +217,7 @@ export default function InstitutionDetails() {
   type PageTab = 'resumo' | 'impl' | 'equipe' | 'whatsapp' | 'financeiro' | 'campanhas' | 'modulos'
   const [pageTab, setPageTab] = useState<PageTab>(
     () => (new URLSearchParams(window.location.search).get('tab') === 'whatsapp' ? 'whatsapp' : 'resumo'))
-  const [waSub, setWaSub] = useState<'conexao' | 'templates'>('conexao')
+  const [waSub, setWaSub] = useState<'conexao' | 'templates' | 'uso'>('conexao')
   const [modSub, setModSub] = useState<'broadcast' | 'base'>('broadcast')
 
   // Templates tab state
@@ -315,20 +319,16 @@ export default function InstitutionDetails() {
       }
 
       const monthYear = new Date().toISOString().slice(0, 7)
-      const { data: usageRow } = await supabase
-        .from('whatsapp_conversation_usage')
-        .select('initiated_count, received_count, limit_count')
-        .eq('institution_id', id)
-        .eq('month_year', monthYear)
-        .maybeSingle()
+      const mStart = `${monthYear}-01`
+      const { data: repRows } = await supabase.rpc('whatsapp_usage_report', { p_from: mStart, p_to: new Date().toISOString().slice(0, 10) })
+      const usageRow: any = ((repRows ?? []) as any[]).find(r => r.institution_id === id)
       if (!cancelledRef.current) {
         setWaUsage({
-          count:     usageRow?.initiated_count  ?? 0,
-          limit:     usageRow?.limit_count      ?? 1000,
-          initiated: usageRow?.initiated_count  ?? 0,
-          received:  usageRow?.received_count   ?? 0,
+          count:     (usageRow?.sent ?? 0) + (usageRow?.received ?? 0),
+          limit:     0,
+          initiated: usageRow?.sent ?? 0,
+          received:  usageRow?.received ?? 0,
         })
-        setNewLimit(String(usageRow?.limit_count ?? 1000))
       }
 
     } catch {
@@ -1376,7 +1376,7 @@ export default function InstitutionDetails() {
 
   return (
     <SuperAdminLayout>
-      <div className="p-6 max-w-4xl mx-auto space-y-5">
+      <div className="p-6 max-w-6xl mx-auto space-y-5">
 
         {toast && (
           <div className={`fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold
@@ -1492,7 +1492,7 @@ export default function InstitutionDetails() {
             { label: 'Mensalidade', value: fmtBRL(institution.monthly_value || 0), icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50' },
             { label: 'Implantação', value: fmtBRL(institution.implementation_value || 0), icon: CreditCard, color: 'text-blue-600', bg: 'bg-blue-50' },
             { label: 'Usuários', value: users.length, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
-            { label: 'Conversas WA', value: `${waUsage.count}/${waUsage.limit}`, icon: MessageCircle, color: 'text-cyan-600', bg: 'bg-cyan-50' },
+            { label: 'Mensagens no mês', value: waUsage.count.toLocaleString('pt-BR'), icon: MessageCircle, color: 'text-cyan-600', bg: 'bg-cyan-50' },
           ].map(k => {
             const Icon = k.icon
             return (
@@ -1511,28 +1511,32 @@ export default function InstitutionDetails() {
           })}
         </div>
 
-        {/* ── Barra de abas ── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-2">
-          <div className="flex flex-wrap gap-1.5">
-            {([
-              { id: 'resumo', label: 'Resumo', show: true },
-              { id: 'impl', label: 'Implantação', show: true },
-              { id: 'equipe', label: 'Equipe', show: manageTabs },
-              { id: 'whatsapp', label: 'WhatsApp', show: manageTabs },
-              { id: 'financeiro', label: 'Financeiro', show: manageTabs },
-              { id: 'campanhas', label: 'Campanhas', show: manageTabs },
-              { id: 'modulos', label: 'Módulos', show: manageTabs },
-            ] as const).filter(t => t.show).map(t => (
+        {/* ── Menu lateral + conteúdo ── */}
+        <div className="flex items-start gap-2 sm:gap-4">
+        <nav aria-label="Seções da escola" className="sticky top-2 z-10 shrink-0 w-[60px] sm:w-48 bg-white rounded-2xl border border-gray-200 shadow-sm p-1 sm:p-1.5 flex flex-col gap-0.5 sm:gap-1">
+          {([
+            { id: 'resumo', label: 'Resumo', icon: LayoutGrid, show: true },
+            { id: 'impl', label: 'Implantação', short: 'Implant.', icon: ListChecks, show: true },
+            { id: 'equipe', label: 'Equipe', icon: Users, show: manageTabs },
+            { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, show: manageTabs },
+            { id: 'financeiro', label: 'Financeiro', short: 'Financ.', icon: DollarSign, show: manageTabs },
+            { id: 'campanhas', label: 'Campanhas', short: 'Campan.', icon: Megaphone, show: manageTabs },
+            { id: 'modulos', label: 'Módulos', icon: Boxes, show: manageTabs },
+          ] as { id: PageTab; label: string; short?: string; icon: any; show: boolean }[]).filter(t => t.show).map(t => {
+            const Icon = t.icon
+            return (
               <button key={t.id}
                 onClick={() => { setPageTab(t.id); if (t.id === 'whatsapp' && waSub === 'templates') loadWaTemplates() }}
-                className={`px-3.5 py-2 text-sm font-semibold rounded-xl transition-colors whitespace-nowrap ${
+                className={`flex flex-col sm:flex-row items-center gap-0 sm:gap-2.5 px-0.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[9px] sm:text-sm font-medium sm:font-semibold transition-colors ${
                   pageTab === t.id ? 'text-white bg-gradient-to-r from-teal-600 to-emerald-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                 }`}>
-                {t.label}
+                <Icon className="w-[18px] h-[18px] sm:w-4 sm:h-4 shrink-0" />
+                <span className="max-w-full leading-tight"><span className="sm:hidden">{t.short ?? t.label}</span><span className="hidden sm:inline">{t.label}</span></span>
               </button>
-            ))}
-          </div>
-        </div>
+            )
+          })}
+        </nav>
+        <div className="flex-1 min-w-0 space-y-5">
 
         {pageTab === 'resumo' && <DetailSummaryTab institution={institution} users={users} payments={payments} cycles={cycles} changeRequests={changeRequests} contract={contract} contractSt={contractSt} onboardingProcess={onboardingProcess} onboardingTasks={onboardingTasks} currentPhaseIdx={currentPhaseIdx} waConnected={waConnected} waSaved={waSaved} waUsage={waUsage} consultantName={consultants.find(c => c.id === institution.consultant_id)?.full_name || ''} goTab={t => setPageTab(t as PageTab)} />}
 
@@ -1906,12 +1910,13 @@ export default function InstitutionDetails() {
               {pageTab === 'whatsapp' && (
                 <div className="space-y-5">
                   <div className="flex gap-2">
-                    {([{ id: 'conexao', label: 'Conexão' }, { id: 'templates', label: 'Templates' }] as const).map(t => (
+                    {([{ id: 'conexao', label: 'Conexão' }, { id: 'templates', label: 'Templates' }, { id: 'uso', label: 'Uso' }] as const).map(t => (
                       <button key={t.id} onClick={() => { setWaSub(t.id); if (t.id === 'templates') loadWaTemplates() }}
                         className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${waSub === t.id ? 'bg-cyan-50 text-cyan-700 border-cyan-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>{t.label}</button>
                     ))}
                   </div>
                   {waSub === 'conexao' && <DetailWhatsAppTab handleSaveWhatsApp={handleSaveWhatsApp} handleUpdateLimit={handleUpdateLimit} hasOwnNumber={hasOwnNumber} id={id} institution={institution} isSuperAdmin={isSuperAdmin} loadAll={loadAll} newLimit={newLimit} ownWaba={ownWaba} savingWa={savingWa} setChargeForm={setChargeForm} setNewLimit={setNewLimit} setShowNewCharge={setShowNewCharge} setWaForm={setWaForm} updatingLimit={updatingLimit} usagePct={usagePct} waConnected={waConnected} waForm={waForm} waInvalidRecord={waInvalidRecord} waSaved={waSaved} waUsage={waUsage} />}
+                  {waSub === 'uso' && id && <UsageDashboard institutionId={id} institutionName={institution.name} />}
                   {waSub === 'templates' && <DetailTemplatesTab handleAddTemplate={handleAddTemplate} handleSyncTemplateDefinitions={handleSyncTemplateDefinitions} loadWaTemplates={loadWaTemplates} loadingTemplates={loadingTemplates} newTemplate={newTemplate} sendingNewTemplate={sendingNewTemplate} setNewTemplate={setNewTemplate} setShowAddTemplate={setShowAddTemplate} showAddTemplate={showAddTemplate} syncingDefs={syncingDefs} waTemplates={waTemplates} />}
                 </div>
               )}
@@ -1932,6 +1937,9 @@ export default function InstitutionDetails() {
             </div>
           </div>
         )}
+
+        </div>
+        </div>
 
         {releaseConfirm && <ReleaseConfirmModal schoolName={institution.name} year={cycleYear(releaseConfirm)} startDate={releaseConfirm.start_date || suggestedDates(cycleYear(releaseConfirm)).start} endDate={releaseConfirm.end_date || suggestedDates(cycleYear(releaseConfirm)).end} busy={releasingCycleId === releaseConfirm.id} onConfirm={confirmReleaseCampaign} onClose={() => setReleaseConfirm(null)} />}
 

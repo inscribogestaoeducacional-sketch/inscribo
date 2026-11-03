@@ -36,7 +36,7 @@ export default function AdminSchools() {
   const [cycles, setCycles] = useState<any[]>([])
   const [pendingChangeCounts, setPendingChangeCounts] = useState<Record<string, number>>({})
   const [waNumbers, setWaNumbers]   = useState<Record<string, any>>({})
-  const [waUsageMap, setWaUsageMap] = useState<Record<string, { initiated: number; limit: number }>>({})
+  const [waUsageMap, setWaUsageMap] = useState<Record<string, { messages: number }>>({})
 
   const [phaseMap, setPhaseMap] = useState<Record<string, string>>({})
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -98,9 +98,7 @@ export default function AdminSchools() {
         .select('institution_id, status, year, target_school_year, id, start_date, end_date, campaign_start_month, label')
         .order('created_at', { ascending: false }),
       supabase.from('whatsapp_phone_numbers').select(WHATSAPP_PHONE_COLUMNS),
-      supabase.from('whatsapp_conversation_usage')
-        .select('institution_id, initiated_count, limit_count')
-        .eq('month_year', monthYear),
+      supabase.rpc('whatsapp_usage_report', { p_from: `${monthYear}-01`, p_to: new Date().toISOString().slice(0, 10) }),
       supabase.from('campaign_change_requests').select('institution_id').eq('status', 'pending'),
       supabase.from('onboarding_processes').select('institution_id, current_phase'),
     ])
@@ -113,9 +111,9 @@ export default function AdminSchools() {
     const waMap: Record<string, any> = {}
     for (const r of (waRes.data || [])) waMap[r.institution_id] = r
     setWaNumbers(waMap)
-    const usageMap: Record<string, { initiated: number; limit: number }> = {}
-    for (const r of (usageRes.data || [])) {
-      usageMap[r.institution_id] = { initiated: r.initiated_count || 0, limit: r.limit_count || 1000 }
+    const usageMap: Record<string, { messages: number }> = {}
+    for (const r of ((usageRes.data || []) as any[])) {
+      usageMap[r.institution_id] = { messages: (r.sent || 0) + (r.received || 0) }
     }
     setWaUsageMap(usageMap)
     const phMap: Record<string, string> = {}
@@ -444,7 +442,7 @@ export default function AdminSchools() {
                               </span>
                               {waUsageMap[inst.id] && (
                                 <span className="text-[10px] text-gray-400 pl-0.5">
-                                  {waUsageMap[inst.id].initiated}/{waUsageMap[inst.id].limit} conv.
+                                  {waUsageMap[inst.id].messages.toLocaleString('pt-BR')} msgs no mês
                                 </span>
                               )}
                             </div>
@@ -519,7 +517,7 @@ export default function AdminSchools() {
                   {!!pendingChangeCounts[inst.id] && <span className="text-xs font-semibold px-2 py-1 rounded-full text-amber-700 bg-amber-50 border border-amber-200">⏳ {pendingChangeCounts[inst.id]}</span>}
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-100 text-xs">
-                  <div><p className="text-gray-400">WhatsApp</p><p className={`font-semibold ${wa?.is_active ? 'text-green-700' : wa ? 'text-yellow-700' : 'text-gray-400'}`}>{wa?.is_active ? 'Ativo' : wa ? 'Inativo' : 'Pendente'}</p>{wa?.is_active && waUsageMap[inst.id] && <p className="text-[10px] text-gray-400">{waUsageMap[inst.id].initiated}/{waUsageMap[inst.id].limit} conv.</p>}</div>
+                  <div><p className="text-gray-400">WhatsApp</p><p className={`font-semibold ${wa?.is_active ? 'text-green-700' : wa ? 'text-yellow-700' : 'text-gray-400'}`}>{wa?.is_active ? 'Ativo' : wa ? 'Inativo' : 'Pendente'}</p>{wa?.is_active && waUsageMap[inst.id] && <p className="text-[10px] text-gray-400">{waUsageMap[inst.id].messages.toLocaleString('pt-BR')} msgs no mês</p>}</div>
                   <div><p className="text-gray-400">Mensalidade</p><p className="font-semibold text-gray-700">{inst.plan === 'gratuito' ? 'Gratuito' : `${fmtBRLOrDash(inst.monthly_value)}/mês`}</p></div>
                   <div><p className="text-gray-400">Consultor</p><p className="font-semibold text-gray-700 truncate">{getConsultantName(inst.consultant_id)}</p></div>
                 </div>

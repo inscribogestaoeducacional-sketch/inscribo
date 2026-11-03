@@ -3,7 +3,6 @@
 import { WABA_FIELD_LABEL, WABA_FIELD_PLACEHOLDER } from '../../../lib/whatsappSaveGuard'
 import EmbeddedSignupButton from '../../whatsapp/EmbeddedSignupButton'
 import LinkAionWabaPanel from '../LinkAionWabaPanel'
-import WhatsAppUsagePanel from '../../whatsapp/WhatsAppUsagePanel'
 import { CheckCircle2, Wifi, WifiOff, Phone } from 'lucide-react'
 import { inp, lbl } from './ui'
 
@@ -58,53 +57,6 @@ export default function DetailWhatsAppTab({ handleSaveWhatsApp, handleUpdateLimi
                   {id && isSuperAdmin && (
                     <LinkAionWabaPanel institutionId={id} savedWabaId={ownWaba} onLinked={() => loadAll(true)} />
                   )}
-
-                  {/* Consumo: mensagens recebidas/enviadas por dia e por mês (Central de notificações) */}
-                  {id && <WhatsAppUsagePanel institutionId={id} />}
-
-                  {/* Usage section */}
-                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Uso de conversas</p>
-                      <span className="text-xs text-gray-400">{new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
-                        <p className="text-xs font-semibold text-gray-500 mb-1">Iniciadas (escola)</p>
-                        <p className="text-lg font-bold text-gray-900">{waUsage.initiated}<span className="text-xs font-normal text-gray-400">/{waUsage.limit}</span></p>
-                      </div>
-                      <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
-                        <p className="text-xs font-semibold text-gray-500 mb-1">Recebidas (gratuitas)</p>
-                        <p className="text-lg font-bold text-gray-900">{waUsage.received}</p>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-xs text-gray-500">{usagePct}% do limite</p>
-                        {usagePct >= 80 && (
-                          <button
-                            onClick={() => { setShowNewCharge(true); setChargeForm(f => ({ ...f, payment_type: 'extra_conversations' })) }}
-                            className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg hover:bg-amber-100"
-                          >+ Liberar extras</button>
-                        )}
-                      </div>
-                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full transition-all ${usagePct >= 100 ? 'bg-red-500' : usagePct >= 80 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${usagePct}%` }} />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-                      <div className="flex-1">
-                        <label className={lbl}>Limite mensal</label>
-                        <input type="number" min="0" className={inp} value={newLimit}
-                          onChange={e => setNewLimit(e.target.value)} />
-                      </div>
-                      <button onClick={handleUpdateLimit} disabled={updatingLimit}
-                        className="mt-5 flex items-center gap-1.5 px-3 py-2.5 bg-cyan-600 text-white rounded-lg text-xs font-semibold disabled:opacity-60 hover:bg-cyan-700">
-                        {updatingLimit ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                        Atualizar
-                      </button>
-                    </div>
-                  </div>
 
                   {/* WA config form */}
                   <div className="border-t border-gray-100 pt-5">
