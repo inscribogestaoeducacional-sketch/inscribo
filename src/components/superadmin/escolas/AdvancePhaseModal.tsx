@@ -36,6 +36,7 @@ export default function AdvancePhaseModal({ advancingPhase, confirmAdvancePhase,
                 {pending > 0 && (
                   <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-4 text-center">
                     {pending} tarefa{pending > 1 ? 's' : ''} pendente{pending > 1 ? 's' : ''} na fase "{cur.label}" — dá pra avançar mesmo assim.
+                    <span className="block mt-1 font-semibold text-amber-800">{tasksForPhase(cur.id).filter((t: any) => !isTaskDone(cur.id, t)).map((t: any) => t.title).join(' · ')}</span>
                   </p>
                 )}
                 <p className="text-sm text-gray-500 text-center mb-5">

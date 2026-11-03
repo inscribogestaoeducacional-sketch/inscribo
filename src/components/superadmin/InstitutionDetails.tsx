@@ -1289,8 +1289,18 @@ export default function InstitutionDetails() {
   // vez de o admin marcar à mão, ela reflete sozinha se já existe algum ciclo
   // liberado pra essa escola.
   const campaignReleasedByAdmin = cycles.some(c => c.status === 'released')
-  const isDerivedTask = (phaseId: TimelinePhaseId, task: any) => phaseId === 'campaign' && task.title === 'Campanha liberada pelo admin'
-  const isTaskDone = (phaseId: TimelinePhaseId, task: any) => isDerivedTask(phaseId, task) ? (task.done || campaignReleasedByAdmin) : task.done
+  // Tarefas que o sistema já sabe sozinho: refletem os dados reais (só leitura, não disparam nada).
+  // Marcar a mão continua valendo (task.done), mas a tarefa também fica concluída quando o dado confirma.
+  const DERIVED_TASKS: Record<string, { done: boolean; ok: string; todo: string }> = {
+    'Contrato enviado via Autentique':     { done: !!contract && contract.status !== 'draft', ok: 'Automático: contrato enviado', todo: 'Automático: aguardando o envio do contrato' },
+    'Contrato assinado pela escola':       { done: contract?.status === 'signed', ok: 'Automático: contrato assinado', todo: 'Automático: aguardando a assinatura' },
+    'Pagamento da implantação confirmado': { done: implPayment?.status === 'paid', ok: 'Automático: pagamento confirmado', todo: 'Automático: aguardando o pagamento' },
+    'WhatsApp oficial homologado':         { done: !!waConnected, ok: 'Automático: WhatsApp conectado', todo: 'Automático: conecte o número na aba WhatsApp' },
+    'Equipe cadastrada no sistema':        { done: users.filter((u: any) => u.role !== 'admin').length > 0, ok: 'Automático: equipe cadastrada', todo: 'Automático: cadastre a equipe na aba Equipe' },
+    'Campanha liberada pelo admin':        { done: campaignReleasedByAdmin, ok: 'Automático: campanha liberada', todo: 'Automático: libere um ciclo na aba Campanhas' },
+  }
+  const isDerivedTask = (_phaseId: TimelinePhaseId, task: any) => !!DERIVED_TASKS[task.title]
+  const isTaskDone = (phaseId: TimelinePhaseId, task: any) => isDerivedTask(phaseId, task) ? (task.done || DERIVED_TASKS[task.title].done) : task.done
 
   // Checklist da fase em formato de cards + indicador "X de Y concluídas",
   // reaproveitado nas 5 fases (Part 1 do pedido: reforma visual sem tocar na
@@ -1309,22 +1319,33 @@ export default function InstitutionDetails() {
         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(doneCount / tasks.length) * 100}%`, background: color }} />
         </div>
+        {doneCount < tasks.length ? (
+          <p className="text-xs text-gray-500">
+            <span className="font-semibold text-gray-600">Falta: </span>
+            {tasks.filter(t => !isTaskDone(phaseId, t)).slice(0, 3).map(t => t.title).join(', ')}
+            {tasks.length - doneCount > 3 ? ` e mais ${tasks.length - doneCount - 3}` : ''}
+          </p>
+        ) : (
+          <p className="text-xs font-semibold text-green-600">Fase completa. Pode avançar.</p>
+        )}
         <div className="grid gap-2 sm:grid-cols-2">
           {tasks.map(task => {
             const derived = isDerivedTask(phaseId, task)
             const done = isTaskDone(phaseId, task)
+            // só a campanha é travada; as demais automáticas ainda podem ser marcadas à mão (ex.: contrato assinado fora do sistema)
+            const locked = task.title === 'Campanha liberada pelo admin'
             return (
               <div key={task.id}
-                onClick={() => !derived && handleToggleTask(task.id, !task.done)}
-                className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${derived ? 'cursor-default' : 'cursor-pointer group'} ${done ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}>
+                onClick={() => !locked && handleToggleTask(task.id, !task.done)}
+                className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${locked ? 'cursor-default' : 'cursor-pointer group'} ${done ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}>
                 <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${done ? 'bg-green-500 border-green-500' : 'border-gray-300 group-hover:border-gray-400'}`}>
                   {done && <CheckCircle2 className="w-3 h-3 text-white" />}
                 </div>
                 <div className="min-w-0">
                   <p className={`text-sm font-medium ${done ? 'text-gray-500 line-through' : 'text-gray-700'}`}>{task.title}</p>
                   {done && !derived && task.done_at && <p className="text-xs text-green-500 mt-0.5">Concluído em {fmtDate(task.done_at)}</p>}
-                  {derived && done && <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1 font-medium"><Rocket className="w-3 h-3" /> Automático — campanha liberada</p>}
-                  {derived && !done && <p className="text-xs text-gray-400 mt-0.5">Automático — libere um ciclo na aba Campanhas</p>}
+                  {derived && done && <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1 font-medium"><Rocket className="w-3 h-3" /> {DERIVED_TASKS[task.title]?.ok}</p>}
+                  {derived && !done && <p className="text-xs text-gray-400 mt-0.5">{DERIVED_TASKS[task.title]?.todo}</p>}
                 </div>
               </div>
             )
