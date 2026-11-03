@@ -70,6 +70,8 @@ export default function DetailSummaryTab(p: Props) {
   if (overdue.length > 0) alerts.push({ text: `${overdue.length} cobrança${overdue.length > 1 ? 's' : ''} em atraso`, tab: 'financeiro', tone: 'red' })
   if (manage && !waConnected) alerts.push({ text: 'WhatsApp não está conectado', tab: 'whatsapp', tone: 'amber' })
   if (changeRequests.length > 0) alerts.push({ text: `${changeRequests.length} ajuste${changeRequests.length > 1 ? 's' : ''} de campanha esperando sua resposta`, tab: 'campanhas', tone: 'amber' })
+  const toRelease = cycles.filter(c => c.status === 'draft' || c.status === 'setup')
+  if (manage && toRelease.length > 0 && !cycles.some(c => c.status === 'released' || c.status === 'active')) alerts.push({ text: `Campanha ${toRelease[0].target_school_year ?? toRelease[0].year} criada e ainda não liberada`, tab: 'campanhas', tone: 'amber' })
   if (!free && i.plan_status === 'pending_contract') alerts.push({ text: 'Contrato aguardando assinatura', tab: 'impl', tone: 'amber' })
 
   return (

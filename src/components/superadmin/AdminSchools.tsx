@@ -2,13 +2,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, WHATSAPP_PHONE_COLUMNS } from '../../lib/supabase'
-import { toReenrollFraction } from '../../lib/campaignApply'
 import SuperAdminLayout from './SuperAdminLayout'
 import { fmtBRLOrDash } from './escolas/format'
 import { Skeleton, ToastBar, type ToastT, inp, lbl } from './escolas/ui'
 import { StageBadge } from './escolas/pipeline'
 import { PLANS, PLAN_STATUS } from './escolas/constants'
 import NewSchoolWizard from './escolas/NewSchoolWizard'
+import { releaseCampaignCycle, cycleYear, suggestedDates } from './escolas/releaseCampaign'
+import { fmtDate } from './escolas/format'
 import {
   Building2,
   Search,
@@ -94,7 +95,7 @@ export default function AdminSchools() {
       supabase.from('institutions').select('id, name, city, state, email, phone, plan, plan_status, monthly_value, consultant_id, created_at, address, cnpj').order('name'),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('campaign_cycles')
-        .select('institution_id, status, year, id, start_date, end_date, campaign_start_month, label')
+        .select('institution_id, status, year, target_school_year, id, start_date, end_date, campaign_start_month, label')
         .order('created_at', { ascending: false }),
       supabase.from('whatsapp_phone_numbers').select(WHATSAPP_PHONE_COLUMNS),
       supabase.from('whatsapp_conversation_usage')
@@ -134,8 +135,8 @@ export default function AdminSchools() {
     const map: Record<string, { label: string; color: string; bg: string }> = {
       active:    { label: 'Ativa',         color: '#16a34a', bg: '#f0fdf4' },
       released:  { label: 'Liberada',      color: '#0891b2', bg: '#ecfeff' },
-      setup:     { label: 'Em setup',      color: '#d97706', bg: '#fffbeb' },
-      draft:     { label: 'Rascunho',      color: '#d97706', bg: '#fffbeb' },
+      setup:     { label: 'A liberar',     color: '#d97706', bg: '#fffbeb' },
+      draft:     { label: 'A liberar',     color: '#d97706', bg: '#fffbeb' },
       completed: { label: 'Concluída',     color: '#7c3aed', bg: '#f5f3ff' },
     }
     return map[cycle.status] || { label: 'Pré-campanha', color: '#d97706', bg: '#fffbeb' }
@@ -240,54 +241,14 @@ export default function AdminSchools() {
   const handleReleaseCampaign = async () => {
     if (!releaseModal) return
     setReleasing(true)
-    try {
-      // A Áion libera só o ANO LETIVO. As datas começam sugeridas (set/ano anterior a mar/ano) e o gestor da
-      // escola acerta, junto com a meta, na página Campanha de Matrículas.
-      const campaignYear = releaseYear
-      const sd = `${campaignYear - 1}-09-01`
-      const ed = `${campaignYear}-03-31`
-      const startMonthNum = 9
-      const existing = cycles.find(c => c.institution_id === releaseModal.id && (c.target_school_year ?? c.year) === campaignYear && !['completed', 'archived'].includes(c.status))
-
-      if (existing?.status === 'active') {
-        showToast(`A campanha ${campaignYear} já está ativa nesta escola.`, false)
-        setReleasing(false)
-        return
-      }
-      if (existing) {
-        const { error } = await supabase.from('campaign_cycles').update({
-          status: 'released', campaign_start_month: existing.start_date ? new Date(existing.start_date + 'T12:00:00').getMonth() + 1 : startMonthNum,
-          start_date: existing.start_date ?? sd, end_date: existing.end_date ?? ed,
-        }).eq('id', existing.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from('campaign_cycles').insert({
-          institution_id: releaseModal.id, status: 'released',
-          campaign_start_month: startMonthNum, year: campaignYear - 1, target_school_year: campaignYear,
-          label: `Campanha ${campaignYear}`, start_date: sd, end_date: ed,
-          target_new_students: 0, target_reenrollment_rate: toReenrollFraction(85),
-          base_students: 0, monthly_targets: [], market_data: {},
-          historical_input: [], generation_mode: 'benchmark',
-          ai_reasoning: '', realism_score: 'realistic',
-        })
-        if (error) throw error
-      }
-
-      await supabase.from('system_notifications').insert({
-        institution_id: releaseModal.id,
-        title: `Campanha ${campaignYear} liberada! 🎉`,
-        message: `Sua campanha de matrículas ${campaignYear} foi liberada. Abra Campanha de Matrículas para conferir a meta sugerida e ativar.`,
-        type: 'info', read: false,
-      })
-
-      showToast(`Campanha ${campaignYear} liberada para ${releaseModal.name}!`)
-      setReleaseModal(null)
-      loadData()
-    } catch (e: any) {
-      showToast(`Erro ao liberar: ${e?.message}`, false)
-    } finally {
-      setReleasing(false)
-    }
+    const existing = cycles.find(c => c.institution_id === releaseModal.id && cycleYear(c) === releaseYear && !['completed', 'archived'].includes(c.status))
+    const { data: auth } = await supabase.auth.getUser()
+    const res = await releaseCampaignCycle({ institutionId: releaseModal.id, year: releaseYear, existing, userId: auth?.user?.id })
+    setReleasing(false)
+    if (!res.ok) { showToast(res.error, false); return }
+    showToast(`Campanha ${releaseYear} liberada para ${releaseModal.name}!`)
+    setReleaseModal(null)
+    loadData()
   }
 
   const handleSuspend = async (inst: any) => {
@@ -720,7 +681,7 @@ export default function AdminSchools() {
               </div>
               <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-3 text-sm text-cyan-700">
                 <p className="font-semibold">Campanha {releaseYear}</p>
-                <p className="text-xs mt-1">A escola recebe o card, define datas e meta (sugeridas pelo histórico dela) e ativa. O gestor é avisado no sistema.</p>
+                <p className="text-xs mt-1">Período sugerido: {fmtDate(suggestedDates(releaseYear).start)} a {fmtDate(suggestedDates(releaseYear).end)}. A escola recebe o aviso no sistema, confere a meta sugerida, acerta as datas e ativa.</p>
               </div>
             </div>
             <div className="flex gap-3 mt-5">

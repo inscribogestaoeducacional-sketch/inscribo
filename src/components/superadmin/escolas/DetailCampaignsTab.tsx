@@ -21,13 +21,18 @@ export default function DetailCampaignsTab({ archivingCampaignId, changeRequests
                     </button>
                   </div>
 
+                  {changeRequests.length > 0 && (
+                    <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 flex items-center gap-2">
+                      <Bell className="w-4 h-4" /> {changeRequests.length} ajuste{changeRequests.length > 1 ? 's' : ''} da escola esperando sua resposta
+                    </div>
+                  )}
                   {cycles.length === 0 ? (
                     <p className="text-sm text-gray-400 italic text-center py-8">Nenhum ciclo de campanha criado ainda.</p>
                   ) : (
                     <div className="space-y-3">
                       {cycles.map(c => {
                         const cst = CYCLE_STATUS[c.status] || CYCLE_STATUS.draft
-                        const canRelease = c.status === 'draft' || c.status === 'setup' || c.status === 'active'
+                        const canRelease = c.status === 'draft' || c.status === 'setup'
                         const isDraftLike = c.status === 'draft' || c.status === 'setup'
                         const isLiveLike = c.status === 'released' || c.status === 'active' || c.status === 'completed'
                         return (
@@ -35,7 +40,7 @@ export default function DetailCampaignsTab({ archivingCampaignId, changeRequests
                             <div className="flex items-start justify-between gap-3 flex-wrap">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                                  <p className="text-sm font-bold text-gray-900">{c.label || `Campanha ${c.year}`}</p>
+                                  <p className="text-sm font-bold text-gray-900">{c.label || `Campanha ${c.target_school_year ?? c.year}`}</p>
                                   <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ color: cst.c, background: cst.bg }}>{cst.l}</span>
                                 </div>
                                 <p className="text-xs text-gray-500">

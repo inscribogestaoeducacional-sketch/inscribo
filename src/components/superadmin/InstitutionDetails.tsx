@@ -34,6 +34,8 @@ import DetailTemplatesTab from './escolas/DetailTemplatesTab'
 import DetailWhatsAppTab from './escolas/DetailWhatsAppTab'
 import DetailUsersTab from './escolas/DetailUsersTab'
 import DetailSummaryTab from './escolas/DetailSummaryTab'
+import ReleaseConfirmModal from './escolas/ReleaseConfirmModal'
+import { releaseCampaignCycle, cycleYear, suggestedDates } from './escolas/releaseCampaign'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { applyCampaignCycle, toReenrollFraction } from '../../lib/campaignApply'
 import { useAuth } from '../../contexts/AuthContext'
@@ -978,31 +980,23 @@ export default function InstitutionDetails() {
   }
 
   // Libera um ciclo específico pra escola (aba Campanhas, ação por linha).
-  const handleReleaseCampaign = async (cycleId: string) => {
+  // Liberar campanha: o botão da aba só abre a confirmação; quem grava é o caminho único (escolas/releaseCampaign).
+  const [releaseConfirm, setReleaseConfirm] = useState<any | null>(null)
+  const handleReleaseCampaign = (cycleId: string) => {
     const target = cycles.find(c => c.id === cycleId)
+    if (target) setReleaseConfirm(target)
+  }
+  const confirmReleaseCampaign = async () => {
+    const target = releaseConfirm
     if (!target) return
-    setReleasingCycleId(cycleId)
-    try {
-      const { error } = await supabase.from('campaign_cycles').update({
-        status: 'released',
-        released_at: new Date().toISOString(),
-        released_by: user?.id || null,
-      }).eq('id', cycleId)
-      if (error) throw error
-
-      const { error: notifErr } = await supabase.from('system_notifications').insert({
-        institution_id: id, title: `Campanha ${target.year} liberada! 🎉`,
-        message: 'Sua campanha de matrículas foi liberada.', type: 'info', read: false,
-      })
-      if (notifErr) console.error('[handleReleaseCampaign] erro ao notificar escola:', notifErr.message)
-
-      showToast(`Campanha ${target.year} liberada!`)
-      loadAll()
-    } catch (e: any) {
-      showToast(e?.message || 'Erro ao liberar campanha.', false)
-    } finally {
-      setReleasingCycleId(null)
-    }
+    setReleasingCycleId(target.id)
+    const year = cycleYear(target)
+    const res = await releaseCampaignCycle({ institutionId: id as string, year, existing: target, userId: user?.id })
+    setReleasingCycleId(null)
+    setReleaseConfirm(null)
+    if (!res.ok) { showToast(res.error, false); return }
+    showToast(`Campanha ${year} liberada!`)
+    loadAll()
   }
 
   // Aprova um pedido de ajuste pendente — aplica requested_changes
@@ -1938,6 +1932,8 @@ export default function InstitutionDetails() {
             </div>
           </div>
         )}
+
+        {releaseConfirm && <ReleaseConfirmModal schoolName={institution.name} year={cycleYear(releaseConfirm)} startDate={releaseConfirm.start_date || suggestedDates(cycleYear(releaseConfirm)).start} endDate={releaseConfirm.end_date || suggestedDates(cycleYear(releaseConfirm)).end} busy={releasingCycleId === releaseConfirm.id} onConfirm={confirmReleaseCampaign} onClose={() => setReleaseConfirm(null)} />}
 
         {/* ── Modal: Rejeitar ajuste de campanha ── */}
         {rejectingRequest && <RejectChangeModal handleRejectChangeRequest={handleRejectChangeRequest} rejectReason={rejectReason} rejectingRequest={rejectingRequest} reviewingRequestId={reviewingRequestId} setRejectReason={setRejectReason} setRejectingRequest={setRejectingRequest} />}
