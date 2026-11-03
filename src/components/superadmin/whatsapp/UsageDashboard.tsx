@@ -390,6 +390,8 @@ export default function UsageDashboard({ institutionId, institutionName }: { ins
               </div>
             )}
 
+            <MetaReport from={range.from} to={range.to} institutionId={institutionId} names={Object.fromEntries(rows.map(r => [r.institution_id, r.name]))} />
+
             {institutionId && tot(scope, r => r.failed) > 0 && (
               <FailureBlock institutionId={institutionId} monthStart={range.from.slice(0, 8) + '01'} />
             )}
@@ -416,6 +418,65 @@ function FailureBlock({ institutionId, monthStart }: { institutionId: string; mo
           <span className="text-gray-700 flex-1">{REASON[x.code] ?? `Erro ${x.code} da Meta.`} <span className="text-gray-400">{x.code !== 'sem motivo' ? `(código ${x.code})` : ''}</span></span>
         </div>
       ))}
+    </div>
+  )
+}
+
+const CAT_LABEL: Record<string, string> = { MARKETING: 'Marketing', UTILITY: 'Utilidade', AUTHENTICATION: 'Autenticação', AUTHENTICATION_INTERNATIONAL: 'Autenticação (internacional)', SERVICE: 'Atendimento (grátis)', MARKETING_LITE: 'Marketing lite' }
+
+// Valores reais cobrados pela Meta (pricing_analytics). Só aparece ao clicar, para não chamar a Meta à toa.
+function MetaReport({ from, to, institutionId, names }: { from: string; to: string; institutionId?: string; names: Record<string, string> }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle')
+  const [err, setErr] = useState('')
+  const [schools, setSchools] = useState<{ institution_id: string; waba_id: string; rows: { category: string; volume: number; cost: number }[]; error: string | null }[]>([])
+  useEffect(() => { setState('idle'); setSchools([]); setErr('') }, [from, to, institutionId])
+
+  const load = async () => {
+    setState('loading'); setErr('')
+    const { data, error } = await supabase.functions.invoke('whatsapp-meta-report', { body: { from, to } })
+    if (error || data?.error) { setErr(data?.error || error?.message || 'Não foi possível consultar a Meta.'); setState('idle'); return }
+    setSchools(data.schools ?? []); setState('done')
+  }
+  const shown = institutionId ? schools.filter(x => x.institution_id === institutionId) : schools
+  const money = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+  const cats = [...new Set(shown.flatMap(x => x.rows.map(r => r.category)))].sort()
+  const total = sum(shown, x => sum(x.rows, r => r.cost))
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-bold text-gray-900">Relatório da Meta</p>
+          <p className="text-xs text-gray-500 mt-0.5">Valores reais cobrados pela Meta no período, na moeda da conta dela. Não é cálculo nosso.</p>
+        </div>
+        <button onClick={load} disabled={state === 'loading'} className="no-pdf px-3.5 py-2 text-xs font-semibold rounded-xl border border-teal-600 text-teal-700 hover:bg-teal-50 disabled:opacity-50">
+          {state === 'loading' ? 'Consultando a Meta…' : state === 'done' ? 'Atualizar' : 'Buscar da Meta'}
+        </button>
+      </div>
+      {err && <p className="mt-3 text-sm text-amber-700">{err}</p>}
+      {state === 'done' && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-xs text-gray-500 bg-gray-50">
+              <th className="px-3 py-2 text-left font-semibold">Escola</th>
+              {cats.map(c => <th key={c} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{CAT_LABEL[c] ?? c}</th>)}
+              <th className="px-3 py-2 text-right font-semibold">Total</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {shown.map(x => (
+                <tr key={x.institution_id}>
+                  <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap">{names[x.institution_id] ?? x.waba_id}</td>
+                  {x.error ? <td colSpan={cats.length + 1} className="px-3 py-2 text-xs text-amber-700">{x.error}</td> : (<>
+                    {cats.map(c => { const r = x.rows.find(y => y.category === c); return <td key={c} className="px-3 py-2 text-right">{r ? <>{money(r.cost)} <span className="text-[11px] text-gray-400">({fmt(r.volume)})</span></> : <span className="text-gray-300">—</span>}</td> })}
+                    <td className="px-3 py-2 text-right font-bold">{money(sum(x.rows, r => r.cost))}</td>
+                  </>)}
+                </tr>
+              ))}
+              {!institutionId && <tr className="bg-gray-50 font-semibold"><td className="px-3 py-2">Total</td><td colSpan={cats.length} /><td className="px-3 py-2 text-right">{money(total)}</td></tr>}
+            </tbody>
+          </table>
+          <p className="text-[11px] text-gray-400 mt-2">Entre parênteses: quantidade cobrada. Os dados da Meta podem levar algumas horas para fechar.</p>
+        </div>
+      )}
     </div>
   )
 }
