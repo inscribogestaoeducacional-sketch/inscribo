@@ -164,9 +164,11 @@ interface CardContentProps {
   pendingPastVisit?: PendingVisit | null
   onVisitOutcome?: (lead: Lead) => void
   waitingInfo?: { side: 'us' | 'family' | null; since: string } | null
+  // Já tem matrícula na escola (aluno da casa) — o lead continua editável/excluível
+  isStudent?: boolean
 }
 
-function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, unitName, selectMode, selected, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll, reminderOpts, pendingPastVisit, onVisitOutcome, waitingInfo }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, unitName, selectMode, selected, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll, reminderOpts, pendingPastVisit, onVisitOutcome, waitingInfo, isStudent }: CardContentProps) {
   const hasFamily = !!familyMembers && familyMembers.length > 1
   const lostReason = lead.lost_reason
   const lostLabel = lostReasonLabel(lostReason)
@@ -217,6 +219,7 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
                 <span style={{ fontWeight: 700, color: '#7C3AED', flexShrink: 0 }}>+{familyMembers!.length - 1} irmão{familyMembers!.length - 1 === 1 ? '' : 's'}</span>
               )}
             </p>
+            {isStudent && <span title="Esta família já tem aluno matriculado na escola" style={{ ...pill('#D1FAE5', '#047857'), marginTop: 3, fontSize: 10.5 }}>Já é aluno da casa</span>}
           </div>
           {!overlay && (
             <button
@@ -639,6 +642,7 @@ export default function LeadKanban() {
   useEffect(() => { setNoContactDays(schoolNoContactDays) }, [schoolNoContactDays])
   // Fase 0A: visitas sem baixa por lead + pergunta "a visita aconteceu?"
   const [pendingVisitsByLead, setPendingVisitsByLead] = useState<Map<string, PendingVisit[]>>(new Map())
+  const [enrolledLeadIds, setEnrolledLeadIds] = useState<Set<string>>(new Set())
   const [visitPrompt, setVisitPrompt] = useState<{ open: boolean; title: string; subtitle?: string; visits: PendingVisit[]; advanceLead: boolean }>({ open: false, title: '', visits: [], advanceLead: true })
 
   // ── Item 6c — drawer de filtros modernizado ────────────────────────────────
@@ -776,6 +780,10 @@ export default function LeadKanban() {
       ])
       setLeads(leadsData)
       setPendingVisitsByLead(await fetchPendingVisitsByLead(instId))
+      try {
+        const { data: enr } = await supabase.from('enrollments').select('lead_id').eq('institution_id', instId).not('lead_id', 'is', null)
+        setEnrolledLeadIds(new Set((enr ?? []).map((e: any) => e.lead_id as string)))
+      } catch { /* selo é só informativo */ }
       refreshInteractions()
       setUsers((usersRes.data as SimpleUser[]) ?? [])
       setActiveCampaignCycle(campaignRes.data ? { id: campaignRes.data.id, label: campaignRes.data.label || String(campaignRes.data.year), targetYear: campaignRes.data.target_school_year ?? null, start: campaignRes.data.start_date ?? undefined, end: campaignRes.data.end_date ?? undefined } : null)
@@ -945,11 +953,13 @@ export default function LeadKanban() {
 
   const handleDelete = async (leadId: string) => {
     const lead = leads.find(l => l.id === leadId)
-    if (!lead || !window.confirm(`Tem certeza que deseja excluir o lead "${lead.student_name}"?\n\nEsta ação não pode ser desfeita.`)) return
+    if (!lead || !window.confirm(`Tem certeza que deseja excluir o lead "${lead.student_name}"?${enrolledLeadIds.has(leadId) ? '\n\nEsta família já tem aluno matriculado: a matrícula NÃO será apagada.' : ''}\n\nEsta ação não pode ser desfeita.`)) return
     try {
       const { supabase: db } = await import('../../lib/supabase')
       const instId = user!.institution_id
 
+      // 0. Matrícula fica (o aluno continua na escola); só perde o vínculo com o lead
+      await db.from('enrollments').update({ lead_id: null }).eq('lead_id', leadId).eq('institution_id', instId)
       // 1. Desvincular mensagens do lead
       await db.from('whatsapp_messages').update({ lead_id: null }).eq('lead_id', leadId).eq('institution_id', instId)
       // 2. Desvincular conversas do lead
@@ -1756,6 +1766,7 @@ export default function LeadKanban() {
                               selectMode={selectMode}
                               selected={idsForCard(lead).every(id => selectedIds.has(id))}
                               familyMembers={family?.members}
+                isStudent={enrolledLeadIds.has(lead.id)}
                               onReopenAll={() => handleReopenAllLost(family ? family.lostMembers.map(m => m.id) : [lead.id])}
                               reminderOpts={optsFor(lead.id)}
                               pendingPastVisit={(pendingVisitsByLead.get(lead.id) ?? []).find(isPastVisit) ?? null}
@@ -1792,6 +1803,7 @@ export default function LeadKanban() {
                 assignedUser={activeLead.assigned_to ? usersById.get(activeLead.assigned_to) ?? null : null}
                 unitName={unitCfg.enabled ? unitCfg.unitName(activeLead.unit_id) : null}
                 familyMembers={activeLead.family_id ? familyInfoMap.get(activeLead.family_id)?.members : undefined}
+                isStudent={enrolledLeadIds.has(activeLead.id)}
                 onSchedule={() => {}} onEdit={() => {}} onDelete={() => {}} onStatusChange={() => {}} onWhatsApp={() => {}} onReminder={() => {}}
                 onChildDecision={() => {}} onReopenAll={() => {}}
               />
