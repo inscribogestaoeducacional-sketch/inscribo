@@ -9,13 +9,14 @@ import HubErrorBoundary from '../whatsapp/HubErrorBoundary'
 import FlowEditor from '../whatsapp/FlowEditor'
 import RobotEditor from '../whatsapp/robot/RobotEditor'
 import WhatsAppHealthCard from './WhatsAppHealthCard'
+import AionCampaignResults from './AionCampaignResults'
 import { Card, Title, Switch, GhostButton } from '../management/settings/ui'
 import {
   Settings, MessageCircle, GitBranch, QrCode, Megaphone,
   Plus, Trash2, Copy, Check, ToggleLeft, ToggleRight, Save, Loader2,
   TrendingUp, Users, Clock, Edit2, Send, AlertCircle, X,
   Search, Upload, Download, FileText, Radio, ChevronRight, UserX, Percent,
-  Bot,
+  Bot, BarChart3,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia, type MediaHeaderFormat } from '../../lib/whatsappTemplate'
@@ -106,7 +107,7 @@ interface ConsultantUser {
   email: string
 }
 
-type Tab = 'inbox' | 'flow' | 'qrcodes' | 'contacts' | 'broadcasts' | 'settings'
+type Tab = 'inbox' | 'flow' | 'qrcodes' | 'contacts' | 'broadcasts' | 'results' | 'settings'
 
 const DAYS = [
   { key: 'MON', label: 'Seg' },
@@ -3250,7 +3251,7 @@ export default function AdminAionInbox() {
   // Permite deep-link (ex: navigate('/super-admin/aion-inbox?tab=settings')
   // vindo do próprio AionInboxHub quando falta configurar templates/conexão).
   const initialTab = (searchParams.get('tab') as Tab | null)
-  const [tab, setTab]                   = useState<Tab>(initialTab && ['inbox','flow','qrcodes','contacts','broadcasts','settings'].includes(initialTab) ? initialTab : 'inbox')
+  const [tab, setTab]                   = useState<Tab>(initialTab && ['inbox','flow','qrcodes','contacts','broadcasts','results','settings'].includes(initialTab) ? initialTab : 'inbox')
 
   useEffect(() => {
     supabase
@@ -3306,6 +3307,7 @@ export default function AdminAionInbox() {
     { key: 'qrcodes',    label: 'Campanhas',      Icon: Megaphone },
     { key: 'contacts',   label: 'Contatos',       Icon: Users },
     { key: 'broadcasts', label: 'Transmissão',    Icon: Radio },
+    { key: 'results',    label: 'Resultados',     Icon: BarChart3 },
     { key: 'settings',   label: 'Configurações',  Icon: Settings },
   ]
 
@@ -3347,6 +3349,7 @@ export default function AdminAionInbox() {
           {tab === 'qrcodes'    && <div style={{ overflowY: 'auto', height: '100%' }}><CampaignsTab /></div>}
           {tab === 'contacts'   && <div style={{ overflowY: 'auto', height: '100%' }}><ContactsTab aionPlatformId={aionPlatformId} /></div>}
           {tab === 'broadcasts' && <div style={{ overflowY: 'auto', height: '100%' }}><BroadcastsTab aionPlatformId={aionPlatformId} /></div>}
+          {tab === 'results'    && <div style={{ overflowY: 'auto', height: '100%' }}><AionCampaignResults /></div>}
           {tab === 'settings'   && <div style={{ overflowY: 'auto', height: '100%' }}><SettingsTab aionPlatformId={aionPlatformId} onEditBot={() => setTab('flow')} /></div>}
         </div>
       </div>
