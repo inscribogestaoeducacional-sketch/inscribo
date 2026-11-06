@@ -3736,7 +3736,6 @@ async function processAionMessage({
     // seedou) de responder no lugar, com uma mensagem completamente
     // diferente da configurada.
     let aionFlow: any = null
-    let whatsappFlowsRowExists = false
     if (platformWAId) {
       const { data: wflow, error: wflowErr } = await supabase
         .from('whatsapp_flows')
@@ -3745,26 +3744,14 @@ async function processAionMessage({
         .maybeSingle()
       if (wflowErr) console.error('❌ [aion] erro ao buscar whatsapp_flows:', wflowErr)
       if (wflow) {
-        whatsappFlowsRowExists = true
         if (wflow.is_active && wflow.bot_enabled && wflow.bot_flow?.nodes?.length) {
           aionFlow = wflow
         }
       }
     }
-    // Fallback: tabela legada aion_flows — só quando não há NENHUMA
-    // configuração em whatsapp_flows pra essa plataforma (linha inexistente).
-    // Se a linha existe e está desabilitada, respeita essa decisão e não
-    // busca nada aqui.
-    if (!aionFlow && !whatsappFlowsRowExists) {
-      const { data: legacyFlow, error: legacyFlowErr } = await supabase
-        .from('aion_flows')
-        .select('*')
-        .eq('is_active', true)
-        .eq('bot_enabled', true)
-        .maybeSingle()
-      if (legacyFlowErr) console.error('❌ [aion] erro ao buscar aion_flows:', legacyFlowErr)
-      aionFlow = legacyFlow
-    }
+    // A tabela legada aion_flows NÃO é mais usada como reserva: sem fluxo ativo em
+    // whatsapp_flows o robô fica quieto e a conversa segue para a fila da equipe
+    // (antes, apagar o fluxo novo fazia o robô responder com o texto antigo de maio).
 
     if (!aionFlow?.bot_flow?.nodes?.length) {
       await linkAionLead(supabase, rawPhone, remoteJid, contactName, true)
