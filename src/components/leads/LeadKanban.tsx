@@ -1563,6 +1563,7 @@ export default function LeadKanban() {
                     {unitCfg.enabled && unitCfg.unitName(lead.unit_id) && <span style={{ fontSize: 12, fontWeight: 600, color: '#4F46E5' }}>📍 {unitCfg.unitName(lead.unit_id)}</span>}
                     {lead.grade_interest && <span style={{ fontSize: 12, color: '#94A3B8' }}>{lead.grade_interest}</span>}
                     {lead.source && <span style={{ fontSize: 12, color: '#94A3B8' }}>{lead.source}</span>}
+                    {enrolledLeadIds.has(lead.id) && <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#D1FAE5', color: '#047857' }}>Já é aluno da casa</span>}
                     {reminder && reminderColors && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: reminderColors.color }}>
                         <Bell size={10} />{reminder.label}
