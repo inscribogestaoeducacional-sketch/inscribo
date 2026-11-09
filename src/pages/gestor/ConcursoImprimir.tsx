@@ -20,7 +20,8 @@ function Marks() {
 
 export default function ConcursoImprimir() {
   const q = new URLSearchParams(window.location.search)
-  const contestId = q.get('contest') || ''; const grade = q.get('grade') || ''; const kind = q.get('kind') || 'caderno'; const version = q.get('version') || 'A'
+  const contestId = q.get('contest') || ''; const grade = q.get('grade') || ''; const roomParam = q.get('room') || ''; // room: id da sala ou 'all' (lote por sala)
+  const kind = q.get('kind') || 'caderno'; const version = q.get('version') || 'A'
   const [state, setState] = useState<'loading' | 'error' | 'ok'>('loading')
   const [contest, setContest] = useState<Contest | null>(null)
   const [school, setSchool] = useState<{ name: string; logo_url: string | null; primary_color: string | null } | null>(null)
@@ -56,11 +57,20 @@ export default function ConcursoImprimir() {
     const [i, s, v, cd] = await Promise.all([
       db.from('institutions').select('name, logo_url, primary_color').eq('id', c.institution_id).maybeSingle(),
       db.from('contest_subjects').select('*').eq('contest_id', contestId).order('position'),
-      db.from('contest_exam_versions').select('*').eq('contest_id', contestId).eq('grade', grade).order('version'),
-      db.from('contest_candidates').select('*').eq('contest_id', contestId).eq('grade', grade).order('number'),
+      roomParam ? db.from('contest_exam_versions').select('*').eq('contest_id', contestId).order('version') : db.from('contest_exam_versions').select('*').eq('contest_id', contestId).eq('grade', grade).order('version'),
+      roomParam ? db.from('contest_candidates').select('*').eq('contest_id', contestId).order('number') : db.from('contest_candidates').select('*').eq('contest_id', contestId).eq('grade', grade).order('number'),
     ])
     const vers: ExamVersionRow[] = v.data ?? []
     if (!vers.length) return setState('error')
+    if (roomParam) {
+      const { data: rs } = await db.from('contest_rooms').select('*').eq('contest_id', contestId).order('position').order('created_at')
+      const order = new Map<string, number>((rs ?? []).map((r: any, i: number) => [r.id, i]))
+      let list: Candidate[] = (cd.data ?? []).filter((x: any) => roomParam === 'all' ? order.has(x.room_id) : x.room_id === roomParam)
+      if (kind === 'redacao') list = list.filter(x => essayFor(c, x.grade).enabled)
+      if (kind === 'cartoes') list = list.filter(x => vers.some(v => v.grade === x.grade))
+      list.sort((a: any, b: any) => (order.get(a.room_id) ?? 0) - (order.get(b.room_id) ?? 0) || a.number - b.number)
+      cd.data = list
+    }
     const ids = Array.from(new Set(vers.flatMap(x => x.items.map(it => it.question_id))))
     const { data: qs } = await db.from('contest_questions').select('*').in('id', ids)
     setContest(c); setSchool(i.data); setSubjects(s.data ?? []); setVersions(vers); setCands(cd.data ?? [])
@@ -80,7 +90,7 @@ export default function ConcursoImprimir() {
       setQrs(o)
     }
     setState('ok')
-  })() }, [contestId, grade, kind])
+  })() }, [contestId, grade, kind, roomParam])
 
   const doPrint = async () => {
     setPrinting(true)
@@ -122,7 +132,7 @@ export default function ConcursoImprimir() {
         .cover { height: 262mm; page-break-after: always; overflow: hidden; }
         @media print { body, .root { background: #fff !important; min-height: 0 !important } body { background: #fff } .bar { display: none } .sheet { margin: 0; width: auto; box-shadow: none } .full { width: 210mm } .flow { padding: 0; min-height: 0 } .cover { width: auto } }
       `}</style>
-      <div className="bar"><b>{kind === 'caderno' ? `Caderno · versão ${ver.version}` : kind === 'cartoes' ? 'Cartões-resposta' : kind === 'redacao' ? 'Folhas de redação' : kind === 'folha' ? 'Folhas do aluno' : 'Gabarito'} · {grade}</b>
+      <div className="bar"><b>{kind === 'caderno' ? `Caderno · versão ${ver.version}` : kind === 'cartoes' ? 'Cartões-resposta' : kind === 'redacao' ? 'Folhas de redação' : kind === 'folha' ? 'Folhas do aluno' : 'Gabarito'} · {roomParam ? (roomParam === 'all' ? 'todas as salas' : 'sala selecionada') : grade}</b>
         <button onClick={doPrint} disabled={printing}>{printing ? 'Carregando imagens…' : 'Imprimir / Salvar PDF'}</button><span style={{ opacity: .8 }}>Em "Mais configurações", desligue "Cabeçalhos e rodapés". {kind === 'caderno' ? 'Imprima em frente e verso (virar pela borda longa).' : kind === 'cartoes' || kind === 'redacao' ? 'Imprima só na frente (a leitura é de um lado só).' : ''}</span></div>
 
       {kind === 'caderno' && (() => {
@@ -241,6 +251,7 @@ export default function ConcursoImprimir() {
 
       {kind === 'cartoes' && cands.map(c => {
         const ver2 = versionFor(c.number, contest.versions_count)
+        const Nc = versions.find(v => v.grade === c.grade)?.items.length ?? N
         void cardGrid
         return (
           <div key={c.id} className="sheet full">
@@ -249,7 +260,7 @@ export default function ConcursoImprimir() {
               {school?.logo_url && <img src={school.logo_url} alt="" style={{ height: '18mm', maxWidth: '40mm', objectFit: 'contain' }} />}
               <div>
               <div style={{ fontWeight: 800, fontSize: 13 }}>{school?.name}</div>
-              <div style={{ fontSize: 11 }}>{contest.name} · {grade}</div>
+              <div style={{ fontSize: 11 }}>{contest.name} · {c.grade}</div>
               <div style={{ fontWeight: 800, fontSize: 18, margin: '3mm 0 2mm' }}>CARTÃO-RESPOSTA</div>
               <div style={{ fontSize: 11 }}>Inscrição nº <b style={{ fontSize: 15 }}>{c.number}</b> &nbsp;·&nbsp; Versão <b style={{ fontSize: 15 }}>{ver2}</b></div>
               <div style={{ fontSize: 12, marginTop: 2 }}><b>{c.student_name}</b></div>
@@ -259,8 +270,8 @@ export default function ConcursoImprimir() {
             <div style={{ position: 'absolute', left: '20mm', right: '20mm', top: '56mm', fontSize: 9.5, border: '1px solid #000', padding: '2mm 3mm' }}>
               Preencha todo o círculo com caneta azul ou preta, assim: <span style={{ display: 'inline-block', width: '3.6mm', height: '3.6mm', borderRadius: '50%', background: '#000', verticalAlign: 'middle' }} />. Não rasure. Uma só marca por questão.
             </div>
-            {Array.from({ length: N }, (_, i) => {
-              const left = rowLeft(N, i); const top = rowTop(N, i)
+            {Array.from({ length: Nc }, (_, i) => {
+              const left = rowLeft(Nc, i); const top = rowTop(Nc, i)
               return (
                 <div key={i} style={{ position: 'absolute', left: `${left}mm`, top: `${top}mm`, height: '6mm', display: 'flex', alignItems: 'center', gap: '1.6mm' }}>
                   <div style={{ width: '7mm', fontSize: 9.5, fontWeight: 700, textAlign: 'right', marginRight: '1mm' }}>{i + 1}</div>
@@ -282,7 +293,7 @@ export default function ConcursoImprimir() {
           <div style={{ position: 'absolute', left: '20mm', top: '16mm', right: '66mm' }}>
             {school?.logo_url && <img src={school.logo_url} alt="" style={{ height: '14mm', maxWidth: '40mm', objectFit: 'contain', marginBottom: '2mm' }} />}
             <div style={{ fontWeight: 800, fontSize: 18 }}>FOLHA DE REDAÇÃO</div>
-            <div style={{ fontSize: 11, margin: '2mm 0' }}>{contest.name} · {grade}</div>
+            <div style={{ fontSize: 11, margin: '2mm 0' }}>{contest.name} · {c.grade}</div>
             <div style={{ fontSize: 12 }}>Inscrição nº <b style={{ fontSize: 22 }}>{c.number}</b></div>
             <div style={{ fontSize: 10, marginTop: 3 }}>Não escreva seu nome, não assine e não faça marcas que o identifiquem.</div>
           </div>
@@ -309,7 +320,7 @@ export default function ConcursoImprimir() {
             <div style={{ border: '1px solid #000', borderRadius: 8, padding: '5mm 6mm', display: 'flex', gap: '6mm', alignItems: 'center' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 17, fontWeight: 800 }}>{c.student_name}</div>
-                <div style={{ fontSize: 11.5, marginTop: 2 }}>{grade} · Versão da prova {versionFor(c.number, contest.versions_count)}{date && ` · Prova em ${date}`}</div>
+                <div style={{ fontSize: 11.5, marginTop: 2 }}>{c.grade} · Versão da prova {versionFor(c.number, contest.versions_count)}{date && ` · Prova em ${date}`}</div>
               </div>
               <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, fontWeight: 700 }}>INSCRIÇÃO Nº</div><div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1 }}>{c.number}</div></div>
             </div>

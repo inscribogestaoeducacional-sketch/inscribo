@@ -107,12 +107,13 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {!hasExam && <div style={card}>Feche a prova de pelo menos uma série na aba Prova para poder corrigir os cartões.</div>}
+      {!hasExam && <div style={{ ...card, background: '#FEF3C7', borderColor: '#FCD34D', color: '#92400E', fontWeight: 700, fontSize: 14 }}>O envio dos cartões só libera depois que você fecha a prova de pelo menos uma série. Vá em Preparar → Montar prova e clique em "Fechar prova e gerar versões". É nesse momento que o gabarito de cada versão é criado.</div>}
       <div style={card}>
         <div style={{ fontWeight: 800, color: BRAND.ink }}>Subir cartões escaneados</div>
         <div style={{ fontSize: 13, color: BRAND.muted, margin: '4px 0 12px' }}>Escaneie os cartões em PDF (todas as páginas, em ordem qualquer) e envie. A leitura acontece neste computador; só o resultado é salvo.</div>
         <input ref={fileRef} type="file" accept="application/pdf,image/*" multiple hidden onChange={e => onFiles(e.target.files)} />
         <button style={btn(true)} disabled={busy || !hasExam} onClick={() => fileRef.current?.click()}>{busy ? <Loader2 size={15} className="animate-spin" /> : <FileUp size={15} />} {busy ? `Lendo… ${progress}` : 'Escolher PDF dos cartões'}</button>
+        {!hasExam && <span style={{ marginLeft: 10, fontSize: 13, color: '#92400E', fontWeight: 700 }}>Feche a prova primeiro.</span>}
         {log.length > 0 && (
           <div style={{ marginTop: 12, fontSize: 13.5 }}>
             <div style={{ fontWeight: 800, color: BRAND.ink }}>{log[0]}</div>

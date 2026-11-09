@@ -92,6 +92,8 @@ export default function ConcursoSalas({ contest, cands, onChanged }: { contest: 
     w.document.close()
   }
   const head = (t: string, sub = '') => `<h1>${esc(school?.name ?? '')} — ${esc(contest.name)}</h1><div class="sub">${esc(t)}${sub ? ' · ' + esc(sub) : ''}${contest.exam_date ? ' · ' + esc(fmtDate(contest.exam_date)) : ''}</div>`
+  const [lote, setLote] = useState('all')
+  const loteHref = (kind: string) => `/concurso/imprimir?contest=${contest.id}&kind=${kind}&room=${lote}`
   const roomOf = (c: Candidate) => rooms.find(r => r.id === c.room_id)
 
   const printPatio = () => {
@@ -158,6 +160,20 @@ export default function ConcursoSalas({ contest, cands, onChanged }: { contest: 
         </div>
         <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 8 }}>A lista de pátio sai por série, em ordem alfabética, para o aluno achar o nome. A de assinatura sai uma folha por sala, com a versão do caderno de cada aluno.</div>
       </div>
+
+      {rooms.length > 0 && (
+        <div style={card}>
+          <div style={{ fontWeight: 800, color: BRAND.ink }}>Lote por sala</div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted, margin: '4px 0 10px' }}>Gera cartões, folhas de redação e folhas do aluno já na ordem da sala (sala 1 inteira, depois a sala 2…). Cada aluno sai com a sua versão e a sua série, mesmo em sala mista.</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <select style={input} value={lote} onChange={e => setLote(e.target.value)} aria-label="Sala do lote"><option value="all">Todas as salas</option>{rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+            <a style={{ ...btn(), textDecoration: 'none' }} href={loteHref('cartoes')} target="_blank" rel="noreferrer"><Printer size={15} /> Cartões-resposta</a>
+            <a style={{ ...btn(), textDecoration: 'none' }} href={loteHref('redacao')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas de redação</a>
+            <a style={{ ...btn(), textDecoration: 'none' }} href={loteHref('folha')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas do aluno</a>
+          </div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 8 }}>Os cadernos são iguais para todos da mesma versão e série, então saem da etapa Preparar → Montar prova (um por versão). Use o "Pacote de materiais por sala" para saber quantas cópias de cada versão vão para cada sala.</div>
+        </div>
+      )}
 
       {rooms.map(r => {
         const l = inRoom(r)
