@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase'
-import { LETTERS, type Candidate, type Contest, type Question, type Subject } from '../../lib/concurso'
+import { essayFor, LETTERS, type Candidate, type Contest, type Question, type Subject } from '../../lib/concurso'
 import { versionFor, type ExamVersionRow } from '../../lib/concursoProva'
 import { ContestImg } from '../../components/concurso/media'
 import { cardGrid, rowLeft, rowTop } from '../../lib/concursoLayout'
@@ -70,6 +70,7 @@ export default function ConcursoImprimir() {
   if (state === 'loading') return <div style={{ padding: 40, fontFamily: 'system-ui' }}>Carregando…</div>
   if (state === 'error' || !contest) return <div style={{ padding: 40, fontFamily: 'system-ui' }}>Não foi possível abrir. Entre na sua conta e confira se a prova desta série foi fechada.</div>
 
+  const essay = essayFor(contest, grade)
   const margin = kind === 'cartoes' || kind === 'redacao' ? '0' : '12mm 12mm 16mm'
   const ver = versions.find(v => v.version === version) ?? versions[0]
   const N = versions[0].items.length
@@ -125,18 +126,18 @@ export default function ConcursoImprimir() {
                 <div style={{ height: 3, width: 60, background: accent, margin: '3mm 0 6mm' }} />
                 <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 3 }}>LEIA COM ATENÇÃO</div>
                 <ol style={{ fontSize: '10.5pt', lineHeight: 1.5, margin: '0 0 8mm', paddingLeft: 18, listStyle: 'decimal' }}>
-                  <li>Este caderno tem <b>{N} questões objetivas</b>{contest.has_essay ? ' e a proposta de redação' : ''}. Confira se a versão <b>{ver.version}</b> é a mesma do seu cartão-resposta.</li>
+                  <li>Este caderno tem <b>{N} questões objetivas</b>{essay.enabled ? ' e a proposta de redação' : ''}. Confira se a versão <b>{ver.version}</b> é a mesma do seu cartão-resposta.</li>
                   <li>Cada questão tem uma única alternativa correta. No cartão-resposta, preencha todo o círculo com caneta azul ou preta.</li>
-                  <li>Não rasure nem dobre o cartão-resposta. {contest.has_essay && 'Não escreva seu nome na folha de redação.'}</li>
+                  <li>Não rasure nem dobre o cartão-resposta. {essay.enabled && 'Não escreva seu nome na folha de redação.'}</li>
                   {contest.exam_duration && <li>Duração da prova: <b>{contest.exam_duration}</b>.</li>}
-                  <li>Ao terminar, entregue o caderno, o cartão-resposta{contest.has_essay ? ' e a folha de redação' : ''}. Nada pode ser levado.</li>
+                  <li>Ao terminar, entregue o caderno, o cartão-resposta{essay.enabled ? ' e a folha de redação' : ''}. Nada pode ser levado.</li>
                   <li>É proibido o uso de celular, calculadora e qualquer material de consulta.</li>
                 </ol>
                 <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 4 }}>O QUE TEM NESTA PROVA</div>
                 <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '10.5pt' }}>
                   <tbody>{ranges.map(r => (
                     <tr key={r.id} style={{ borderTop: '1px solid #bbb' }}><td style={{ padding: '2.2mm 0', fontWeight: 700 }}>{r.name}</td><td style={{ textAlign: 'right', color: '#333' }}>questões {r.from} a {r.to}</td></tr>
-                  ))}{contest.has_essay && <tr style={{ borderTop: '1px solid #bbb', borderBottom: '1px solid #bbb' }}><td style={{ padding: '2.2mm 0', fontWeight: 700 }}>Redação</td><td style={{ textAlign: 'right', color: '#333' }}>folha própria</td></tr>}</tbody>
+                  ))}{essay.enabled && <tr style={{ borderTop: '1px solid #bbb', borderBottom: '1px solid #bbb' }}><td style={{ padding: '2.2mm 0', fontWeight: 700 }}>Redação</td><td style={{ textAlign: 'right', color: '#333' }}>folha própria</td></tr>}</tbody>
                 </table>
               </div>
             </div>
@@ -173,10 +174,10 @@ export default function ConcursoImprimir() {
               </div>
             </div>
 
-            {contest.has_essay && contest.essay_prompt && (
+            {essay.enabled && essay.prompt && (
               <div className="sheet flow" style={{ breakBefore: 'page' }}>
                 <div style={{ background: accent, color: '#fff', padding: '3mm 5mm', fontWeight: 800, fontSize: 14, borderRadius: 3 }}>REDAÇÃO</div>
-                <div style={{ whiteSpace: 'pre-wrap', fontSize: '11.5pt', lineHeight: 1.6, marginTop: '6mm', textAlign: 'justify' }}>{contest.essay_prompt}</div>
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: '11.5pt', lineHeight: 1.6, marginTop: '6mm', textAlign: 'justify' }}>{essay.prompt}</div>
                 <div style={{ fontSize: '10pt', marginTop: '8mm', borderLeft: `3px solid ${accent}`, paddingLeft: 10, color: '#333' }}>Escreva o texto na folha de redação, sem se identificar. Não há folha de rascunho.</div>
               </div>
             )}

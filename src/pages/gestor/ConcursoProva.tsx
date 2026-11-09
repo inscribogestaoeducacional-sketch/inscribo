@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, Loader2, Lock, Printer, Unlock } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
-import { db, GRADES, type Candidate, type Contest, type Question, type Quota, type Subject } from '../../lib/concurso'
+import { db, essayFor, GRADES, type Candidate, type Contest, type Question, type Quota, type Subject } from '../../lib/concurso'
 import { buildVersions, versionFor, type ExamVersionRow } from '../../lib/concursoProva'
 
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 16 }
@@ -134,7 +134,7 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {gradeVersions.map(v => <a key={v.id} style={btn()} href={href('caderno', v.version)} target="_blank" rel="noreferrer"><Printer size={15} /> Caderno · versão {v.version}</a>)}
               <a style={btn()} href={href('cartoes')} target="_blank" rel="noreferrer"><Printer size={15} /> Cartões-resposta ({gradeCands.length})</a>
-              {contest.has_essay && <a style={btn()} href={href('redacao')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas de redação ({gradeCands.length})</a>}
+              {essayFor(contest, grade).enabled && <a style={btn()} href={href('redacao')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas de redação ({gradeCands.length})</a>}
               <a style={btn()} href={href('gabarito')} target="_blank" rel="noreferrer"><Printer size={15} /> Gabarito (coordenação)</a>
             </div>
             <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 10 }}>Na janela que abrir, escolha "Salvar como PDF" ou imprima direto. O caderno é um por versão (imprima uma cópia por aluno); o cartão e a folha de redação já saem identificados.</div>

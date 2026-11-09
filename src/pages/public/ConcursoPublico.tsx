@@ -2,11 +2,12 @@
 import { useEffect, useState } from 'react'
 import { CalendarDays, MapPin, GraduationCap, CheckCircle2, Loader2, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { fieldCfg } from '../../lib/concurso'
 
 type Field = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }
 type Info = {
   name: string; year: number; status: string; exam_date: string | null; location: string | null; grades: string[]
-  edital: string | null; extra_fields: Field[]; deadline: string | null; open: boolean
+  edital: string | null; extra_fields: Field[]; form_config?: { fields?: Record<string, { label?: string; required?: boolean; enabled?: boolean }> }; deadline: string | null; open: boolean
   school_name: string; logo_url: string | null; primary_color: string | null; city: string | null
 }
 
@@ -94,24 +95,20 @@ export default function ConcursoPublico() {
         ) : (
           <form onSubmit={submit} style={{ background: '#fff', borderRadius: 18, padding: '8px 18px 20px', marginTop: 16, boxShadow: '0 8px 30px -14px rgba(15,23,42,.25)' }}>
             <h2 style={{ fontSize: 19, fontWeight: 800, color: '#1A2B4A', margin: '14px 0 0' }}>Faça a inscrição</h2>
-            <label style={lab}>Nome completo do aluno</label>
-            <input style={input} required value={f.student_name} onChange={set('student_name')} autoComplete="off" />
-            <label style={lab}>Série em 2027</label>
-            <select style={input} required value={f.grade} onChange={set('grade')}>
-              <option value="">Escolha</option>{info.grades.map(g => <option key={g}>{g}</option>)}
-            </select>
-            <label style={lab}>Data de nascimento do aluno</label>
-            <input style={input} type="date" required value={f.birth_date} onChange={set('birth_date')} />
-            <label style={lab}>CPF do aluno</label>
-            <input style={input} required inputMode="numeric" placeholder="000.000.000-00" value={f.student_cpf} onChange={e => setF({ ...f, student_cpf: maskCpf(e.target.value) })} />
-            <label style={lab}>Nome do responsável</label>
-            <input style={input} required value={f.responsible_name} onChange={set('responsible_name')} autoComplete="name" />
-            <label style={lab}>WhatsApp do responsável</label>
-            <input style={input} required inputMode="tel" placeholder="(83) 90000-0000" value={f.phone} onChange={e => setF({ ...f, phone: maskPhone(e.target.value) })} autoComplete="tel" />
-            <label style={lab}>E-mail do responsável</label>
-            <input style={input} type="email" required value={f.email} onChange={set('email')} autoComplete="email" />
-            <label style={lab}>Escola onde estuda hoje</label>
-            <input style={input} required value={f.origin_school} onChange={set('origin_school')} />
+            {(() => {
+              const F = (k: string) => fieldCfg(info.form_config as any, k)
+              const L = (k: string) => { const c = F(k); return <label style={lab}>{c.label}{!c.required && <span style={{ fontWeight: 500 }}> (opcional)</span>}</label> }
+              return <>
+                {L('student_name')}<input style={input} required value={f.student_name} onChange={set('student_name')} autoComplete="off" />
+                {L('grade')}<select style={input} required value={f.grade} onChange={set('grade')}><option value="">Escolha</option>{info.grades.map(g => <option key={g}>{g}</option>)}</select>
+                {F('birth_date').enabled && <>{L('birth_date')}<input style={input} type="date" required={F('birth_date').required} value={f.birth_date} onChange={set('birth_date')} /></>}
+                {F('student_cpf').enabled && <>{L('student_cpf')}<input style={input} required={F('student_cpf').required} inputMode="numeric" placeholder="000.000.000-00" value={f.student_cpf} onChange={e => setF({ ...f, student_cpf: maskCpf(e.target.value) })} /></>}
+                {L('responsible_name')}<input style={input} required value={f.responsible_name} onChange={set('responsible_name')} autoComplete="name" />
+                {L('phone')}<input style={input} required inputMode="tel" placeholder="(83) 90000-0000" value={f.phone} onChange={e => setF({ ...f, phone: maskPhone(e.target.value) })} autoComplete="tel" />
+                {F('email').enabled && <>{L('email')}<input style={input} type="email" required={F('email').required} value={f.email} onChange={set('email')} autoComplete="email" /></>}
+                {F('origin_school').enabled && <>{L('origin_school')}<input style={input} required={F('origin_school').required} value={f.origin_school} onChange={set('origin_school')} /></>}
+              </>
+            })()}
             {info.extra_fields.map(x => (
               <div key={x.id}>
                 <label style={lab}>{x.label}{!x.required && <span style={{ fontWeight: 500 }}> (opcional)</span>}</label>
