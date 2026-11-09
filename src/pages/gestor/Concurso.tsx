@@ -10,6 +10,7 @@ import ConcursoCorrecao from './ConcursoCorrecao'
 import { EditInscricao, Painel } from './ConcursoInscritos'
 import ConcursoEmails from './ConcursoEmails'
 import EssayRubric from '../../components/concurso/EssayRubric'
+import TakeHomeConfig from '../../components/concurso/TakeHomeConfig'
 import ConcursoResultados from './ConcursoResultados'
 import { ContestImg } from '../../components/concurso/media'
 import {
@@ -261,6 +262,7 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
           })}
         </div>
         <EssayRubric contest={contest} onChanged={onChanged} />
+        <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 12 }}><TakeHomeConfig contest={contest} onChanged={onChanged} /></div>
         <div>
           <label style={lab}>Perguntas da inscrição (texto e se é obrigatória)</label>
           {FORM_FIELDS.map(d => {

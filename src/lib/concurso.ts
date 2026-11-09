@@ -16,7 +16,8 @@ export type Contest = { id: string; institution_id: string; name: string; year: 
   public_slug: string | null; edital: string | null; location: string | null; registration_deadline: string | null; extra_fields: ExtraField[]; essay_prompt: string | null; exam_duration: string | null; print_color: string | null
   essay_by_grade: Record<string, { enabled: boolean; prompt: string; images?: string[] }>; form_config: { fields?: Record<string, { label?: string; required?: boolean; enabled?: boolean }> }
   email_auto_confirm: boolean; email_confirmation: { subject?: string; body?: string }
-  essay_rubric: { id: string; name: string; max: number }[]; essay_weight: number; scholarship_tiers: { label: string; percent: number }[] }
+  essay_rubric: { id: string; name: string; max: number }[]; essay_weight: number; scholarship_tiers: { label: string; percent: number }[]
+  take_home: { message?: string; image?: string | null; qr_url?: string; qr_label?: string } | null }
 export type Essay = { id: string; candidate_id: string; scan_path: string | null; scores: Record<string, number>; total: number | null; max_total: number | null; annulled: boolean; note: string | null }
 export type Decision = { id: string; candidate_id: string; scholarship_pct: number | null; status: 'pending' | 'granted' | 'waitlist' | 'denied'; note: string | null }
 export type ExtraField = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }

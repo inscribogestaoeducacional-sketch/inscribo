@@ -135,6 +135,7 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
               {gradeVersions.map(v => <a key={v.id} style={btn()} href={href('caderno', v.version)} target="_blank" rel="noreferrer"><Printer size={15} /> Caderno · versão {v.version}</a>)}
               <a style={btn()} href={href('cartoes')} target="_blank" rel="noreferrer"><Printer size={15} /> Cartões-resposta ({gradeCands.length})</a>
               {essayFor(contest, grade).enabled && <a style={btn()} href={href('redacao')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas de redação ({gradeCands.length})</a>}
+              <a style={btn()} href={href('folha')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas do aluno ({gradeCands.length})</a>
               <a style={btn()} href={href('gabarito')} target="_blank" rel="noreferrer"><Printer size={15} /> Gabarito (coordenação)</a>
             </div>
             <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 10 }}>Na janela que abrir, escolha "Salvar como PDF" ou imprima direto. O caderno é um por versão (imprima uma cópia por aluno); o cartão e a folha de redação já saem identificados.</div>

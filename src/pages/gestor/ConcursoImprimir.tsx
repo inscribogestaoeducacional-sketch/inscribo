@@ -72,6 +72,13 @@ export default function ConcursoImprimir() {
       }))
       setQrs(Object.fromEntries(entries))
     }
+    if (kind === 'folha') {
+      const link = c.public_slug ? `${window.location.origin}/bolsas/${c.public_slug}/resultado` : ''
+      const o: Record<string, string> = {}
+      if (link) o.result = await QRCode.toDataURL(link, { margin: 1, width: 300 })
+      if (c.take_home?.qr_url) o.extra = await QRCode.toDataURL(c.take_home.qr_url, { margin: 1, width: 300 })
+      setQrs(o)
+    }
     setState('ok')
   })() }, [contestId, grade, kind])
 
@@ -90,7 +97,7 @@ export default function ConcursoImprimir() {
   if (state === 'error' || !contest) return <div style={{ padding: 40, fontFamily: 'system-ui' }}>Não foi possível abrir. Entre na sua conta e confira se a prova desta série foi fechada.</div>
 
   const essay = essayFor(contest, grade)
-  const margin = kind === 'cartoes' || kind === 'redacao' ? '0' : '12mm 12mm 16mm'
+  const margin = kind === 'cartoes' || kind === 'redacao' || kind === 'folha' ? '0' : '12mm 12mm 16mm'
   const ver = versions.find(v => v.version === version) ?? versions[0]
   const N = versions[0].items.length
   const subjName = (id: string) => subjects.find(s => s.id === id)?.name ?? ''
@@ -115,7 +122,7 @@ export default function ConcursoImprimir() {
         .cover { height: 262mm; page-break-after: always; overflow: hidden; }
         @media print { body, .root { background: #fff !important; min-height: 0 !important } body { background: #fff } .bar { display: none } .sheet { margin: 0; width: auto; box-shadow: none } .full { width: 210mm } .flow { padding: 0; min-height: 0 } .cover { width: auto } }
       `}</style>
-      <div className="bar"><b>{kind === 'caderno' ? `Caderno · versão ${ver.version}` : kind === 'cartoes' ? 'Cartões-resposta' : kind === 'redacao' ? 'Folhas de redação' : 'Gabarito'} · {grade}</b>
+      <div className="bar"><b>{kind === 'caderno' ? `Caderno · versão ${ver.version}` : kind === 'cartoes' ? 'Cartões-resposta' : kind === 'redacao' ? 'Folhas de redação' : kind === 'folha' ? 'Folhas do aluno' : 'Gabarito'} · {grade}</b>
         <button onClick={doPrint} disabled={printing}>{printing ? 'Carregando imagens…' : 'Imprimir / Salvar PDF'}</button><span style={{ opacity: .8 }}>Em "Mais configurações", desligue "Cabeçalhos e rodapés". {kind === 'caderno' ? 'Imprima em frente e verso (virar pela borda longa).' : kind === 'cartoes' || kind === 'redacao' ? 'Imprima só na frente (a leitura é de um lado só).' : ''}</span></div>
 
       {kind === 'caderno' && (() => {
@@ -287,6 +294,41 @@ export default function ConcursoImprimir() {
           ))}
         </div>
       ))}
+
+      {kind === 'folha' && (() => {
+        const accent = contest.print_color || school?.primary_color || '#1A2B4A'
+        const th = contest.take_home ?? {}
+        const link = contest.public_slug ? `${window.location.origin}/bolsas/${contest.public_slug}/resultado` : ''
+        const date = contest.exam_date ? contest.exam_date.split('T')[0].split('-').reverse().join('/') : ''
+        return cands.map(c => (
+          <div key={c.id} className="sheet full" style={{ padding: '14mm 18mm', display: 'flex', flexDirection: 'column', gap: '6mm' }}>
+            <div style={{ background: accent, color: '#fff', borderRadius: 10, padding: '8mm 9mm', display: 'flex', alignItems: 'center', gap: '6mm' }}>
+              {school?.logo_url && <div style={{ background: '#fff', borderRadius: 8, padding: 6 }}><img src={school.logo_url} alt="" style={{ height: '16mm', maxWidth: '40mm', objectFit: 'contain', display: 'block' }} /></div>}
+              <div><div style={{ fontSize: 12, opacity: .9 }}>{school?.name}</div><div style={{ fontSize: 20, fontWeight: 800 }}>{contest.name}</div><div style={{ fontSize: 12 }}>Comprovante do candidato</div></div>
+            </div>
+            <div style={{ border: '1px solid #000', borderRadius: 8, padding: '5mm 6mm', display: 'flex', gap: '6mm', alignItems: 'center' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 17, fontWeight: 800 }}>{c.student_name}</div>
+                <div style={{ fontSize: 11.5, marginTop: 2 }}>{grade} · Versão da prova {versionFor(c.number, contest.versions_count)}{date && ` · Prova em ${date}`}</div>
+              </div>
+              <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, fontWeight: 700 }}>INSCRIÇÃO Nº</div><div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1 }}>{c.number}</div></div>
+            </div>
+            <div style={{ display: 'flex', gap: '8mm', alignItems: 'center' }}>
+              {qrs.result && <img src={qrs.result} alt="" style={{ width: '38mm', height: '38mm' }} />}
+              <div style={{ flex: 1, fontSize: 12, lineHeight: 1.5 }}>
+                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 3 }}>Como ver o resultado</div>
+                <div>1. Aponte a câmera do celular para o QR code{link ? ` ou acesse ${link}` : ''}.</div>
+                <div>2. Informe o <b>número da inscrição ({c.number})</b> e a <b>data de nascimento</b> do aluno.</div>
+                <div>3. Guarde esta folha: o número será pedido para consultar o resultado e na matrícula.</div>
+                <div style={{ marginTop: 3, color: '#444' }}>O resultado só aparece depois que a escola divulgar.</div>
+              </div>
+            </div>
+            {th.message && <div style={{ fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap', borderLeft: `3px solid ${accent}`, paddingLeft: '4mm' }}>{th.message}</div>}
+            {qrs.extra && <div style={{ display: 'flex', gap: '6mm', alignItems: 'center' }}><img src={qrs.extra} alt="" style={{ width: '30mm', height: '30mm' }} /><div style={{ fontSize: 13, fontWeight: 700 }}>{th.qr_label}</div></div>}
+            {th.image && <div style={{ marginTop: 'auto', textAlign: 'center' }}><ContestImg path={th.image} style={{ border: 0, borderRadius: 6, maxWidth: '100%', maxHeight: '90mm', width: 'auto', height: 'auto', objectFit: 'contain' }} /></div>}
+          </div>
+        ))
+      })()}
 
       {kind === 'gabarito' && (
         <div className="sheet flow">
