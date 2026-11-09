@@ -1,7 +1,7 @@
 // Painel da coordenação por segmento. Somente leitura, sem telefone nem contato.
 // O filtro por segmento é feito no servidor (coordinator_dashboard, coordinator_saidas, campaign_matriculometro).
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, Users, UserCheck, UserMinus, UserPlus, LayoutGrid, RefreshCw, Layers, Flag, LogOut, Percent } from 'lucide-react'
+import { ChevronDown, Users, UserCheck, UserMinus, UserPlus, UserRoundCheck, Hourglass, LayoutGrid, RefreshCw, Layers, Flag, LogOut } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
 import StatStrip from '../mobile/StatStrip'
@@ -10,7 +10,7 @@ import Matriculometro from '../campanha/Matriculometro'
 
 type Turma = { turma: string; serie: string | null; segment: string | null; base: number; matriculados: number; pre: number }
 type Pessoa = { nome: string; turma: string | null; serie: string | null; segment: string | null; pre?: boolean; status?: string }
-type Dash = { year: number; segments: string[]; turmas: Turma[]; faltam: Pessoa[]; novos: Pessoa[] }
+type Dash = { year: number; segments: string[]; turmas: Turma[]; faltam: Pessoa[]; novos: Pessoa[]; voltaram: Pessoa[] }
 
 export const SEG: Record<string, string> = { infantil: 'Infantil', fund1: 'Fundamental I', fund2: 'Fundamental II', medio: 'Médio' }
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0)
@@ -59,6 +59,9 @@ export default function MeuSegmento({ institutionId, year, onTitle }: { institut
     return { base, mat, pre, falta: base - mat }
   }, [d])
   const group = (list: Pessoa[], key: (p: Pessoa) => string) => { const m = new Map<string, Pessoa[]>(); list.forEach(p => m.set(key(p), [...(m.get(key(p)) ?? []), p])); return [...m.entries()] }
+  const soPre = d?.faltam.filter(x => x.pre).length ?? 0
+  const semReg = (d?.faltam.length ?? 0) - soPre
+  const voltaram = useMemo(() => group(d?.voltaram ?? [], p => p.serie ?? 'Sem série'), [d])
   const faltam = useMemo(() => group(d?.faltam ?? [], p => `${p.serie ?? 'Sem série'} · ${p.turma ?? ''}`), [d])
   const novos = useMemo(() => group(d?.novos ?? [], p => p.serie ?? 'Sem série'), [d])
   const sai = useMemo(() => group(saidas, p => p.serie ?? 'Sem série'), [saidas])
@@ -89,13 +92,14 @@ export default function MeuSegmento({ institutionId, year, onTitle }: { institut
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <StatStrip items={[
-        { label: 'Rematriculados', value: tot.mat, color: BRAND.success, icon: UserCheck, sub: `dos ${tot.base} da base de ${year - 1}` },
-        { label: 'Ainda faltam', value: tot.falta, color: '#D97706', icon: UserMinus, alert: tot.falta > 0, sub: `${tot.pre} em pré-matrícula` },
-        { label: 'Alunos novos', value: d.novos.length, color: '#7C3AED', icon: UserPlus, sub: `em ${year}` },
-        { label: 'Rematrícula', value: `${p}%`, color: tone(p), icon: Percent, sub: 'da base já confirmada' },
+        { label: 'Rematriculados', value: tot.mat, color: BRAND.success, icon: UserCheck, sub: `${p}% dos ${tot.base} da base de ${year - 1}` },
+        { label: 'Só pré-matrícula', value: soPre, color: '#7C3AED', icon: Hourglass, sub: 'ainda não efetivaram' },
+        { label: 'Sem registro', value: semReg, color: '#D97706', icon: UserMinus, alert: semReg > 0, sub: 'sem matrícula nem pré' },
+        { label: 'Alunos novos', value: d.novos.length, color: '#2563EB', icon: UserPlus, sub: `nunca estudaram aqui` },
+        { label: 'Voltaram', value: d.voltaram.filter(x => x.status === 'ativo').length, color: '#0EA5E9', icon: UserRoundCheck, sub: 'já foram da escola e voltaram' },
       ]} />
       <PillTabs value={tab} onChange={setTab} tabs={([
-        ['geral', 'Visão geral', LayoutGrid], ['rematricula', 'Rematrícula', RefreshCw], ['novatos', 'Novatos', Users],
+        ['geral', 'Visão geral', LayoutGrid], ['rematricula', 'Rematrícula', RefreshCw], ['novatos', 'Novos', Users], ['voltaram', 'Voltaram', UserRoundCheck],
         ['serie', 'Séries e turmas', Layers], ['matriculometro', 'Matriculômetro', Flag], ['saidas', 'Saídas', LogOut],
       ] as any)} />
 
@@ -106,8 +110,9 @@ export default function MeuSegmento({ institutionId, year, onTitle }: { institut
           {porSerie.map(s => bar(s.serie, s.mat, s.base, s.serie))}
         </div>
       )}
-      {tab === 'rematricula' && <Grouped groups={faltam} color="#D97706" empty="Todos os alunos da base já estão rematriculados." render={x => (<><span>{x.nome}</span>{x.pre && <Tag c="#7C3AED">pré-matrícula</Tag>}</>)} />}
+      {tab === 'rematricula' && <Grouped groups={faltam} color="#D97706" empty="Todos os alunos da base já estão rematriculados." render={x => (<><span>{x.nome}</span><Tag c={x.pre ? '#7C3AED' : '#D97706'}>{x.pre ? 'só pré-matrícula' : 'sem registro'}</Tag></>)} />}
       {tab === 'novatos' && <Grouped groups={novos} color="#7C3AED" empty="Ainda não há alunos novos neste segmento." render={x => (<><span>{x.nome}{x.turma ? <span style={{ color: BRAND.muted }}> · {x.turma}</span> : null}</span><Tag c={x.status === 'ativo' ? BRAND.success : '#7C3AED'}>{x.status === 'ativo' ? 'matriculado' : 'pré-matrícula'}</Tag></>)} />}
+      {tab === 'voltaram' && <Grouped groups={voltaram} color="#0EA5E9" empty="Nenhum aluno que já foi da escola voltou neste segmento." render={x => (<><span>{x.nome}{x.turma ? <span style={{ color: BRAND.muted }}> · {x.turma}</span> : null}</span><Tag c={x.status === 'ativo' ? BRAND.success : '#7C3AED'}>{x.status === 'ativo' ? 'matriculado' : 'pré-matrícula'}</Tag></>)} />}
       {tab === 'serie' && (
         <div style={{ ...card, padding: '2px 16px' }}>
           <div style={{ fontWeight: 800, fontSize: 14, color: BRAND.ink, padding: '12px 0 0' }}>Ranking de turmas</div>

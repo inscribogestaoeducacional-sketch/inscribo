@@ -113,9 +113,9 @@ export default function EnrollmentCheck({ institutionId, year, mobile }: { insti
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {chip(nov.novatos, `novatos na ${sys.label}`, false)}
-              {chip(nov.novatos + (nov.ras ? nov.returning : 0), 'novos aqui', false)}
+              {chip(nov.novatos, 'novos aqui', false)}
             </div>
-            <NovosBridge novos={nov.novatos + (nov.ras ? nov.returning : 0)} returning={nov.returning} returningAsNew={nov.ras} />
+            <NovosBridge returning={nov.returning} />
             <div style={{ fontSize: 12, color: BRAND.muted }}>A conferência com a {sys.label} é só dos novatos. Os veteranos (rematrículas) já batem.</div>
           </div>
         )}

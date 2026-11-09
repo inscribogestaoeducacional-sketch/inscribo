@@ -40,11 +40,13 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
   const [withPre, setWithPre] = useState(false)
   const [resumo, setResumo] = useState<Resumo | null>(null)
   const [err, setErr] = useState('')
+  const [split, setSplit] = useState<{ veteranos: number; voltaram: number; novos: number; total: number } | null>(null)
   const [sel, setSel] = useState<{ turma: string | null; serie: string | null; title: string } | null>(null)
 
   useEffect(() => {
     let alive = true
     setRows(null); setErr('')
+    supabase.rpc('campaign_year_split', { p_inst: institutionId, p_year: year }).then(({ data }) => setSplit((data as typeof split) ?? null))
     supabase.rpc('campaign_matriculometro', { p_inst: institutionId, p_year: year }).then(({ data, error }) => {
       if (!alive) return
       if (error) setErr(error.message); else { const d = data as { turmas: Row[]; resumo?: Resumo } | null; setRows(d?.turmas ?? []); setResumo(d?.resumo ?? null) }
@@ -88,13 +90,13 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
 
       {resumo && (
         <div style={{ ...card, marginBottom: 14 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Alunos: {year - 1} × {year}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Total de alunos da escola: {year - 1} × {year}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
             {([
               [`Fechou ${year - 1} com`, resumo.ly_final, 'alunos matriculados', '#1A2B4A'],
               [`No mesmo dia de ${year - 1}`, resumo.ly_mesmo_dia, `já matriculados (${new Date(resumo.dia_comparado + 'T12:00:00').toLocaleDateString('pt-BR')})`, '#64748B'],
-              [`Hoje, ${year}`, resumo.hoje_matriculados, 'matriculados', '#059669'],
-              [`Hoje, ${year}`, resumo.hoje_pre, 'em pré-matrícula (não contam)', '#8B5CF6'],
+              [`Hoje, ${year}`, resumo.hoje_matriculados, split ? `matriculados: ${split.veteranos} rematriculados + ${split.voltaram} voltaram + ${split.novos} novos` : 'matriculados', '#059669'],
+              [`Hoje, ${year}`, resumo.hoje_pre, 'em pré-matrícula, de todos os grupos (não contam)', '#8B5CF6'],
             ] as [string, number, string, string][]).map(([t, n, sub, c]) => (
               <div key={t + sub} style={{ borderRadius: 12, background: '#F8FAFC', padding: '10px 12px' }}>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: BRAND.muted }}>{t}</div>

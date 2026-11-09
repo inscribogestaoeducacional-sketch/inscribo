@@ -246,23 +246,9 @@ export function GeralView({ mobile, year, counts, parts, totalAll, preCounts, ca
         )}
       </div>
 
-      <div className="ld-card" style={{ ...baseCard, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 16px' }}>
-        <div style={{ flex: '1 1 220px' }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: BRAND.ink }}>Quem já foi da escola e volta conta como novo?</div>
-          <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 2, lineHeight: 1.45 }}>
-            Cada escola escolhe. A Activesoft conta esses alunos como veteranos. Hoje: {returningAsNew ? 'Sim, contam como novos (com a etiqueta “já foi da escola”).' : 'Não, contam como rematrícula, igual à Activesoft.'}
-          </div>
-        </div>
-        {canEdit && (
-          <div style={{ display: 'flex', border: `1.5px solid ${BRAND.line}`, borderRadius: 12, overflow: 'hidden', fontSize: 13 }}>
-            {[true, false].map(v => (
-              <button key={String(v)} type="button" onClick={() => { if (returningAsNew !== v) setReturningAsNew(v) }}
-                style={{ padding: '10px 20px', minHeight: 44, border: 0, cursor: 'pointer', fontFamily: 'inherit', background: returningAsNew === v ? BRAND.primary : '#fff', color: returningAsNew === v ? '#fff' : BRAND.text, fontWeight: 700 }}>
-                {v ? 'Sim' : 'Não'}
-              </button>
-            ))}
-          </div>
-        )}
+      <div className="ld-card" style={{ ...baseCard, padding: '14px 16px' }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: BRAND.ink }}>E quem já foi da escola e voltou?</div>
+        <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 2, lineHeight: 1.45 }}>Esses alunos aparecem com a etiqueta “Voltou” e são contados à parte: não entram em rematrículas nem em novos, só no total de matriculados.</div>
       </div>
     </>
   )

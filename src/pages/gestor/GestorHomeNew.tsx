@@ -195,10 +195,9 @@ export default function GestorHomeNew() {
   const preCounts = !!((d.info ?? [])[0]?.pre_counts)
   const prog = useMemo(() => {
     const s = (k: keyof PanelRow) => panelRows.reduce((a, r) => a + (n0(r[k])), 0)
-    const rc = ((d.hist as Json | null)?.current as Json | undefined)?.returning_as_new !== false
     const ret = s('returning_students')
-    const reMat = s('reenrolled') + s('reenrolled_declared') + (rc ? 0 : ret), novos = s('new_students') + (rc ? ret : 0), pre = s('pre_enrolled')
-    return { reMat, novos, pre: preCounts ? 0 : pre, pending: s('pending'), left: s('left_school'), done: reMat + novos + (preCounts ? pre : 0) }
+    const reMat = s('reenrolled') + s('reenrolled_declared'), novos = s('new_students'), pre = s('pre_enrolled')
+    return { reMat, novos, voltaram: ret, pre: preCounts ? 0 : pre, pending: s('pending'), left: s('left_school'), done: reMat + novos + ret + (preCounts ? pre : 0) }
   }, [panelRows, preCounts, d.hist]) // eslint-disable-line react-hooks/exhaustive-deps
   const goalTotal = cycle ? (cycle.goal_total ?? n0(cycle.goal_reenrollments) + n0(cycle.target_new_students)) : 0
   const goalRe = n0(cycle?.goal_reenrollments), goalNovos = Math.max(0, goalTotal - goalRe)
@@ -341,7 +340,7 @@ export default function GestorHomeNew() {
               const mb = d.matBase as Json | null
               if (!mb?.has_base) return <Kpi label="Matrículas" value={<CountUp value={n0(mat?.total)} />} color="#05907B" icon={GraduationCap} to="/reports?tab=matriculas" delay={0} sub={<Delta cur={n0(mat?.total)} prev={n0(mat?.anterior_total)} />} />
               return <Kpi label="Matrículas" value={<CountUp value={n0(mb.total)} />} color="#05907B" icon={GraduationCap} to="/base-alunos" delay={0}
-                sub={<span>{n0(mb.novos)} novos · {n0(mb.rematriculas)} rematrículas<br /><span style={{ color: BRAND.faint }}>{n0(mb.dos_leads)} vieram de leads · </span><Delta cur={n0(mb.total)} prev={n0(mb.anterior_total)} /></span>} />
+                sub={<span>{n0(mb.novos)} novos · {n0(mb.rematriculas)} rematrículas{n0(mb.voltaram) > 0 ? ` · ${n0(mb.voltaram)} voltaram` : ''}<br /><span style={{ color: BRAND.faint }}>{n0(mb.dos_leads)} vieram de leads · </span><Delta cur={n0(mb.total)} prev={n0(mb.anterior_total)} /></span>} />
             })()}
             <Kpi label="Leads novos" value={<CountUp value={n0(leads?.total)} />} color="#2DCBA4" icon={Users} to="/reports?tab=leads" delay={60} sub={<Delta cur={n0(leads?.total)} prev={n0(leads?.anterior?.total)} />} />
             <Kpi label="Conversão" value={pct(n0(mat?.total), n0(leads?.total)) != null ? `${pct(n0(mat?.total), n0(leads?.total))}%` : '—'} color="#00695F" icon={TrendingUp} to="/reports?tab=leads" delay={120} sub="matrículas ÷ leads do período" />
