@@ -12,7 +12,11 @@ export const GRADES = [
 export const DEFAULT_SUBJECTS = ['Língua Portuguesa', 'Matemática', 'Ciências', 'História', 'Geografia']
 export const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
-export type Contest = { id: string; institution_id: string; name: string; year: number; status: 'draft' | 'open' | 'closed' | 'published'; exam_date: string | null; grades: string[]; alternatives_count: 4 | 5; versions_count: number; has_essay: boolean }
+export type Contest = { id: string; institution_id: string; name: string; year: number; status: 'draft' | 'open' | 'closed' | 'published'; exam_date: string | null; grades: string[]; alternatives_count: 4 | 5; versions_count: number; has_essay: boolean
+  public_slug: string | null; edital: string | null; location: string | null; registration_deadline: string | null; extra_fields: ExtraField[] }
+export type ExtraField = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }
+export type Candidate = { id: string; contest_id: string; lead_id: string | null; number: number; student_name: string; grade: string; responsible_name: string; phone: string; email: string | null; origin_school: string | null; answers: Record<string, string>; created_at: string }
+export const slugify = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
 export type Subject = { id: string; contest_id: string; name: string; position: number }
 export type Teacher = { id: string; institution_id: string; user_id: string; full_name: string; email: string; phone: string | null; active: boolean }
 export type Quota = { id: string; contest_id: string; teacher_id: string; subject_id: string; grade: string; quantity: number; due_date: string | null }

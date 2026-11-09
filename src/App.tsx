@@ -52,6 +52,7 @@ import CaptacaoInteligente from './pages/gestor/CaptacaoInteligente'
 import Vitrine from './pages/gestor/Vitrine'
 import Concurso from './pages/gestor/Concurso'
 import ProfessorQuestoes from './pages/professor/ProfessorQuestoes'
+import ConcursoPublico from './pages/public/ConcursoPublico'
 import Transmissoes from './pages/gestor/Transmissoes'
 import BaseAlunos from './pages/gestor/BaseAlunos'
 import CampanhaMatriculas from './pages/gestor/CampanhaMatriculas'
@@ -265,6 +266,9 @@ function AppContent() {
   }
   if (pathname.startsWith('/satisfaction/')) {
     return <Routes><Route path="/satisfaction/:token" element={<SatisfactionPage />} /></Routes>
+  }
+  if (pathname.startsWith('/bolsas/')) {
+    return <Routes><Route path="/bolsas/:slug" element={<ConcursoPublico />} /></Routes>
   }
   if (pathname.startsWith('/raio-x')) {
     return <Routes><Route path="/raio-x" element={<RaioXPage />} /></Routes>
