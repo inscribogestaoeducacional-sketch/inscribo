@@ -93,7 +93,8 @@ export default function ConcursoEmails({ contest, cands, onChanged }: { contest:
   }
   const saveTpl = async () => {
     const name = window.prompt('Nome do modelo:', sub); if (!name) return
-    await db.from('contest_email_templates').insert({ institution_id: contest.institution_id, contest_id: contest.id, name, subject: sub, body })
+    const { error } = await db.from('contest_email_templates').insert({ institution_id: contest.institution_id, contest_id: contest.id, name, subject: sub, body })
+    flash(error ? 'Não foi possível salvar o modelo: ' + error.message : 'Modelo salvo.')
     load()
   }
   const delTpl = async (id: string) => { await db.from('contest_email_templates').delete().eq('id', id); load() }
@@ -102,7 +103,7 @@ export default function ConcursoEmails({ contest, cands, onChanged }: { contest:
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {msg && <div role="status" style={{ ...card, background: BRAND.softer, borderColor: BRAND.softLine, fontSize: 14 }}>{msg}</div>}
+      {msg && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 200, maxWidth: 'min(520px, calc(100vw - 24px))', background: BRAND.ink, color: '#fff', borderRadius: 14, padding: '12px 18px', fontSize: 14.5, fontWeight: 700, boxShadow: '0 14px 40px -12px rgba(0,0,0,.5)' }}>{msg}</div>}
 
       <div style={card}>
         <label style={lab}>Receber os e-mails de teste em</label>
@@ -119,8 +120,8 @@ export default function ConcursoEmails({ contest, cands, onChanged }: { contest:
         <div style={{ margin: '12px 0 6px', fontSize: 12.5, fontWeight: 700, color: BRAND.muted }}>Como a família vai ver</div>
         <Preview contest={contest} school={school} subject={cSub} body={cBody} cand={cands[0]} />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-          <button style={btn(true)} disabled={!!busy} onClick={saveConfirmation}>{busy === 'save' && <Loader2 size={15} className="animate-spin" />}Salvar</button>
-          <button style={btn()} disabled={!!busy} onClick={() => sendTest(cSub, cBody)}>Enviar teste para mim</button>
+          <button style={btn(true)} disabled={!!busy} onClick={saveConfirmation}>{busy === 'save' && <Loader2 size={15} className="animate-spin" />}{busy === 'save' ? 'Salvando…' : 'Salvar'}</button>
+          <button style={btn()} disabled={!!busy} onClick={() => sendTest(cSub, cBody)}>{busy === 'test' ? <Loader2 size={15} className="animate-spin" /> : null}{busy === 'test' ? 'Enviando teste…' : 'Enviar teste para mim'}</button>
           <button style={btn()} onClick={() => { setCSub(DEFAULT_CONFIRMATION.subject); setCBody(DEFAULT_CONFIRMATION.body) }}>Voltar ao texto padrão</button>
         </div>
       </div>
@@ -141,7 +142,7 @@ export default function ConcursoEmails({ contest, cands, onChanged }: { contest:
           {!confirmSend
             ? <button style={btn(true)} disabled={!!busy || !sub.trim() || !body.trim() || !withEmail.length} onClick={() => setConfirmSend(true)}>{busy === 'send' && <Loader2 size={15} className="animate-spin" />}Enviar para {withEmail.length}</button>
             : <><b style={{ fontSize: 13.5 }}>Enviar agora para {withEmail.length} {withEmail.length === 1 ? 'pessoa' : 'pessoas'}?</b><button style={btn(true)} onClick={sendAll}>Sim, enviar</button><button style={btn()} onClick={() => setConfirmSend(false)}>Cancelar</button></>}
-          <button style={btn()} disabled={!!busy || !sub.trim() || !body.trim()} onClick={() => sendTest(sub, body)}>Enviar teste para mim</button>
+          <button style={btn()} disabled={!!busy || !sub.trim() || !body.trim()} onClick={() => sendTest(sub, body)}>{busy === 'test' ? 'Enviando teste…' : 'Enviar teste para mim'}</button>
           <button style={btn()} disabled={!sub.trim() || !body.trim()} onClick={saveTpl}>Salvar como modelo</button>
         </div>
         {tpls.length > 0 && <div style={{ marginTop: 12, fontSize: 12.5, color: BRAND.muted }}>Modelos salvos: {tpls.map(t => <span key={t.id} style={{ marginRight: 10 }}>{t.name} <button onClick={() => delTpl(t.id)} style={{ border: 0, background: 'none', color: '#B91C1C', cursor: 'pointer', fontSize: 12 }}>excluir</button></span>)}</div>}

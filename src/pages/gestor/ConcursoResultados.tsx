@@ -67,7 +67,7 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
     const base = { institution_id: contest.institution_id, contest_id: contest.id, candidate_id: candId, decided_at: new Date().toISOString() }
     const row = value.startsWith('p:') ? { ...base, status: 'granted', scholarship_pct: Number(value.slice(2)) } : { ...base, status: value, scholarship_pct: null }
     const { error } = await db.from('contest_decisions').upsert(row, { onConflict: 'contest_id,candidate_id' })
-    if (error) flash('Não foi possível salvar: ' + error.message); else load()
+    if (error) flash('Não foi possível salvar: ' + error.message); else { flash('Decisão salva.'); load() }
   }
   const applyBulk = async () => {
     if (!grade) return flash('Escolha uma série para aplicar as bolsas por posição.')
@@ -108,7 +108,7 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {msg && <div role="status" style={{ ...card, background: BRAND.softer, borderColor: BRAND.softLine, fontSize: 14 }}>{msg}</div>}
+      {msg && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 200, maxWidth: 'min(520px, calc(100vw - 24px))', background: BRAND.ink, color: '#fff', borderRadius: 14, padding: '12px 18px', fontSize: 14.5, fontWeight: 700, boxShadow: '0 14px 40px -12px rgba(0,0,0,.5)' }}>{msg}</div>}
 
       <div style={card}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>

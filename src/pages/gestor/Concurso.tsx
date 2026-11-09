@@ -72,7 +72,7 @@ export default function Concurso() {
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1000, margin: '0 auto' }}>
       <PageHeader icon={Trophy as any} title="Concurso de Bolsas" subtitle="Monte a prova, convide os professores e acompanhe as questões" />
-      {msg && <div style={{ ...card, background: BRAND.softer, borderColor: BRAND.softLine, color: BRAND.ink, fontSize: 14 }}>{msg}</div>}
+      {msg && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 200, maxWidth: 'min(520px, calc(100vw - 24px))', background: BRAND.ink, color: '#fff', borderRadius: 14, padding: '12px 18px', fontSize: 14.5, fontWeight: 700, boxShadow: '0 14px 40px -12px rgba(0,0,0,.5)' }}>{msg}</div>}
 
       {!contest ? (
         <NewContest instId={instId} onCreated={async id => { await loadAll(); setSel(id) }} />
@@ -136,13 +136,15 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
   const [f, setF] = useState(contest)
   const [newSubj, setNewSubj] = useState('')
   useEffect(() => setF(contest), [contest])
+  const [saveMsg, setSaveMsg] = useState('')
   const save = async () => {
     // o tema e as fotos da redação são do professor: aqui só vale ligar/desligar a série; o resto vem do que está salvo agora
     const { data: fresh } = await db.from('contests').select('essay_by_grade').eq('id', contest.id).maybeSingle()
     const merged: Contest['essay_by_grade'] = {}
     for (const [g, v] of Object.entries(f.essay_by_grade ?? {})) merged[g] = { ...(fresh?.essay_by_grade?.[g] ?? {}), enabled: v.enabled, prompt: fresh?.essay_by_grade?.[g]?.prompt ?? v.prompt ?? '' }
     const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: f.public_slug ? slugify(f.public_slug) : null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, print_color: f.print_color || null, essay_by_grade: merged, form_config: f.form_config ?? {}, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
-    if (error) alert(error.message); else onChanged()
+    if (error) { setSaveMsg('Não foi possível salvar: ' + error.message) } else { setSaveMsg('Salvo!'); onChanged() }
+    setTimeout(() => setSaveMsg(''), 5000)
   }
   const lab: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: BRAND.muted, display: 'block', marginBottom: 5 }
   return (
@@ -253,7 +255,7 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
           <button style={btn()} onClick={() => setF({ ...f, extra_fields: [...(f.extra_fields ?? []), { id: 'q' + Date.now().toString(36), label: '', type: 'text', required: false }] })}><Plus size={15} /> Adicionar pergunta</button>
         </div>
       </div>
-      <div><button style={btn(true)} onClick={save}>Salvar</button></div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}><button style={btn(true)} onClick={save}>Salvar</button>{saveMsg && <span role="status" style={{ fontSize: 14, fontWeight: 700, color: saveMsg === 'Salvo!' ? '#047857' : '#B91C1C' }}>{saveMsg}</span>}</div>
     </div>
   )
 }
