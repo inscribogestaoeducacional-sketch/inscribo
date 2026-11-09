@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { LETTERS, type Candidate, type Contest, type Question, type Subject } from '../../lib/concurso'
 import { versionFor, type ExamVersionRow } from '../../lib/concursoProva'
 import { ContestImg } from '../../components/concurso/media'
+import { cardGrid, rowLeft, rowTop } from '../../lib/concursoLayout'
 
 const db: any = supabase
 const MARK: React.CSSProperties = { position: 'absolute', width: '8mm', height: '8mm', background: '#000' }
@@ -185,7 +186,7 @@ export default function ConcursoImprimir() {
 
       {kind === 'cartoes' && cands.map(c => {
         const ver2 = versionFor(c.number, contest.versions_count)
-        const blocks = N > 25 ? 4 : Math.max(1, Math.ceil(N / 25)); const rows = Math.min(30, Math.ceil(N / blocks)); const pitch = Math.min(8, 180 / Math.max(rows, 1))
+        void cardGrid
         return (
           <div key={c.id} className="sheet full">
             <Marks />
@@ -204,8 +205,7 @@ export default function ConcursoImprimir() {
               Preencha todo o círculo com caneta azul ou preta, assim: <span style={{ display: 'inline-block', width: '3.6mm', height: '3.6mm', borderRadius: '50%', background: '#000', verticalAlign: 'middle' }} />. Não rasure. Uma só marca por questão.
             </div>
             {Array.from({ length: N }, (_, i) => {
-              const col = Math.floor(i / rows); const row = i % rows
-              const left = 20 + col * (170 / Math.max(blocks, 1)); const top = 72 + row * pitch
+              const left = rowLeft(N, i); const top = rowTop(N, i)
               return (
                 <div key={i} style={{ position: 'absolute', left: `${left}mm`, top: `${top}mm`, height: '6mm', display: 'flex', alignItems: 'center', gap: '1.6mm' }}>
                   <div style={{ width: '7mm', fontSize: 9.5, fontWeight: 700, textAlign: 'right', marginRight: '1mm' }}>{i + 1}</div>

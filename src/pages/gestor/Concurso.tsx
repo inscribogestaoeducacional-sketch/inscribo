@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
 import ConcursoProva from './ConcursoProva'
+import ConcursoCorrecao from './ConcursoCorrecao'
 import { ContestImg } from '../../components/concurso/media'
 import {
   db, DEFAULT_SUBJECTS, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
@@ -18,7 +19,7 @@ const btn = (primary = false): React.CSSProperties => ({
   display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center', padding: '9px 14px', borderRadius: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5,
   border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink,
 })
-const TABS = [['config', 'Concurso'], ['insc', 'Inscritos'], ['prova', 'Prova'], ['prof', 'Professores e cotas'], ['quest', 'Questões']] as const
+const TABS = [['config', 'Concurso'], ['insc', 'Inscritos'], ['prova', 'Prova'], ['corr', 'Correção'], ['prof', 'Professores e cotas'], ['quest', 'Questões']] as const
 type Tab = typeof TABS[number][0]
 
 export default function Concurso() {
@@ -88,6 +89,7 @@ export default function Concurso() {
           {tab === 'config' && <Config contest={contest} subjects={subjects} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'insc' && <Candidates contest={contest} cands={cands} />}
           {tab === 'prova' && <ConcursoProva contest={contest} subjects={subjects} quotas={quotas} questions={questions} cands={cands} onChanged={loadContest} />}
+          {tab === 'corr' && <ConcursoCorrecao contest={contest} subjects={subjects} questions={questions} cands={cands} />}
           {tab === 'prof' && <Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'quest' && <Review contest={contest} subjects={subjects} teachers={teachers} questions={questions} onChanged={loadContest} />}
           <div><NewContestButton instId={instId} onCreated={async id => { await loadAll(); setSel(id) }} /></div>
