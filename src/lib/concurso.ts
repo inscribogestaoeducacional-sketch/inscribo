@@ -13,9 +13,9 @@ export const DEFAULT_SUBJECTS = ['Língua Portuguesa', 'Matemática', 'Ciências
 export const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
 export type Contest = { id: string; institution_id: string; name: string; year: number; status: 'draft' | 'open' | 'closed' | 'published'; exam_date: string | null; grades: string[]; alternatives_count: 4 | 5; versions_count: number; has_essay: boolean
-  public_slug: string | null; edital: string | null; location: string | null; registration_deadline: string | null; extra_fields: ExtraField[] }
+  public_slug: string | null; edital: string | null; location: string | null; registration_deadline: string | null; extra_fields: ExtraField[]; essay_prompt: string | null; exam_duration: string | null }
 export type ExtraField = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }
-export type Candidate = { id: string; contest_id: string; lead_id: string | null; number: number; student_name: string; grade: string; responsible_name: string; phone: string; email: string | null; origin_school: string | null; answers: Record<string, string>; created_at: string }
+export type Candidate = { id: string; contest_id: string; lead_id: string | null; number: number; student_name: string; grade: string; responsible_name: string; phone: string; email: string | null; origin_school: string | null; answers: Record<string, string>; created_at: string; version: string | null; birth_date: string | null; student_cpf: string | null }
 export const slugify = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
 export type Subject = { id: string; contest_id: string; name: string; position: number }
 export type Teacher = { id: string; institution_id: string; user_id: string; full_name: string; email: string; phone: string | null; active: boolean }
@@ -26,6 +26,7 @@ export type Question = {
   statement: string; statement_images: string[]; alternatives: Alt[]; correct_index: number | null
   difficulty: 'facil' | 'media' | 'dificil' | null; comment: string | null; no_shuffle: boolean
   status: 'draft' | 'sent' | 'returned' | 'approved'; review_note: string | null; updated_at: string
+  position: number; in_exam: boolean
 }
 
 export const CONTEST_STATUS: Record<string, string> = { draft: 'Em preparação', open: 'Inscrições abertas', closed: 'Encerrado', published: 'Resultado divulgado' }

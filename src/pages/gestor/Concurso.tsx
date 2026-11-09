@@ -5,6 +5,7 @@ import PageHeader from '../../components/ui/PageHeader'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
+import ConcursoProva from './ConcursoProva'
 import { ContestImg } from '../../components/concurso/media'
 import {
   db, DEFAULT_SUBJECTS, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
@@ -17,7 +18,7 @@ const btn = (primary = false): React.CSSProperties => ({
   display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center', padding: '9px 14px', borderRadius: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5,
   border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink,
 })
-const TABS = [['config', 'Concurso'], ['insc', 'Inscritos'], ['prof', 'Professores e cotas'], ['quest', 'Questões']] as const
+const TABS = [['config', 'Concurso'], ['insc', 'Inscritos'], ['prova', 'Prova'], ['prof', 'Professores e cotas'], ['quest', 'Questões']] as const
 type Tab = typeof TABS[number][0]
 
 export default function Concurso() {
@@ -86,6 +87,7 @@ export default function Concurso() {
           </div>
           {tab === 'config' && <Config contest={contest} subjects={subjects} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'insc' && <Candidates contest={contest} cands={cands} />}
+          {tab === 'prova' && <ConcursoProva contest={contest} subjects={subjects} quotas={quotas} questions={questions} cands={cands} onChanged={loadContest} />}
           {tab === 'prof' && <Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'quest' && <Review contest={contest} subjects={subjects} teachers={teachers} questions={questions} onChanged={loadContest} />}
           <div><NewContestButton instId={instId} onCreated={async id => { await loadAll(); setSel(id) }} /></div>
@@ -126,7 +128,7 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
   const [newSubj, setNewSubj] = useState('')
   useEffect(() => setF(contest), [contest])
   const save = async () => {
-    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: f.public_slug ? slugify(f.public_slug) : null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
+    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: f.public_slug ? slugify(f.public_slug) : null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
     if (error) alert(error.message); else onChanged()
   }
   const lab: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: BRAND.muted, display: 'block', marginBottom: 5 }
@@ -179,6 +181,11 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
             <button style={{ ...btn(), padding: '4px 10px', fontSize: 12.5 }} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/bolsas/${contest.public_slug}`)}>Copiar</button>
             <div style={{ marginTop: 4 }}>Para aparecer na Vitrine, adicione um botão de matrícula (modo link) com este endereço.</div></div>
         )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
+          <div><label style={lab}>Duração da prova (impressa no caderno)</label><input style={input} placeholder="Ex.: 3 horas" value={f.exam_duration ?? ''} onChange={e => setF({ ...f, exam_duration: e.target.value })} /></div>
+        </div>
+        <div><label style={lab}>Proposta de redação (impressa no caderno)</label>
+          <textarea rows={4} style={{ ...input, resize: 'vertical' }} placeholder="Tema e instruções da redação" value={f.essay_prompt ?? ''} onChange={e => setF({ ...f, essay_prompt: e.target.value })} /></div>
         <div><label style={lab}>Edital</label>
           <textarea rows={8} style={{ ...input, resize: 'vertical' }} placeholder="Regras, conteúdo da prova, critérios, bolsas, prazos…" value={f.edital ?? ''} onChange={e => setF({ ...f, edital: e.target.value })} /></div>
         <div>

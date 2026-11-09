@@ -53,6 +53,7 @@ import Vitrine from './pages/gestor/Vitrine'
 import Concurso from './pages/gestor/Concurso'
 import ProfessorQuestoes from './pages/professor/ProfessorQuestoes'
 import ConcursoPublico from './pages/public/ConcursoPublico'
+import ConcursoImprimir from './pages/gestor/ConcursoImprimir'
 import Transmissoes from './pages/gestor/Transmissoes'
 import BaseAlunos from './pages/gestor/BaseAlunos'
 import CampanhaMatriculas from './pages/gestor/CampanhaMatriculas'
@@ -266,6 +267,9 @@ function AppContent() {
   }
   if (pathname.startsWith('/satisfaction/')) {
     return <Routes><Route path="/satisfaction/:token" element={<SatisfactionPage />} /></Routes>
+  }
+  if (pathname === '/concurso/imprimir') {
+    return <Routes><Route path="/concurso/imprimir" element={<ConcursoImprimir />} /></Routes>
   }
   if (pathname.startsWith('/bolsas/')) {
     return <Routes><Route path="/bolsas/:slug" element={<ConcursoPublico />} /></Routes>
