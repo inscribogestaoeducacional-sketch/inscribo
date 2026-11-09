@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { BRAND } from '../../lib/brand'
 import { db, fmtDate, Q_STATUS, type Contest, type Question, type Quota, type Subject } from '../../lib/concurso'
 import QuestionEditor from '../../components/concurso/QuestionEditor'
+import EssayTeacher from '../../components/concurso/EssayTeacher'
 
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 16 }
 
@@ -16,6 +17,7 @@ export default function ProfessorQuestoes() {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [quotas, setQuotas] = useState<Quota[]>([])
   const [questions, setQuestions] = useState<Question[]>([])
+  const [essayContests, setEssayContests] = useState<string[]>([])
   const [editor, setEditor] = useState<{ quota: Quota; question: Question | null } | null>(null)
 
   const load = useCallback(async () => {
@@ -28,6 +30,8 @@ export default function ProfessorQuestoes() {
         db.from('contest_quotas').select('*').eq('teacher_id', t.id),
         db.from('contest_questions').select('*').eq('author_teacher_id', t.id).order('updated_at', { ascending: false }),
       ])
+      const et = await db.from('contest_essay_teachers').select('contest_id').eq('teacher_id', t.id)
+      setEssayContests((et.data ?? []).map((x: any) => x.contest_id))
       setContests(c.data ?? []); setSubjects(s.data ?? []); setQuotas(q.data ?? []); setQuestions(qs.data ?? [])
     }
     setLoading(false)
@@ -58,7 +62,9 @@ export default function ProfessorQuestoes() {
 
       <main style={{ maxWidth: 820, margin: '0 auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {!teacher && <div style={card}>Seu acesso ainda não está ativo. Fale com a coordenação da escola.</div>}
-        {teacher && quotas.length === 0 && <div style={card}>Você ainda não recebeu nenhuma tarefa. Quando a coordenação definir quantas questões você deve escrever, elas aparecem aqui.</div>}
+        {teacher && quotas.length === 0 && essayContests.length === 0 && <div style={card}>Você ainda não recebeu nenhuma tarefa. Quando a coordenação definir quantas questões você deve escrever, elas aparecem aqui.</div>}
+
+        {contests.filter(ct => essayContests.includes(ct.id)).map(ct => <EssayTeacher key={'e' + ct.id} contest={ct} onChanged={load} />)}
 
         {contests.map(ct => {
           const mine = quotas.filter(q => q.contest_id === ct.id)

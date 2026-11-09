@@ -14,7 +14,7 @@ export const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
 export type Contest = { id: string; institution_id: string; name: string; year: number; status: 'draft' | 'open' | 'closed' | 'published'; exam_date: string | null; grades: string[]; alternatives_count: 4 | 5; versions_count: number; has_essay: boolean
   public_slug: string | null; edital: string | null; location: string | null; registration_deadline: string | null; extra_fields: ExtraField[]; essay_prompt: string | null; exam_duration: string | null; print_color: string | null
-  essay_by_grade: Record<string, { enabled: boolean; prompt: string }>; form_config: { fields?: Record<string, { label?: string; required?: boolean; enabled?: boolean }> }
+  essay_by_grade: Record<string, { enabled: boolean; prompt: string; images?: string[] }>; form_config: { fields?: Record<string, { label?: string; required?: boolean; enabled?: boolean }> }
   email_auto_confirm: boolean; email_confirmation: { subject?: string; body?: string }
   essay_rubric: { id: string; name: string; max: number }[]; essay_weight: number; scholarship_tiers: { label: string; percent: number }[] }
 export type Essay = { id: string; candidate_id: string; scan_path: string | null; scores: Record<string, number>; total: number | null; max_total: number | null; annulled: boolean; note: string | null }
@@ -58,10 +58,10 @@ export function useConcursoModuleEnabled(institutionId: string | null | undefine
 export const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—')
 
 // Redação por série: se a série não tem configuração própria, vale o padrão do concurso.
-export function essayFor(c: Contest, grade: string): { enabled: boolean; prompt: string } {
+export function essayFor(c: Contest, grade: string): { enabled: boolean; prompt: string; images: string[] } {
   const g = c.essay_by_grade?.[grade]
-  if (g) return { enabled: !!g.enabled, prompt: g.prompt || '' }
-  return { enabled: c.has_essay, prompt: c.essay_prompt || '' }
+  if (g) return { enabled: !!g.enabled, prompt: g.prompt || '', images: g.images ?? [] }
+  return { enabled: c.has_essay, prompt: c.essay_prompt || '', images: [] }
 }
 
 // Perguntas fixas da inscrição. "locked": a coordenação edita o texto, mas não pode desligar nem tornar opcional.

@@ -9,7 +9,7 @@ import ConcursoProva from './ConcursoProva'
 import ConcursoCorrecao from './ConcursoCorrecao'
 import { EditInscricao, Painel } from './ConcursoInscritos'
 import ConcursoEmails from './ConcursoEmails'
-import ConcursoRedacao from './ConcursoRedacao'
+import EssayRubric from '../../components/concurso/EssayRubric'
 import ConcursoResultados from './ConcursoResultados'
 import { ContestImg } from '../../components/concurso/media'
 import {
@@ -23,7 +23,7 @@ const btn = (primary = false): React.CSSProperties => ({
   display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center', padding: '9px 14px', borderRadius: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5,
   border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink,
 })
-const TABS = [['config', 'Concurso'], ['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails'], ['prova', 'Prova'], ['corr', 'Correção'], ['red', 'Redações'], ['res', 'Resultados'], ['prof', 'Professores e cotas'], ['quest', 'Questões']] as const
+const TABS = [['config', 'Concurso'], ['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails'], ['prova', 'Prova'], ['corr', 'Correção'], ['res', 'Resultados'], ['prof', 'Professores e cotas'], ['quest', 'Questões']] as const
 type Tab = typeof TABS[number][0]
 
 export default function Concurso() {
@@ -96,7 +96,6 @@ export default function Concurso() {
           {tab === 'mail' && <ConcursoEmails key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prova' && <ConcursoProva contest={contest} subjects={subjects} quotas={quotas} questions={questions} cands={cands} onChanged={loadContest} />}
           {tab === 'corr' && <ConcursoCorrecao contest={contest} subjects={subjects} questions={questions} cands={cands} />}
-          {tab === 'red' && <ConcursoRedacao key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'res' && <ConcursoResultados key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prof' && <Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'quest' && <Review contest={contest} subjects={subjects} teachers={teachers} questions={questions} onChanged={loadContest} />}
@@ -138,7 +137,11 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
   const [newSubj, setNewSubj] = useState('')
   useEffect(() => setF(contest), [contest])
   const save = async () => {
-    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: f.public_slug ? slugify(f.public_slug) : null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, print_color: f.print_color || null, essay_by_grade: f.essay_by_grade ?? {}, form_config: f.form_config ?? {}, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
+    // o tema e as fotos da redação são do professor: aqui só vale ligar/desligar a série; o resto vem do que está salvo agora
+    const { data: fresh } = await db.from('contests').select('essay_by_grade').eq('id', contest.id).maybeSingle()
+    const merged: Contest['essay_by_grade'] = {}
+    for (const [g, v] of Object.entries(f.essay_by_grade ?? {})) merged[g] = { ...(fresh?.essay_by_grade?.[g] ?? {}), enabled: v.enabled, prompt: fresh?.essay_by_grade?.[g]?.prompt ?? v.prompt ?? '' }
+    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: f.public_slug ? slugify(f.public_slug) : null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, print_color: f.print_color || null, essay_by_grade: merged, form_config: f.form_config ?? {}, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
     if (error) alert(error.message); else onChanged()
   }
   const lab: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: BRAND.muted, display: 'block', marginBottom: 5 }
@@ -209,15 +212,16 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
           {f.grades.length === 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Escolha as séries do concurso acima para configurar a redação de cada uma.</div>}
           {GRADES.filter(g => f.grades.includes(g)).map(g => {
             const e = essayFor(f, g)
-            const set = (patch: Partial<{ enabled: boolean; prompt: string }>) => setF({ ...f, essay_by_grade: { ...(f.essay_by_grade ?? {}), [g]: { enabled: e.enabled, prompt: e.prompt, ...patch } } })
+            const set = (patch: Partial<{ enabled: boolean; prompt: string }>) => setF({ ...f, essay_by_grade: { ...(f.essay_by_grade ?? {}), [g]: { ...(f.essay_by_grade?.[g] ?? {}), enabled: e.enabled, prompt: e.prompt, ...patch } } })
             return (
               <div key={g} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 10, marginBottom: 8 }}>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, fontWeight: 700, color: BRAND.ink }}><input type="checkbox" checked={e.enabled} onChange={ev => set({ enabled: ev.target.checked })} /> {g}: tem redação</label>
-                {e.enabled && <textarea rows={3} style={{ ...input, resize: 'vertical', marginTop: 8 }} placeholder="Tema e instruções da redação desta série (impressas no caderno)" value={e.prompt} onChange={ev => set({ prompt: ev.target.value })} />}
+                {e.enabled && <div style={{ fontSize: 12.5, marginTop: 6, color: e.prompt ? '#047857' : '#B45309' }}>{e.prompt ? 'Tema cadastrado pelo professor de redação.' : 'Tema ainda não cadastrado: o professor de redação escreve na área dele.'}</div>}
               </div>
             )
           })}
         </div>
+        <EssayRubric contest={contest} onChanged={onChanged} />
         <div>
           <label style={lab}>Perguntas da inscrição (texto e se é obrigatória)</label>
           {FORM_FIELDS.map(d => {
@@ -260,6 +264,15 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
   const [form, setForm] = useState({ full_name: '', email: '', phone: '' })
   const [busy, setBusy] = useState(false)
   const [q, setQ] = useState({ teacher_id: '', subject_id: '', grade: '', quantity: 10, due_date: '' })
+  const [essayT, setEssayT] = useState<string[]>([])
+  useEffect(() => { db.from('contest_essay_teachers').select('teacher_id').eq('contest_id', contest.id).then(({ data }: any) => setEssayT((data ?? []).map((x: any) => x.teacher_id))) }, [contest.id])
+  const toggleEssay = async (t: Teacher, on: boolean) => {
+    const { error } = on
+      ? await db.from('contest_essay_teachers').insert({ institution_id: instId, contest_id: contest.id, teacher_id: t.id })
+      : await db.from('contest_essay_teachers').delete().eq('contest_id', contest.id).eq('teacher_id', t.id)
+    if (error) return flash('Não foi possível salvar: ' + error.message)
+    setEssayT(on ? [...essayT, t.id] : essayT.filter(x => x !== t.id))
+  }
 
   const invite = async () => {
     if (!form.full_name.trim() || !form.email.trim()) return flash('Informe nome e e-mail do professor.')
@@ -312,6 +325,7 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
               <div key={t.id} style={{ padding: '10px 0', borderTop: `1px solid ${BRAND.line}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div><b style={{ color: BRAND.ink }}>{t.full_name}</b> <span style={{ color: BRAND.muted, fontSize: 12.5 }}>{t.email}</span></div>
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, fontWeight: 700, color: BRAND.ink }}><input type="checkbox" checked={essayT.includes(t.id)} onChange={e => toggleEssay(t, e.target.checked)} /> Professor de redação</label>
                   <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={() => resend(t)}><Mail size={14} /> Reenviar convite</button>
                 </div>
                 {mine.length === 0 && <div style={{ fontSize: 12.5, color: BRAND.faint }}>Sem cotas neste concurso.</div>}

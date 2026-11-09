@@ -210,6 +210,7 @@ export default function ConcursoImprimir() {
                 <div className="sheet flow" style={{ breakBefore: 'page', breakAfter: 'page' }}>
                   <div style={{ background: accent, color: '#fff', padding: '3mm 5mm', fontWeight: 800, fontSize: 14, borderRadius: 3, display: 'flex', justifyContent: 'space-between' }}><span>REDAÇÃO</span><span style={{ fontWeight: 600, opacity: .9, fontSize: 11 }}>{grade}</span></div>
                   <div style={{ whiteSpace: 'pre-wrap', fontSize: '11.5pt', lineHeight: 1.6, marginTop: '6mm', textAlign: 'justify' }}>{essay.prompt || 'Proposta de redação não cadastrada.'}</div>
+                  {essay.images.map(pth => <div key={pth} className="figure" style={{ marginTop: '4mm' }}><ContestImg path={pth} style={{ border: 0, borderRadius: 0, maxWidth: '100%', maxHeight: '95mm', width: 'auto', height: 'auto', objectFit: 'contain' }} /></div>)}
                   <div style={{ fontSize: '10pt', marginTop: '8mm', borderLeft: `3px solid ${accent}`, paddingLeft: 10, color: '#333', lineHeight: 1.5 }}>
                     Escreva o texto definitivo na <b>folha de redação</b>, sem se identificar: não escreva seu nome, não assine e não faça marcas.<br />
                     O texto escrito na folha de rascunho (próxima página) <b>não será considerado</b> na correção.

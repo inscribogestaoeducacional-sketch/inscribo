@@ -76,7 +76,7 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
               if (blob) { path = `${contest.institution_id}/${contest.id}/redacao-${c.number}.jpg`; const up = await db.storage.from('contest-scans').upload(path, blob, { upsert: true, contentType: 'image/jpeg' }); if (up.error) path = null }
             }
             if (!path) { failN++; lines.push(`${file.name} p.${page}: não consegui guardar a redação de ${c.student_name}`); continue }
-            const { error: ee } = await db.from('contest_essays').upsert({ institution_id: contest.institution_id, contest_id: contest.id, candidate_id: c.id, scan_path: path }, { onConflict: 'contest_id,candidate_id' })
+            const { error: ee } = await db.from('contest_essays').upsert({ institution_id: contest.institution_id, contest_id: contest.id, candidate_id: c.id, grade: c.grade, scan_path: path }, { onConflict: 'contest_id,candidate_id' })
             if (ee) { failN++; lines.push(`${file.name} p.${page}: erro ao salvar a redação`); continue }
             essayN++; continue
           }
