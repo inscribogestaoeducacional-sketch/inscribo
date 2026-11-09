@@ -11,12 +11,13 @@ type Info = {
 }
 
 const fmt = (s: string | null, time = false) => s ? new Date(s).toLocaleString('pt-BR', time ? { dateStyle: 'long', timeStyle: 'short' } : { dateStyle: 'long' }) : ''
+const maskCpf = (v: string) => { const d = v.replace(/\D/g, '').slice(0, 11); return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2') }
 const maskPhone = (v: string) => { const d = v.replace(/\D/g, '').slice(0, 11); return d.length <= 2 ? d : d.length <= 7 ? `(${d.slice(0, 2)}) ${d.slice(2)}` : `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` }
 
 export default function ConcursoPublico() {
   const slug = window.location.pathname.split('/').filter(Boolean)[1] || ''
   const [info, setInfo] = useState<Info | null | undefined>(undefined)
-  const [f, setF] = useState({ student_name: '', grade: '', birth_date: '', responsible_name: '', phone: '', email: '', origin_school: '' })
+  const [f, setF] = useState({ student_name: '', grade: '', birth_date: '', student_cpf: '', responsible_name: '', phone: '', email: '', origin_school: '' })
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [lgpd, setLgpd] = useState(false)
   const [publish, setPublish] = useState(false)
@@ -84,7 +85,7 @@ export default function ConcursoPublico() {
             <h2 style={{ margin: '10px 0 4px', fontSize: 22, fontWeight: 800, color: '#1A2B4A' }}>Inscrição feita!</h2>
             <div style={{ color: '#475569', fontSize: 15 }}>Número de inscrição</div>
             <div style={{ fontSize: 40, fontWeight: 800, color, letterSpacing: 1 }}>{done.number}</div>
-            <p style={{ color: '#475569', fontSize: 14.5, lineHeight: 1.55, margin: '10px 0 0' }}>Guarde este número. A escola entra em contato pelo WhatsApp informado com as orientações da prova.</p>
+            <p style={{ color: '#475569', fontSize: 14.5, lineHeight: 1.55, margin: '10px 0 0' }}>Guarde este número. A escola envia as orientações da prova para o contato informado.</p>
           </section>
         ) : !info.open ? (
           <section style={{ background: '#fff', borderRadius: 18, padding: 22, marginTop: 16, textAlign: 'center', color: '#475569' }}>
@@ -100,15 +101,17 @@ export default function ConcursoPublico() {
               <option value="">Escolha</option>{info.grades.map(g => <option key={g}>{g}</option>)}
             </select>
             <label style={lab}>Data de nascimento do aluno</label>
-            <input style={input} type="date" value={f.birth_date} onChange={set('birth_date')} />
+            <input style={input} type="date" required value={f.birth_date} onChange={set('birth_date')} />
+            <label style={lab}>CPF do aluno</label>
+            <input style={input} required inputMode="numeric" placeholder="000.000.000-00" value={f.student_cpf} onChange={e => setF({ ...f, student_cpf: maskCpf(e.target.value) })} />
             <label style={lab}>Nome do responsável</label>
             <input style={input} required value={f.responsible_name} onChange={set('responsible_name')} autoComplete="name" />
             <label style={lab}>WhatsApp do responsável</label>
             <input style={input} required inputMode="tel" placeholder="(83) 90000-0000" value={f.phone} onChange={e => setF({ ...f, phone: maskPhone(e.target.value) })} autoComplete="tel" />
-            <label style={lab}>E-mail <span style={{ fontWeight: 500 }}>(opcional)</span></label>
-            <input style={input} type="email" value={f.email} onChange={set('email')} autoComplete="email" />
-            <label style={lab}>Escola onde estuda hoje <span style={{ fontWeight: 500 }}>(opcional)</span></label>
-            <input style={input} value={f.origin_school} onChange={set('origin_school')} />
+            <label style={lab}>E-mail do responsável</label>
+            <input style={input} type="email" required value={f.email} onChange={set('email')} autoComplete="email" />
+            <label style={lab}>Escola onde estuda hoje</label>
+            <input style={input} required value={f.origin_school} onChange={set('origin_school')} />
             {info.extra_fields.map(x => (
               <div key={x.id}>
                 <label style={lab}>{x.label}{!x.required && <span style={{ fontWeight: 500 }}> (opcional)</span>}</label>
