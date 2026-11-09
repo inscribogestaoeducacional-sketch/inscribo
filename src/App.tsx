@@ -50,6 +50,8 @@ import GestorSurveys     from './pages/gestor/GestorSurveys'
 import GestorEmbed       from './pages/gestor/GestorEmbed'
 import CaptacaoInteligente from './pages/gestor/CaptacaoInteligente'
 import Vitrine from './pages/gestor/Vitrine'
+import Concurso from './pages/gestor/Concurso'
+import ProfessorQuestoes from './pages/professor/ProfessorQuestoes'
 import Transmissoes from './pages/gestor/Transmissoes'
 import BaseAlunos from './pages/gestor/BaseAlunos'
 import CampanhaMatriculas from './pages/gestor/CampanhaMatriculas'
@@ -385,6 +387,15 @@ function AppContent() {
       </>
     )
   }
+  // ── PORTAL DO PROFESSOR (Concurso de Bolsas): só a tela de questões, sem menu da escola ──
+  if (user.user_type === 'professor') {
+    return (
+      <Routes>
+        <Route path="/professor" element={<ProfessorQuestoes />} />
+        <Route path="*" element={<Navigate to="/professor" replace />} />
+      </Routes>
+    )
+  }
   // ── BLOQUEIO POR STATUS ───────────────────────────────────────────────────
   if (user.user_type === 'school_user') {
     if (checkingStatus) return <BrandLoader fullscreen label="Verificando acesso" />
@@ -427,6 +438,7 @@ function AppContent() {
             <Route path="/whatsapp"       element={<PermissionRoute module="whatsapp"><HubErrorBoundary><WhatsAppHub /></HubErrorBoundary></PermissionRoute>} />
             <Route path="/captacao"       element={<PermissionRoute module="captacao"><CaptacaoInteligente /></PermissionRoute>} />
             <Route path="/vitrine"        element={<PermissionRoute module="vitrine"><Vitrine /></PermissionRoute>} />
+            <Route path="/concurso"       element={<RequireRole roles={['admin','manager']}><Concurso /></RequireRole>} />
             <Route path="/transmissoes"   element={<PermissionRoute module="transmissoes"><Transmissoes /></PermissionRoute>} />
             {/* Etapa B passo 4: atendente só com a permissão base_alunos (o banco confere de novo) */}
             <Route path="/campanha"       element={<ProtectedRoute allowedRoles={['admin','manager']}><CampanhaMatriculas /></ProtectedRoute>} />

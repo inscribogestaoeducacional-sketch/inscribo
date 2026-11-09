@@ -7,11 +7,12 @@ import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { useBaseModuleEnabled } from '../../lib/baseModule'
+import { useConcursoModuleEnabled } from '../../lib/concurso'
 import { useRoadmap } from '../../lib/roadmap'
 import { X, SlidersHorizontal, LayoutGrid, MessageSquare } from 'lucide-react'
 import {
   House, Funnel, AddressBook, WhatsappLogo, CalendarCheck, Megaphone, Storefront, PaperPlaneTilt, Flag,
-  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle, BookOpenText, ListChecks, Gift,
+  GraduationCap, ArrowsLeftRight, ChartLineUp, ClipboardText, UsersThree, GearSix, List, UserCircle, BookOpenText, ListChecks, Gift, Trophy,
 } from '@phosphor-icons/react'
 import type { Icon as PhIcon } from '@phosphor-icons/react'
 
@@ -35,6 +36,7 @@ const NAV_CFG: NavItem[] = [
   { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#16A34A', Icon: WhatsappLogo, roles: ['admin','manager','user'], module: 'whatsapp', group: 'Comercial' },
   { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager','user'], module: 'captacao',     group: 'Comercial' },
   { path: '/vitrine',         label: 'Vitrine',         iconBg: '#CCFBF1', iconColor: '#0D9488', Icon: Storefront,           roles: ['admin','manager','user'], module: 'vitrine',      group: 'Comercial' },
+  { path: '/concurso',        label: 'Concurso de Bolsas', iconBg: '#FEF3C7', iconColor: '#D97706', Icon: Trophy,        roles: ['admin','manager'],        module: 'concurso',     group: 'Matrículas' },
   { path: '/transmissoes',    label: 'Transmissões',    iconBg: '#E0F2FE', iconColor: '#0284C7', Icon: PaperPlaneTilt,            roles: ['admin','manager','user'], module: 'transmissoes', group: 'Comercial' },
   // Matrículas
   { path: '/campanha',       label: 'Campanha de Matrículas', iconBg: '#FFEDD5', iconColor: '#EA580C', Icon: Flag,       roles: ['admin','manager'],        module: 'campanha',     group: 'Matrículas' },
@@ -131,11 +133,13 @@ export default function Sidebar() {
   const broadcastEnabled = useBroadcastEnabled(user?.institution_id)
   // Base de alunos só com o módulo liberado pela Áion pra escola.
   const baseEnabled = useBaseModuleEnabled(user?.institution_id)
+  const concursoEnabled = useConcursoModuleEnabled(user?.institution_id)
   const { state: roadmap } = useRoadmap(user?.institution_id)
   const navItems = NAV_CFG.filter(item =>
     item.roles.includes(user?.role || 'user') && isModuleEnabled(item.module)
     && (item.module !== 'transmissoes' || broadcastEnabled === true)
     && (item.module !== 'base_alunos' || baseEnabled === true)
+    && (item.module !== 'concurso' || concursoEnabled === true)
     && (item.module !== 'roteiro' || roadmap?.released === true)
   )
   // Título do grupo antes do primeiro sub-item visível (sem sub-item visível, sem título)

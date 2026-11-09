@@ -19,7 +19,7 @@ interface AppUser {
   // distribuição round-robin de grupo no WhatsApp (timeout_group_id).
   is_available?: boolean
   institution_name?: string
-  user_type?: 'school_user' | 'consultant' | 'admin_geral' | 'gestor_rede'
+  user_type?: 'school_user' | 'consultant' | 'admin_geral' | 'gestor_rede' | 'professor'
   // mantido por compatibilidade com código legado
   is_super_admin?: boolean
   // Só preenchido pra gestor_rede sem vínculo em user_institutions (grupo
@@ -130,6 +130,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let groupInstitutions: { id: string; name: string }[] | undefined
         let availableInstitutions: { id: string; name: string; logo_url?: string }[] | undefined
         let needsInstitutionSelection = false
+
+        // Professor do Concurso de Bolsas: não tem vínculo comum com a escola (users.institution_id fica vazio
+        // de propósito, pra nenhuma regra de leads/conversas liberar acesso). A escola dele vem de contest_teachers.
+        if (data.user_type === 'professor') {
+          const { data: tRow } = await supabase
+            .from('contest_teachers')
+            .select('institution_id, institutions(name)')
+            .eq('user_id', data.id)
+            .eq('active', true)
+            .limit(1)
+            .maybeSingle()
+          if (tRow) {
+            effectiveInstitutionId = (tRow as any).institution_id || ''
+            institutionName = (tRow as any).institutions?.name
+          }
+        }
 
         // Fase 2 de "usuário em múltiplas instituições": fonte da verdade de
         // quais instituições o usuário pode acessar. Só consultado pra quem
