@@ -1,5 +1,5 @@
 // Impressões do Concurso (abre em outra aba): caderno, cartão-resposta, folha de redação e gabarito. Modelo ENEM.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase'
 import { essayFor, LETTERS, type Candidate, type Contest, type Question, type Subject } from '../../lib/concurso'
@@ -30,6 +30,25 @@ export default function ConcursoImprimir() {
   const [cands, setCands] = useState<Candidate[]>([])
   const [qrs, setQrs] = useState<Record<string, string>>({})
   const [printing, setPrinting] = useState(false)
+  const [qpages, setQpages] = useState(0) // páginas ocupadas pelas questões (medido), para fechar frente e verso
+  const measureRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (state !== 'ok' || kind !== 'caderno') return
+    let alive = true
+    const measure = () => {
+      const box = measureRef.current?.querySelector('.cols') as HTMLElement | null
+      if (!box || !alive) return
+      const mm = 96 / 25.4
+      box.style.height = `${269 * mm}px`; box.style.columnFill = 'auto'
+      const colW = (186 - 9) / 2 * mm, gap = 9 * mm
+      const cols = Math.max(1, Math.round((box.scrollWidth + gap) / (colW + gap)))
+      setQpages(Math.ceil(cols / 2))
+    }
+    measure()
+    const t = setInterval(measure, 700)
+    const stop = setTimeout(() => clearInterval(t), 8000)
+    return () => { alive = false; clearInterval(t); clearTimeout(stop) }
+  }, [state, kind, versions, version])
 
   useEffect(() => { (async () => {
     const { data: c } = await db.from('contests').select('*').eq('id', contestId).maybeSingle()
@@ -97,7 +116,7 @@ export default function ConcursoImprimir() {
         @media print { body, .root { background: #fff !important; min-height: 0 !important } body { background: #fff } .bar { display: none } .sheet { margin: 0; width: auto; box-shadow: none } .full { width: 210mm } .flow { padding: 0; min-height: 0 } .cover { width: auto } }
       `}</style>
       <div className="bar"><b>{kind === 'caderno' ? `Caderno · versão ${ver.version}` : kind === 'cartoes' ? 'Cartões-resposta' : kind === 'redacao' ? 'Folhas de redação' : 'Gabarito'} · {grade}</b>
-        <button onClick={doPrint} disabled={printing}>{printing ? 'Carregando imagens…' : 'Imprimir / Salvar PDF'}</button><span style={{ opacity: .8 }}>Em "Mais configurações", desligue "Cabeçalhos e rodapés".</span></div>
+        <button onClick={doPrint} disabled={printing}>{printing ? 'Carregando imagens…' : 'Imprimir / Salvar PDF'}</button><span style={{ opacity: .8 }}>Em "Mais configurações", desligue "Cabeçalhos e rodapés". {kind === 'caderno' ? 'Imprima em frente e verso (virar pela borda longa).' : kind === 'cartoes' || kind === 'redacao' ? 'Imprima só na frente (a leitura é de um lado só).' : ''}</span></div>
 
       {kind === 'caderno' && (() => {
         const accent = contest.print_color || school?.primary_color || '#1A2B4A'
@@ -108,7 +127,40 @@ export default function ConcursoImprimir() {
           if (last && last.id === sid) last.to = i + 1; else ranges.push({ id: sid, name: subjName(sid), from: i + 1, to: i + 1 })
         })
         const Logo = ({ h }: { h: number }) => school?.logo_url ? <img src={school.logo_url} alt="" style={{ height: h, maxWidth: h * 3, objectFit: 'contain' }} /> : null
+        const renderCols = () => {
         let n = 0; let lastSubject = ''
+        return (
+              <div className="cols">
+                {ver.items.map(it => {
+                  const qu = questions[it.question_id]; if (!qu) return null
+                  n++
+                  const r = ranges.find(x => x.id === qu.subject_id && n >= x.from && n <= x.to)
+                  const heading = qu.subject_id !== lastSubject ? (
+                    <div style={{ background: accent, color: '#fff', padding: '2mm 3mm', margin: '1mm 0 3.5mm', breakAfter: 'avoid', display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '10pt', borderRadius: 3 }}>
+                      <span>{subjName(qu.subject_id).toUpperCase()}</span><span style={{ fontWeight: 600, opacity: .9 }}>{r ? `questões ${r.from} a ${r.to}` : ''}</span>
+                    </div>) : null
+                  lastSubject = qu.subject_id
+                  return (
+                    <div key={it.question_id}>
+                      {heading}
+                      <div className="q">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 1.5 }}>
+                          <span style={{ display: 'inline-block', minWidth: '7mm', textAlign: 'center', border: `1.4px solid ${accent}`, color: accent, fontWeight: 800, fontSize: '9.5pt', padding: '0.4mm 1.5mm', borderRadius: 3 }}>{String(n).padStart(2, '0')}</span>
+                        </div>
+                        <div style={{ whiteSpace: 'pre-wrap', textAlign: 'justify', hyphens: 'auto' }}>{qu.statement}</div>
+                        {qu.statement_images.map(p => <div key={p} className="figure"><ContestImg path={p} style={{ border: 0, borderRadius: 0, maxWidth: '100%', maxHeight: '62mm', width: 'auto', height: 'auto', objectFit: 'contain' }} /></div>)}
+                        <div style={{ marginTop: '2mm' }}>
+                          {it.alt_order.map((orig, pos) => { const a = qu.alternatives[orig]; return (
+                            <div key={pos} className="alt"><b style={{ minWidth: '5mm' }}>{LETTERS[pos]})</b><div style={{ flex: 1, minWidth: 0 }}>{a?.text}{a?.image && <div className="figure"><ContestImg path={a.image} style={{ border: 0, borderRadius: 0, maxWidth: '100%', maxHeight: '34mm', width: 'auto', height: 'auto', objectFit: 'contain' }} /></div>}</div></div>
+                          ) })}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+        )
+        }
         return (
           <>
             <div className="sheet cover">
@@ -142,38 +194,17 @@ export default function ConcursoImprimir() {
               </div>
             </div>
 
+            <div ref={measureRef} aria-hidden style={{ position: 'absolute', left: '-9999px', top: 0, visibility: 'hidden', width: '186mm' }} className="measure">{renderCols()}</div>
             <div className="sheet flow">
-              <div className="cols">
-                {ver.items.map(it => {
-                  const qu = questions[it.question_id]; if (!qu) return null
-                  n++
-                  const r = ranges.find(x => x.id === qu.subject_id && n >= x.from && n <= x.to)
-                  const heading = qu.subject_id !== lastSubject ? (
-                    <div style={{ background: accent, color: '#fff', padding: '2mm 3mm', margin: '1mm 0 3.5mm', breakAfter: 'avoid', display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '10pt', borderRadius: 3 }}>
-                      <span>{subjName(qu.subject_id).toUpperCase()}</span><span style={{ fontWeight: 600, opacity: .9 }}>{r ? `questões ${r.from} a ${r.to}` : ''}</span>
-                    </div>) : null
-                  lastSubject = qu.subject_id
-                  return (
-                    <div key={it.question_id}>
-                      {heading}
-                      <div className="q">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 1.5 }}>
-                          <span style={{ display: 'inline-block', minWidth: '7mm', textAlign: 'center', border: `1.4px solid ${accent}`, color: accent, fontWeight: 800, fontSize: '9.5pt', padding: '0.4mm 1.5mm', borderRadius: 3 }}>{String(n).padStart(2, '0')}</span>
-                        </div>
-                        <div style={{ whiteSpace: 'pre-wrap', textAlign: 'justify', hyphens: 'auto' }}>{qu.statement}</div>
-                        {qu.statement_images.map(p => <div key={p} className="figure"><ContestImg path={p} style={{ border: 0, borderRadius: 0, maxWidth: '100%', maxHeight: '62mm', width: 'auto', height: 'auto', objectFit: 'contain' }} /></div>)}
-                        <div style={{ marginTop: '2mm' }}>
-                          {it.alt_order.map((orig, pos) => { const a = qu.alternatives[orig]; return (
-                            <div key={pos} className="alt"><b style={{ minWidth: '5mm' }}>{LETTERS[pos]})</b><div style={{ flex: 1, minWidth: 0 }}>{a?.text}{a?.image && <div className="figure"><ContestImg path={a.image} style={{ border: 0, borderRadius: 0, maxWidth: '100%', maxHeight: '34mm', width: 'auto', height: 'auto', objectFit: 'contain' }} /></div>}</div></div>
-                          ) })}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+              {renderCols()}
             </div>
 
+            {(qpages % 2 === 0) && (
+              <div className="sheet flow" style={{ breakBefore: 'page', breakAfter: essay.enabled ? 'page' : 'auto', height: '269mm', overflow: 'hidden' }}>
+                <div style={{ background: accent, color: '#fff', padding: '3mm 5mm', fontWeight: 800, fontSize: 14, borderRadius: 3, display: 'flex', justifyContent: 'space-between' }}><span>{essay.enabled ? 'RASCUNHO PARA CÁLCULOS' : 'RASCUNHO'}</span><span style={{ fontWeight: 600, opacity: .9, fontSize: 11 }}>não será corrigido</span></div>
+                <div style={{ marginTop: '4mm', height: '240mm', backgroundImage: 'linear-gradient(#bbb 0.3mm, transparent 0.3mm)', backgroundSize: '100% 8mm' }} />
+              </div>
+            )}
             {essay.enabled && (
               <>
                 <div className="sheet flow" style={{ breakBefore: 'page', breakAfter: 'page' }}>
