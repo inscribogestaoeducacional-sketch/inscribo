@@ -133,6 +133,7 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
             <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Impressões</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {gradeVersions.map(v => <a key={v.id} style={btn()} href={href('caderno', v.version)} target="_blank" rel="noreferrer"><Printer size={15} /> Caderno · versão {v.version}</a>)}
+              <a style={btn()} href={`/concurso/imprimir?contest=${contest.id}&grade=${encodeURIComponent(grade)}&kind=caderno&room=serie`} target="_blank" rel="noreferrer"><Printer size={15} /> Cadernos de todos os alunos ({gradeCands.length})</a>
               <a style={btn()} href={href('cartoes')} target="_blank" rel="noreferrer"><Printer size={15} /> Cartões-resposta ({gradeCands.length})</a>
               {essayFor(contest, grade).enabled && <a style={btn()} href={href('redacao')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas de redação ({gradeCands.length})</a>}
               <a style={btn()} href={href('folha')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas do aluno ({gradeCands.length})</a>
