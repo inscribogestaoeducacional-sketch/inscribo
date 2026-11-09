@@ -204,7 +204,7 @@ function Alunos({ institutionId, year, sel, onClose }: { institutionId: string; 
           {!list ? <Loader2 size={16} className="animate-spin" /> : shown.length === 0 ? <div style={{ fontSize: 13, color: BRAND.muted }}>Nenhum aluno nesta situação.</div> : shown.map((x, i) => (
             <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '7px 0', borderTop: '1px solid #EEF2F1', fontSize: 13 }}>
               <i style={{ width: 9, height: 9, borderRadius: 3, background: COL[x.status as keyof typeof COL] ?? '#F59E0B', flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}><b>{x.student}</b><div style={{ fontSize: 12, color: BRAND.muted }}>{sel.turma ? '' : `${x.turma} · `}{x.responsavel ?? 'Sem responsável'} · {fone(x.telefone)}</div></div>
+              <div style={{ flex: 1, minWidth: 0 }}><b>{x.student}</b><div style={{ fontSize: 12, color: BRAND.muted }}>{sel.turma ? '' : `${x.turma} · `}{x.responsavel === null && x.telefone === null ? (sel.turma ? x.serie ?? '' : '') : `${x.responsavel ?? 'Sem responsável'} · ${fone(x.telefone)}`}</div></div>
               <span style={{ fontSize: 11.5, color: BRAND.muted }}>{ST[x.status]}</span>
             </div>
           ))}
