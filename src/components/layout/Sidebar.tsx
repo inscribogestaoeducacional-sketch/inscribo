@@ -36,12 +36,12 @@ const NAV_CFG: NavItem[] = [
   { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#16A34A', Icon: WhatsappLogo, roles: ['admin','manager','user'], module: 'whatsapp', group: 'Comercial' },
   { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager','user'], module: 'captacao',     group: 'Comercial' },
   { path: '/vitrine',         label: 'Vitrine',         iconBg: '#CCFBF1', iconColor: '#0D9488', Icon: Storefront,           roles: ['admin','manager','user'], module: 'vitrine',      group: 'Comercial' },
-  { path: '/concurso',        label: 'Concurso de Bolsas', iconBg: '#FEF3C7', iconColor: '#D97706', Icon: Trophy,        roles: ['admin','manager'],        module: 'concurso',     group: 'Matrículas' },
   { path: '/transmissoes',    label: 'Transmissões',    iconBg: '#E0F2FE', iconColor: '#0284C7', Icon: PaperPlaneTilt,            roles: ['admin','manager','user'], module: 'transmissoes', group: 'Comercial' },
   // Matrículas
   { path: '/campanha',       label: 'Campanha de Matrículas', iconBg: '#FFEDD5', iconColor: '#EA580C', Icon: Flag,       roles: ['admin','manager'],        module: 'campanha',     group: 'Matrículas' },
   { path: '/base-alunos',     label: 'Base de alunos',  iconBg: '#D1FAE5', iconColor: '#059669', Icon: GraduationCap,   roles: ['admin','manager','user'], module: 'base_alunos',  group: 'Matrículas' },
   { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowsLeftRight,  roles: ['admin','manager','user'], module: 'transferencias', group: 'Matrículas' },
+  { path: '/concurso',        label: 'Concurso de Bolsas', iconBg: '#FEF3C7', iconColor: '#D97706', Icon: Trophy,        roles: ['admin','manager'],        module: 'concurso',     group: 'Concurso de Bolsas' },
   // Análise
   { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: ChartLineUp,       roles: ['admin','manager'], module: 'relatorios', group: 'Análise' },
   { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFEDD5', iconColor: '#F97316', Icon: ClipboardText,  roles: ['admin','manager'], module: 'pesquisas',  group: 'Análise' },

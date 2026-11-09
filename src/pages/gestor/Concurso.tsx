@@ -23,8 +23,13 @@ const btn = (primary = false): React.CSSProperties => ({
   display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center', padding: '9px 14px', borderRadius: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5,
   border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink,
 })
-const TABS = [['config', 'Concurso'], ['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails'], ['prova', 'Prova'], ['corr', 'Correção'], ['res', 'Resultados'], ['prof', 'Professores e cotas'], ['quest', 'Questões']] as const
-type Tab = typeof TABS[number][0]
+const STAGES = [
+  { id: 'prep', label: 'Preparar', tabs: [['config', 'Dados do concurso'], ['prof', 'Professores e cotas'], ['quest', 'Questões'], ['prova', 'Montar prova']] },
+  { id: 'insc', label: 'Inscrições', tabs: [['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails']] },
+  { id: 'corr', label: 'Aplicar e corrigir', tabs: [['corr', 'Correção']] },
+  { id: 'res', label: 'Resultados', tabs: [['res', 'Ranking e divulgação']] },
+] as const
+type Tab = 'config' | 'prof' | 'quest' | 'prova' | 'painel' | 'insc' | 'mail' | 'corr' | 'res'
 
 export default function Concurso() {
   const { user } = useAuth()
@@ -69,27 +74,60 @@ export default function Concurso() {
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}><Loader2 className="animate-spin" /></div>
 
+  const stageOf = STAGES.find(st => (st.tabs as readonly (readonly [string, string])[]).some(t => t[0] === tab)) ?? STAGES[0]
+  const approved = questions.filter(q => q.status === 'approved').length
+  const days = contest?.exam_date ? Math.ceil((new Date(contest.exam_date.split('T')[0] + 'T12:00:00').getTime() - Date.now()) / 86400000) : null
+  const stageHint = (id: string) => id === 'prep' ? `${approved} de ${questions.length} questões aprovadas` : id === 'insc' ? `${cands.length} inscritos` : id === 'corr' ? 'Cartões e redações' : contest ? CONTEST_STATUS[contest.status] : ''
+  const stat = (label: string, value: React.ReactNode) => (
+    <div style={{ ...card, flex: '1 1 100px', padding: '10px 12px' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: BRAND.muted }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: BRAND.ink, lineHeight: 1.2, marginTop: 2 }}>{value}</div>
+    </div>
+  )
+
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1000, margin: '0 auto' }}>
-      <PageHeader icon={Trophy as any} title="Concurso de Bolsas" subtitle="Monte a prova, convide os professores e acompanhe as questões" />
+      <PageHeader icon={Trophy as any} title="Concurso de Bolsas" subtitle={contest ? `${contest.name} · ${CONTEST_STATUS[contest.status]}` : 'Monte a prova, receba as inscrições e divulgue o resultado'}
+        actions={contest ? (
+          <>
+            {contests.length > 1 && <select value={sel ?? ''} onChange={e => setSel(e.target.value)} style={{ ...input, width: 'auto', fontWeight: 700, background: 'rgba(255,255,255,.95)' }}>
+              {contests.map(c => <option key={c.id} value={c.id}>{c.name} ({c.year})</option>)}
+            </select>}
+            <NewContestButton instId={instId} onCreated={async id => { await loadAll(); setSel(id) }} light />
+          </>
+        ) : undefined} />
       {msg && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 200, maxWidth: 'min(520px, calc(100vw - 24px))', background: BRAND.ink, color: '#fff', borderRadius: 14, padding: '12px 18px', fontSize: 14.5, fontWeight: 700, boxShadow: '0 14px 40px -12px rgba(0,0,0,.5)' }}>{msg}</div>}
 
       {!contest ? (
         <NewContest instId={instId} onCreated={async id => { await loadAll(); setSel(id) }} />
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <select value={sel ?? ''} onChange={e => setSel(e.target.value)} style={{ ...input, width: 'auto', fontWeight: 700 }}>
-              {contests.map(c => <option key={c.id} value={c.id}>{c.name} ({c.year})</option>)}
-            </select>
-            <span style={{ fontSize: 12.5, fontWeight: 700, padding: '4px 10px', borderRadius: 99, background: BRAND.soft, color: BRAND.primaryDark }}>{CONTEST_STATUS[contest.status]}</span>
-            <div style={{ flex: 1 }} />
-            <div style={{ display: 'flex', gap: 6, background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 4, overflowX: 'auto', maxWidth: '100%' }}>
-              {TABS.map(([k, l]) => (
-                <button key={k} onClick={() => setTab(k)} style={{ border: 0, borderRadius: 10, padding: '7px 12px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0, background: tab === k ? BRAND.primary : 'transparent', color: tab === k ? '#fff' : BRAND.muted }}>{l}</button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {stat('Inscritos', cands.length)}
+            {stat('Questões aprovadas', `${approved}/${questions.length}`)}
+            {stat('Dias até a prova', days === null ? '—' : days < 0 ? 'Já passou' : days === 0 ? 'Hoje' : days)}
+          </div>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
+            {STAGES.map((st, i) => {
+              const on = st.id === stageOf.id
+              return (
+                <button key={st.id} onClick={() => setTab(st.tabs[0][0] as Tab)} style={{ flex: '1 1 0', minWidth: 150, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', borderRadius: 16, padding: '12px 14px', border: `1.5px solid ${on ? BRAND.primary : BRAND.line}`, background: on ? BRAND.soft : '#fff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 99, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, background: on ? BRAND.primary : BRAND.line, color: on ? '#fff' : BRAND.muted }}>{i + 1}</span>
+                    <span style={{ fontWeight: 800, fontSize: 14.5, color: BRAND.ink }}>{st.label}</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 4 }}>{stageHint(st.id)}</div>
+                </button>
+              )
+            })}
+          </div>
+          {stageOf.tabs.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 4, overflowX: 'auto', alignSelf: 'flex-start', maxWidth: '100%' }}>
+              {stageOf.tabs.map(([k, l]) => (
+                <button key={k} onClick={() => setTab(k as Tab)} style={{ border: 0, borderRadius: 10, padding: '7px 12px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0, background: tab === k ? BRAND.primary : 'transparent', color: tab === k ? '#fff' : BRAND.muted }}>{l}</button>
               ))}
             </div>
-          </div>
+          )}
           {tab === 'config' && <Config contest={contest} subjects={subjects} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'painel' && <Painel contest={contest} cands={cands} />}
           {tab === 'insc' && <Candidates contest={contest} cands={cands} onChanged={loadContest} />}
@@ -99,7 +137,6 @@ export default function Concurso() {
           {tab === 'res' && <ConcursoResultados key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prof' && <Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'quest' && <Review contest={contest} subjects={subjects} teachers={teachers} questions={questions} onChanged={loadContest} />}
-          <div><NewContestButton instId={instId} onCreated={async id => { await loadAll(); setSel(id) }} /></div>
         </>
       )}
     </div>
@@ -116,7 +153,7 @@ function NewContest({ instId, onCreated }: { instId: string; onCreated: (id: str
   )
 }
 
-function NewContestButton({ instId, onCreated, primary }: { instId: string; onCreated: (id: string) => void; primary?: boolean }) {
+function NewContestButton({ instId, onCreated, primary, light }: { instId: string; onCreated: (id: string) => void; primary?: boolean; light?: boolean }) {
   const [busy, setBusy] = useState(false)
   const create = async () => {
     const name = prompt('Nome do concurso', `Concurso de Bolsas ${new Date().getFullYear() + 1}`)
@@ -129,7 +166,7 @@ function NewContestButton({ instId, onCreated, primary }: { instId: string; onCr
     } else alert('Não foi possível criar: ' + error?.message)
     setBusy(false)
   }
-  return <button onClick={create} disabled={busy} style={btn(primary)}><Plus size={15} /> Novo concurso</button>
+  return <button onClick={create} disabled={busy} style={light ? { ...btn(), background: 'rgba(255,255,255,.18)', color: '#fff', border: '1px solid rgba(255,255,255,.4)' } : btn(primary)}><Plus size={15} /> Novo concurso</button>
 }
 
 function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: Subject[]; onChanged: () => void }) {
