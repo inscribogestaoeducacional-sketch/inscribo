@@ -73,7 +73,7 @@ export default function UserManagement() {
   const isConsultor = (role: string) => role !== 'admin' && role !== 'manager'
 
   const handleSave = async (formData: any) => {
-    const { permissions, ...userData } = formData
+    const { permissions, segments, ...userData } = formData
     if (editingUser) {
       const { error } = await supabase
         .from('users')
@@ -109,6 +109,7 @@ export default function UserManagement() {
           .from('user_permissions')
           .upsert(rows, { onConflict: 'user_id,institution_id,module' })
         if (permErr) throw permErr
+        await supabase.from('coordinator_segments').upsert({ user_id: editingUser.id, institution_id: user!.institution_id, segments: segments ?? [], updated_at: new Date().toISOString() }, { onConflict: 'user_id,institution_id' })
         if (editingUser.id === user?.id) await refreshPermissions()
       }
 
@@ -160,6 +161,7 @@ export default function UserManagement() {
           enabled: permissions[m.id] ?? !DEFAULT_OFF_MODULES.includes(m.id),
         }))
         await supabase.from('user_permissions').upsert(rows, { onConflict: 'user_id,institution_id,module' })
+        await supabase.from('coordinator_segments').upsert({ user_id: newUserId, institution_id: user!.institution_id, segments: segments ?? [] }, { onConflict: 'user_id,institution_id' })
       }
 
       if (wasCreated) {

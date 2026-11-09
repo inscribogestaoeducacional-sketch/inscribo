@@ -164,6 +164,8 @@ export function UserModal({ isOpen, onClose, onSave, editingUser, institutionId 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [permMap, setPermMap] = useState<Record<string, boolean>>({})
+  // Segmentos do coordenador (vazio = escola toda). Só vale pra quem usa o Matriculômetro.
+  const [segs, setSegs] = useState<string[]>([])
   // Fase 6.1: Transmissões também depende da liberação da escola (Super Admin,
   // broadcast_settings). Mostra quando o módulo não está liberado, pra a
   // permissão do usuário não parecer suficiente sozinha.
@@ -189,13 +191,17 @@ export function UserModal({ isOpen, onClose, onSave, editingUser, institutionId 
             setPermMap(map)
             setLoadingPerms(false)
           }, () => setLoadingPerms(false))
+        supabase.from('coordinator_segments').select('segments').eq('user_id', editingUser.id).eq('institution_id', institutionId ?? '').maybeSingle()
+          .then(({ data }) => setSegs((data as any)?.segments ?? []), () => setSegs([]))
       } else {
         setPermMap({})
       }
     } else {
       setFormData({ full_name: '', email: '', role: 'user', password: '', confirmPassword: '', active: true, can_see_all_conversations: false, can_see_full_history: false })
       setPermMap(defaultMap())
+      setSegs([])
     }
+    if (!editingUser) setSegs([])
     setShowPwd(false)
     setError('')
   }, [editingUser, isOpen, institutionId])
@@ -214,7 +220,7 @@ export function UserModal({ isOpen, onClose, onSave, editingUser, institutionId 
     }
     setLoading(true)
     try {
-      const payload = isConsultor(formData.role) ? { ...formData, permissions: permMap } : formData
+      const payload = isConsultor(formData.role) ? { ...formData, permissions: permMap, segments: segs } : formData
       await onSave(payload)
       onClose()
     }
@@ -346,6 +352,19 @@ export function UserModal({ isOpen, onClose, onSave, editingUser, institutionId 
                     </button>
                   )
                 })}
+              </div>
+            )}
+            {!loadingPerms && isOn('matriculometro') && (
+              <div style={{ padding: '12px 16px', background: '#fff', borderTop: '1px solid #E3E8F0' }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Segmento do coordenador</p>
+                <p style={{ fontSize: 12, color: '#5B6B86', margin: '2px 0 8px' }}>Ele só vê os alunos destes segmentos. Sem nenhum marcado, vê a escola toda.</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {[['infantil', 'Infantil'], ['fund1', 'Fundamental I'], ['fund2', 'Fundamental II'], ['medio', 'Médio']].map(([k, l]) => {
+                    const on = segs.includes(k)
+                    return <button key={k} type="button" aria-pressed={on} onClick={() => setSegs(x => on ? x.filter(i => i !== k) : [...x, k])}
+                      style={{ fontSize: 12.5, fontWeight: 800, padding: '7px 14px', minHeight: 36, borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: on ? '1px solid #05907B' : '1px solid #E3E8F0', background: on ? '#E6F7F5' : '#fff', color: on ? '#00695F' : '#5B6B86' }}>{l}</button>
+                  })}
+                </div>
               </div>
             )}
           </div>
