@@ -28,7 +28,8 @@ serve(async (req) => {
     // Autorização: quem chama precisa gerir o concurso desta escola
     const { data: prof } = await admin.from('users').select('user_type, role, active, institution_id, active_institution_id').eq('id', caller.user.id).maybeSingle()
     const isSuper = prof?.user_type === 'admin_geral'
-    const isSchoolManager = !!prof && prof.active !== false && ['admin', 'manager'].includes(prof.role)
+    const { data: perm } = await admin.from('user_permissions').select('enabled').eq('user_id', caller.user.id).eq('institution_id', institution_id).eq('module', 'concurso').maybeSingle()
+    const isSchoolManager = !!prof && prof.active !== false && (['admin', 'manager'].includes(prof.role) || perm?.enabled === true)
       && [prof.institution_id, prof.active_institution_id].includes(institution_id)
     if (!isSuper && !isSchoolManager) return json(403, { error: 'Sem permissão para cadastrar professores' })
     const { data: st } = await admin.from('contest_settings').select('module_enabled').eq('institution_id', institution_id).maybeSingle()

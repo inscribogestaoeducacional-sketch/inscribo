@@ -51,6 +51,8 @@ import GestorEmbed       from './pages/gestor/GestorEmbed'
 import CaptacaoInteligente from './pages/gestor/CaptacaoInteligente'
 import Vitrine from './pages/gestor/Vitrine'
 import Concurso from './pages/gestor/Concurso'
+import MatriculometroPage from './pages/gestor/MatriculometroPage'
+import CoordenacaoHome from './pages/gestor/CoordenacaoHome'
 import ProfessorQuestoes from './pages/professor/ProfessorQuestoes'
 import ConcursoPublico from './pages/public/ConcursoPublico'
 import ConcursoResultado from './pages/public/ConcursoResultado'
@@ -139,6 +141,15 @@ function PermissionDenied() {
     }))
   }, [])
   return <Navigate to="/atendente" replace />
+}
+
+// Consultor sem Leads e WhatsApp, mas com Concurso/Matriculômetro liberados: cai na tela de coordenação.
+function AttendantOrCoordination() {
+  const { user } = useAuth()
+  const { isModuleEnabled, loading } = usePermissions()
+  if (loading) return null
+  const coord = user?.role === 'user' && !isModuleEnabled('leads') && (isModuleEnabled('concurso') || isModuleEnabled('matriculometro'))
+  return coord ? <CoordenacaoHome /> : <AttendantHome />
 }
 
 function PermissionRoute({ children, module }: { children: React.ReactNode; module: string }) {
@@ -438,7 +449,7 @@ function AppContent() {
           <Routes>
             <Route path="/" element={<Navigate to={schoolDefault} replace />} />
             <Route path="/home" element={<RequireRole roles={['admin','manager']}><GestorHome /></RequireRole>} />
-            <Route path="/atendente" element={<RequireRole roles={['user','school_user']}><AttendantHome /></RequireRole>} />
+            <Route path="/atendente" element={<RequireRole roles={['user','school_user']}><AttendantOrCoordination /></RequireRole>} />
             <Route path="/dashboard"      element={<Dashboard />} />
             <Route path="/leads"          element={<PermissionRoute module="leads"><LeadKanban /></PermissionRoute>} />
             <Route path="/clients"        element={<ClientsModule />} />
@@ -447,7 +458,8 @@ function AppContent() {
             <Route path="/whatsapp"       element={<PermissionRoute module="whatsapp"><HubErrorBoundary><WhatsAppHub /></HubErrorBoundary></PermissionRoute>} />
             <Route path="/captacao"       element={<PermissionRoute module="captacao"><CaptacaoInteligente /></PermissionRoute>} />
             <Route path="/vitrine"        element={<PermissionRoute module="vitrine"><Vitrine /></PermissionRoute>} />
-            <Route path="/concurso"       element={<RequireRole roles={['admin','manager']}><Concurso /></RequireRole>} />
+            <Route path="/concurso"       element={<RequireRole roles={['admin','manager','user']}><PermissionRoute module="concurso"><Concurso /></PermissionRoute></RequireRole>} />
+            <Route path="/matriculometro" element={<RequireRole roles={['admin','manager','user']}><PermissionRoute module="matriculometro"><MatriculometroPage /></PermissionRoute></RequireRole>} />
             <Route path="/transmissoes"   element={<PermissionRoute module="transmissoes"><Transmissoes /></PermissionRoute>} />
             {/* Etapa B passo 4: atendente só com a permissão base_alunos (o banco confere de novo) */}
             <Route path="/campanha"       element={<ProtectedRoute allowedRoles={['admin','manager']}><CampanhaMatriculas /></ProtectedRoute>} />

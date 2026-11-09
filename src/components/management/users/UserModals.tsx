@@ -19,6 +19,8 @@ export const PERM_MODULES = [
   { id: 'vitrine',        label: 'Vitrine',        icon: '🏫', desc: 'Página pública da escola com links, WhatsApp e matrícula (desligado por padrão)' },
   { id: 'transmissoes',   label: 'Transmissões',   icon: '📨', desc: 'Campanhas de disparo em massa com template aprovado (desligado por padrão)' },
   { id: 'base_alunos',    label: 'Base de alunos', icon: '🎓', desc: 'Painel de rematrícula e lista de quem falta rematricular (desligado por padrão)' },
+  { id: 'concurso',        label: 'Concurso de Bolsas', icon: '🏆', desc: 'Monta e acompanha o concurso inteiro: questões, inscritos, salas, correção e resultados (desligado por padrão)' },
+  { id: 'matriculometro',  label: 'Matriculômetro', icon: '🚩', desc: 'Só visualização do acompanhamento de rematrículas por turma, sem acesso ao restante da Campanha (desligado por padrão)' },
   { id: 'relatorios',     label: 'Relatórios',     icon: '📊', desc: 'Métricas e relatórios de desempenho' },
   { id: 'transferencias', label: 'Transferências', icon: '↔️', desc: 'Transferência de leads entre atendentes' },
   { id: 'pesquisas',      label: 'Pesquisas',      icon: '⭐', desc: 'Pesquisas de satisfação e resultados' },
@@ -315,6 +317,7 @@ export function UserModal({ isOpen, onClose, onSave, editingUser, institutionId 
                 <p style={{ fontSize: 13.5, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Acesso aos módulos</p>
                 <p style={{ fontSize: 12, color: '#5B6B86', margin: '2px 0 0' }}>Administradores e gestores têm acesso total.</p>
               </div>
+              {!loadingPerms && <button type="button" title="Liga só Início, Concurso de Bolsas e Matriculômetro; o resto fica desligado" onClick={() => setPermMap(Object.fromEntries(PERM_MODULES.map(m => [m.id, ['inicio', 'concurso', 'matriculometro'].includes(m.id)])))} style={{ fontSize: 12, fontWeight: 800, color: '#1A2B4A', background: '#fff', border: '1px solid #E3E8F0', borderRadius: 999, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Perfil de coordenação</button>}
               {!loadingPerms && <span style={{ fontSize: 12, fontWeight: 800, color: '#00695F', background: '#E6F7F5', borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap' }}>{enabledCount} de {PERM_MODULES.length}</span>}
             </div>
             {loadingPerms ? (

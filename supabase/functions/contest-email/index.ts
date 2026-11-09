@@ -97,7 +97,8 @@ serve(async (req) => {
     if (!c) return json(404, { error: 'Concurso não encontrado' })
     const { data: prof } = await admin.from('users').select('user_type, role, active, institution_id, active_institution_id, email').eq('id', who.user.id).maybeSingle()
     const isSuper = prof?.user_type === 'admin_geral'
-    const isMgr = !!prof && prof.active !== false && ['admin', 'manager'].includes(prof.role) && [prof.institution_id, prof.active_institution_id].includes(c.institution_id)
+    const { data: perm } = await admin.from('user_permissions').select('enabled').eq('user_id', who.user.id).eq('institution_id', c.institution_id).eq('module', 'concurso').maybeSingle()
+    const isMgr = !!prof && prof.active !== false && (['admin', 'manager'].includes(prof.role) || perm?.enabled === true) && [prof.institution_id, prof.active_institution_id].includes(c.institution_id)
     if (!isSuper && !isMgr) return json(403, { error: 'Sem permissão' })
     const { data: st } = await admin.from('contest_settings').select('module_enabled').eq('institution_id', c.institution_id).maybeSingle()
     if (st?.module_enabled !== true) return json(403, { error: 'Módulo não liberado' })
