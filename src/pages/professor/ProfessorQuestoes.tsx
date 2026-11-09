@@ -89,11 +89,11 @@ export default function ProfessorQuestoes() {
                         <div key={x.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', borderTop: i ? `1px solid ${BRAND.line}` : 0 }}>
                           <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: BRAND.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.statement || 'Sem enunciado'}</div>
                           <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: st.bg, color: st.fg }}>{st.label}</span>
-                          {x.status !== 'approved' && (
-                            <>
-                              <button aria-label="Editar" onClick={() => setEditor({ quota: q, question: x })} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.muted }}><Pencil size={16} /></button>
-                              <button aria-label="Apagar" onClick={() => remove(x)} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.danger }}><Trash2 size={16} /></button>
-                            </>
+                          {(x.status === 'draft' || x.status === 'returned') && (
+                            <button aria-label="Editar" onClick={() => setEditor({ quota: q, question: x })} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.muted }}><Pencil size={16} /></button>
+                          )}
+                          {x.status === 'draft' && (
+                            <button aria-label="Apagar" onClick={() => remove(x)} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.danger }}><Trash2 size={16} /></button>
                           )}
                         </div>
                       )
