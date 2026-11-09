@@ -131,6 +131,7 @@ export default function Concurso() {
             </div>
           )}
           {tab === 'config' && <Config contest={contest} subjects={subjects} onChanged={() => { loadAll(); loadContest() }} />}
+          {tab === 'config' && <DeleteContest contest={contest} inscritos={cands.length} questoes={questions.length} onDeleted={async () => { setSel(null); await loadAll() }} />}
           {tab === 'painel' && <Painel contest={contest} cands={cands} />}
           {tab === 'insc' && <Candidates contest={contest} cands={cands} onChanged={loadContest} />}
           {tab === 'mail' && <ConcursoEmails key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
@@ -170,6 +171,49 @@ function NewContestButton({ instId, onCreated, primary, light }: { instId: strin
     setBusy(false)
   }
   return <button onClick={create} disabled={busy} style={light ? { ...btn(), background: 'rgba(255,255,255,.18)', color: '#fff', border: '1px solid rgba(255,255,255,.4)' } : btn(primary)}><Plus size={15} /> Novo concurso</button>
+}
+
+// Área perigosa no fim da Configuração: exclui o concurso e tudo que pertence a ele (não dá para desfazer).
+export function DeleteContest({ contest, inscritos, questoes, onDeleted }: { contest: Contest; inscritos: number; questoes: number; onDeleted: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => { setOpen(false); setTyped(''); setErr('') }, [contest.id])
+  const ok = typed.trim().toLowerCase() === contest.name.trim().toLowerCase()
+  const remove = async () => {
+    if (!ok) return
+    setBusy(true); setErr('')
+    const { error } = await db.from('contests').delete().eq('id', contest.id)
+    setBusy(false)
+    if (error) setErr('Não foi possível excluir: ' + error.message); else onDeleted()
+  }
+  return (
+    <div style={{ ...card, border: '1.5px solid #FECACA', background: '#FFFBFB' }}>
+      <div style={{ fontWeight: 800, color: '#B91C1C' }}>Excluir este concurso</div>
+      {!open ? (
+        <>
+          <div style={{ fontSize: 13.5, color: BRAND.muted, margin: '4px 0 12px' }}>Apaga o concurso e tudo que pertence a ele. Não dá para desfazer.</div>
+          <button onClick={() => setOpen(true)} style={{ ...btn(), color: '#DC2626', border: '1px solid #FECACA' }}><Trash2 size={15} /> Excluir concurso</button>
+        </>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+          <div style={{ fontSize: 13.5, color: BRAND.text, lineHeight: 1.5 }}>
+            Vai apagar <b>{contest.name}</b> com <b>{inscritos} {inscritos === 1 ? 'inscrição' : 'inscrições'}</b> e <b>{questoes} {questoes === 1 ? 'questão' : 'questões'}</b>, além de salas, provas, notas e redações.
+            {inscritos > 0 && <span style={{ color: '#B91C1C', fontWeight: 700 }}> Já existem candidatos inscritos: eles perdem o acesso ao resultado.</span>}
+          </div>
+          <label style={{ fontSize: 13, fontWeight: 700, color: BRAND.ink }}>Para confirmar, digite o nome do concurso
+            <input style={{ ...input, marginTop: 6 }} value={typed} onChange={e => setTyped(e.target.value)} placeholder={contest.name} autoComplete="off" />
+          </label>
+          {err && <div role="alert" style={{ fontSize: 13, color: '#B91C1C' }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={remove} disabled={!ok || busy} style={{ ...btn(), background: ok ? '#DC2626' : '#F1F5F9', color: ok ? '#fff' : BRAND.faint, border: 'none', cursor: ok ? 'pointer' : 'not-allowed' }}>{busy ? 'Excluindo…' : 'Excluir de vez'}</button>
+            <button onClick={() => { setOpen(false); setTyped('') }} style={btn()}>Cancelar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: Subject[]; onChanged: () => void }) {
