@@ -42,6 +42,7 @@ export default function ConcursoPublico() {
     setBusy(false)
     if (error || !data?.ok) return setErr(data?.error || 'Não foi possível enviar agora. Tente de novo.')
     setDone({ number: data.number })
+    ;(supabase as any).functions.invoke('contest-email', { body: { action: 'confirm', slug, number: data.number } }).catch(() => {})
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -86,7 +87,7 @@ export default function ConcursoPublico() {
             <h2 style={{ margin: '10px 0 4px', fontSize: 22, fontWeight: 800, color: '#1A2B4A' }}>Inscrição feita!</h2>
             <div style={{ color: '#475569', fontSize: 15 }}>Número de inscrição</div>
             <div style={{ fontSize: 40, fontWeight: 800, color, letterSpacing: 1 }}>{done.number}</div>
-            <p style={{ color: '#475569', fontSize: 14.5, lineHeight: 1.55, margin: '10px 0 0' }}>Guarde este número. A escola envia as orientações da prova para o contato informado.</p>
+            <p style={{ color: '#475569', fontSize: 14.5, lineHeight: 1.55, margin: '10px 0 0' }}>Guarde este número. Se você informou e-mail, a confirmação chega por lá; a escola envia as demais orientações para o contato informado.</p>
           </section>
         ) : !info.open ? (
           <section style={{ background: '#fff', borderRadius: 18, padding: 22, marginTop: 16, textAlign: 'center', color: '#475569' }}>
