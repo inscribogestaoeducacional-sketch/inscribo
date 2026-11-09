@@ -21,7 +21,8 @@ export type Contest = { id: string; institution_id: string; name: string; year: 
 export type Essay = { id: string; candidate_id: string; scan_path: string | null; scores: Record<string, number>; total: number | null; max_total: number | null; annulled: boolean; note: string | null }
 export type Decision = { id: string; candidate_id: string; scholarship_pct: number | null; status: 'pending' | 'granted' | 'waitlist' | 'denied'; note: string | null }
 export type ExtraField = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }
-export type Candidate = { id: string; contest_id: string; lead_id: string | null; number: number; student_name: string; grade: string; responsible_name: string; phone: string; email: string | null; origin_school: string | null; answers: Record<string, string>; created_at: string; version: string | null; birth_date: string | null; student_cpf: string | null }
+export type Candidate = { id: string; contest_id: string; lead_id: string | null; number: number; student_name: string; grade: string; responsible_name: string; phone: string; email: string | null; origin_school: string | null; answers: Record<string, string>; created_at: string; version: string | null; birth_date: string | null; student_cpf: string | null; room_id?: string | null; present?: boolean | null }
+export type Room = { id: string; institution_id: string; contest_id: string; name: string; capacity: number; grade: string | null; position: number }
 export const slugify = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
 export type Subject = { id: string; contest_id: string; name: string; position: number }
 export type Teacher = { id: string; institution_id: string; user_id: string; full_name: string; email: string; phone: string | null; active: boolean }
@@ -56,7 +57,12 @@ export function useConcursoModuleEnabled(institutionId: string | null | undefine
   return enabled
 }
 
-export const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—')
+export const fmtDate = (s?: string | null) => {
+  if (!s) return '—'
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.slice(0, 10)) // data pura: não passa pelo fuso (evita sair 1 dia antes)
+  if (m && (s.length === 10 || s.slice(10).startsWith('T00:00:00'))) return `${m[3]}/${m[2]}/${m[1]}`
+  return new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
 
 // Redação por série: se a série não tem configuração própria, vale o padrão do concurso.
 export function essayFor(c: Contest, grade: string): { enabled: boolean; prompt: string; images: string[] } {

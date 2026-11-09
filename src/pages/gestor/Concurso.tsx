@@ -12,6 +12,7 @@ import ConcursoEmails from './ConcursoEmails'
 import EssayRubric from '../../components/concurso/EssayRubric'
 import TakeHomeConfig from '../../components/concurso/TakeHomeConfig'
 import ConcursoResultados from './ConcursoResultados'
+import ConcursoSalas from './ConcursoSalas'
 import { ContestImg } from '../../components/concurso/media'
 import {
   db, DEFAULT_SUBJECTS, essayFor, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
@@ -27,10 +28,10 @@ const btn = (primary = false): React.CSSProperties => ({
 const STAGES = [
   { id: 'prep', label: 'Preparar', tabs: [['config', 'Dados do concurso'], ['prof', 'Professores e cotas'], ['quest', 'Questões'], ['prova', 'Montar prova']] },
   { id: 'insc', label: 'Inscrições', tabs: [['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails']] },
-  { id: 'corr', label: 'Aplicar e corrigir', tabs: [['corr', 'Correção']] },
+  { id: 'corr', label: 'Aplicar e corrigir', tabs: [['salas', 'Salas e listas'], ['corr', 'Correção']] },
   { id: 'res', label: 'Resultados', tabs: [['res', 'Ranking e divulgação']] },
 ] as const
-type Tab = 'config' | 'prof' | 'quest' | 'prova' | 'painel' | 'insc' | 'mail' | 'corr' | 'res'
+type Tab = 'salas' | 'config' | 'prof' | 'quest' | 'prova' | 'painel' | 'insc' | 'mail' | 'corr' | 'res'
 
 export default function Concurso() {
   const { user } = useAuth()
@@ -78,7 +79,7 @@ export default function Concurso() {
   const stageOf = STAGES.find(st => (st.tabs as readonly (readonly [string, string])[]).some(t => t[0] === tab)) ?? STAGES[0]
   const approved = questions.filter(q => q.status === 'approved').length
   const days = contest?.exam_date ? Math.ceil((new Date(contest.exam_date.split('T')[0] + 'T12:00:00').getTime() - Date.now()) / 86400000) : null
-  const stageHint = (id: string) => id === 'prep' ? `${approved} de ${questions.length} questões aprovadas` : id === 'insc' ? `${cands.length} inscritos` : id === 'corr' ? 'Cartões e redações' : contest ? CONTEST_STATUS[contest.status] : ''
+  const stageHint = (id: string) => id === 'prep' ? `${approved} de ${questions.length} questões aprovadas` : id === 'insc' ? `${cands.length} inscritos` : id === 'corr' ? 'Salas, cartões e redações' : contest ? CONTEST_STATUS[contest.status] : ''
   const stat = (label: string, value: React.ReactNode) => (
     <div style={{ ...card, flex: '1 1 100px', padding: '10px 12px' }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: BRAND.muted }}>{label}</div>
@@ -134,6 +135,7 @@ export default function Concurso() {
           {tab === 'insc' && <Candidates contest={contest} cands={cands} onChanged={loadContest} />}
           {tab === 'mail' && <ConcursoEmails key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prova' && <ConcursoProva contest={contest} subjects={subjects} quotas={quotas} questions={questions} cands={cands} onChanged={loadContest} />}
+          {tab === 'salas' && <ConcursoSalas key={contest.id} contest={contest} cands={cands} onChanged={loadContest} />}
           {tab === 'corr' && <ConcursoCorrecao contest={contest} subjects={subjects} questions={questions} cands={cands} />}
           {tab === 'res' && <ConcursoResultados key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prof' && <Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}

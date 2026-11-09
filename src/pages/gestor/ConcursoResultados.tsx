@@ -175,7 +175,7 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
               <div style={{ fontWeight: 700, color: BRAND.ink, fontSize: 14.5 }}>{r.c.student_name}</div>
               <div style={{ fontSize: 12.5, color: BRAND.muted }}>{r.c.number} · {r.c.grade}</div>
             </div>
-            <div style={{ fontSize: 12.5, color: BRAND.muted, minWidth: 130 }}>Objetiva {r.obj ?? '-'}{r.hasEssay ? ` · Redação ${r.essay ?? 'pendente'}` : ''}</div>
+            <div style={{ fontSize: 12.5, color: BRAND.muted, minWidth: 130 }}>{r.c.present === false && <b style={{ color: '#B91C1C' }}>Faltou · </b>}Objetiva {r.obj ?? '-'}{r.hasEssay ? ` · Redação ${r.essay ?? 'pendente'}` : ''}</div>
             <div style={{ minWidth: 56, fontWeight: 800, fontSize: 16, color: BRAND.ink }}>{r.final ?? '-'}</div>
             {published && r.c.phone && <a style={{ ...btn(), textDecoration: 'none', padding: '7px 10px', fontSize: 12.5 }} target="_blank" rel="noreferrer" href={waLink(r.c.phone, `Olá, ${r.c.responsible_name}! O resultado do ${contest.name} já está disponível. Para ver o de ${r.c.student_name}, acesse ${link} e informe o número da inscrição (${r.c.number}) e a data de nascimento do aluno.`)}>WhatsApp</a>}
             <select style={sel} value={decKey(r.dec)} disabled={r.final == null} onChange={e => setDecision(r.c.id, e.target.value)} aria-label={`Decisão para ${r.c.student_name}`}>
