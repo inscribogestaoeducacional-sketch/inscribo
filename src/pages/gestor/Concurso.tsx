@@ -361,13 +361,25 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
         </div>
         <div style={{ marginTop: 10 }}><button style={btn(true)} onClick={addQuota}><Plus size={15} /> Adicionar cota</button></div>
 
+        {quotas.length > 0 && (
+          <div style={{ marginTop: 14, border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: '10px 12px', background: '#F8FAFC' }}>
+            <div style={{ fontWeight: 800, color: BRAND.ink, fontSize: 13.5, marginBottom: 6 }}>Total por disciplina e série</div>
+            {Array.from(new Set(quotas.map(x => `${x.subject_id}|${x.grade}`))).map(key => {
+              const [sid, g] = key.split('|'); const qs = quotas.filter(x => x.subject_id === sid && x.grade === g)
+              return <div key={key} style={{ fontSize: 13.5, color: BRAND.text, padding: '2px 0' }}><b>{subjects.find(x => x.id === sid)?.name} · {g}:</b> {qs.reduce((n, x) => n + x.quantity, 0)} questões = {qs.map(x => `${teachers.find(t => t.id === x.teacher_id)?.full_name?.split(' ')[0] ?? '?'} ${x.quantity}`).join(' + ')}</div>
+            })}
+            <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 4 }}>Cada professor vê e edita só as questões que ele mesmo escreveu.</div>
+          </div>
+        )}
+
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}>
           {teachers.map(t => {
             const mine = quotas.filter(x => x.teacher_id === t.id)
             return (
               <div key={t.id} style={{ padding: '10px 0', borderTop: `1px solid ${BRAND.line}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div><b style={{ color: BRAND.ink }}>{t.full_name}</b> <span style={{ color: BRAND.muted, fontSize: 12.5 }}>{t.email}</span></div>
+                  <div><b style={{ color: BRAND.ink }}>{t.full_name}</b> <span style={{ color: BRAND.muted, fontSize: 12.5 }}>{t.email}</span>
+                    <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: t.nda_accepted_at ? '#D1FAE5' : '#FEF3C7', color: t.nda_accepted_at ? '#047857' : '#B45309' }}>{t.nda_accepted_at ? `Termo aceito em ${fmtDate(t.nda_accepted_at)}` : 'Termo pendente'}</span></div>
                   <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, fontWeight: 700, color: BRAND.ink }}><input type="checkbox" checked={essayT.includes(t.id)} onChange={e => toggleEssay(t, e.target.checked)} /> Professor de redação</label>
                   <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={() => resend(t)}><Mail size={14} /> Reenviar convite</button>
                 </div>

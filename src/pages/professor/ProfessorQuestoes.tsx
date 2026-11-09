@@ -6,13 +6,14 @@ import { BRAND } from '../../lib/brand'
 import { db, fmtDate, Q_STATUS, type Contest, type Question, type Quota, type Subject } from '../../lib/concurso'
 import QuestionEditor from '../../components/concurso/QuestionEditor'
 import EssayTeacher from '../../components/concurso/EssayTeacher'
+import NdaTerm from '../../components/concurso/NdaTerm'
 
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 16 }
 
 export default function ProfessorQuestoes() {
   const { user, signOut } = useAuth() as any
   const [loading, setLoading] = useState(true)
-  const [teacher, setTeacher] = useState<{ id: string; full_name: string; institution_id: string } | null>(null)
+  const [teacher, setTeacher] = useState<{ id: string; full_name: string; institution_id: string; nda_accepted_at: string | null } | null>(null)
   const [contests, setContests] = useState<Contest[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [quotas, setQuotas] = useState<Quota[]>([])
@@ -21,7 +22,7 @@ export default function ProfessorQuestoes() {
   const [editor, setEditor] = useState<{ quota: Quota; question: Question | null } | null>(null)
 
   const load = useCallback(async () => {
-    const { data: t } = await db.from('contest_teachers').select('id, full_name, institution_id').eq('user_id', user?.id).eq('active', true).maybeSingle()
+    const { data: t } = await db.from('contest_teachers').select('id, full_name, institution_id, nda_accepted_at').eq('user_id', user?.id).eq('active', true).maybeSingle()
     setTeacher(t ?? null)
     if (t) {
       const [c, s, q, qs] = await Promise.all([
@@ -45,6 +46,7 @@ export default function ProfessorQuestoes() {
   }
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}><Loader2 className="animate-spin" /></div>
+  if (teacher && !teacher.nda_accepted_at) return <NdaTerm name={teacher.full_name} onAccepted={() => { setLoading(true); load() }} />
 
   return (
     <div style={{ minHeight: '100vh', background: BRAND.bg }}>

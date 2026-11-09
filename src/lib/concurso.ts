@@ -25,7 +25,7 @@ export type Candidate = { id: string; contest_id: string; lead_id: string | null
 export type Room = { id: string; institution_id: string; contest_id: string; name: string; capacity: number; grade: string | null; position: number }
 export const slugify = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
 export type Subject = { id: string; contest_id: string; name: string; position: number }
-export type Teacher = { id: string; institution_id: string; user_id: string; full_name: string; email: string; phone: string | null; active: boolean }
+export type Teacher = { id: string; institution_id: string; user_id: string; full_name: string; email: string; phone: string | null; active: boolean; nda_accepted_at?: string | null }
 export type Quota = { id: string; contest_id: string; teacher_id: string; subject_id: string; grade: string; quantity: number; due_date: string | null }
 export type Alt = { text: string; image?: string | null }
 export type Question = {
@@ -102,3 +102,12 @@ export function finalScore(c: Contest, grade: string, r?: { score: number; total
   const final = obj == null ? null : w > 0 ? Math.round(((obj * (100 - w) + (essay ?? 0) * w) / 100) * 10) / 10 : obj
   return { hasEssay, obj, essay, final, pending: obj != null && w > 0 && essay == null }
 }
+
+// Termo de confidencialidade que o professor aceita no primeiro acesso ao portal.
+export const NDA_VERSION = '1'
+export const NDA_TITLE = 'Termo de confidencialidade'
+export const NDA_PARAGRAPHS = [
+  'As questões, os gabaritos, as propostas de redação e as notas do Concurso de Bolsas são informações confidenciais da escola até a divulgação oficial do resultado.',
+  'Ao aceitar este termo, eu me comprometo a: (1) não compartilhar, copiar, fotografar nem divulgar nenhuma questão, alternativa, gabarito ou proposta de redação, por qualquer meio, inclusive aplicativos de mensagem e redes sociais; (2) não usar as questões que escrevi ou corrigi em aulas, listas, simulados ou materiais antes da aplicação da prova; (3) não revelar a candidatos, famílias ou colegas qualquer informação sobre o conteúdo da prova; (4) manter em sigilo a correção das redações e as notas que eu atribuir; (5) usar o acesso somente para a minha função e não repassar meu login e minha senha.',
+  'Estou ciente de que meu aceite fica registrado com data e hora, e de que o descumprimento deste termo pode gerar as medidas cabíveis previstas em contrato e na lei.',
+]
