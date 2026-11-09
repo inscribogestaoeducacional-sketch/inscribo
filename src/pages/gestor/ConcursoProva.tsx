@@ -47,6 +47,7 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
   const lock = async () => {
     setErr('')
     if (inExam.length === 0) return setErr('Não há questões aprovadas para esta série.')
+    if (inExam.length > 120) return setErr('O cartão-resposta comporta até 120 questões por série. Tire algumas da prova.')
     if (inExam.some(q => q.correct_index === null)) return setErr('Há questão sem alternativa correta marcada.')
     setBusy(true)
     const built = buildVersions(inExam, contest.versions_count, contest.alternatives_count, subjOrder.map(s => s.id), `${contest.id}:${grade}`)

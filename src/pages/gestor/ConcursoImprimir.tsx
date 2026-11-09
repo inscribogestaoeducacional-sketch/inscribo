@@ -22,18 +22,19 @@ export default function ConcursoImprimir() {
   const contestId = q.get('contest') || ''; const grade = q.get('grade') || ''; const kind = q.get('kind') || 'caderno'; const version = q.get('version') || 'A'
   const [state, setState] = useState<'loading' | 'error' | 'ok'>('loading')
   const [contest, setContest] = useState<Contest | null>(null)
-  const [school, setSchool] = useState<{ name: string; logo_url: string | null } | null>(null)
+  const [school, setSchool] = useState<{ name: string; logo_url: string | null; primary_color: string | null } | null>(null)
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [versions, setVersions] = useState<ExamVersionRow[]>([])
   const [questions, setQuestions] = useState<Record<string, Question>>({})
   const [cands, setCands] = useState<Candidate[]>([])
   const [qrs, setQrs] = useState<Record<string, string>>({})
+  const [printing, setPrinting] = useState(false)
 
   useEffect(() => { (async () => {
     const { data: c } = await db.from('contests').select('*').eq('id', contestId).maybeSingle()
     if (!c) return setState('error')
     const [i, s, v, cd] = await Promise.all([
-      db.from('institutions').select('name, logo_url').eq('id', c.institution_id).maybeSingle(),
+      db.from('institutions').select('name, logo_url, primary_color').eq('id', c.institution_id).maybeSingle(),
       db.from('contest_subjects').select('*').eq('contest_id', contestId).order('position'),
       db.from('contest_exam_versions').select('*').eq('contest_id', contestId).eq('grade', grade).order('version'),
       db.from('contest_candidates').select('*').eq('contest_id', contestId).eq('grade', grade).order('number'),
@@ -54,6 +55,17 @@ export default function ConcursoImprimir() {
     setState('ok')
   })() }, [contestId, grade, kind])
 
+  const doPrint = async () => {
+    setPrinting(true)
+    const t0 = Date.now()
+    while (Date.now() - t0 < 12000) {
+      const imgs = Array.from(document.images)
+      if (imgs.every(i => i.complete)) break
+      await new Promise(r => setTimeout(r, 250))
+    }
+    setPrinting(false); window.print()
+  }
+
   if (state === 'loading') return <div style={{ padding: 40, fontFamily: 'system-ui' }}>Carregando…</div>
   if (state === 'error' || !contest) return <div style={{ padding: 40, fontFamily: 'system-ui' }}>Não foi possível abrir. Entre na sua conta e confira se a prova desta série foi fechada.</div>
 
@@ -65,87 +77,127 @@ export default function ConcursoImprimir() {
   return (
     <div style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000', background: '#9aa3ad', minHeight: '100vh' }}>
       <style>{`
-        @page { size: A4; margin: ${margin}; }
+        @page { size: A4; margin: ${margin}; ${kind === 'caderno' || kind === 'gabarito' ? `@bottom-left { content: "${contest.name} · ${grade}${kind === 'caderno' ? ` · Versão ${ver.version}` : ''}"; font: 8pt Arial; color: #444 } @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 8pt Arial; color: #444 }` : ''} }
+        @page :first { @bottom-left { content: none } @bottom-right { content: none } }
         * { box-sizing: border-box; }
         .bar { position: sticky; top: 0; background: #1A2B4A; color: #fff; padding: 10px 16px; display: flex; gap: 12px; align-items: center; font-size: 14px; z-index: 5 }
         .bar button { padding: 8px 16px; border-radius: 10px; border: 0; background: #05907B; color: #fff; font-weight: 700; cursor: pointer }
         .sheet { background: #fff; width: 210mm; margin: 12px auto; position: relative; }
         .full { height: 297mm; page-break-after: always; overflow: hidden; }
-        .flow { padding: 12mm 12mm 16mm; min-height: 297mm; }
+        .flow { padding: 12mm 12mm 16mm; }
         .cols { column-count: 2; column-gap: 9mm; column-rule: 1px solid #888; font-size: 10.5pt; line-height: 1.35; }
         .q { break-inside: avoid; margin-bottom: 5mm; }
         .q img { max-width: 100%; }
         .alt { display: flex; gap: 6px; margin: 1.2mm 0; }
-        .foot { position: fixed; bottom: 4mm; left: 0; right: 0; text-align: center; font-size: 8.5pt; color: #333; display: none }
-        @media print { body { background: #fff } .bar { display: none } .sheet { margin: 0; width: auto; box-shadow: none } .full { width: 210mm } .flow { padding: 0; min-height: 0 } .foot { display: block } }
+        .figure { margin: 2mm 0; text-align: center; break-inside: avoid; }
+        .figure img { display: block; margin: 0 auto; max-width: 100%; }
+        .cover { height: 268mm; page-break-after: always; overflow: hidden; }
+        @media print { body { background: #fff } .bar { display: none } .sheet { margin: 0; width: auto; box-shadow: none } .full { width: 210mm } .flow { padding: 0; min-height: 0 } .cover { width: auto } }
       `}</style>
       <div className="bar"><b>{kind === 'caderno' ? `Caderno · versão ${ver.version}` : kind === 'cartoes' ? 'Cartões-resposta' : kind === 'redacao' ? 'Folhas de redação' : 'Gabarito'} · {grade}</b>
-        <button onClick={() => window.print()}>Imprimir / Salvar PDF</button><span style={{ opacity: .8 }}>Em "Mais configurações", desligue "Cabeçalhos e rodapés".</span></div>
+        <button onClick={doPrint} disabled={printing}>{printing ? 'Carregando imagens…' : 'Imprimir / Salvar PDF'}</button><span style={{ opacity: .8 }}>Em "Mais configurações", desligue "Cabeçalhos e rodapés".</span></div>
 
-      {kind === 'caderno' && (
-        <div className="sheet flow">
-          <div className="foot">{contest.name} · {grade} · Versão {ver.version}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderBottom: '2px solid #000', paddingBottom: 6 }}>
-            {school?.logo_url && <img src={school.logo_url} alt="" style={{ height: 46 }} />}
-            <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: 15 }}>{school?.name}</div><div style={{ fontSize: 12 }}>{contest.name} · {grade}</div></div>
-            <div style={{ border: '2px solid #000', padding: '6px 14px', textAlign: 'center' }}><div style={{ fontSize: 10 }}>VERSÃO</div><div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1 }}>{ver.version}</div></div>
-          </div>
-          <div style={{ fontWeight: 800, textAlign: 'center', margin: '10px 0 6px', fontSize: 14 }}>CADERNO DE QUESTÕES</div>
-          <ol style={{ fontSize: '9.5pt', lineHeight: 1.4, margin: '0 0 8px', paddingLeft: 18, listStyle: 'decimal' }}>
-            <li>Este caderno contém {N} questões objetivas{contest.has_essay ? ' e a proposta de redação' : ''}. Confira se a versão impressa aqui é a mesma do seu cartão-resposta.</li>
-            <li>Cada questão tem uma única alternativa correta. Marque no cartão-resposta, preenchendo todo o círculo, com caneta azul ou preta.</li>
-            <li>Não rasure o cartão-resposta. Não escreva seu nome na folha de redação.</li>
-            {contest.exam_duration && <li>Duração da prova: {contest.exam_duration}.</li>}
-            <li>Ao terminar, entregue este caderno, o cartão-resposta{contest.has_essay ? ' e a folha de redação' : ''}. Nada pode ser levado.</li>
-          </ol>
-          <div className="cols">
-            {(() => {
-              let n = 0; let lastSubject = ''
-              return ver.items.map(it => {
-                const qu = questions[it.question_id]; if (!qu) return null
-                n++
-                const heading = qu.subject_id !== lastSubject ? <div style={{ fontWeight: 800, fontSize: '10pt', background: '#000', color: '#fff', padding: '2px 8px', margin: '2mm 0 3mm', breakAfter: 'avoid' }}>{subjName(qu.subject_id).toUpperCase()}</div> : null
-                lastSubject = qu.subject_id
-                return (
-                  <div key={it.question_id}>
-                    {heading}
-                    <div className="q">
-                      <div style={{ fontWeight: 800, marginBottom: 2 }}>QUESTÃO {String(n).padStart(2, '0')}</div>
-                      <div style={{ whiteSpace: 'pre-wrap' }}>{qu.statement}</div>
-                      {qu.statement_images.map(p => <div key={p} style={{ margin: '2mm 0' }}><ContestImg path={p} style={{ border: 0, borderRadius: 0, maxHeight: '70mm' }} /></div>)}
-                      <div style={{ marginTop: '2mm' }}>
-                        {it.alt_order.map((orig, p) => { const a = qu.alternatives[orig]; return (
-                          <div key={p} className="alt"><b>{LETTERS[p]})</b><div>{a?.text}{a?.image && <ContestImg path={a.image} style={{ border: 0, borderRadius: 0, maxHeight: '40mm', display: 'block' }} />}</div></div>
-                        ) })}
+      {kind === 'caderno' && (() => {
+        const accent = school?.primary_color || '#1A2B4A'
+        const ranges: { id: string; name: string; from: number; to: number }[] = []
+        ver.items.forEach((it, i) => {
+          const sid = questions[it.question_id]?.subject_id; if (!sid) return
+          const last = ranges[ranges.length - 1]
+          if (last && last.id === sid) last.to = i + 1; else ranges.push({ id: sid, name: subjName(sid), from: i + 1, to: i + 1 })
+        })
+        const Logo = ({ h }: { h: number }) => school?.logo_url ? <img src={school.logo_url} alt="" style={{ height: h, maxWidth: h * 3, objectFit: 'contain' }} /> : null
+        let n = 0; let lastSubject = ''
+        return (
+          <>
+            <div className="sheet cover">
+              <div style={{ background: accent, color: '#fff', padding: '14mm 16mm 10mm', display: 'flex', alignItems: 'center', gap: '8mm' }}>
+                {school?.logo_url && <div style={{ background: '#fff', borderRadius: 10, padding: 8 }}><Logo h={58} /></div>}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, opacity: .9 }}>{school?.name}</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.1, marginTop: 3 }}>{contest.name}</div>
+                  <div style={{ fontSize: 14, marginTop: 4 }}>{grade}</div>
+                </div>
+                <div style={{ background: '#fff', color: '#000', borderRadius: 10, padding: '4mm 7mm', textAlign: 'center' }}><div style={{ fontSize: 10, fontWeight: 700 }}>VERSÃO</div><div style={{ fontSize: 44, fontWeight: 800, lineHeight: 1 }}>{ver.version}</div></div>
+              </div>
+              <div style={{ padding: '10mm 16mm' }}>
+                <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: .5 }}>CADERNO DE QUESTÕES</div>
+                <div style={{ height: 3, width: 60, background: accent, margin: '3mm 0 6mm' }} />
+                <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 3 }}>LEIA COM ATENÇÃO</div>
+                <ol style={{ fontSize: '10.5pt', lineHeight: 1.5, margin: '0 0 8mm', paddingLeft: 18, listStyle: 'decimal' }}>
+                  <li>Este caderno tem <b>{N} questões objetivas</b>{contest.has_essay ? ' e a proposta de redação' : ''}. Confira se a versão <b>{ver.version}</b> é a mesma do seu cartão-resposta.</li>
+                  <li>Cada questão tem uma única alternativa correta. No cartão-resposta, preencha todo o círculo com caneta azul ou preta.</li>
+                  <li>Não rasure nem dobre o cartão-resposta. {contest.has_essay && 'Não escreva seu nome na folha de redação.'}</li>
+                  {contest.exam_duration && <li>Duração da prova: <b>{contest.exam_duration}</b>.</li>}
+                  <li>Ao terminar, entregue o caderno, o cartão-resposta{contest.has_essay ? ' e a folha de redação' : ''}. Nada pode ser levado.</li>
+                  <li>É proibido o uso de celular, calculadora e qualquer material de consulta.</li>
+                </ol>
+                <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 4 }}>O QUE TEM NESTA PROVA</div>
+                <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '10.5pt' }}>
+                  <tbody>{ranges.map(r => (
+                    <tr key={r.id} style={{ borderTop: '1px solid #bbb' }}><td style={{ padding: '2.2mm 0', fontWeight: 700 }}>{r.name}</td><td style={{ textAlign: 'right', color: '#333' }}>questões {r.from} a {r.to}</td></tr>
+                  ))}{contest.has_essay && <tr style={{ borderTop: '1px solid #bbb', borderBottom: '1px solid #bbb' }}><td style={{ padding: '2.2mm 0', fontWeight: 700 }}>Redação</td><td style={{ textAlign: 'right', color: '#333' }}>folha própria</td></tr>}</tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="sheet flow">
+              <div className="cols">
+                {ver.items.map(it => {
+                  const qu = questions[it.question_id]; if (!qu) return null
+                  n++
+                  const r = ranges.find(x => x.id === qu.subject_id && n >= x.from && n <= x.to)
+                  const heading = qu.subject_id !== lastSubject ? (
+                    <div style={{ background: accent, color: '#fff', padding: '2mm 3mm', margin: '1mm 0 3.5mm', breakAfter: 'avoid', display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '10pt', borderRadius: 3 }}>
+                      <span>{subjName(qu.subject_id).toUpperCase()}</span><span style={{ fontWeight: 600, opacity: .9 }}>{r ? `questões ${r.from} a ${r.to}` : ''}</span>
+                    </div>) : null
+                  lastSubject = qu.subject_id
+                  return (
+                    <div key={it.question_id}>
+                      {heading}
+                      <div className="q">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 1.5 }}>
+                          <span style={{ display: 'inline-block', minWidth: '7mm', textAlign: 'center', border: `1.4px solid ${accent}`, color: accent, fontWeight: 800, fontSize: '9.5pt', padding: '0.4mm 1.5mm', borderRadius: 3 }}>{String(n).padStart(2, '0')}</span>
+                        </div>
+                        <div style={{ whiteSpace: 'pre-wrap', textAlign: 'justify', hyphens: 'auto' }}>{qu.statement}</div>
+                        {qu.statement_images.map(p => <div key={p} className="figure"><ContestImg path={p} style={{ border: 0, borderRadius: 0, maxWidth: '100%', maxHeight: '62mm', width: 'auto', height: 'auto', objectFit: 'contain' }} /></div>)}
+                        <div style={{ marginTop: '2mm' }}>
+                          {it.alt_order.map((orig, pos) => { const a = qu.alternatives[orig]; return (
+                            <div key={pos} className="alt"><b style={{ minWidth: '5mm' }}>{LETTERS[pos]})</b><div style={{ flex: 1, minWidth: 0 }}>{a?.text}{a?.image && <div className="figure"><ContestImg path={a.image} style={{ border: 0, borderRadius: 0, maxWidth: '100%', maxHeight: '34mm', width: 'auto', height: 'auto', objectFit: 'contain' }} /></div>}</div></div>
+                          ) })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })
-            })()}
-          </div>
-          {contest.has_essay && contest.essay_prompt && (
-            <div style={{ breakBefore: 'page', paddingTop: 8 }}>
-              <div style={{ fontWeight: 800, fontSize: 13, background: '#000', color: '#fff', padding: '3px 10px', marginBottom: 8 }}>REDAÇÃO</div>
-              <div style={{ whiteSpace: 'pre-wrap', fontSize: '11pt', lineHeight: 1.5 }}>{contest.essay_prompt}</div>
-              <div style={{ fontSize: '10pt', marginTop: 10 }}>Escreva a redação na folha própria, sem se identificar. Não há folha de rascunho.</div>
+                  )
+                })}
+              </div>
             </div>
-          )}
-        </div>
-      )}
+
+            {contest.has_essay && contest.essay_prompt && (
+              <div className="sheet flow" style={{ breakBefore: 'page' }}>
+                <div style={{ background: accent, color: '#fff', padding: '3mm 5mm', fontWeight: 800, fontSize: 14, borderRadius: 3 }}>REDAÇÃO</div>
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: '11.5pt', lineHeight: 1.6, marginTop: '6mm', textAlign: 'justify' }}>{contest.essay_prompt}</div>
+                <div style={{ fontSize: '10pt', marginTop: '8mm', borderLeft: `3px solid ${accent}`, paddingLeft: 10, color: '#333' }}>Escreva o texto na folha de redação, sem se identificar. Não há folha de rascunho.</div>
+              </div>
+            )}
+          </>
+        )
+      })()}
 
       {kind === 'cartoes' && cands.map(c => {
         const ver2 = versionFor(c.number, contest.versions_count)
-        const rows = 20; const blocks = Math.ceil(N / rows)
+        const blocks = N > 25 ? 4 : Math.max(1, Math.ceil(N / 25)); const rows = Math.min(30, Math.ceil(N / blocks)); const pitch = Math.min(8, 180 / Math.max(rows, 1))
         return (
           <div key={c.id} className="sheet full">
             <Marks />
-            <div style={{ position: 'absolute', left: '20mm', top: '16mm', right: '66mm' }}>
+            <div style={{ position: 'absolute', left: '20mm', top: '16mm', right: '58mm', display: 'flex', gap: '4mm', alignItems: 'flex-start' }}>
+              {school?.logo_url && <img src={school.logo_url} alt="" style={{ height: '18mm', maxWidth: '40mm', objectFit: 'contain' }} />}
+              <div>
               <div style={{ fontWeight: 800, fontSize: 13 }}>{school?.name}</div>
               <div style={{ fontSize: 11 }}>{contest.name} · {grade}</div>
-              <div style={{ fontWeight: 800, fontSize: 18, margin: '4mm 0 3mm' }}>CARTÃO-RESPOSTA</div>
+              <div style={{ fontWeight: 800, fontSize: 18, margin: '3mm 0 2mm' }}>CARTÃO-RESPOSTA</div>
               <div style={{ fontSize: 11 }}>Inscrição nº <b style={{ fontSize: 15 }}>{c.number}</b> &nbsp;·&nbsp; Versão <b style={{ fontSize: 15 }}>{ver2}</b></div>
               <div style={{ fontSize: 12, marginTop: 2 }}><b>{c.student_name}</b></div>
+              </div>
             </div>
             {qrs[c.id] && <img src={qrs[c.id]} alt="" style={{ position: 'absolute', right: '20mm', top: '16mm', width: '32mm', height: '32mm' }} />}
             <div style={{ position: 'absolute', left: '20mm', right: '20mm', top: '56mm', fontSize: 9.5, border: '1px solid #000', padding: '2mm 3mm' }}>
@@ -153,7 +205,7 @@ export default function ConcursoImprimir() {
             </div>
             {Array.from({ length: N }, (_, i) => {
               const col = Math.floor(i / rows); const row = i % rows
-              const left = 20 + col * (170 / Math.max(blocks, 1)); const top = 72 + row * 8
+              const left = 20 + col * (170 / Math.max(blocks, 1)); const top = 72 + row * pitch
               return (
                 <div key={i} style={{ position: 'absolute', left: `${left}mm`, top: `${top}mm`, height: '6mm', display: 'flex', alignItems: 'center', gap: '1.6mm' }}>
                   <div style={{ width: '7mm', fontSize: 9.5, fontWeight: 700, textAlign: 'right', marginRight: '1mm' }}>{i + 1}</div>
@@ -173,6 +225,7 @@ export default function ConcursoImprimir() {
         <div key={c.id} className="sheet full">
           <Marks />
           <div style={{ position: 'absolute', left: '20mm', top: '16mm', right: '66mm' }}>
+            {school?.logo_url && <img src={school.logo_url} alt="" style={{ height: '14mm', maxWidth: '40mm', objectFit: 'contain', marginBottom: '2mm' }} />}
             <div style={{ fontWeight: 800, fontSize: 18 }}>FOLHA DE REDAÇÃO</div>
             <div style={{ fontSize: 11, margin: '2mm 0' }}>{contest.name} · {grade}</div>
             <div style={{ fontSize: 12 }}>Inscrição nº <b style={{ fontSize: 22 }}>{c.number}</b></div>
