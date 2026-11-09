@@ -128,7 +128,7 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
   const [newSubj, setNewSubj] = useState('')
   useEffect(() => setF(contest), [contest])
   const save = async () => {
-    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: f.public_slug ? slugify(f.public_slug) : null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
+    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: f.public_slug ? slugify(f.public_slug) : null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, print_color: f.print_color || null, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
     if (error) alert(error.message); else onChanged()
   }
   const lab: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: BRAND.muted, display: 'block', marginBottom: 5 }
@@ -183,6 +183,16 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
           <div><label style={lab}>Duração da prova (impressa no caderno)</label><input style={input} placeholder="Ex.: 3 horas" value={f.exam_duration ?? ''} onChange={e => setF({ ...f, exam_duration: e.target.value })} /></div>
+        </div>
+        <div>
+          <label style={lab}>Cor da prova impressa (faixas e destaques)</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {['#0B6E5F', '#1D4ED8', '#7C3AED', '#B91C1C', '#C2410C', '#1A2B4A', '#000000'].map(c => (
+              <button key={c} aria-label={`Cor ${c}`} onClick={() => setF({ ...f, print_color: c })} style={{ width: 30, height: 30, borderRadius: 99, background: c, cursor: 'pointer', border: (f.print_color || '').toLowerCase() === c.toLowerCase() ? `3px solid ${BRAND.ink}` : '2px solid #fff', boxShadow: '0 0 0 1px #CBD5E1' }} />
+            ))}
+            <input type="color" value={f.print_color || '#0B6E5F'} onChange={e => setF({ ...f, print_color: e.target.value })} aria-label="Outra cor" style={{ width: 38, height: 32, border: 0, background: 'none', cursor: 'pointer' }} />
+            <button style={{ ...btn(), padding: '5px 10px', fontSize: 12.5 }} onClick={() => setF({ ...f, print_color: null })}>Usar a cor da escola</button>
+          </div>
         </div>
         <div><label style={lab}>Proposta de redação (impressa no caderno)</label>
           <textarea rows={4} style={{ ...input, resize: 'vertical' }} placeholder="Tema e instruções da redação" value={f.essay_prompt ?? ''} onChange={e => setF({ ...f, essay_prompt: e.target.value })} /></div>

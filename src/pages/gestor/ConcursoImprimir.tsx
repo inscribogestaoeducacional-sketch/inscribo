@@ -98,7 +98,7 @@ export default function ConcursoImprimir() {
         <button onClick={doPrint} disabled={printing}>{printing ? 'Carregando imagens…' : 'Imprimir / Salvar PDF'}</button><span style={{ opacity: .8 }}>Em "Mais configurações", desligue "Cabeçalhos e rodapés".</span></div>
 
       {kind === 'caderno' && (() => {
-        const accent = school?.primary_color || '#1A2B4A'
+        const accent = contest.print_color || school?.primary_color || '#1A2B4A'
         const ranges: { id: string; name: string; from: number; to: number }[] = []
         ver.items.forEach((it, i) => {
           const sid = questions[it.question_id]?.subject_id; if (!sid) return
