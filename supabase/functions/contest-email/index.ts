@@ -26,6 +26,7 @@ function vars(c: any, k: any, school: any) {
     aluno: k.student_name, responsavel: k.responsible_name, numero: k.number, serie: k.grade, concurso: c.name,
     data_prova: fmtDate(c.exam_date), local: c.location || 'a definir', duracao: c.exam_duration || '',
     escola: school?.name || '', link: c.public_slug ? `${SITE}/bolsas/${c.public_slug}` : '',
+    link_resultado: c.public_slug ? `${SITE}/bolsas/${c.public_slug}/resultado` : '',
   } as Record<string, unknown>
 }
 const fill = (t: string, v: Record<string, unknown>, html = false) =>

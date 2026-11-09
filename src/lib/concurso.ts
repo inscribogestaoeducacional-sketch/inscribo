@@ -80,7 +80,7 @@ export function fieldCfg(fc: Contest['form_config'] | undefined, key: string) {
   return { label: c.label?.trim() || d.label, required: d.locked ? true : c.required !== false, enabled: d.locked ? true : c.enabled !== false }
 }
 
-export const EMAIL_VARS: [string, string][] = [['aluno', 'Nome do aluno'], ['responsavel', 'Responsável'], ['numero', 'Nº da inscrição'], ['serie', 'Série'], ['concurso', 'Nome do concurso'], ['data_prova', 'Data da prova'], ['local', 'Local'], ['duracao', 'Duração'], ['escola', 'Nome da escola'], ['link', 'Link da inscrição']]
+export const EMAIL_VARS: [string, string][] = [['aluno', 'Nome do aluno'], ['responsavel', 'Responsável'], ['numero', 'Nº da inscrição'], ['serie', 'Série'], ['concurso', 'Nome do concurso'], ['data_prova', 'Data da prova'], ['local', 'Local'], ['duracao', 'Duração'], ['escola', 'Nome da escola'], ['link', 'Link da inscrição'], ['link_resultado', 'Link do resultado']]
 export const DEFAULT_CONFIRMATION = {
   subject: 'Inscrição confirmada — {{concurso}}',
   body: 'Olá, {{responsavel}}!\n\nA inscrição de {{aluno}} ({{serie}}) no {{concurso}} foi recebida.\n\nNúmero de inscrição: {{numero}}\nData da prova: {{data_prova}}\nLocal: {{local}}\n\nGuarde este número: ele será pedido no dia da prova. Em breve a escola envia as demais orientações.\n\n{{escola}}',
