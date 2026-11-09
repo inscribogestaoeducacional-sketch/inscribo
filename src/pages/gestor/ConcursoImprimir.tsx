@@ -77,7 +77,7 @@ export default function ConcursoImprimir() {
   const subjName = (id: string) => subjects.find(s => s.id === id)?.name ?? ''
 
   return (
-    <div style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000', background: '#9aa3ad', minHeight: '100vh' }}>
+    <div className="root" style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000', background: '#9aa3ad', minHeight: '100vh' }}>
       <style>{`
         @page { size: A4; margin: ${margin}; ${kind === 'caderno' || kind === 'gabarito' ? `@bottom-left { content: "${contest.name} · ${grade}${kind === 'caderno' ? ` · Versão ${ver.version}` : ''}"; font: 8pt Arial; color: #444 } @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 8pt Arial; color: #444 }` : ''} }
         @page :first { @bottom-left { content: none } @bottom-right { content: none } }
@@ -93,8 +93,8 @@ export default function ConcursoImprimir() {
         .alt { display: flex; gap: 6px; margin: 1.2mm 0; }
         .figure { margin: 2mm 0; text-align: center; break-inside: avoid; }
         .figure img { display: block; margin: 0 auto; max-width: 100%; }
-        .cover { height: 268mm; page-break-after: always; overflow: hidden; }
-        @media print { body { background: #fff } .bar { display: none } .sheet { margin: 0; width: auto; box-shadow: none } .full { width: 210mm } .flow { padding: 0; min-height: 0 } .cover { width: auto } }
+        .cover { height: 262mm; page-break-after: always; overflow: hidden; }
+        @media print { body, .root { background: #fff !important; min-height: 0 !important } body { background: #fff } .bar { display: none } .sheet { margin: 0; width: auto; box-shadow: none } .full { width: 210mm } .flow { padding: 0; min-height: 0 } .cover { width: auto } }
       `}</style>
       <div className="bar"><b>{kind === 'caderno' ? `Caderno · versão ${ver.version}` : kind === 'cartoes' ? 'Cartões-resposta' : kind === 'redacao' ? 'Folhas de redação' : 'Gabarito'} · {grade}</b>
         <button onClick={doPrint} disabled={printing}>{printing ? 'Carregando imagens…' : 'Imprimir / Salvar PDF'}</button><span style={{ opacity: .8 }}>Em "Mais configurações", desligue "Cabeçalhos e rodapés".</span></div>
@@ -126,7 +126,7 @@ export default function ConcursoImprimir() {
                 <div style={{ height: 3, width: 60, background: accent, margin: '3mm 0 6mm' }} />
                 <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 3 }}>LEIA COM ATENÇÃO</div>
                 <ol style={{ fontSize: '10.5pt', lineHeight: 1.5, margin: '0 0 8mm', paddingLeft: 18, listStyle: 'decimal' }}>
-                  <li>Este caderno tem <b>{N} questões objetivas</b>{essay.enabled ? ' e a proposta de redação' : ''}. Confira se a versão <b>{ver.version}</b> é a mesma do seu cartão-resposta.</li>
+                  <li>Este caderno tem <b>{N} questões objetivas</b>{essay.enabled ? ' e a proposta de redação, com folha de rascunho' : ''}. Confira se a versão <b>{ver.version}</b> é a mesma do seu cartão-resposta.</li>
                   <li>Cada questão tem uma única alternativa correta. No cartão-resposta, preencha todo o círculo com caneta azul ou preta.</li>
                   <li>Não rasure nem dobre o cartão-resposta. {essay.enabled && 'Não escreva seu nome na folha de redação.'}</li>
                   {contest.exam_duration && <li>Duração da prova: <b>{contest.exam_duration}</b>.</li>}
@@ -174,12 +174,27 @@ export default function ConcursoImprimir() {
               </div>
             </div>
 
-            {essay.enabled && essay.prompt && (
-              <div className="sheet flow" style={{ breakBefore: 'page' }}>
-                <div style={{ background: accent, color: '#fff', padding: '3mm 5mm', fontWeight: 800, fontSize: 14, borderRadius: 3 }}>REDAÇÃO</div>
-                <div style={{ whiteSpace: 'pre-wrap', fontSize: '11.5pt', lineHeight: 1.6, marginTop: '6mm', textAlign: 'justify' }}>{essay.prompt}</div>
-                <div style={{ fontSize: '10pt', marginTop: '8mm', borderLeft: `3px solid ${accent}`, paddingLeft: 10, color: '#333' }}>Escreva o texto na folha de redação, sem se identificar. Não há folha de rascunho.</div>
-              </div>
+            {essay.enabled && (
+              <>
+                <div className="sheet flow" style={{ breakBefore: 'page', breakAfter: 'page' }}>
+                  <div style={{ background: accent, color: '#fff', padding: '3mm 5mm', fontWeight: 800, fontSize: 14, borderRadius: 3, display: 'flex', justifyContent: 'space-between' }}><span>REDAÇÃO</span><span style={{ fontWeight: 600, opacity: .9, fontSize: 11 }}>{grade}</span></div>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: '11.5pt', lineHeight: 1.6, marginTop: '6mm', textAlign: 'justify' }}>{essay.prompt || 'Proposta de redação não cadastrada.'}</div>
+                  <div style={{ fontSize: '10pt', marginTop: '8mm', borderLeft: `3px solid ${accent}`, paddingLeft: 10, color: '#333', lineHeight: 1.5 }}>
+                    Escreva o texto definitivo na <b>folha de redação</b>, sem se identificar: não escreva seu nome, não assine e não faça marcas.<br />
+                    O texto escrito na folha de rascunho (próxima página) <b>não será considerado</b> na correção.
+                  </div>
+                </div>
+                <div className="sheet flow" style={{ height: '269mm', overflow: 'hidden' }}>
+                  <div style={{ background: accent, color: '#fff', padding: '3mm 5mm', fontWeight: 800, fontSize: 14, borderRadius: 3, display: 'flex', justifyContent: 'space-between' }}><span>RASCUNHO DA REDAÇÃO</span><span style={{ fontWeight: 600, opacity: .9, fontSize: 11 }}>não será corrigido</span></div>
+                  <div style={{ marginTop: '4mm' }}>
+                    {Array.from({ length: 30 }, (_, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-end', height: '8mm', borderBottom: '0.3mm solid #666' }}>
+                        <span style={{ width: '8mm', fontSize: 7.5, color: '#555', paddingBottom: 0.5 }}>{i + 1}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
           </>
         )
