@@ -107,7 +107,9 @@ serve(async (req) => {
     const accent = c.print_color || school?.primary_color || '#05907B'
 
     if (action === 'test') {
-      const to = prof?.email || who.user.email
+      const asked = String(b.to ?? '').trim()
+      if (asked && !EMAIL_RE.test(asked)) return json(400, { error: 'E-mail do teste inválido' })
+      const to = asked || prof?.email || who.user.email
       if (!to) return json(400, { error: 'Sem e-mail para o teste' })
       const sample = { student_name: 'Nome do Aluno', responsible_name: 'Nome do Responsável', number: 1001, grade: (c.grades?.[0] ?? '6º ano') }
       const v = vars(c, sample, school)

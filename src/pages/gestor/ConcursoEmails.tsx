@@ -55,6 +55,7 @@ export default function ConcursoEmails({ contest, cands, onChanged }: { contest:
   const [focus, setFocus] = useState<'cb' | 'b'>('cb')
   const [busy, setBusy] = useState(''); const [msg, setMsg] = useState('')
   const [confirmSend, setConfirmSend] = useState(false)
+  const [testTo, setTestTo] = useState('')
 
   const load = useCallback(async () => {
     const [i, t, l] = await Promise.all([
@@ -81,7 +82,7 @@ export default function ConcursoEmails({ contest, cands, onChanged }: { contest:
   }
   const sendTest = async (s: string, b: string) => {
     setBusy('test')
-    try { const r = await call({ action: 'test', subject: s, body: b }); flash(r.ok ? `Teste enviado para ${r.to}.` : 'Falha no envio: ' + (r.error ?? '')) } catch (e: any) { flash(e.message) }
+    try { const r = await call({ action: 'test', subject: s, body: b, to: testTo.trim() || undefined }); flash(r.ok ? `Teste enviado para ${r.to}.` : 'Falha no envio: ' + (r.error ?? '')) } catch (e: any) { flash(e.message) }
     setBusy(''); load()
   }
   const withEmail = cands.filter(c => c.email && (!grade || c.grade === grade))
@@ -102,6 +103,11 @@ export default function ConcursoEmails({ contest, cands, onChanged }: { contest:
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {msg && <div role="status" style={{ ...card, background: BRAND.softer, borderColor: BRAND.softLine, fontSize: 14 }}>{msg}</div>}
+
+      <div style={card}>
+        <label style={lab}>Receber os e-mails de teste em</label>
+        <input style={input} type="email" placeholder="seu-email@exemplo.com (se vazio, vai para o e-mail da sua conta no Áion)" value={testTo} onChange={e => setTestTo(e.target.value)} />
+      </div>
 
       <div style={card}>
         <div style={{ fontWeight: 800, fontSize: 16, color: BRAND.ink }}>E-mail de confirmação da inscrição</div>
