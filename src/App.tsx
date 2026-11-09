@@ -53,6 +53,7 @@ import Vitrine from './pages/gestor/Vitrine'
 import Concurso from './pages/gestor/Concurso'
 import ProfessorQuestoes from './pages/professor/ProfessorQuestoes'
 import ConcursoPublico from './pages/public/ConcursoPublico'
+import ConcursoResultado from './pages/public/ConcursoResultado'
 import ConcursoImprimir from './pages/gestor/ConcursoImprimir'
 import Transmissoes from './pages/gestor/Transmissoes'
 import BaseAlunos from './pages/gestor/BaseAlunos'
@@ -272,7 +273,7 @@ function AppContent() {
     return <Routes><Route path="/concurso/imprimir" element={<ConcursoImprimir />} /></Routes>
   }
   if (pathname.startsWith('/bolsas/')) {
-    return <Routes><Route path="/bolsas/:slug" element={<ConcursoPublico />} /></Routes>
+    return <Routes><Route path="/bolsas/:slug/resultado" element={<ConcursoResultado />} /><Route path="/bolsas/:slug" element={<ConcursoPublico />} /></Routes>
   }
   if (pathname.startsWith('/raio-x')) {
     return <Routes><Route path="/raio-x" element={<RaioXPage />} /></Routes>

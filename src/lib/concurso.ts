@@ -15,7 +15,10 @@ export const LETTERS = ['A', 'B', 'C', 'D', 'E']
 export type Contest = { id: string; institution_id: string; name: string; year: number; status: 'draft' | 'open' | 'closed' | 'published'; exam_date: string | null; grades: string[]; alternatives_count: 4 | 5; versions_count: number; has_essay: boolean
   public_slug: string | null; edital: string | null; location: string | null; registration_deadline: string | null; extra_fields: ExtraField[]; essay_prompt: string | null; exam_duration: string | null; print_color: string | null
   essay_by_grade: Record<string, { enabled: boolean; prompt: string }>; form_config: { fields?: Record<string, { label?: string; required?: boolean; enabled?: boolean }> }
-  email_auto_confirm: boolean; email_confirmation: { subject?: string; body?: string } }
+  email_auto_confirm: boolean; email_confirmation: { subject?: string; body?: string }
+  essay_rubric: { id: string; name: string; max: number }[]; essay_weight: number; scholarship_tiers: { label: string; percent: number }[] }
+export type Essay = { id: string; candidate_id: string; scan_path: string | null; scores: Record<string, number>; total: number | null; max_total: number | null; annulled: boolean; note: string | null }
+export type Decision = { id: string; candidate_id: string; scholarship_pct: number | null; status: 'pending' | 'granted' | 'waitlist' | 'denied'; note: string | null }
 export type ExtraField = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }
 export type Candidate = { id: string; contest_id: string; lead_id: string | null; number: number; student_name: string; grade: string; responsible_name: string; phone: string; email: string | null; origin_school: string | null; answers: Record<string, string>; created_at: string; version: string | null; birth_date: string | null; student_cpf: string | null }
 export const slugify = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
@@ -81,4 +84,14 @@ export const EMAIL_VARS: [string, string][] = [['aluno', 'Nome do aluno'], ['res
 export const DEFAULT_CONFIRMATION = {
   subject: 'Inscrição confirmada — {{concurso}}',
   body: 'Olá, {{responsavel}}!\n\nA inscrição de {{aluno}} ({{serie}}) no {{concurso}} foi recebida.\n\nNúmero de inscrição: {{numero}}\nData da prova: {{data_prova}}\nLocal: {{local}}\n\nGuarde este número: ele será pedido no dia da prova. Em breve a escola envia as demais orientações.\n\n{{escola}}',
+}
+
+// Nota final (0–100): objetiva + redação (peso configurável) nas séries que têm redação.
+export function finalScore(c: Contest, grade: string, r?: { score: number; total: number } | null, e?: Essay | null) {
+  const hasEssay = essayFor(c, grade).enabled
+  const obj = r && r.total > 0 ? Math.round(1000 * r.score / r.total) / 10 : null
+  const essay = e ? (e.annulled ? 0 : e.total != null && (e.max_total ?? 0) > 0 ? Math.round(1000 * e.total / e.max_total!) / 10 : null) : null
+  const w = hasEssay ? c.essay_weight : 0
+  const final = obj == null ? null : w > 0 ? Math.round(((obj * (100 - w) + (essay ?? 0) * w) / 100) * 10) / 10 : obj
+  return { hasEssay, obj, essay, final, pending: obj != null && w > 0 && essay == null }
 }

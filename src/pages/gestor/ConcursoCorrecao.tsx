@@ -57,7 +57,7 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
 
   const onFiles = async (files: FileList | null) => {
     if (!files?.length) return
-    setBusy(true); setLog([]); const lines: string[] = []; let okN = 0, revN = 0, failN = 0
+    setBusy(true); setLog([]); const lines: string[] = []; let okN = 0, revN = 0, failN = 0, essayN = 0
     for (const file of Array.from(files)) {
       try {
         for await (const { page, image } of pdfPages(file)) {
@@ -68,6 +68,18 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
           if (r.qr.contestId !== contest.id) { failN++; lines.push(`${file.name} p.${page}: cartão de outro concurso`); continue }
           const c = cands.find(x => x.number === r.qr!.number)
           if (!c) { failN++; lines.push(`${file.name} p.${page}: inscrição ${r.qr.number} não existe`); continue }
+          if (r.qr.version === 'R') {
+            // folha de redação: guarda a imagem para correção às cegas
+            let path: string | null = null
+            if (r.rectified) {
+              const blob = await toJpeg(r.rectified)
+              if (blob) { path = `${contest.institution_id}/${contest.id}/redacao-${c.number}.jpg`; const up = await db.storage.from('contest-scans').upload(path, blob, { upsert: true, contentType: 'image/jpeg' }); if (up.error) path = null }
+            }
+            if (!path) { failN++; lines.push(`${file.name} p.${page}: não consegui guardar a redação de ${c.student_name}`); continue }
+            const { error: ee } = await db.from('contest_essays').upsert({ institution_id: contest.institution_id, contest_id: contest.id, candidate_id: c.id, scan_path: path }, { onConflict: 'contest_id,candidate_id' })
+            if (ee) { failN++; lines.push(`${file.name} p.${page}: erro ao salvar a redação`); continue }
+            essayN++; continue
+          }
           const nQ = versions.find(v => v.grade === c.grade)?.items.length ?? 0
           if (!nQ) { failN++; lines.push(`${file.name} p.${page}: a prova de ${c.grade} ainda não foi fechada`); continue }
           const rr = readCard(image, nQ, contest.alternatives_count)
@@ -81,7 +93,7 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
         }
       } catch (e: any) { failN++; lines.push(`${file.name}: ${e?.message || 'erro ao abrir o arquivo'}`) }
     }
-    setBusy(false); setProgress(''); setLog([`Lidos sem dúvida: ${okN} · Para conferir: ${revN} · Com problema: ${failN}`, ...lines]); load()
+    setBusy(false); setProgress(''); setLog([`Lidos sem dúvida: ${okN} · Para conferir: ${revN} · Redações recebidas: ${essayN} · Com problema: ${failN}`, ...lines]); load()
     if (fileRef.current) fileRef.current.value = ''
   }
 
