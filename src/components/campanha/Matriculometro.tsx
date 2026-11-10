@@ -5,9 +5,9 @@ import { Loader2, Printer, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { BRAND } from '../../lib/brand'
 
-interface Row { turma: string; serie: string | null; segment: string | null; base: number; matriculados: number; pre: number; ly_base?: number | null; ly_mesmo_dia?: number | null; ly_final?: number | null }
+interface Row { turma: string; serie: string | null; segment: string | null; base: number; matriculados: number; pre: number; saiu?: number; ly_base?: number | null; ly_mesmo_dia?: number | null; ly_final?: number | null }
 interface Resumo { ly_final: number; ly_mesmo_dia: number; hoje_matriculados: number; hoje_pre: number; dia_comparado: string }
-type Agg = { base: number; matriculados: number; pre: number; ly_base?: number | null; ly_mesmo_dia?: number | null; ly_final?: number | null }
+type Agg = { base: number; matriculados: number; pre: number; saiu?: number; ly_base?: number | null; ly_mesmo_dia?: number | null; ly_final?: number | null }
 // ritmo do ano passado no mesmo dia: quantos já estariam matriculados hoje se fosse como em %ANO%
 const expected = (r: Agg) => (r.ly_base ? Math.round(r.base * (r.ly_mesmo_dia ?? 0) / r.ly_base) : null)
 const devOf = (r: Agg) => { const e = expected(r); return e == null ? null : r.matriculados - e }
@@ -25,8 +25,8 @@ const card: React.CSSProperties = { border: '1px solid #E2E8F0', borderRadius: 1
 function Stack({ r, withPre }: { r: Agg; withPre: boolean }) {
   const b = r.base || 1, m = r.matriculados / b * 100, p = withPre ? r.pre / b * 100 : 0
   const e = expected(r)
-  const falta = r.base - r.matriculados - r.pre
-  const tip = `${r.matriculados} matriculados · ${r.pre} pré-matriculados · ${falta} faltam de ${r.base} veteranos${e != null ? ` · ritmo do ano passado no mesmo dia: ${e}` : ''}`
+  const falta = r.base - r.matriculados - r.pre - (r.saiu ?? 0)
+  const tip = `${r.matriculados} matriculados · ${r.pre} pré-matriculados · ${falta} faltam${r.saiu ? ` · ${r.saiu} saíram` : ''} de ${r.base} veteranos${e != null ? ` · ritmo do ano passado no mesmo dia: ${e}` : ''}`
   return (
     <div title={tip} style={{ flex: 1, display: 'flex', height: 14, background: COL.falta, borderRadius: 7, overflow: 'hidden', position: 'relative' }}>
       <div style={{ width: `${m}%`, background: COL.matriculado, transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} /><div style={{ width: `${p}%`, background: COL.pre, transition: 'width .9s cubic-bezier(.2,.8,.2,1)' }} />
@@ -69,7 +69,7 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
 
   const val = (r: { matriculados: number; pre: number }) => r.matriculados + (withPre ? r.pre : 0)
   const pct = (r: { base: number; matriculados: number; pre: number }) => (r.base ? val(r) / r.base : 0)
-  const sum = (list: Row[]): Agg => list.reduce((a, r) => ({ base: a.base + r.base, matriculados: a.matriculados + r.matriculados, pre: a.pre + r.pre, ly_base: (a.ly_base ?? 0) + (r.ly_base ?? 0), ly_mesmo_dia: (a.ly_mesmo_dia ?? 0) + (r.ly_mesmo_dia ?? 0), ly_final: (a.ly_final ?? 0) + (r.ly_final ?? 0) }), { base: 0, matriculados: 0, pre: 0, ly_base: 0, ly_mesmo_dia: 0, ly_final: 0 })
+  const sum = (list: Row[]): Agg => list.reduce((a, r) => ({ base: a.base + r.base, matriculados: a.matriculados + r.matriculados, pre: a.pre + r.pre, saiu: (a.saiu ?? 0) + (r.saiu ?? 0), ly_base: (a.ly_base ?? 0) + (r.ly_base ?? 0), ly_mesmo_dia: (a.ly_mesmo_dia ?? 0) + (r.ly_mesmo_dia ?? 0), ly_final: (a.ly_final ?? 0) + (r.ly_final ?? 0) }), { base: 0, matriculados: 0, pre: 0, saiu: 0, ly_base: 0, ly_mesmo_dia: 0, ly_final: 0 })
   const tot = sum(rows)
   const today = new Date().toLocaleDateString('pt-BR')
   const link: React.CSSProperties = { all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, width: '100%', margin: '5px 0', fontSize: 12.5 }
@@ -114,9 +114,9 @@ export default function Matriculometro({ institutionId, year }: { institutionId:
           <div><div style={{ fontSize: 30, fontWeight: 800, color: BRAND.ink, lineHeight: 1 }}>{tot.matriculados} <span style={{ fontSize: 15, color: '#94A3B8', fontWeight: 600 }}>de {tot.base}</span></div>
             <div style={{ fontSize: 12.5, color: BRAND.muted }}>{tot.base ? Math.round(tot.matriculados / tot.base * 100) : 0}% dos veteranos já matriculados · mais {tot.pre} em pré-matrícula (ainda não contam)</div></div>
           <div style={{ display: 'flex', gap: 14, fontSize: 12.5, flexWrap: 'wrap' }}>
-            {(['matriculado', 'pre', 'falta'] as const).map(k => (
-              <span key={k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><i style={{ width: 10, height: 10, borderRadius: 3, background: COL[k], display: 'inline-block' }} />
-                {ST[k]}: <b>{k === 'matriculado' ? tot.matriculados : k === 'pre' ? tot.pre : tot.base - tot.matriculados - tot.pre}</b></span>
+            {(['matriculado', 'pre', 'falta', ...((tot.saiu ?? 0) > 0 ? ['saiu' as const] : [])] as const).map(k => (
+              <span key={k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><i style={{ width: 10, height: 10, borderRadius: 3, background: k === 'saiu' ? '#F87171' : COL[k], display: 'inline-block' }} />
+                {ST[k]}: <b>{k === 'matriculado' ? tot.matriculados : k === 'pre' ? tot.pre : k === 'saiu' ? (tot.saiu ?? 0) : tot.base - tot.matriculados - tot.pre - (tot.saiu ?? 0)}</b></span>
             ))}
           </div>
         </div>

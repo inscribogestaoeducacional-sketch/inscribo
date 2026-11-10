@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 
 interface Row { student_id: string; name: string; registration: string | null; grade: string | null; status: string; changed_at: string | null; registered: boolean }
 
-export default function SaidasActivesoft({ institutionId, onRegister }: { institutionId: string; onRegister: (name: string, grade: string) => void }) {
+export default function SaidasActivesoft({ institutionId, onRegister }: { institutionId: string; onRegister: (name: string, grade: string, studentId: string) => void }) {
   const thisYear = new Date().getFullYear()
   const [year, setYear] = useState(thisYear)
   const [rows, setRows] = useState<Row[] | null>(null)
@@ -35,7 +35,7 @@ export default function SaidasActivesoft({ institutionId, onRegister }: { instit
               <div style={{ flex: 1 }}><b>{r.name}</b>{r.registration ? ` · ${r.registration}` : ''}<div style={{ color: '#94a3b8', fontSize: 12 }}>{r.grade ?? 'sem série'} · {r.status === 'cancelado' ? 'cancelado' : 'transferido'}{r.changed_at ? ` em ${new Date(r.changed_at).toLocaleDateString('pt-BR')}` : ''}</div></div>
               {r.registered
                 ? <span style={{ padding: '3px 10px', borderRadius: 99, background: '#DCFCE7', color: '#15803D', fontSize: 11.5, fontWeight: 700 }}>Já registrado</span>
-                : <button onClick={() => onRegister(r.name, r.grade ?? '')} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: '#1A2B4A', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Registrar</button>}
+                : <button onClick={() => onRegister(r.name, r.grade ?? '', r.student_id)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: '#1A2B4A', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Registrar</button>}
             </div>
           ))}
         </div>

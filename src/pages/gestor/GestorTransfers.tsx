@@ -37,6 +37,7 @@ interface Transfer {
   internal_notes: string | null
   status: string | null
   lead_id: string | null
+  student_id?: string | null
   created_at: string
   deleted_at: string | null
   deleted_by: string | null
@@ -52,6 +53,7 @@ interface DiagnosisData {
 }
 
 interface TransferForm {
+  studentId?: string | null
   studentName: string
   grade: string
   statedReason: string
@@ -104,7 +106,7 @@ function getStatusInfo(t: Transfer) {
 
 function fmt(n: number) { return new Intl.NumberFormat('pt-BR').format(n) }
 
-const EMPTY_FORM: TransferForm = { studentName: '', grade: '', statedReason: '', internalNotes: '', lead_id: null }
+const EMPTY_FORM: TransferForm = { studentName: '', grade: '', statedReason: '', internalNotes: '', lead_id: null, studentId: null }
 
 // ─── component ────────────────────────────────────────────────────────────────
 export default function GestorTransfers() {
@@ -235,6 +237,7 @@ export default function GestorTransfers() {
           stated_reason:  form.statedReason || null,
           internal_notes: form.internalNotes || null,
           lead_id:        form.lead_id || null,
+          student_id:     form.studentId || null,
           created_at:     new Date().toISOString(),
         }).select('id').single()
         if (error) throw new Error(error.message)
@@ -264,7 +267,7 @@ export default function GestorTransfers() {
   }
 
   function openEdit(t: Transfer) {
-    setForm({ studentName: t.student_name, grade: t.course_grade, statedReason: t.stated_reason ?? '', internalNotes: t.internal_notes ?? '', lead_id: t.lead_id ?? null })
+    setForm({ studentName: t.student_name, grade: t.course_grade, statedReason: t.stated_reason ?? '', internalNotes: t.internal_notes ?? '', lead_id: t.lead_id ?? null, studentId: t.student_id ?? null })
     setEditingTransfer(t)
     setShowNewModal(true)
   }
@@ -481,7 +484,7 @@ export default function GestorTransfers() {
           <PageHeader compact icon={ArrowRightLeft} title="Transferências" subtitle={`${total} registradas`}
             actions={isAdmin ? <HeaderAction primary icon={Plus} label="Nova transferência" onClick={() => { setForm(EMPTY_FORM); setEditingTransfer(null); setShowNewModal(true) }} /> : undefined} />
 
-          {activeTab === 'active' && <SaidasActivesoft institutionId={institutionId} onRegister={(name, grade) => { setForm({ ...EMPTY_FORM, studentName: name, grade }); setEditingTransfer(null); setShowNewModal(true) }} />}
+          {activeTab === 'active' && <SaidasActivesoft institutionId={institutionId} onRegister={(name, grade, studentId) => { setForm({ ...EMPTY_FORM, studentName: name, grade, studentId }); setEditingTransfer(null); setShowNewModal(true) }} />}
 
           <PillTabs tabs={[['active', `Ativos (${transfers.length})`], ['deleted', `Excluídos (${deletedTransfers.length})`], ['report', 'Relatório']]}
             value={activeTab} onChange={id => setActiveTab(id as 'active' | 'deleted' | 'report')} />
@@ -689,7 +692,7 @@ export default function GestorTransfers() {
           </button>
         } />
 
-      {activeTab === 'active' && <SaidasActivesoft institutionId={institutionId} onRegister={(name, grade) => { setForm({ ...EMPTY_FORM, studentName: name, grade }); setEditingTransfer(null); setShowNewModal(true) }} />}
+      {activeTab === 'active' && <SaidasActivesoft institutionId={institutionId} onRegister={(name, grade, studentId) => { setForm({ ...EMPTY_FORM, studentName: name, grade, studentId }); setEditingTransfer(null); setShowNewModal(true) }} />}
 
       {/* ── Tabs ───────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, width: 'fit-content' }}>
