@@ -330,21 +330,36 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
     setSavingAgentName(false)
   }
 
-  const handleTestConnection = async () => {
+  // silent = conferência automática ao abrir a tela: só pinta verde/vermelho, sem mensagem
+  const handleTestConnection = async (silent = false) => {
     const phoneId = metaConfig?.whatsapp_phone_id || phoneRecord?.phone_number_id
-    if (!phoneId) { setTestResult({ ok: false, msg: 'Phone ID ou token não configurado.' }); return }
-    setTesting(true); setTestResult(null)
+    if (!phoneId) { if (!silent) setTestResult({ ok: false, msg: 'Phone ID ou token não configurado.' }); return }
+    setTesting(true); if (!silent) setTestResult(null)
     try {
       const data = await platformAdmin<{ ok: boolean; error?: string; verified_name?: string; display_phone_number?: string }>('test_connection', { institution_id: institutionId })
-      if (data.ok) { setLive('ok'); setTestResult({ ok: true, msg: `Conectado: ${data.verified_name} (${data.display_phone_number})` }) }
+      if (data.ok) { setLive('ok'); if (!silent) setTestResult({ ok: true, msg: `Conectado: ${data.verified_name} (${data.display_phone_number})` }) }
       else { setLive('off'); setTestResult({ ok: false, msg: data.error || 'Token inválido' }) }
     } catch {
-      setTestResult({ ok: false, msg: 'Erro de rede ao testar a conexão.' })
+      if (!silent) setTestResult({ ok: false, msg: 'Erro de rede ao testar a conexão.' })
     } finally {
       setTesting(false)
       setTimeout(() => setTestResult(null), 6000)
     }
   }
+
+  // Ao abrir a tela: confere sozinho (sem precisar clicar em "Testar conexão"). Enquanto isso, usa o último
+  // resultado do monitor (a cada 10 min) para não mostrar verde de um número que já caiu.
+  const autoChecked = useRef(false)
+  useEffect(() => {
+    supabase.rpc('whatsapp_connection_state', { p_inst: institutionId }).then(({ data }) => {
+      if (mounted.current && (data as { down?: boolean } | null)?.down) setLive(cur => cur ?? 'off')
+    })
+  }, [institutionId])
+  useEffect(() => {
+    if (autoChecked.current || !(metaConfig?.whatsapp_phone_id || phoneRecord?.phone_number_id)) return
+    autoChecked.current = true
+    handleTestConnection(true)
+  }, [metaConfig, phoneRecord])
 
   const handleAddBlock = async () => {
     if (!newBlockNum.trim()) return
@@ -498,7 +513,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: connected ? '#A3E635' : '#FECACA' }} />{testing ? 'Verificando…' : connected ? 'Conectado' : 'Desconectado'}
             </span>
             {isAdmin && (
-              <button type="button" onClick={handleTestConnection} disabled={testing} aria-label="Verificar a conexão de novo"
+              <button type="button" onClick={() => handleTestConnection()} disabled={testing} aria-label="Verificar a conexão de novo"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#fff', background: 'rgba(255,255,255,.18)', border: 'none', padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit' }}>
                 <RefreshCw size={12} className={testing ? 'animate-spin' : undefined} /> Verificar
               </button>
@@ -542,7 +557,7 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <GhostButton onClick={() => setShowFlowEditor(true)}><Bot size={14} /> Editar robô</GhostButton>
-          <GhostButton onClick={handleTestConnection} disabled={testing}>{testing ? <><Loader2 size={13} className="animate-spin" /> Testando…</> : <><RefreshCw size={13} /> Testar conexão</>}</GhostButton>
+          <GhostButton onClick={() => handleTestConnection()} disabled={testing}>{testing ? <><Loader2 size={13} className="animate-spin" /> Testando…</> : <><RefreshCw size={13} /> Testar conexão</>}</GhostButton>
         </div>
       </Card>
 
