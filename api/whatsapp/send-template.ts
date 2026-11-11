@@ -211,6 +211,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const metaData = await metaRes.json()
     if (!metaRes.ok) {
       console.error('❌ Meta template error:', metaData)
+      if (metaData.error?.code === 100 && metaData.error?.error_subcode === 33) {
+        await supabase.rpc('whatsapp_health_record', {
+          p_phone_number_id: phoneRecord.phone_number_id, p_status: 'INACESSIVEL',
+          p_error: `${String(metaData.error?.message || 'número inacessível').slice(0, 200)} (código 100/33, no envio)`,
+        }).then(() => undefined, () => undefined)
+        return res.status(503).json({ error: 'O WhatsApp desta escola perdeu a conexão com a Meta e não está enviando. Avise o gestor ou a equipe Áion.', code: 'wa_disconnected' })
+      }
       return res.status(500).json({
         error:   metaData.error?.message || 'Erro ao enviar template',
         code:    metaData.error?.code,

@@ -51,6 +51,7 @@ import {
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import WaDownBanner from './WaDownBanner'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, Lead, supabase } from '../../lib/supabase'
 import { getInitials, cleanName } from '../../lib/initials'
 import { normalizeBrazilianInput, isBrazilianMobileLocal } from '../../lib/phone'
@@ -4032,6 +4033,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F0FDFB', height: '100%' }}>
+
+        <WaDownBanner institutionId={effectiveInstitutionId} />
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 

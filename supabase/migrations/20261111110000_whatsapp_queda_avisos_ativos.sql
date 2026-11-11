@@ -1,0 +1,4 @@
+-- Aplicado via MCP (ver migration "whatsapp_queda_avisos_ativos"): 
+-- coluna whatsapp_phone_health.last_alert_at; RPC whatsapp_connection_state(p_inst) para a faixa do WhatsApp;
+-- whatsapp_alert_owner (push aos admin_geral + e-mail via edge wa-down-alert se platform_settings.alert_email existir);
+-- whatsapp_health_record avisa na queda e repete a cada 30 min enquanto continuar caído.

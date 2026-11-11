@@ -410,6 +410,17 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     const metaData = await metaRes.json()
     if (!metaRes.ok) {
       console.error('❌ Meta API error:', metaData)
+      // 100/33: o número saiu da conta ou a Áion perdeu o acesso a ele. Marca como caído na hora
+      // (sem esperar o monitor de 10 min) e devolve um aviso claro em português.
+      if (metaData.error?.code === 100 && metaData.error?.error_subcode === 33) {
+        if (!isAionSend) {
+          await supabase.rpc('whatsapp_health_record', {
+            p_phone_number_id: phoneNumberId, p_status: 'INACESSIVEL',
+            p_error: `${String(metaData.error?.message || 'número inacessível').slice(0, 200)} (código 100/33, no envio)`,
+          }).then(() => undefined, () => undefined)
+        }
+        return res.status(503).json({ error: 'O WhatsApp desta escola perdeu a conexão com a Meta e não está enviando. Avise o gestor ou a equipe Áion.', code: 'wa_disconnected' })
+      }
       return res.status(500).json({ error: metaData.error?.message || 'Erro ao enviar mensagem' })
     }
 
