@@ -11,8 +11,8 @@ const btn = (primary = false): React.CSSProperties => ({
   border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink,
 })
 
-export default function ConcursoProva({ contest, subjects, quotas, questions, cands, onChanged }: {
-  contest: Contest; subjects: Subject[]; quotas: Quota[]; questions: Question[]; cands: Candidate[]; onChanged: () => void
+export default function ConcursoProva({ contest, subjects, quotas, questions, cands, onChanged, onGoSalas }: {
+  contest: Contest; subjects: Subject[]; quotas: Quota[]; questions: Question[]; cands: Candidate[]; onChanged: () => void; onGoSalas?: () => void
 }) {
   const grades = contest.grades.length ? contest.grades : GRADES
   const [grade, setGrade] = useState(grades[0])
@@ -73,6 +73,10 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ background: BRAND.soft, border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: '10px 14px', fontSize: 13.5, color: BRAND.ink, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ flex: '1 1 260px' }}><b>Último passo da preparação.</b> Aqui você escolhe as questões, a ordem e fecha a prova de cada série. A impressão de cadernos e cartões <b>por sala e por aluno</b> fica em "Aplicar e corrigir".</span>
+        {onGoSalas && <button style={btn()} onClick={onGoSalas}>Ir para Salas e impressão</button>}
+      </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={grade} onChange={e => setGrade(e.target.value)} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: '9px 11px', fontSize: 14, fontWeight: 700, fontFamily: 'inherit' }}>
           {grades.map(g => <option key={g}>{g}</option>)}

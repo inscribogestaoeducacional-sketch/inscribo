@@ -26,9 +26,9 @@ const btn = (primary = false): React.CSSProperties => ({
   border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink,
 })
 const STAGES = [
-  { id: 'prep', label: 'Preparar', tabs: [['config', '1 · Dados básicos'], ['pub', '2 · Inscrição e edital'], ['fmt', '3 · Formato da prova'], ['prof', 'Professores e cotas'], ['quest', 'Questões'], ['prova', 'Montar prova']] },
+  { id: 'prep', label: 'Preparar', tabs: [['config', '1 · Dados básicos'], ['pub', '2 · Inscrição e edital'], ['fmt', '3 · Formato da prova'], ['prof', '4 · Professores e cotas'], ['quest', '5 · Questões'], ['prova', '6 · Fechar a prova']] },
   { id: 'insc', label: 'Inscrições', tabs: [['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails']] },
-  { id: 'corr', label: 'Aplicar e corrigir', tabs: [['salas', 'Salas e listas'], ['corr', 'Correção']] },
+  { id: 'corr', label: 'Aplicar e corrigir', tabs: [['salas', 'Salas e impressão'], ['corr', 'Correção']] },
   { id: 'res', label: 'Resultados', tabs: [['res', 'Ranking e divulgação']] },
 ] as const
 type Tab = 'salas' | 'config' | 'fmt' | 'pub' | 'prof' | 'quest' | 'prova' | 'painel' | 'insc' | 'mail' | 'corr' | 'res'
@@ -135,8 +135,8 @@ export default function Concurso() {
           {tab === 'painel' && <Painel contest={contest} cands={cands} />}
           {tab === 'insc' && <Candidates contest={contest} cands={cands} onChanged={loadContest} />}
           {tab === 'mail' && <ConcursoEmails key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
-          {tab === 'prova' && <ConcursoProva contest={contest} subjects={subjects} quotas={quotas} questions={questions} cands={cands} onChanged={loadContest} />}
-          {tab === 'salas' && <ConcursoSalas key={contest.id} contest={contest} cands={cands} onChanged={loadContest} />}
+          {tab === 'prova' && <ConcursoProva contest={contest} subjects={subjects} quotas={quotas} questions={questions} cands={cands} onChanged={loadContest} onGoSalas={() => setTab('salas')} />}
+          {tab === 'salas' && <ConcursoSalas key={contest.id} contest={contest} cands={cands} onChanged={loadContest} onGoProva={() => setTab('prova')} />}
           {tab === 'corr' && <ConcursoCorrecao contest={contest} subjects={subjects} questions={questions} cands={cands} />}
           {tab === 'res' && <ConcursoResultados key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prof' && <Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}

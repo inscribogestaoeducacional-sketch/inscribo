@@ -13,7 +13,7 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&am
 const byName = (a: Candidate, b: Candidate) => a.student_name.localeCompare(b.student_name, 'pt-BR')
 const byNumber = (a: Candidate, b: Candidate) => a.number - b.number
 
-export default function ConcursoSalas({ contest, cands, onChanged }: { contest: Contest; cands: Candidate[]; onChanged: () => void }) {
+export default function ConcursoSalas({ contest, cands, onChanged, onGoProva }: { contest: Contest; cands: Candidate[]; onChanged: () => void; onGoProva?: () => void }) {
   const [rooms, setRooms] = useState<Room[]>([])
   const [school, setSchool] = useState<{ name: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -132,6 +132,10 @@ export default function ConcursoSalas({ contest, cands, onChanged }: { contest: 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ background: BRAND.soft, border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: '10px 14px', fontSize: 13.5, color: BRAND.ink, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ flex: '1 1 260px' }}><b>Dia da prova.</b> Crie as salas, distribua os inscritos e imprima tudo daqui. Os cadernos usam a prova que você fechou em "Preparar": as questões não mudam por aqui.</span>
+        {onGoProva && <button style={btn()} onClick={onGoProva}>Ver a prova fechada</button>}
+      </div>
       {msg && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 200, maxWidth: 'min(520px, calc(100vw - 24px))', background: BRAND.ink, color: '#fff', borderRadius: 14, padding: '12px 18px', fontSize: 14.5, fontWeight: 700, boxShadow: '0 14px 40px -12px rgba(0,0,0,.5)' }}>{msg}</div>}
 
       <div style={card}>
