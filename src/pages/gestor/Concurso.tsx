@@ -26,7 +26,7 @@ const btn = (primary = false): React.CSSProperties => ({
   border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink,
 })
 const STAGES = [
-  { id: 'prep', label: 'Preparar', tabs: [['config', '1 · Dados básicos'], ['fmt', '2 · Formato da prova'], ['pub', '3 · Inscrição e edital'], ['prof', 'Professores e cotas'], ['quest', 'Questões'], ['prova', 'Montar prova']] },
+  { id: 'prep', label: 'Preparar', tabs: [['config', '1 · Dados básicos'], ['pub', '2 · Inscrição e edital'], ['fmt', '3 · Formato da prova'], ['prof', 'Professores e cotas'], ['quest', 'Questões'], ['prova', 'Montar prova']] },
   { id: 'insc', label: 'Inscrições', tabs: [['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails']] },
   { id: 'corr', label: 'Aplicar e corrigir', tabs: [['salas', 'Salas e listas'], ['corr', 'Correção']] },
   { id: 'res', label: 'Resultados', tabs: [['res', 'Ranking e divulgação']] },
@@ -219,8 +219,8 @@ export function DeleteContest({ contest, inscritos, questoes, onDeleted }: { con
 type CfgPart = 'config' | 'fmt' | 'pub'
 const PART_INFO: Record<CfgPart, { title: string; sub: string }> = {
   config: { title: 'Passo 1 · Dados básicos', sub: 'Nome, datas, local e séries. É o que aparece para as famílias.' },
-  fmt: { title: 'Passo 2 · Formato da prova', sub: 'Disciplinas, alternativas, versões, redação e visual do caderno impresso.' },
-  pub: { title: 'Passo 3 · Inscrição e edital', sub: 'Endereço da página, perguntas do formulário e o edital.' },
+  pub: { title: 'Passo 2 · Inscrição e edital', sub: 'Endereço da página, perguntas do formulário e o edital. Pronto este passo, já dá para divulgar o link.' },
+  fmt: { title: 'Passo 3 · Formato da prova', sub: 'Disciplinas, alternativas, versões, redação e visual do caderno impresso.' },
 }
 
 function Config({ contest, subjects, part, onChanged }: { contest: Contest; subjects: Subject[]; part: CfgPart; onChanged: () => void }) {
@@ -230,6 +230,9 @@ function Config({ contest, subjects, part, onChanged }: { contest: Contest; subj
   const [restored, setRestored] = useState(() => !!readDraft())
   const [newSubj, setNewSubj] = useState('')
   const [saveMsg, setSaveMsg] = useState('')
+  const [instName, setInstName] = useState('')
+  useEffect(() => { db.from('institutions').select('name').eq('id', contest.institution_id).maybeSingle().then(({ data }: any) => setInstName(data?.name ?? '')) }, [contest.institution_id])
+  const slugBase = slugify(instName)
   const prev = useRef(contest)
   const force = useRef(false)
   const dirty = JSON.stringify(f) !== JSON.stringify(contest)
@@ -257,8 +260,8 @@ function Config({ contest, subjects, part, onChanged }: { contest: Contest; subj
     const { data: fresh } = await db.from('contests').select('essay_by_grade').eq('id', contest.id).maybeSingle()
     const merged: Contest['essay_by_grade'] = {}
     for (const [g, v] of Object.entries(f.essay_by_grade ?? {})) merged[g] = { ...(fresh?.essay_by_grade?.[g] ?? {}), enabled: v.enabled, prompt: fresh?.essay_by_grade?.[g]?.prompt ?? v.prompt ?? '' }
-    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: f.public_slug ? slugify(f.public_slug) : null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, print_color: f.print_color || null, essay_by_grade: merged, form_config: f.form_config ?? {}, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
-    if (error) { setSaveMsg('Não foi possível salvar: ' + error.message) } else {
+    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: (f.public_slug ? slugify(f.public_slug) : slugBase) || null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, print_color: f.print_color || null, essay_by_grade: merged, form_config: f.form_config ?? {}, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
+    if (error) { setSaveMsg(/contests_public_slug_uidx|duplicate/i.test(error.message) ? 'Esse endereço já está em uso por outro concurso. Acrescente um complemento (ex.: a cidade ou o ano).' : 'Não foi possível salvar: ' + error.message) } else {
       setSaveMsg('Salvo!'); setRestored(false); force.current = true
       try { localStorage.removeItem(draftKey) } catch { /* ok */ }
       onChanged()
@@ -270,7 +273,7 @@ function Config({ contest, subjects, part, onChanged }: { contest: Contest; subj
   const missing: string[] = []
   if (part === 'config') { if (!f.exam_date) missing.push('data da prova'); if (!f.location) missing.push('local'); if (!f.registration_deadline) missing.push('"Inscrições até"'); if (!f.grades.length) missing.push('séries') }
   if (part === 'fmt') { if (!subjects.length) missing.push('disciplinas') }
-  if (part === 'pub') { if (!f.public_slug) missing.push('endereço da página'); if (!f.edital) missing.push('edital') }
+  if (part === 'pub') { if (!f.public_slug && !slugBase) missing.push('endereço da página'); if (!f.edital) missing.push('edital') }
   const info = PART_INFO[part]
 
   return (
@@ -363,7 +366,20 @@ function Config({ contest, subjects, part, onChanged }: { contest: Contest; subj
 
       {part === 'pub' && (<>
         <div><label style={lab}>Endereço da página</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ fontSize: 13, color: BRAND.muted, whiteSpace: 'nowrap' }}>/bolsas/</span><input style={input} placeholder="concurso-2027" value={f.public_slug ?? ''} onChange={e => setF({ ...f, public_slug: e.target.value })} /></div></div>
+          {(() => {
+            const cur = f.public_slug || slugBase
+            const suffix = slugBase && cur.startsWith(slugBase) ? cur.slice(slugBase.length).replace(/^-/, '') : ''
+            const compose = (suf: string) => { const t = slugify(suf); return slugBase ? (t ? `${slugBase}-${t}` : slugBase) : t }
+            return (<>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, color: BRAND.muted, whiteSpace: 'nowrap' }}>/bolsas/</span>
+                {slugBase ? <b style={{ fontSize: 14, color: BRAND.ink }}>{slugBase}</b> : <input style={{ ...input, width: 'auto', flex: '1 1 160px' }} placeholder="nome-da-escola" value={f.public_slug ?? ''} onChange={e => setF({ ...f, public_slug: e.target.value })} />}
+                {slugBase && <><span style={{ fontSize: 13, color: BRAND.muted }}>-</span><input style={{ ...input, width: 'auto', flex: '1 1 120px', maxWidth: 200 }} placeholder="complemento (opcional)" value={suffix} onChange={e => setF({ ...f, public_slug: compose(e.target.value) })} /></>}
+              </div>
+              <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 4 }}>O começo do endereço é o nome da sua escola e nenhuma outra escola usa o mesmo. Use o complemento só se tiver mais de um concurso (ex.: <b>2028</b>) ou se houver outra escola com o mesmo nome.</div>
+            </>)
+          })()}
+        </div>
         {contest.public_slug && (
           <div style={{ fontSize: 13, color: BRAND.muted }}>Link para divulgar: <b style={{ color: BRAND.ink }}>{window.location.origin}/bolsas/{contest.public_slug}</b> {' '}
             <button style={{ ...btn(), padding: '4px 10px', fontSize: 12.5 }} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/bolsas/${contest.public_slug}`)}>Copiar</button>
