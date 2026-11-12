@@ -1,6 +1,6 @@
 // Concurso de Bolsas — coordenação: cria o concurso, disciplinas, professores e cotas, e revisa as questões.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Trophy, Plus, Loader2, Check, Undo2, Trash2, Mail } from 'lucide-react'
+import { Trophy, Plus, Loader2, Check, Undo2, Trash2, Mail, FileText } from 'lucide-react'
 import PageHeader from '../../components/ui/PageHeader'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -15,7 +15,7 @@ import ConcursoResultados from './ConcursoResultados'
 import ConcursoSalas from './ConcursoSalas'
 import { ContestImg } from '../../components/concurso/media'
 import {
-  db, DEFAULT_SUBJECTS, deadlineFromInput, deadlineToInput, essayFor, examDateFromInput, examDateToInput, subjectHasGrade, DEFAULT_COVER, COVER_TOKENS, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
+  db, DEFAULT_SUBJECTS, deadlineFromInput, deadlineLong, deadlineToInput, essayFor, examDateFromInput, examDateToInput, subjectHasGrade, DEFAULT_COVER, COVER_TOKENS, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
   type Candidate, type Contest, type ExtraField, slugify, type Question, type Quota, type Subject, type Teacher,
 } from '../../lib/concurso'
 
@@ -104,6 +104,7 @@ export default function Concurso() {
         <NewContest instId={instId} onCreated={async id => { await loadAll(); setSel(id) }} />
       ) : (
         <>
+          <StatusBar contest={contest} flash={flash} onChanged={() => { loadAll(); loadContest() }} />
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {stat('Inscritos', cands.length)}
             {stat('Questões aprovadas', `${approved}/${questions.length}`)}
@@ -223,6 +224,58 @@ const PART_INFO: Record<CfgPart, { title: string; sub: string }> = {
   fmt: { title: 'Passo 3 · Formato da prova', sub: 'Disciplinas, alternativas, versões, redação e visual do caderno impresso.' },
 }
 
+// Faixa no topo: em que fase está o concurso e o botão certo para a próxima.
+function StatusBar({ contest, onChanged, flash }: { contest: Contest; onChanged: () => void; flash: (m: string) => void }) {
+  const [busy, setBusy] = useState(false)
+  const link = contest.public_slug ? `${window.location.origin}/bolsas/${contest.public_slug}` : ''
+  const set = async (status: Contest['status'], ok: string) => {
+    setBusy(true)
+    const { error } = await db.from('contests').update({ status }).eq('id', contest.id)
+    setBusy(false)
+    if (error) return flash('Não foi possível mudar: ' + error.message)
+    flash(ok); onChanged()
+  }
+  const abrir = () => {
+    const falta: string[] = []
+    if (!contest.public_slug) falta.push('endereço da página')
+    if (!contest.exam_date) falta.push('data da prova')
+    if (!contest.registration_deadline) falta.push('"Inscrições até"')
+    if (!contest.location) falta.push('local da prova')
+    if (!contest.edital_path && !contest.edital?.trim()) falta.push('edital (PDF)')
+    if (!contest.grades.length) falta.push('séries')
+    const msg = falta.length ? `Ainda falta preencher: ${falta.join(', ')}.\n\nAbrir as inscrições mesmo assim? A página pública fica disponível na hora.` : 'Abrir as inscrições agora? A página pública fica disponível na hora.'
+    if (confirm(msg)) set('open', 'Inscrições abertas. A página já está no ar.')
+  }
+  const wrap: React.CSSProperties = { ...card, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', padding: '12px 16px' }
+  const dot = (c: string) => <span style={{ width: 10, height: 10, borderRadius: 99, background: c, display: 'inline-block', flexShrink: 0 }} />
+  const cp = link && <button style={btn()} onClick={() => { navigator.clipboard?.writeText(link); flash('Link copiado.') }}>Copiar link</button>
+  if (contest.status === 'draft') return (
+    <div style={{ ...wrap, background: '#FFFBEB', borderColor: '#FCD34D' }}>
+      {dot('#D97706')}
+      <div style={{ flex: '1 1 240px' }}><div style={{ fontWeight: 800, color: BRAND.ink }}>Inscrições ainda não abertas</div><div style={{ fontSize: 13, color: BRAND.muted }}>A página das famílias só aparece depois que você abrir.</div></div>
+      <button style={btn(true)} disabled={busy} onClick={abrir}>Abrir inscrições</button>
+    </div>
+  )
+  if (contest.status === 'open') return (
+    <div style={{ ...wrap, background: BRAND.soft, borderColor: BRAND.primary }}>
+      {dot('#059669')}
+      <div style={{ flex: '1 1 240px', minWidth: 0 }}><div style={{ fontWeight: 800, color: BRAND.ink }}>Inscrições abertas{contest.registration_deadline ? ` até ${deadlineLong(contest.registration_deadline)}` : ''}</div>{link && <div style={{ fontSize: 13, color: BRAND.muted, wordBreak: 'break-all' }}>{link}</div>}</div>
+      {cp}
+      <button style={btn()} disabled={busy} onClick={() => { if (confirm('Encerrar as inscrições agora? A página passa a mostrar que estão encerradas.')) set('closed', 'Inscrições encerradas.') }}>Encerrar inscrições</button>
+    </div>
+  )
+  if (contest.status === 'closed') return (
+    <div style={wrap}>
+      {dot('#64748B')}
+      <div style={{ flex: '1 1 240px' }}><div style={{ fontWeight: 800, color: BRAND.ink }}>Inscrições encerradas</div><div style={{ fontSize: 13, color: BRAND.muted }}>Para aceitar mais inscrições, reabra (confira o "Inscrições até").</div></div>
+      <button style={btn()} disabled={busy} onClick={() => { if (confirm('Reabrir as inscrições?')) set('open', 'Inscrições reabertas.') }}>Reabrir inscrições</button>
+    </div>
+  )
+  return (
+    <div style={wrap}>{dot('#2563EB')}<div style={{ flex: 1, fontWeight: 800, color: BRAND.ink }}>Resultado divulgado</div></div>
+  )
+}
+
 function Config({ contest, subjects, quotas, part, onChanged }: { contest: Contest; subjects: Subject[]; quotas: Quota[]; part: CfgPart; onChanged: () => void }) {
   const draftKey = `aion-concurso-rascunho:${contest.id}`
   const readDraft = (): Partial<Contest> | null => { try { const r = localStorage.getItem(draftKey); return r ? JSON.parse(r) : null } catch { return null } }
@@ -273,7 +326,7 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
   const missing: string[] = []
   if (part === 'config') { if (!f.exam_date) missing.push('data da prova'); if (!f.location) missing.push('local'); if (!f.registration_deadline) missing.push('"Inscrições até"'); if (!f.grades.length) missing.push('séries') }
   if (part === 'fmt') { if (!subjects.length) missing.push('disciplinas') }
-  if (part === 'pub') { if (!f.public_slug && !slugBase) missing.push('endereço da página'); if (!f.edital) missing.push('edital') }
+  if (part === 'pub') { if (!f.public_slug && !slugBase) missing.push('endereço da página'); if (!f.edital && !contest.edital_path) missing.push('edital (PDF)') }
   const info = PART_INFO[part]
 
   return (
@@ -422,6 +475,7 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
             <button style={{ ...btn(), padding: '4px 10px', fontSize: 12.5 }} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/bolsas/${contest.public_slug}`)}>Copiar</button>
             <div style={{ marginTop: 4 }}>Para aparecer na Vitrine, adicione um botão de matrícula (modo link) com este endereço.</div></div>
         )}
+        <EditalUpload contest={contest} lab={lab} onChanged={onChanged} />
         <div>
           <label style={lab}>Perguntas da inscrição (texto e se é obrigatória)</label>
           {FORM_FIELDS.map(d => {
@@ -450,8 +504,6 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
           ))}
           <button style={btn()} onClick={() => setF({ ...f, extra_fields: [...(f.extra_fields ?? []), { id: 'q' + Date.now().toString(36), label: '', type: 'text', required: false }] })}><Plus size={15} /> Adicionar pergunta</button>
         </div>
-        <div><label style={lab}>Edital</label>
-          <textarea rows={8} style={{ ...input, resize: 'vertical' }} placeholder="Regras, conteúdo da prova, critérios, bolsas, prazos…" value={f.edital ?? ''} onChange={e => setF({ ...f, edital: e.target.value })} /></div>
       </>)}
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px solid ${BRAND.line}`, paddingTop: 12 }}>
@@ -459,6 +511,66 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
         {saveMsg ? <span role="status" style={{ fontSize: 14, fontWeight: 700, color: saveMsg === 'Salvo!' ? '#047857' : '#B91C1C' }}>{saveMsg}</span>
           : dirty ? <span style={{ fontSize: 13.5, fontWeight: 700, color: '#B45309' }}>Há alterações ainda não salvas (valem os 3 passos).</span> : null}
       </div>
+    </div>
+  )
+}
+
+// Edital em PDF: arrastar ou escolher o arquivo. Fica num bucket público para as famílias abrirem pela página de inscrição.
+function EditalUpload({ contest, lab, onChanged }: { contest: Contest; lab: React.CSSProperties; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [over, setOver] = useState(false)
+  const [err, setErr] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const path = contest.edital_path
+  const url = path ? db.storage.from('contest-edital').getPublicUrl(path).data.publicUrl : ''
+  const send = async (file: File | undefined) => {
+    setErr('')
+    if (!file) return
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) return setErr('Envie o edital em PDF.')
+    if (file.size > 20 * 1024 * 1024) return setErr('O PDF passa de 20 MB. Reduza o arquivo e tente de novo.')
+    setBusy(true)
+    const np = `${contest.institution_id}/${contest.id}/edital-${Date.now()}.pdf`
+    const up = await db.storage.from('contest-edital').upload(np, file, { contentType: 'application/pdf' })
+    if (up.error) { setBusy(false); return setErr('Não foi possível enviar: ' + up.error.message) }
+    const { error } = await db.from('contests').update({ edital_path: np }).eq('id', contest.id)
+    if (error) { setBusy(false); return setErr('Não foi possível salvar: ' + error.message) }
+    if (path) await db.storage.from('contest-edital').remove([path])
+    setBusy(false); onChanged()
+  }
+  const remove = async () => {
+    if (!path || !confirm('Remover o edital? A página de inscrição deixa de mostrar o PDF.')) return
+    await db.from('contests').update({ edital_path: null }).eq('id', contest.id)
+    await db.storage.from('contest-edital').remove([path])
+    onChanged()
+  }
+  return (
+    <div>
+      <label style={lab}>Edital (PDF)</label>
+      <div
+        onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
+        onDrop={e => { e.preventDefault(); setOver(false); send(e.dataTransfer.files?.[0]) }}
+        style={{ border: `2px dashed ${over ? BRAND.primary : BRAND.line}`, background: over ? BRAND.soft : '#fff', borderRadius: 14, padding: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        {path ? (<>
+          <FileText size={26} color={BRAND.primary} />
+          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+            <div style={{ fontWeight: 800, color: BRAND.ink, fontSize: 14 }}>Edital enviado</div>
+            <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: BRAND.primaryDark, fontWeight: 700 }}>Abrir o PDF</a>
+            <span style={{ fontSize: 12.5, color: BRAND.muted }}> · as famílias baixam pela página de inscrição</span>
+          </div>
+          <button style={btn()} disabled={busy} onClick={() => inputRef.current?.click()}>{busy ? <Loader2 size={15} className="animate-spin" /> : null} Trocar PDF</button>
+          <button style={btn()} disabled={busy} onClick={remove}>Remover</button>
+        </>) : (<>
+          <FileText size={26} color={BRAND.muted} />
+          <div style={{ flex: '1 1 220px' }}>
+            <div style={{ fontWeight: 800, color: BRAND.ink, fontSize: 14 }}>Arraste o PDF do edital para cá</div>
+            <div style={{ fontSize: 12.5, color: BRAND.muted }}>ou escolha o arquivo. Até 20 MB.</div>
+          </div>
+          <button style={btn(true)} disabled={busy} onClick={() => inputRef.current?.click()}>{busy ? <Loader2 size={15} className="animate-spin" /> : null} Escolher PDF</button>
+        </>)}
+        <input ref={inputRef} type="file" accept="application/pdf,.pdf" hidden onChange={e => { send(e.target.files?.[0]); e.target.value = '' }} />
+      </div>
+      {err && <div role="alert" style={{ fontSize: 13, fontWeight: 700, color: '#B91C1C', marginTop: 6 }}>{err}</div>}
+      {contest.edital?.trim() && <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 6 }}>Este concurso tem um edital em texto, escrito antes. Ele continua aparecendo na página até você enviar o PDF.</div>}
     </div>
   )
 }

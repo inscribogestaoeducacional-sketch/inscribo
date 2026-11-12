@@ -7,7 +7,7 @@ import { deadlineLong, examDateLong, fieldCfg } from '../../lib/concurso'
 type Field = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }
 type Info = {
   name: string; year: number; status: string; exam_date: string | null; location: string | null; grades: string[]
-  edital: string | null; extra_fields: Field[]; form_config?: { fields?: Record<string, { label?: string; required?: boolean; enabled?: boolean }> }; deadline: string | null; open: boolean
+  edital: string | null; edital_path?: string | null; extra_fields: Field[]; form_config?: { fields?: Record<string, { label?: string; required?: boolean; enabled?: boolean }> }; deadline: string | null; open: boolean
   school_name: string; logo_url: string | null; primary_color: string | null; city: string | null
 }
 
@@ -70,7 +70,12 @@ export default function ConcursoPublico() {
           {info.location && <Row icon={<MapPin size={18} color={color} />} t="Local" v={info.location} />}
           {info.grades.length > 0 && <Row icon={<GraduationCap size={18} color={color} />} t="Séries" v={info.grades.join(', ')} />}
           {info.deadline && <Row icon={<CalendarDays size={18} color={color} />} t="Inscrições até" v={deadlineLong(info.deadline)} />}
-          {info.edital && (
+          {info.edital_path && (
+            <a href={(supabase as any).storage.from('contest-edital').getPublicUrl(info.edital_path).data.publicUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', gap: 8, alignItems: 'center', alignSelf: 'start', border: `1px solid ${color}`, color, background: '#fff', borderRadius: 12, padding: '10px 14px', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
+              <FileText size={16} /> Baixar o edital (PDF)
+            </a>
+          )}
+          {info.edital && !info.edital_path && (
             <div>
               <button type="button" onClick={() => setShowEdital(s => !s)} style={{ display: 'inline-flex', gap: 8, alignItems: 'center', border: `1px solid ${color}`, color, background: '#fff', borderRadius: 12, padding: '10px 14px', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
                 <FileText size={16} /> {showEdital ? 'Esconder o edital' : 'Ler o edital'}
