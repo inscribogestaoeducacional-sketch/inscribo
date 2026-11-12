@@ -15,7 +15,7 @@ import ConcursoResultados from './ConcursoResultados'
 import ConcursoSalas from './ConcursoSalas'
 import { ContestImg } from '../../components/concurso/media'
 import {
-  db, DEFAULT_SUBJECTS, deadlineFromInput, deadlineToInput, essayFor, examDateFromInput, examDateToInput, subjectHasGrade, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
+  db, DEFAULT_SUBJECTS, deadlineFromInput, deadlineToInput, essayFor, examDateFromInput, examDateToInput, subjectHasGrade, DEFAULT_COVER, COVER_TOKENS, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
   type Candidate, type Contest, type ExtraField, slugify, type Question, type Quota, type Subject, type Teacher,
 } from '../../lib/concurso'
 
@@ -136,7 +136,7 @@ export default function Concurso() {
           {tab === 'insc' && <Candidates contest={contest} cands={cands} onChanged={loadContest} />}
           {tab === 'mail' && <ConcursoEmails key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prova' && <ConcursoProva contest={contest} subjects={subjects} quotas={quotas} questions={questions} cands={cands} onChanged={loadContest} onGoSalas={() => setTab('salas')} />}
-          {tab === 'salas' && <ConcursoSalas key={contest.id} contest={contest} cands={cands} onChanged={loadContest} onGoProva={() => setTab('prova')} />}
+          {tab === 'salas' && <ConcursoSalas key={contest.id} contest={contest} cands={cands} onChanged={loadContest} onGoProva={() => setTab('prova')} onGoFormato={() => { setTab('fmt'); setTimeout(() => document.getElementById('instrucoes-capa')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300) }} />}
           {tab === 'corr' && <ConcursoCorrecao contest={contest} subjects={subjects} questions={questions} cands={cands} />}
           {tab === 'res' && <ConcursoResultados key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prof' && <Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}
@@ -260,7 +260,7 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
     const { data: fresh } = await db.from('contests').select('essay_by_grade').eq('id', contest.id).maybeSingle()
     const merged: Contest['essay_by_grade'] = {}
     for (const [g, v] of Object.entries(f.essay_by_grade ?? {})) merged[g] = { ...(fresh?.essay_by_grade?.[g] ?? {}), enabled: v.enabled, prompt: fresh?.essay_by_grade?.[g]?.prompt ?? v.prompt ?? '' }
-    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: (f.public_slug ? slugify(f.public_slug) : slugBase) || null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, print_color: f.print_color || null, essay_by_grade: merged, form_config: f.form_config ?? {}, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
+    const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: (f.public_slug ? slugify(f.public_slug) : slugBase) || null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, print_color: f.print_color || null, essay_by_grade: merged, form_config: f.form_config ?? {}, exam_duration: f.exam_duration || null, cover_instructions: f.cover_instructions?.trim() && f.cover_instructions.trim() !== DEFAULT_COVER ? f.cover_instructions : null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
     if (error) { setSaveMsg(/contests_public_slug_uidx|duplicate/i.test(error.message) ? 'Esse endereço já está em uso por outro concurso. Acrescente um complemento (ex.: a cidade ou o ano).' : 'Não foi possível salvar: ' + error.message) } else {
       setSaveMsg('Salvo!'); setRestored(false); force.current = true
       try { localStorage.removeItem(draftKey) } catch { /* ok */ }
@@ -379,6 +379,16 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
         </div>
         <EssayRubric contest={contest} onChanged={onChanged} />
         <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 12 }}><TakeHomeConfig contest={contest} onChanged={onChanged} /></div>
+        <div id="instrucoes-capa">
+          <label style={lab}>Instruções na capa do caderno ("Leia com atenção")</label>
+          <textarea rows={7} style={{ ...input, resize: 'vertical', lineHeight: 1.5 }} value={f.cover_instructions?.trim() ? f.cover_instructions : DEFAULT_COVER} onChange={e => setF({ ...f, cover_instructions: e.target.value })} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+            <span style={{ fontSize: 12.5, color: BRAND.muted }}>Uma instrução por linha. Inserir no fim:</span>
+            {COVER_TOKENS.map(([t, l]) => <button key={t} style={{ ...btn(), padding: '4px 10px', fontSize: 12.5 }} onClick={() => setF({ ...f, cover_instructions: `${(f.cover_instructions?.trim() ? f.cover_instructions : DEFAULT_COVER).replace(/\s+$/, '')} ${t}` })}>{l}</button>)}
+            <button style={{ ...btn(), padding: '4px 10px', fontSize: 12.5 }} onClick={() => setF({ ...f, cover_instructions: null })}>Voltar ao texto padrão</button>
+          </div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 4 }}>Os trechos entre chaves viram o valor real na impressão. Nas séries com redação, o sistema acrescenta sozinho a instrução da redação. Vale para todos os cadernos, inclusive o lote por sala.</div>
+        </div>
         <div>
           <label style={lab}>Cor da prova impressa (faixas e destaques)</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

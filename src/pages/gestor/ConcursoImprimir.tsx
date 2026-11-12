@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase'
-import { essayFor, fmtDate, LETTERS, type Candidate, type Contest, type Question, type Subject } from '../../lib/concurso'
+import { COVER_ESSAY_LINE, DEFAULT_COVER, essayFor, fmtDate, LETTERS, type Candidate, type Contest, type Question, type Subject } from '../../lib/concurso'
 import { versionFor, type ExamVersionRow } from '../../lib/concursoProva'
 import { ContestImg } from '../../components/concurso/media'
 import { cardGrid, rowLeft, rowTop } from '../../lib/concursoLayout'
@@ -101,12 +101,9 @@ function CadernoDoc({ contest, school, subjects, ver, questions, grade }: { cont
                 <div style={{ height: 3, width: 60, background: accent, margin: '3mm 0 6mm' }} />
                 <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 3 }}>LEIA COM ATENÇÃO</div>
                 <ol style={{ fontSize: '10.5pt', lineHeight: 1.5, margin: '0 0 8mm', paddingLeft: 18, listStyle: 'decimal' }}>
-                  <li>Este caderno tem <b>{N} questões objetivas</b>{essay.enabled ? ' e a proposta de redação, com folha de rascunho' : ''}. Confira se a versão <b>{ver.version}</b> é a mesma do seu cartão-resposta.</li>
-                  <li>Cada questão tem uma única alternativa correta. No cartão-resposta, preencha todo o círculo com caneta azul ou preta.</li>
-                  <li>Não rasure nem dobre o cartão-resposta. {essay.enabled && 'Não escreva seu nome na folha de redação.'}</li>
-                  {contest.exam_duration && <li>Duração da prova: <b>{contest.exam_duration}</b>.</li>}
-                  <li>Ao terminar, entregue o caderno, o cartão-resposta{essay.enabled ? ' e a folha de redação' : ''}. Nada pode ser levado.</li>
-                  <li>É proibido o uso de celular, calculadora e qualquer material de consulta.</li>
+                  {(contest.cover_instructions?.trim() ? contest.cover_instructions : DEFAULT_COVER).split('\n').map(l => l.trim()).filter(l => l && (contest.exam_duration || !l.includes('{duracao}'))).concat(essay.enabled ? [COVER_ESSAY_LINE] : []).map((l, i) => (
+                    <li key={i}>{l.split(/(\{questoes\}|\{versao\}|\{duracao\})/).map((t, j) => t === '{questoes}' ? <b key={j}>{N}</b> : t === '{versao}' ? <b key={j}>{ver.version}</b> : t === '{duracao}' ? <b key={j}>{contest.exam_duration}</b> : t)}</li>
+                  ))}
                 </ol>
                 <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 4 }}>O QUE TEM NESTA PROVA</div>
                 <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '10.5pt' }}>

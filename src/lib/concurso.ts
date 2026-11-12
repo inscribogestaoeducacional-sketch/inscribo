@@ -17,7 +17,7 @@ export type Contest = { id: string; institution_id: string; name: string; year: 
   essay_by_grade: Record<string, { enabled: boolean; prompt: string; images?: string[] }>; form_config: { fields?: Record<string, { label?: string; required?: boolean; enabled?: boolean }> }
   email_auto_confirm: boolean; email_confirmation: { subject?: string; body?: string }
   essay_rubric: { id: string; name: string; max: number }[]; essay_weight: number; scholarship_tiers: { label: string; percent: number }[]
-  take_home: { message?: string; image?: string | null; qr_url?: string; qr_label?: string } | null }
+  cover_instructions?: string | null; take_home: { message?: string; image?: string | null; qr_url?: string; qr_label?: string } | null }
 export type Essay = { id: string; candidate_id: string; scan_path: string | null; scores: Record<string, number>; total: number | null; max_total: number | null; annulled: boolean; note: string | null }
 export type Decision = { id: string; candidate_id: string; scholarship_pct: number | null; status: 'pending' | 'granted' | 'waitlist' | 'denied'; note: string | null }
 export type ExtraField = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }
@@ -67,6 +67,19 @@ export const fmtDate = (s?: string | null) => {
 }
 
 // Data da prova = dia puro (guardado como meia-noite UTC; nunca passa pelo fuso, senão anda 1 dia).
+// Instruções da capa do caderno: uma por linha. Trechos entre chaves viram o valor real na impressão.
+export const COVER_TOKENS: [string, string][] = [['{questoes}', 'nº de questões'], ['{versao}', 'versão do caderno'], ['{duracao}', 'duração da prova']]
+export const DEFAULT_COVER = [
+  'Este caderno tem {questoes} questões objetivas. Confira se a versão {versao} é a mesma do seu cartão-resposta.',
+  'Cada questão tem uma única alternativa correta. No cartão-resposta, preencha todo o círculo com caneta azul ou preta.',
+  'Não rasure nem dobre o cartão-resposta.',
+  'Duração da prova: {duracao}.',
+  'Ao terminar, entregue o caderno e o cartão-resposta. Nada pode ser levado.',
+  'É proibido o uso de celular, calculadora e qualquer material de consulta.',
+].join('\n')
+// Nas séries com redação, o sistema acrescenta sozinho esta última instrução.
+export const COVER_ESSAY_LINE = 'Esta prova tem redação, com folha de rascunho. Não escreva seu nome na folha de redação e entregue-a junto com o caderno e o cartão-resposta.'
+
 export const examDateToInput = (s?: string | null) => (s ? s.slice(0, 10) : '')
 export const examDateFromInput = (v: string) => (v ? `${v}T00:00:00+00:00` : null)
 export const examDateLong = (s?: string | null) => {

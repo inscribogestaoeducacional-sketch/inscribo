@@ -13,7 +13,7 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&am
 const byName = (a: Candidate, b: Candidate) => a.student_name.localeCompare(b.student_name, 'pt-BR')
 const byNumber = (a: Candidate, b: Candidate) => a.number - b.number
 
-export default function ConcursoSalas({ contest, cands, onChanged, onGoProva }: { contest: Contest; cands: Candidate[]; onChanged: () => void; onGoProva?: () => void }) {
+export default function ConcursoSalas({ contest, cands, onChanged, onGoProva, onGoFormato }: { contest: Contest; cands: Candidate[]; onChanged: () => void; onGoProva?: () => void; onGoFormato?: () => void }) {
   const [rooms, setRooms] = useState<Room[]>([])
   const [school, setSchool] = useState<{ name: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -175,6 +175,7 @@ export default function ConcursoSalas({ contest, cands, onChanged, onGoProva }: 
             <a style={{ ...btn(), textDecoration: 'none' }} href={loteHref('cartoes')} target="_blank" rel="noreferrer"><Printer size={15} /> Cartões-resposta</a>
             <a style={{ ...btn(), textDecoration: 'none' }} href={loteHref('redacao')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas de redação</a>
             <a style={{ ...btn(), textDecoration: 'none' }} href={loteHref('folha')} target="_blank" rel="noreferrer"><Printer size={15} /> Folhas do aluno</a>
+            {onGoFormato && <button style={btn()} onClick={onGoFormato}>Editar instruções da capa</button>}
           </div>
           <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 8 }}>Os cadernos saem na ordem da sala, cada aluno com a sua versão e frente e verso fechando certinho. O PDF de uma sala cheia é pesado: se o computador travar, gere sala por sala. Quem prefere imprimir só uma cópia por versão usa Preparar → Montar prova.</div>
         </div>
