@@ -24,7 +24,9 @@ export type ExtraField = { id: string; label: string; type: 'text' | 'select'; o
 export type Candidate = { id: string; contest_id: string; lead_id: string | null; number: number; student_name: string; grade: string; responsible_name: string; phone: string; email: string | null; origin_school: string | null; answers: Record<string, string>; created_at: string; version: string | null; birth_date: string | null; student_cpf: string | null; room_id?: string | null; present?: boolean | null }
 export type Room = { id: string; institution_id: string; contest_id: string; name: string; capacity: number; grade: string | null; position: number }
 export const slugify = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
-export type Subject = { id: string; contest_id: string; name: string; position: number }
+export type Subject = { id: string; contest_id: string; name: string; position: number; grades?: string[] | null }
+// grades NULL = disciplina vale para todas as séries do concurso (comportamento antigo).
+export const subjectHasGrade = (s: Subject, grade: string, contestGrades: string[] = []) => (s.grades ? s.grades.includes(grade) : contestGrades.length === 0 || contestGrades.includes(grade))
 export type Teacher = { id: string; institution_id: string; user_id: string; full_name: string; email: string; phone: string | null; active: boolean; nda_accepted_at?: string | null }
 export type Quota = { id: string; contest_id: string; teacher_id: string; subject_id: string; grade: string; quantity: number; due_date: string | null }
 export type Alt = { text: string; image?: string | null }

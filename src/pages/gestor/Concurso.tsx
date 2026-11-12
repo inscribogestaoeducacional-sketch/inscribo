@@ -15,7 +15,7 @@ import ConcursoResultados from './ConcursoResultados'
 import ConcursoSalas from './ConcursoSalas'
 import { ContestImg } from '../../components/concurso/media'
 import {
-  db, DEFAULT_SUBJECTS, deadlineFromInput, deadlineToInput, essayFor, examDateFromInput, examDateToInput, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
+  db, DEFAULT_SUBJECTS, deadlineFromInput, deadlineToInput, essayFor, examDateFromInput, examDateToInput, subjectHasGrade, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
   type Candidate, type Contest, type ExtraField, slugify, type Question, type Quota, type Subject, type Teacher,
 } from '../../lib/concurso'
 
@@ -130,7 +130,7 @@ export default function Concurso() {
               ))}
             </div>
           )}
-          {(tab === 'config' || tab === 'fmt' || tab === 'pub') && <Config key={contest.id} part={tab} contest={contest} subjects={subjects} onChanged={() => { loadAll(); loadContest() }} />}
+          {(tab === 'config' || tab === 'fmt' || tab === 'pub') && <Config key={contest.id} part={tab} contest={contest} subjects={subjects} quotas={quotas} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'config' && <DeleteContest contest={contest} inscritos={cands.length} questoes={questions.length} onDeleted={async () => { setSel(null); await loadAll() }} />}
           {tab === 'painel' && <Painel contest={contest} cands={cands} />}
           {tab === 'insc' && <Candidates contest={contest} cands={cands} onChanged={loadContest} />}
@@ -223,7 +223,7 @@ const PART_INFO: Record<CfgPart, { title: string; sub: string }> = {
   fmt: { title: 'Passo 3 · Formato da prova', sub: 'Disciplinas, alternativas, versões, redação e visual do caderno impresso.' },
 }
 
-function Config({ contest, subjects, part, onChanged }: { contest: Contest; subjects: Subject[]; part: CfgPart; onChanged: () => void }) {
+function Config({ contest, subjects, quotas, part, onChanged }: { contest: Contest; subjects: Subject[]; quotas: Quota[]; part: CfgPart; onChanged: () => void }) {
   const draftKey = `aion-concurso-rascunho:${contest.id}`
   const readDraft = (): Partial<Contest> | null => { try { const r = localStorage.getItem(draftKey); return r ? JSON.parse(r) : null } catch { return null } }
   const [f, setF] = useState<Contest>(() => { const d = readDraft(); return d ? { ...contest, ...d } : contest })
@@ -321,7 +321,7 @@ function Config({ contest, subjects, part, onChanged }: { contest: Contest; subj
           <div><label style={lab}>Duração da prova (impressa no caderno)</label><input style={input} placeholder="Ex.: 3 horas" value={f.exam_duration ?? ''} onChange={e => setF({ ...f, exam_duration: e.target.value })} /></div>
         </div>
         <div>
-          <label style={lab}>Disciplinas</label>
+          <label style={lab}>Disciplinas do concurso (lista geral)</label>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
             {subjects.map(s => (
               <span key={s.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', padding: '5px 10px', borderRadius: 99, background: '#F1F5F9', fontSize: 13, fontWeight: 600 }}>
@@ -332,8 +332,35 @@ function Config({ contest, subjects, part, onChanged }: { contest: Contest; subj
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input style={input} placeholder="Nova disciplina" value={newSubj} onChange={e => setNewSubj(e.target.value)} />
-            <button style={btn()} onClick={async () => { if (!newSubj.trim()) return; await db.from('contest_subjects').insert({ institution_id: contest.institution_id, contest_id: contest.id, name: newSubj.trim(), position: subjects.length }); setNewSubj(''); onChanged() }}>Adicionar</button>
+            <button style={btn()} onClick={async () => { if (!newSubj.trim()) return; await db.from('contest_subjects').insert({ institution_id: contest.institution_id, contest_id: contest.id, name: newSubj.trim(), position: subjects.length, grades: f.grades.length ? f.grades : null }); setNewSubj(''); onChanged() }}>Adicionar</button>
           </div>
+        </div>
+        <div>
+          <label style={lab}>Disciplinas por série</label>
+          {f.grades.length === 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Escolha as séries no Passo 1 para definir as disciplinas de cada uma.</div>}
+          {subjects.length === 0 && f.grades.length > 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Adicione as disciplinas acima. Depois marque quais valem para cada série.</div>}
+          {GRADES.filter(g => f.grades.includes(g)).map(g => {
+            const mine = subjects.filter(s => subjectHasGrade(s, g, f.grades))
+            const toggle = async (s: Subject) => {
+              const on = subjectHasGrade(s, g, f.grades)
+              if (on && quotas.some(x => x.subject_id === s.id && x.grade === g)) { setSaveMsg(`Já existe cota de professor de ${s.name} no ${g}. Remova a cota em "Professores e cotas" antes.`); setTimeout(() => setSaveMsg(''), 6000); return }
+              const base = s.grades ?? f.grades
+              const next = on ? base.filter(x => x !== g) : [...base, g]
+              await db.from('contest_subjects').update({ grades: next }).eq('id', s.id)
+              onChanged()
+            }
+            return (
+              <div key={g} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: 10, marginBottom: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: BRAND.ink, marginBottom: 6 }}>{g} <span style={{ fontWeight: 600, fontSize: 12.5, color: BRAND.muted }}>· {mine.length} de {subjects.length} disciplinas</span></div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {subjects.map(s => { const on = subjectHasGrade(s, g, f.grades); return (
+                    <button key={s.id} onClick={() => toggle(s)} aria-pressed={on} style={{ padding: '6px 11px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${on ? BRAND.primary : BRAND.line}`, background: on ? BRAND.soft : '#fff', color: on ? BRAND.primaryDark : BRAND.muted }}>{s.name}</button>
+                  ) })}
+                </div>
+              </div>
+            )
+          })}
+          {saveMsg.startsWith('Já existe cota') && <div role="status" style={{ fontSize: 13.5, fontWeight: 700, color: '#B91C1C' }}>{saveMsg}</div>}
         </div>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}><input type="checkbox" checked={f.has_essay} onChange={e => setF({ ...f, has_essay: e.target.checked })} /> Redação ligada por padrão nas séries (você ajusta série por série abaixo)</label>
         <div>
@@ -456,7 +483,7 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
     flash(`E-mail de criar senha reenviado para ${t.email}.`)
   }
   const addQuota = async () => {
-    if (!q.teacher_id || !q.subject_id || !q.grade || q.quantity < 1) return flash('Escolha professor, disciplina, série e quantidade.')
+    if (!q.teacher_id || !q.subject_id || !q.grade || q.quantity < 1) return flash('Escolha professor, série, disciplina e quantidade.')
     const { error } = await db.from('contest_quotas').insert({ institution_id: instId, contest_id: contest.id, teacher_id: q.teacher_id, subject_id: q.subject_id, grade: q.grade, quantity: q.quantity, due_date: q.due_date || null })
     if (error) return flash('Não foi possível salvar: ' + error.message)
     onChanged()
@@ -479,8 +506,8 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
         <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Cotas de questões</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
           <select style={input} value={q.teacher_id} onChange={e => setQ({ ...q, teacher_id: e.target.value })}><option value="">Professor</option>{teachers.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}</select>
-          <select style={input} value={q.subject_id} onChange={e => setQ({ ...q, subject_id: e.target.value })}><option value="">Disciplina</option>{subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-          <select style={input} value={q.grade} onChange={e => setQ({ ...q, grade: e.target.value })}><option value="">Série</option>{(contest.grades.length ? contest.grades : GRADES).map(g => <option key={g}>{g}</option>)}</select>
+          <select style={input} value={q.grade} onChange={e => { const g = e.target.value; const ok = subjects.find(s => s.id === q.subject_id && subjectHasGrade(s, g, contest.grades)); setQ({ ...q, grade: g, subject_id: ok ? q.subject_id : '' }) }}><option value="">Série</option>{(contest.grades.length ? contest.grades : GRADES).map(g => <option key={g}>{g}</option>)}</select>
+          <select style={input} value={q.subject_id} disabled={!q.grade} onChange={e => setQ({ ...q, subject_id: e.target.value })}><option value="">{q.grade ? 'Disciplina' : 'Escolha a série primeiro'}</option>{subjects.filter(s => !q.grade || subjectHasGrade(s, q.grade, contest.grades)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
           <input style={input} type="number" min={1} value={q.quantity} onChange={e => setQ({ ...q, quantity: Number(e.target.value) })} aria-label="Quantidade" />
           <input style={input} type="date" value={q.due_date} onChange={e => setQ({ ...q, due_date: e.target.value })} aria-label="Entregar até" />
         </div>
