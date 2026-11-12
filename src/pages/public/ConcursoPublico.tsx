@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { CalendarDays, MapPin, GraduationCap, CheckCircle2, Loader2, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { fieldCfg } from '../../lib/concurso'
+import { deadlineLong, examDateLong, fieldCfg } from '../../lib/concurso'
 
 type Field = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }
 type Info = {
@@ -11,7 +11,6 @@ type Info = {
   school_name: string; logo_url: string | null; primary_color: string | null; city: string | null
 }
 
-const fmt = (s: string | null, time = false) => s ? new Date(s).toLocaleString('pt-BR', time ? { dateStyle: 'long', timeStyle: 'short' } : { dateStyle: 'long' }) : ''
 const maskCpf = (v: string) => { const d = v.replace(/\D/g, '').slice(0, 11); return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2') }
 const maskPhone = (v: string) => { const d = v.replace(/\D/g, '').slice(0, 11); return d.length <= 2 ? d : d.length <= 7 ? `(${d.slice(0, 2)}) ${d.slice(2)}` : `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` }
 
@@ -67,10 +66,10 @@ export default function ConcursoPublico() {
 
       <main style={{ maxWidth: 640, margin: '-32px auto 40px', padding: '0 14px' }}>
         <section style={{ background: '#fff', borderRadius: 18, padding: 18, boxShadow: '0 8px 30px -14px rgba(15,23,42,.25)', display: 'grid', gap: 12 }}>
-          {info.exam_date && <Row icon={<CalendarDays size={18} color={color} />} t="Dia da prova" v={fmt(info.exam_date, true)} />}
+          {info.exam_date && <Row icon={<CalendarDays size={18} color={color} />} t="Dia da prova" v={examDateLong(info.exam_date)} />}
           {info.location && <Row icon={<MapPin size={18} color={color} />} t="Local" v={info.location} />}
           {info.grades.length > 0 && <Row icon={<GraduationCap size={18} color={color} />} t="Séries" v={info.grades.join(', ')} />}
-          {info.deadline && <Row icon={<CalendarDays size={18} color={color} />} t="Inscrições até" v={fmt(info.deadline, true)} />}
+          {info.deadline && <Row icon={<CalendarDays size={18} color={color} />} t="Inscrições até" v={deadlineLong(info.deadline)} />}
           {info.edital && (
             <div>
               <button type="button" onClick={() => setShowEdital(s => !s)} style={{ display: 'inline-flex', gap: 8, alignItems: 'center', border: `1px solid ${color}`, color, background: '#fff', borderRadius: 12, padding: '10px 14px', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>

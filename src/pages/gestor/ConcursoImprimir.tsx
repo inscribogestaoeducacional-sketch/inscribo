@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase'
-import { essayFor, LETTERS, type Candidate, type Contest, type Question, type Subject } from '../../lib/concurso'
+import { essayFor, fmtDate, LETTERS, type Candidate, type Contest, type Question, type Subject } from '../../lib/concurso'
 import { versionFor, type ExamVersionRow } from '../../lib/concursoProva'
 import { ContestImg } from '../../components/concurso/media'
 import { cardGrid, rowLeft, rowTop } from '../../lib/concursoLayout'
@@ -320,7 +320,7 @@ export default function ConcursoImprimir() {
         const accent = contest.print_color || school?.primary_color || '#1A2B4A'
         const th = contest.take_home ?? {}
         const link = contest.public_slug ? `${window.location.origin}/bolsas/${contest.public_slug}/resultado` : ''
-        const date = contest.exam_date ? contest.exam_date.split('T')[0].split('-').reverse().join('/') : ''
+        const date = contest.exam_date ? fmtDate(contest.exam_date) : ''
         return cands.map(c => (
           <div key={c.id} className="sheet full" style={{ padding: '14mm 18mm', display: 'flex', flexDirection: 'column', gap: '6mm' }}>
             <div style={{ background: accent, color: '#fff', borderRadius: 10, padding: '8mm 9mm', display: 'flex', alignItems: 'center', gap: '6mm' }}>

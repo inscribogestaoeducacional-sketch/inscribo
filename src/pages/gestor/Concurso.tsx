@@ -1,5 +1,5 @@
 // Concurso de Bolsas — coordenação: cria o concurso, disciplinas, professores e cotas, e revisa as questões.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Trophy, Plus, Loader2, Check, Undo2, Trash2, Mail } from 'lucide-react'
 import PageHeader from '../../components/ui/PageHeader'
 import { useAuth } from '../../contexts/AuthContext'
@@ -15,7 +15,7 @@ import ConcursoResultados from './ConcursoResultados'
 import ConcursoSalas from './ConcursoSalas'
 import { ContestImg } from '../../components/concurso/media'
 import {
-  db, DEFAULT_SUBJECTS, essayFor, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
+  db, DEFAULT_SUBJECTS, deadlineFromInput, deadlineToInput, essayFor, examDateFromInput, examDateToInput, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
   type Candidate, type Contest, type ExtraField, slugify, type Question, type Quota, type Subject, type Teacher,
 } from '../../lib/concurso'
 
@@ -26,12 +26,12 @@ const btn = (primary = false): React.CSSProperties => ({
   border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink,
 })
 const STAGES = [
-  { id: 'prep', label: 'Preparar', tabs: [['config', 'Dados do concurso'], ['prof', 'Professores e cotas'], ['quest', 'Questões'], ['prova', 'Montar prova']] },
+  { id: 'prep', label: 'Preparar', tabs: [['config', '1 · Dados básicos'], ['fmt', '2 · Formato da prova'], ['pub', '3 · Inscrição e edital'], ['prof', 'Professores e cotas'], ['quest', 'Questões'], ['prova', 'Montar prova']] },
   { id: 'insc', label: 'Inscrições', tabs: [['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails']] },
   { id: 'corr', label: 'Aplicar e corrigir', tabs: [['salas', 'Salas e listas'], ['corr', 'Correção']] },
   { id: 'res', label: 'Resultados', tabs: [['res', 'Ranking e divulgação']] },
 ] as const
-type Tab = 'salas' | 'config' | 'prof' | 'quest' | 'prova' | 'painel' | 'insc' | 'mail' | 'corr' | 'res'
+type Tab = 'salas' | 'config' | 'fmt' | 'pub' | 'prof' | 'quest' | 'prova' | 'painel' | 'insc' | 'mail' | 'corr' | 'res'
 
 export default function Concurso() {
   const { user } = useAuth()
@@ -92,7 +92,7 @@ export default function Concurso() {
       <PageHeader icon={Trophy as any} title="Concurso de Bolsas" subtitle={contest ? `${contest.name} · ${CONTEST_STATUS[contest.status]}` : 'Monte a prova, receba as inscrições e divulgue o resultado'}
         actions={contest ? (
           <>
-            {contests.length > 1 && <select value={sel ?? ''} onChange={e => setSel(e.target.value)} style={{ ...input, width: 'auto', fontWeight: 700, background: 'rgba(255,255,255,.95)' }}>
+            {contests.length > 0 && <select value={sel ?? ''} onChange={e => setSel(e.target.value)} style={{ ...input, width: 'auto', fontWeight: 700, background: 'rgba(255,255,255,.95)' }}>
               {contests.map(c => <option key={c.id} value={c.id}>{c.name} ({c.year})</option>)}
             </select>}
             <NewContestButton instId={instId} onCreated={async id => { await loadAll(); setSel(id) }} light />
@@ -130,7 +130,7 @@ export default function Concurso() {
               ))}
             </div>
           )}
-          {tab === 'config' && <Config contest={contest} subjects={subjects} onChanged={() => { loadAll(); loadContest() }} />}
+          {(tab === 'config' || tab === 'fmt' || tab === 'pub') && <Config key={contest.id} part={tab} contest={contest} subjects={subjects} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'config' && <DeleteContest contest={contest} inscritos={cands.length} questoes={questions.length} onDeleted={async () => { setSel(null); await loadAll() }} />}
           {tab === 'painel' && <Painel contest={contest} cands={cands} />}
           {tab === 'insc' && <Candidates contest={contest} cands={cands} onChanged={loadContest} />}
@@ -216,86 +216,126 @@ export function DeleteContest({ contest, inscritos, questoes, onDeleted }: { con
   )
 }
 
-function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: Subject[]; onChanged: () => void }) {
-  const [f, setF] = useState(contest)
+type CfgPart = 'config' | 'fmt' | 'pub'
+const PART_INFO: Record<CfgPart, { title: string; sub: string }> = {
+  config: { title: 'Passo 1 · Dados básicos', sub: 'Nome, datas, local e séries. É o que aparece para as famílias.' },
+  fmt: { title: 'Passo 2 · Formato da prova', sub: 'Disciplinas, alternativas, versões, redação e visual do caderno impresso.' },
+  pub: { title: 'Passo 3 · Inscrição e edital', sub: 'Endereço da página, perguntas do formulário e o edital.' },
+}
+
+function Config({ contest, subjects, part, onChanged }: { contest: Contest; subjects: Subject[]; part: CfgPart; onChanged: () => void }) {
+  const draftKey = `aion-concurso-rascunho:${contest.id}`
+  const readDraft = (): Partial<Contest> | null => { try { const r = localStorage.getItem(draftKey); return r ? JSON.parse(r) : null } catch { return null } }
+  const [f, setF] = useState<Contest>(() => { const d = readDraft(); return d ? { ...contest, ...d } : contest })
+  const [restored, setRestored] = useState(() => !!readDraft())
   const [newSubj, setNewSubj] = useState('')
-  useEffect(() => setF(contest), [contest])
   const [saveMsg, setSaveMsg] = useState('')
+  const prev = useRef(contest)
+  const force = useRef(false)
+  const dirty = JSON.stringify(f) !== JSON.stringify(contest)
+
+  // Os dados salvos mudaram (ex.: depois de salvar ou adicionar disciplina): só troco a tela se você não tem nada digitado por cima.
+  useEffect(() => {
+    if (prev.current === contest) return
+    const old = prev.current; prev.current = contest
+    if (force.current) { force.current = false; setF(contest); return }
+    setF(cur => JSON.stringify(cur) === JSON.stringify(old) ? contest : cur)
+  }, [contest])
+  // Rascunho: o que você digita fica guardado neste navegador até salvar.
+  useEffect(() => {
+    try { if (dirty) localStorage.setItem(draftKey, JSON.stringify(f)); else localStorage.removeItem(draftKey) } catch { /* sem armazenamento: segue sem rascunho */ }
+  }, [f, dirty, draftKey])
+  useEffect(() => {
+    if (!dirty) return
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [dirty])
+
   const save = async () => {
     // o tema e as fotos da redação são do professor: aqui só vale ligar/desligar a série; o resto vem do que está salvo agora
     const { data: fresh } = await db.from('contests').select('essay_by_grade').eq('id', contest.id).maybeSingle()
     const merged: Contest['essay_by_grade'] = {}
     for (const [g, v] of Object.entries(f.essay_by_grade ?? {})) merged[g] = { ...(fresh?.essay_by_grade?.[g] ?? {}), enabled: v.enabled, prompt: fresh?.essay_by_grade?.[g]?.prompt ?? v.prompt ?? '' }
     const { error } = await db.from('contests').update({ name: f.name, year: f.year, exam_date: f.exam_date || null, grades: f.grades, public_slug: f.public_slug ? slugify(f.public_slug) : null, edital: f.edital || null, location: f.location || null, registration_deadline: f.registration_deadline || null, extra_fields: f.extra_fields ?? [], essay_prompt: f.essay_prompt || null, print_color: f.print_color || null, essay_by_grade: merged, form_config: f.form_config ?? {}, exam_duration: f.exam_duration || null, alternatives_count: f.alternatives_count, versions_count: f.versions_count, has_essay: f.has_essay, status: f.status }).eq('id', contest.id)
-    if (error) { setSaveMsg('Não foi possível salvar: ' + error.message) } else { setSaveMsg('Salvo!'); onChanged() }
+    if (error) { setSaveMsg('Não foi possível salvar: ' + error.message) } else {
+      setSaveMsg('Salvo!'); setRestored(false); force.current = true
+      try { localStorage.removeItem(draftKey) } catch { /* ok */ }
+      onChanged()
+    }
     setTimeout(() => setSaveMsg(''), 5000)
   }
   const lab: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: BRAND.muted, display: 'block', marginBottom: 5 }
+  const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }
+  const missing: string[] = []
+  if (part === 'config') { if (!f.exam_date) missing.push('data da prova'); if (!f.location) missing.push('local'); if (!f.registration_deadline) missing.push('"Inscrições até"'); if (!f.grades.length) missing.push('séries') }
+  if (part === 'fmt') { if (!subjects.length) missing.push('disciplinas') }
+  if (part === 'pub') { if (!f.public_slug) missing.push('endereço da página'); if (!f.edital) missing.push('edital') }
+  const info = PART_INFO[part]
+
   return (
     <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
-        <div><label style={lab}>Nome</label><input style={input} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></div>
-        <div><label style={lab}>Data da prova</label><input type="date" style={input} value={f.exam_date ?? ''} onChange={e => setF({ ...f, exam_date: e.target.value })} /></div>
-        <div><label style={lab}>Alternativas por questão</label>
-          <select style={input} value={f.alternatives_count} onChange={e => setF({ ...f, alternatives_count: Number(e.target.value) as 4 | 5 })}><option value={4}>4 (A a D)</option><option value={5}>5 (A a E)</option></select></div>
-        <div><label style={lab}>Versões embaralhadas</label>
-          <select style={input} value={f.versions_count} onChange={e => setF({ ...f, versions_count: Number(e.target.value) })}>{[1, 2, 3, 4].map(n => <option key={n} value={n}>{n === 1 ? '1 (sem embaralhar)' : `${n} versões`}</option>)}</select></div>
-        <div><label style={lab}>Situação</label>
-          <select style={input} value={f.status} onChange={e => setF({ ...f, status: e.target.value as Contest['status'] })}>{Object.entries(CONTEST_STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-      </div>
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}><input type="checkbox" checked={f.has_essay} onChange={e => setF({ ...f, has_essay: e.target.checked })} /> Redação ligada por padrão nas séries (você ajusta série por série abaixo)</label>
       <div>
-        <label style={lab}>Séries que participam</label>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {GRADES.map(g => { const on = f.grades.includes(g); return (
-            <button key={g} onClick={() => setF({ ...f, grades: on ? f.grades.filter(x => x !== g) : [...f.grades, g] })} style={{ padding: '6px 11px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${on ? BRAND.primary : BRAND.line}`, background: on ? BRAND.soft : '#fff', color: on ? BRAND.primaryDark : BRAND.muted }}>{g}</button>
-          ) })}
-        </div>
+        <div style={{ fontWeight: 800, fontSize: 17, color: BRAND.ink }}>{info.title}</div>
+        <div style={{ fontSize: 13.5, color: BRAND.muted, marginTop: 2 }}>{info.sub}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, marginTop: 6, color: missing.length ? '#B45309' : '#047857' }}>{missing.length ? `Falta preencher: ${missing.join(', ')}.` : 'Esta parte está completa.'}</div>
       </div>
-      <div>
-        <label style={lab}>Disciplinas</label>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-          {subjects.map(s => (
-            <span key={s.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', padding: '5px 10px', borderRadius: 99, background: '#F1F5F9', fontSize: 13, fontWeight: 600 }}>
-              {s.name}
-              <button aria-label={`Remover ${s.name}`} onClick={async () => { if (confirm(`Remover ${s.name}? As questões dela também saem.`)) { await db.from('contest_subjects').delete().eq('id', s.id); onChanged() } }} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.muted }}>×</button>
-            </span>
-          ))}
+      {restored && (
+        <div role="status" style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '10px 12px', fontSize: 13.5, color: '#92400E', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ flex: '1 1 240px' }}>Recuperei o que você tinha digitado e não salvou. Confira e clique em Salvar.</span>
+          <button style={{ ...btn(), padding: '5px 10px', fontSize: 12.5 }} onClick={() => { setF(contest); setRestored(false); try { localStorage.removeItem(draftKey) } catch { /* ok */ } }}>Descartar</button>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input style={input} placeholder="Nova disciplina" value={newSubj} onChange={e => setNewSubj(e.target.value)} />
-          <button style={btn()} onClick={async () => { if (!newSubj.trim()) return; await db.from('contest_subjects').insert({ institution_id: contest.institution_id, contest_id: contest.id, name: newSubj.trim(), position: subjects.length }); setNewSubj(''); onChanged() }}>Adicionar</button>
+      )}
+
+      {part === 'config' && (<>
+        <div style={grid}>
+          <div><label style={lab}>Nome</label><input style={input} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></div>
+          <div><label style={lab}>Ano</label><input type="number" style={input} value={f.year} onChange={e => setF({ ...f, year: Number(e.target.value) })} /></div>
+          <div><label style={lab}>Situação</label>
+            <select style={input} value={f.status} onChange={e => setF({ ...f, status: e.target.value as Contest['status'] })}>{Object.entries(CONTEST_STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
         </div>
-      </div>
-      <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ fontWeight: 800, color: BRAND.ink }}>Página pública e edital</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
-          <div><label style={lab}>Endereço da página</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ fontSize: 13, color: BRAND.muted, whiteSpace: 'nowrap' }}>/bolsas/</span><input style={input} placeholder="concurso-2027" value={f.public_slug ?? ''} onChange={e => setF({ ...f, public_slug: e.target.value })} /></div></div>
+        <div style={grid}>
+          <div><label style={lab}>Data da prova</label><input type="date" style={input} value={examDateToInput(f.exam_date)} onChange={e => setF({ ...f, exam_date: examDateFromInput(e.target.value) })} /></div>
+          <div><label style={lab}>Inscrições até (data e hora)</label><input type="datetime-local" style={input} value={deadlineToInput(f.registration_deadline)} onChange={e => setF({ ...f, registration_deadline: deadlineFromInput(e.target.value) })} /></div>
           <div><label style={lab}>Local da prova</label><input style={input} value={f.location ?? ''} onChange={e => setF({ ...f, location: e.target.value })} /></div>
-          <div><label style={lab}>Inscrições até</label><input type="datetime-local" style={input} value={f.registration_deadline ? f.registration_deadline.slice(0, 16) : ''} onChange={e => setF({ ...f, registration_deadline: e.target.value ? new Date(e.target.value).toISOString() : null })} /></div>
         </div>
-        {contest.public_slug && (
-          <div style={{ fontSize: 13, color: BRAND.muted }}>Link para divulgar: <b style={{ color: BRAND.ink }}>{window.location.origin}/bolsas/{contest.public_slug}</b> {' '}
-            <button style={{ ...btn(), padding: '4px 10px', fontSize: 12.5 }} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/bolsas/${contest.public_slug}`)}>Copiar</button>
-            <div style={{ marginTop: 4 }}>Para aparecer na Vitrine, adicione um botão de matrícula (modo link) com este endereço.</div></div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
+        <div>
+          <label style={lab}>Séries que participam</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {GRADES.map(g => { const on = f.grades.includes(g); return (
+              <button key={g} onClick={() => setF({ ...f, grades: on ? f.grades.filter(x => x !== g) : [...f.grades, g] })} style={{ padding: '6px 11px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${on ? BRAND.primary : BRAND.line}`, background: on ? BRAND.soft : '#fff', color: on ? BRAND.primaryDark : BRAND.muted }}>{g}</button>
+            ) })}
+          </div>
+        </div>
+      </>)}
+
+      {part === 'fmt' && (<>
+        <div style={grid}>
+          <div><label style={lab}>Alternativas por questão</label>
+            <select style={input} value={f.alternatives_count} onChange={e => setF({ ...f, alternatives_count: Number(e.target.value) as 4 | 5 })}><option value={4}>4 (A a D)</option><option value={5}>5 (A a E)</option></select></div>
+          <div><label style={lab}>Versões embaralhadas</label>
+            <select style={input} value={f.versions_count} onChange={e => setF({ ...f, versions_count: Number(e.target.value) })}>{[1, 2, 3, 4].map(n => <option key={n} value={n}>{n === 1 ? '1 (sem embaralhar)' : `${n} versões`}</option>)}</select></div>
           <div><label style={lab}>Duração da prova (impressa no caderno)</label><input style={input} placeholder="Ex.: 3 horas" value={f.exam_duration ?? ''} onChange={e => setF({ ...f, exam_duration: e.target.value })} /></div>
         </div>
         <div>
-          <label style={lab}>Cor da prova impressa (faixas e destaques)</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {['#0B6E5F', '#1D4ED8', '#7C3AED', '#B91C1C', '#C2410C', '#1A2B4A', '#000000'].map(c => (
-              <button key={c} aria-label={`Cor ${c}`} onClick={() => setF({ ...f, print_color: c })} style={{ width: 30, height: 30, borderRadius: 99, background: c, cursor: 'pointer', border: (f.print_color || '').toLowerCase() === c.toLowerCase() ? `3px solid ${BRAND.ink}` : '2px solid #fff', boxShadow: '0 0 0 1px #CBD5E1' }} />
+          <label style={lab}>Disciplinas</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            {subjects.map(s => (
+              <span key={s.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', padding: '5px 10px', borderRadius: 99, background: '#F1F5F9', fontSize: 13, fontWeight: 600 }}>
+                {s.name}
+                <button aria-label={`Remover ${s.name}`} onClick={async () => { if (confirm(`Remover ${s.name}? As questões dela também saem.`)) { await db.from('contest_subjects').delete().eq('id', s.id); onChanged() } }} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.muted }}>×</button>
+              </span>
             ))}
-            <input type="color" value={f.print_color || '#0B6E5F'} onChange={e => setF({ ...f, print_color: e.target.value })} aria-label="Outra cor" style={{ width: 38, height: 32, border: 0, background: 'none', cursor: 'pointer' }} />
-            <button style={{ ...btn(), padding: '5px 10px', fontSize: 12.5 }} onClick={() => setF({ ...f, print_color: null })}>Usar a cor da escola</button>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input style={input} placeholder="Nova disciplina" value={newSubj} onChange={e => setNewSubj(e.target.value)} />
+            <button style={btn()} onClick={async () => { if (!newSubj.trim()) return; await db.from('contest_subjects').insert({ institution_id: contest.institution_id, contest_id: contest.id, name: newSubj.trim(), position: subjects.length }); setNewSubj(''); onChanged() }}>Adicionar</button>
           </div>
         </div>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}><input type="checkbox" checked={f.has_essay} onChange={e => setF({ ...f, has_essay: e.target.checked })} /> Redação ligada por padrão nas séries (você ajusta série por série abaixo)</label>
         <div>
           <label style={lab}>Redação por série</label>
-          {f.grades.length === 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Escolha as séries do concurso acima para configurar a redação de cada uma.</div>}
+          {f.grades.length === 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Escolha as séries no Passo 1 para configurar a redação de cada uma.</div>}
           {GRADES.filter(g => f.grades.includes(g)).map(g => {
             const e = essayFor(f, g)
             const set = (patch: Partial<{ enabled: boolean; prompt: string }>) => setF({ ...f, essay_by_grade: { ...(f.essay_by_grade ?? {}), [g]: { ...(f.essay_by_grade?.[g] ?? {}), enabled: e.enabled, prompt: e.prompt, ...patch } } })
@@ -309,6 +349,26 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
         </div>
         <EssayRubric contest={contest} onChanged={onChanged} />
         <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 12 }}><TakeHomeConfig contest={contest} onChanged={onChanged} /></div>
+        <div>
+          <label style={lab}>Cor da prova impressa (faixas e destaques)</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {['#0B6E5F', '#1D4ED8', '#7C3AED', '#B91C1C', '#C2410C', '#1A2B4A', '#000000'].map(c => (
+              <button key={c} aria-label={`Cor ${c}`} onClick={() => setF({ ...f, print_color: c })} style={{ width: 30, height: 30, borderRadius: 99, background: c, cursor: 'pointer', border: (f.print_color || '').toLowerCase() === c.toLowerCase() ? `3px solid ${BRAND.ink}` : '2px solid #fff', boxShadow: '0 0 0 1px #CBD5E1' }} />
+            ))}
+            <input type="color" value={f.print_color || '#0B6E5F'} onChange={e => setF({ ...f, print_color: e.target.value })} aria-label="Outra cor" style={{ width: 38, height: 32, border: 0, background: 'none', cursor: 'pointer' }} />
+            <button style={{ ...btn(), padding: '5px 10px', fontSize: 12.5 }} onClick={() => setF({ ...f, print_color: null })}>Usar a cor da escola</button>
+          </div>
+        </div>
+      </>)}
+
+      {part === 'pub' && (<>
+        <div><label style={lab}>Endereço da página</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ fontSize: 13, color: BRAND.muted, whiteSpace: 'nowrap' }}>/bolsas/</span><input style={input} placeholder="concurso-2027" value={f.public_slug ?? ''} onChange={e => setF({ ...f, public_slug: e.target.value })} /></div></div>
+        {contest.public_slug && (
+          <div style={{ fontSize: 13, color: BRAND.muted }}>Link para divulgar: <b style={{ color: BRAND.ink }}>{window.location.origin}/bolsas/{contest.public_slug}</b> {' '}
+            <button style={{ ...btn(), padding: '4px 10px', fontSize: 12.5 }} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/bolsas/${contest.public_slug}`)}>Copiar</button>
+            <div style={{ marginTop: 4 }}>Para aparecer na Vitrine, adicione um botão de matrícula (modo link) com este endereço.</div></div>
+        )}
         <div>
           <label style={lab}>Perguntas da inscrição (texto e se é obrigatória)</label>
           {FORM_FIELDS.map(d => {
@@ -324,8 +384,6 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
           })}
           <div style={{ fontSize: 12.5, color: BRAND.muted }}>Nome do aluno, série, responsável e WhatsApp são sempre obrigatórios (só o texto muda). Perguntas extras ficam logo abaixo.</div>
         </div>
-        <div><label style={lab}>Edital</label>
-          <textarea rows={8} style={{ ...input, resize: 'vertical' }} placeholder="Regras, conteúdo da prova, critérios, bolsas, prazos…" value={f.edital ?? ''} onChange={e => setF({ ...f, edital: e.target.value })} /></div>
         <div>
           <label style={lab}>Perguntas extras na inscrição</label>
           {(f.extra_fields ?? []).map((x: ExtraField, i: number) => (
@@ -339,8 +397,15 @@ function Config({ contest, subjects, onChanged }: { contest: Contest; subjects: 
           ))}
           <button style={btn()} onClick={() => setF({ ...f, extra_fields: [...(f.extra_fields ?? []), { id: 'q' + Date.now().toString(36), label: '', type: 'text', required: false }] })}><Plus size={15} /> Adicionar pergunta</button>
         </div>
+        <div><label style={lab}>Edital</label>
+          <textarea rows={8} style={{ ...input, resize: 'vertical' }} placeholder="Regras, conteúdo da prova, critérios, bolsas, prazos…" value={f.edital ?? ''} onChange={e => setF({ ...f, edital: e.target.value })} /></div>
+      </>)}
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px solid ${BRAND.line}`, paddingTop: 12 }}>
+        <button style={btn(true)} onClick={save}>Salvar</button>
+        {saveMsg ? <span role="status" style={{ fontSize: 14, fontWeight: 700, color: saveMsg === 'Salvo!' ? '#047857' : '#B91C1C' }}>{saveMsg}</span>
+          : dirty ? <span style={{ fontSize: 13.5, fontWeight: 700, color: '#B45309' }}>Há alterações ainda não salvas (valem os 3 passos).</span> : null}
       </div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}><button style={btn(true)} onClick={save}>Salvar</button>{saveMsg && <span role="status" style={{ fontSize: 14, fontWeight: 700, color: saveMsg === 'Salvo!' ? '#047857' : '#B91C1C' }}>{saveMsg}</span>}</div>
     </div>
   )
 }

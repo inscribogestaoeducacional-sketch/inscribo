@@ -64,6 +64,19 @@ export const fmtDate = (s?: string | null) => {
   return new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+// Data da prova = dia puro (guardado como meia-noite UTC; nunca passa pelo fuso, senão anda 1 dia).
+export const examDateToInput = (s?: string | null) => (s ? s.slice(0, 10) : '')
+export const examDateFromInput = (v: string) => (v ? `${v}T00:00:00+00:00` : null)
+export const examDateLong = (s?: string | null) => {
+  if (!s) return ''
+  const [y, m, d] = s.slice(0, 10).split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('pt-BR', { dateStyle: 'long', timeZone: 'UTC' })
+}
+// "Inscrições até" = data e hora no horário de Fortaleza/São Paulo (UTC-3, sem horário de verão).
+export const deadlineToInput = (iso?: string | null) => (iso ? new Date(new Date(iso).getTime() - 3 * 3600000).toISOString().slice(0, 16) : '')
+export const deadlineFromInput = (v: string) => (v ? new Date(`${v}:00-03:00`).toISOString() : null)
+export const deadlineLong = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short', timeZone: 'America/Sao_Paulo' }) : '')
+
 // Redação por série: se a série não tem configuração própria, vale o padrão do concurso.
 export function essayFor(c: Contest, grade: string): { enabled: boolean; prompt: string; images: string[] } {
   const g = c.essay_by_grade?.[grade]

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
 import { supabase } from '../../lib/supabase'
-import { db, DEFAULT_CONFIRMATION, EMAIL_VARS, GRADES, type Candidate, type Contest } from '../../lib/concurso'
+import { db, DEFAULT_CONFIRMATION, EMAIL_VARS, fmtDate, GRADES, type Candidate, type Contest } from '../../lib/concurso'
 
 const input: React.CSSProperties = { border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: '9px 11px', fontSize: 14, fontFamily: 'inherit', color: BRAND.ink, background: '#fff', boxSizing: 'border-box', width: '100%' }
 const lab: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: BRAND.muted, marginBottom: 4, display: 'block' }
@@ -26,7 +26,7 @@ function VarChips({ onPick }: { onPick: (v: string) => void }) {
 function Preview({ contest, school, subject, body, cand }: { contest: Contest; school: { name: string; logo_url: string | null } | null; subject: string; body: string; cand?: Candidate }) {
   const v: Record<string, string> = {
     aluno: cand?.student_name ?? 'Nome do Aluno', responsavel: cand?.responsible_name ?? 'Nome do Responsável', numero: String(cand?.number ?? 1001), serie: cand?.grade ?? contest.grades[0] ?? '6º ano',
-    concurso: contest.name, data_prova: contest.exam_date ? contest.exam_date.split('-').reverse().join('/') : 'a definir', local: contest.location || 'a definir', duracao: contest.exam_duration || '',
+    concurso: contest.name, data_prova: contest.exam_date ? fmtDate(contest.exam_date) : 'a definir', local: contest.location || 'a definir', duracao: contest.exam_duration || '',
     escola: school?.name ?? '', link: contest.public_slug ? `${window.location.origin}/bolsas/${contest.public_slug}` : '',
   }
   const fill = (t: string) => t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k) => v[k] ?? '')
