@@ -287,7 +287,8 @@ export default function InstitutionDetails() {
           plan: inst.plan || 'escola', consultant_id: inst.consultant_id || '',
           monthly_value: String(inst.monthly_value || 550),
           implementation_value: String(inst.implementation_value || 550),
-          nf_issue_timing: inst.nf_issue_timing || 'after_payment',
+          nf_issue_timing: (inst as any).nf_required === false ? 'none' : (inst.nf_issue_timing || 'after_payment'),
+          financial_email: (inst as any).financial_email || '',
         })
         setWaForm({
           phone_id:     inst.whatsapp_phone_id || '',
@@ -349,7 +350,9 @@ export default function InstitutionDetails() {
         plan: editForm.plan, consultant_id: editForm.consultant_id || null,
         monthly_value: Number(editForm.monthly_value),
         implementation_value: Number(editForm.implementation_value),
-        nf_issue_timing: editForm.nf_issue_timing || 'after_payment',
+        nf_issue_timing: editForm.nf_issue_timing === 'before_payment' ? 'before_payment' : 'after_payment',
+        nf_required: editForm.nf_issue_timing !== 'none',
+        financial_email: (editForm.financial_email || '').trim() || null,
       }).eq('id', id)
       if (error) throw error
       showToast('Dados atualizados!')
@@ -1479,8 +1482,13 @@ export default function InstitutionDetails() {
                 <select className={inp} value={editForm.nf_issue_timing} onChange={e => setEditForm((p: any) => ({ ...p, nf_issue_timing: e.target.value }))}>
                   <option value="after_payment">Depois do pagamento</option>
                   <option value="before_payment">Antes do pagamento</option>
+                  <option value="none">Esta escola não precisa de nota</option>
                 </select>
-                <p className="text-xs text-gray-400 mt-1">Quando gerar a linha de controle de nota (aba Financeiro → Nota Fiscal) pra cobranças desta escola.</p>
+                <p className="text-xs text-gray-400 mt-1">Quando gerar a linha de controle de nota (aba Financeiro → Nota Fiscal) pra cobranças desta escola. "Não precisa de nota" não cria mais nota pendente.</p>
+              </div>
+              <div>
+                <label className={lbl}>E-mail do financeiro (recebe a nota fiscal)</label>
+                <input className={inp} type="email" value={editForm.financial_email || ''} onChange={e => setEditForm((p: any) => ({ ...p, financial_email: e.target.value }))} placeholder="Vazio = usa o e-mail da escola" />
               </div>
             </div>
           </div>

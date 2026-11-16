@@ -628,16 +628,12 @@ function InvoiceIssueModal({ invoice, onClose, onSuccess, showToast }: {
     try {
       let pdfUrl = form.invoice_url_pdf.trim() || null
 
-      // Upload opcional do PDF — mesmo padrão de bucket público já usado em
-      // proposals (ProposalGenerator.tsx): cria o bucket se ainda não existir.
+      // Upload opcional do PDF no bucket público 'invoices' (criado por migração;
+      // só o Super Admin escreve nele).
       if (file) {
-        const { data: buckets } = await supabase.storage.listBuckets()
-        if (!buckets?.some(b => b.name === 'invoices')) {
-          await supabase.storage.createBucket('invoices', { public: true })
-        }
         const path = `${invoice.institution_id}/${invoice.payment_id}.pdf`
         const { error: upErr } = await supabase.storage.from('invoices').upload(path, file, { contentType: 'application/pdf', upsert: true })
-        if (upErr) throw new Error('Erro no upload do PDF: ' + upErr.message)
+        if (upErr) throw new Error('Não foi possível enviar o PDF: ' + upErr.message)
         const { data: { publicUrl } } = supabase.storage.from('invoices').getPublicUrl(path)
         pdfUrl = publicUrl
       }
@@ -658,9 +654,10 @@ function InvoiceIssueModal({ invoice, onClose, onSuccess, showToast }: {
       // financeiro" no schema de institutions). Falha aqui não desfaz o que
       // já foi salvo: a nota fica em 'issued' (não avança pra 'sent') e o
       // erro fica registrado em last_error pra nova tentativa manual.
-      const email = invoice.institutions?.email
+      const email = (invoice.institutions?.financial_email || '').trim() || invoice.institutions?.email
       if (!email) {
-        showToast('Nota salva, mas a escola não tem e-mail cadastrado — envio pulado.', false)
+        showToast('Nota salva, mas a escola não tem e-mail cadastrado. Cadastre o e-mail do financeiro na escola e use "Tentar reenviar".', false)
+        await supabase.from('payment_invoices').update({ status: 'error', last_error: 'Escola sem e-mail cadastrado' }).eq('id', invoice.id)
       } else {
         try {
           const { error: mailErr } = await supabase.functions.invoke('send-email', {
@@ -679,7 +676,7 @@ function InvoiceIssueModal({ invoice, onClose, onSuccess, showToast }: {
           })
           if (mailErr) throw new Error(mailErr.message)
           await supabase.from('payment_invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', invoice.id)
-          showToast('Nota gerada e e-mail enviado pro financeiro da escola!')
+          showToast(`Nota gerada e e-mail enviado para ${email}.`)
         } catch (e: any) {
           await supabase.from('payment_invoices').update({ status: 'error', last_error: e?.message || 'Erro ao enviar e-mail' }).eq('id', invoice.id)
           showToast('Nota salva, mas o e-mail não foi enviado: ' + (e?.message || 'erro desconhecido'), false)
@@ -1320,6 +1317,13 @@ export default function AdminFinancial() {
   }
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
+  // Marca a nota de um pagamento como "não precisa de nota" (ou desfaz).
+  const setNf = async (inv: any, status: 'not_required' | 'pending') => {
+    const { error } = await supabase.from('payment_invoices').update({ status, updated_at: new Date().toISOString() }).eq('id', inv.id)
+    if (error) return showToast('Não foi possível atualizar: ' + error.message, false)
+    showToast(status === 'not_required' ? 'Pronto: este pagamento não precisa de nota.' : 'Nota voltou para pendente.')
+    loadData()
+  }
 
   const cancelledRef = useRef(false)
 
@@ -1340,7 +1344,7 @@ export default function AdminFinancial() {
       supabase.from('financial_entries').select('*, institutions(name)').order('entry_date', { ascending: false }),
       supabase.from('consultant_commissions').select('*, institutions(name)').order('created_at', { ascending: false }),
       supabase.from('users').select('id, full_name').eq('user_type', 'consultant').order('full_name'),
-      supabase.from('payment_invoices').select('*, payments(amount, description, payment_type, paid_at, due_date), institutions(name, email)').order('created_at', { ascending: false }),
+      supabase.from('payment_invoices').select('*, payments(amount, description, payment_type, paid_at, due_date), institutions(name, email, financial_email)').order('created_at', { ascending: false }),
     ])
     if (cancelledRef.current) return
     setInstitutions(instRes.data || [])
@@ -2253,15 +2257,29 @@ export default function AdminFinancial() {
                             </td>
                             <td className="px-5 py-3">
                               {inv.status === 'pending' ? (
-                                <button onClick={() => setInvoiceModal(inv)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg text-xs font-semibold whitespace-nowrap">
-                                  <FileText className="w-3.5 h-3.5" /> Marcar como gerada
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <button onClick={() => setInvoiceModal(inv)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg text-xs font-semibold whitespace-nowrap">
+                                    <FileText className="w-3.5 h-3.5" /> Marcar como gerada
+                                  </button>
+                                  <button onClick={() => setNf(inv, 'not_required')}
+                                    className="px-3 py-1.5 bg-white text-gray-600 border border-gray-200 rounded-lg text-xs font-semibold whitespace-nowrap">
+                                    Não precisa de nota
+                                  </button>
+                                </div>
+                              ) : inv.status === 'not_required' ? (
+                                <button onClick={() => setNf(inv, 'pending')}
+                                  className="px-3 py-1.5 bg-white text-gray-600 border border-gray-200 rounded-lg text-xs font-semibold whitespace-nowrap">
+                                  Desfazer
                                 </button>
                               ) : inv.status === 'error' ? (
-                                <button onClick={() => setInvoiceModal(inv)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold whitespace-nowrap">
-                                  <Send className="w-3.5 h-3.5" /> Tentar reenviar
-                                </button>
+                                <div className="flex flex-col gap-1">
+                                  <button onClick={() => setInvoiceModal(inv)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold whitespace-nowrap">
+                                    <Send className="w-3.5 h-3.5" /> Tentar reenviar
+                                  </button>
+                                  {inv.last_error && <span className="text-[11px] text-red-500 max-w-[220px]">{inv.last_error}</span>}
+                                </div>
                               ) : inv.invoice_url_pdf ? (
                                 <a href={inv.invoice_url_pdf} target="_blank" rel="noopener noreferrer"
                                   className="flex items-center gap-1.5 text-cyan-600 text-xs font-semibold whitespace-nowrap">

@@ -330,7 +330,12 @@ async function createPendingInvoice(sb: any, paymentId: string, institutionId: s
     const { data: existing } = await sb.from('payment_invoices').select('id').eq('payment_id', paymentId).maybeSingle()
     if (existing) return
 
-    const { data: inst } = await sb.from('institutions').select('name, nf_issue_timing').eq('id', institutionId).single()
+    const { data: inst } = await sb.from('institutions').select('name, nf_issue_timing, nf_required').eq('id', institutionId).single()
+    // Escola marcada como "não precisa de nota": não cria nota nem avisa o sino.
+    if (inst && inst.nf_required === false) {
+      console.log('[asaas-webhook] escola não emite nota, ignorando NF:', institutionId)
+      return
+    }
     const issueTiming = inst?.nf_issue_timing || 'after_payment'
 
     const { error } = await sb.from('payment_invoices').insert({
