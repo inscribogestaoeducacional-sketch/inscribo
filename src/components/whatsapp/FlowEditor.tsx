@@ -115,7 +115,7 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
       if (mt && mt !== 'text') return 160  // image / video / audio: upload + url (+ caption)
       return 140
     }
-    case 'question':   return 136
+    case 'question':   return 162
     case 'menu':       return 110 + (node.data.options?.length || 1) * 38
     case 'condition': {
       const conds: any[] = node.data?.conditions?.length
@@ -131,7 +131,7 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
       h += Math.max(0, conds.length - 1) * 28  // E/OU badges
       return h
     }
-    case 'transfer':   return node.data.transferType === 'group' ? 220 : node.data.transferType === 'general' ? 140 : 180
+    case 'transfer':   return node.data.transferType === 'group' ? 246 : node.data.transferType === 'general' ? 166 : 206
     case 'wait':       return 82
     case 'media':      return 160
     case 'distribute': return 82
@@ -151,7 +151,7 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
       }
       return h
     }
-    case 'end':        return 82
+    case 'end':        return 112
     default:           return 100
   }
 }
@@ -404,6 +404,10 @@ function NodeBody({
             value={d.variable || ''} placeholder="Salvar em: nome_aluno"
             onChange={e => onChange({ ...d, variable: e.target.value })}
             onMouseDown={stop} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569', cursor: 'pointer' }} onMouseDown={stop}>
+            <input type="checkbox" checked={!!d.acceptFile} onChange={e => onChange({ ...d, acceptFile: e.target.checked })} />
+            Aceitar foto ou PDF como resposta
+          </label>
         </div>
       )
 
@@ -592,6 +596,10 @@ function NodeBody({
             value={d.message || ''} placeholder="Mensagem antes de transferir (opcional)"
             onChange={e => onChange({ ...d, message: e.target.value })}
             onMouseDown={stop} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569', cursor: 'pointer', marginTop: 6 }} onMouseDown={stop}>
+            <input type="checkbox" checked={!!d.keepDestinationOffHours} onChange={e => onChange({ ...d, keepDestinationOffHours: e.target.checked })} />
+            Manter este destino fora do horário
+          </label>
         </div>
       )
     }
@@ -755,6 +763,10 @@ function NodeBody({
             value={d.message || ''} placeholder="Mensagem de encerramento (opcional)"
             onChange={e => onChange({ ...d, message: e.target.value })}
             onMouseDown={stop} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, marginTop: 8, color: '#475569', cursor: 'pointer' }} onMouseDown={stop}>
+            <input type="checkbox" checked={!!d.onlyConclude} onChange={e => onChange({ ...d, onlyConclude: e.target.checked })} />
+            Somente concluir (sem pesquisa de satisfação)
+          </label>
         </div>
       )
 

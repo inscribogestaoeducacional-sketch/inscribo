@@ -2090,10 +2090,13 @@ async function processCustomFlow(
   text:               string,
   flow:               any,
   isNewConversation:  boolean,
-  interactiveChoiceId = ''   // raw Meta reply ID, e.g. 'opt_0', 'opt_1'
+  interactiveChoiceId = '',  // raw Meta reply ID, e.g. 'opt_0', 'opt_1'
+  isFile = false             // a mensagem do cliente é foto/PDF/áudio/vídeo
 ): Promise<void> {
-  const bf = flow.bot_flow as { nodes: any[]; edges: any[] } | null
-  if (!bf?.nodes?.length) return
+  const bf0 = flow.bot_flow as { nodes: any[]; edges: any[] } | null
+  if (!bf0?.nodes?.length) return
+  // cópia rasa: o robô pode acrescentar passos temporários (ex.: chamar a equipe) sem mexer no fluxo salvo
+  const bf = { nodes: [...bf0.nodes], edges: [...(bf0.edges || [])] }
 
   // 1. Fetch conversation state
   const { data: conv } = await supabase
@@ -2137,8 +2140,8 @@ async function processCustomFlow(
   }
 
   // 2. Handle user input for the CURRENT node (before advancing)
-  if (current?.type === 'question' && current.data?.variable && text.trim()) {
-    variables[current.data.variable] = text.trim()
+  if (current?.type === 'question' && current.data?.variable && (text.trim() || (isFile && current.data?.acceptFile))) {
+    variables[current.data.variable] = text.trim() || '[arquivo]'
     const nexts = edgesFrom(currentNodeId, 'out')
     if (nexts.length) { currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId) }
   } else if (current?.type === 'menu' && variables[`__menu_sent_${currentNodeId}`]) {
@@ -2161,6 +2164,45 @@ async function processCustomFlow(
       }
     }
 
+    // Resposta que o menu não entendeu: arquivo vira aviso simpático (não conta como erro);
+    // texto inválido repete o menu e, na N-ésima vez, chama a equipe (configurável por escola e por menu).
+    const invalidAnswer = async (): Promise<boolean> => {
+      const key = `__invalid_${currentNodeId}`
+      const tries = (parseInt(variables[key] || '0', 10) || 0) + 1
+      const esc = current.data?.escalate || {}
+      const maxTries = Number.isFinite(Number(esc.after)) && esc.after !== undefined ? Number(esc.after) : ((flow as any).invalid_max_tries ?? 2)
+      const sendAgain = async (msg: string) => {
+        await sendAutoMessage(institutionId, remoteJid, msg)
+        await sendInteractiveMenu(institutionId, remoteJid, menuHeader, menuHeader, options)
+        await supabase.from('whatsapp_conversations')
+          .update({ bot_current_node: currentNodeId, bot_variables: variables })
+          .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+      }
+      if (isFile && !interactiveChoiceId) {
+        await sendAgain('Recebi seu arquivo! 💚 Sobre qual assunto é?')
+        return true
+      }
+      if (maxTries > 0 && tries >= maxTries) {
+        const msg = esc.message || (flow as any).invalid_escalate_message || 'Vou chamar alguém da equipe para te ajudar. É só aguardar um instante. 💚'
+        const tNode: any = { id: '__esc_t', type: 'transfer', data: { transferType: esc.assignee_id ? 'attendant' : 'general', assignee_id: esc.assignee_id, assignee_name: esc.assignee_name, message: msg } }
+        bf.nodes.push(tNode)
+        let first: any = tNode
+        if (esc.tag) {
+          const aNode: any = { id: '__esc_a', type: 'action', data: { actions: [{ actionType: 'add_conversation_tag', tag: esc.tag }] } }
+          bf.nodes.push(aNode)
+          bf.edges.push({ fromNodeId: '__esc_a', fromPortId: 'out', toNodeId: '__esc_t', toPortId: 'in' })
+          first = aNode
+        }
+        delete variables[`__menu_sent_${currentNodeId}`]
+        delete variables[key]
+        currentNodeId = first.id; current = first
+        return false   // segue para o loop, que executa a etiqueta e a transferência
+      }
+      variables[key] = String(tries)
+      await sendAgain(current.data?.invalidText || (flow as any).invalid_text || 'Não entendi sua resposta 😊 Por favor escolha uma das opções abaixo:')
+      return true
+    }
+
     if (optIdx >= 0) {
       const opt = options[optIdx]
       // Edge fromPortId uses hyphen format (opt-0); Meta reply IDs use underscore (opt_0)
@@ -2168,24 +2210,15 @@ async function processCustomFlow(
       if (!nexts.length && opt.id) nexts = edgesFrom(currentNodeId, opt.id)
       if (nexts.length) {
         delete variables[`__menu_sent_${currentNodeId}`]
+        delete variables[`__invalid_${currentNodeId}`]
         currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId)
       } else {
         // Valid index but no edge configured — re-prompt with interactive menu
-        await sendAutoMessage(institutionId, remoteJid, 'Não entendi sua resposta 😊 Por favor escolha uma das opções abaixo:')
-        await sendInteractiveMenu(institutionId, remoteJid, menuHeader, menuHeader, options)
-        await supabase.from('whatsapp_conversations')
-          .update({ bot_current_node: currentNodeId, bot_variables: variables })
-          .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        return
+        if (await invalidAnswer()) return
       }
     } else {
-      // Unrecognised choice — re-display interactive menu
-      await sendAutoMessage(institutionId, remoteJid, 'Não entendi sua resposta 😊 Por favor escolha uma das opções abaixo:')
-      await sendInteractiveMenu(institutionId, remoteJid, menuHeader, menuHeader, options)
-      await supabase.from('whatsapp_conversations')
-        .update({ bot_current_node: currentNodeId, bot_variables: variables })
-        .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-      return
+      // Unrecognised choice
+      if (await invalidAnswer()) return
     }
   }
 
@@ -2339,7 +2372,7 @@ async function processCustomFlow(
         return curMins >= lsh * 60 + lsm && curMins <= leh * 60 + lem
       }
 
-      if (!withinHours) {
+      if (!withinHours && !node.data?.keepDestinationOffHours) {
         console.log('[flow] transfer bloqueado — fora do horário:', curDay, `${nowTz.getHours()}:${String(nowTz.getMinutes()).padStart(2,'0')}`)
         // Resolve um responsável de fallback: grupo (round-robin, mesmo critério
         // de timeout-check.ts) tem prioridade, depois o atendente fixo do flow.
@@ -2776,10 +2809,12 @@ async function processCustomFlow(
       if (node.data?.message) {
         await sendAutoMessage(institutionId, remoteJid, interp(node.data.message))
       }
+      // "Somente concluir": fecha sem pesquisa e a próxima mensagem já recomeça o robô.
+      const onlyConclude = node.data?.onlyConclude === true
       await supabase.from('whatsapp_conversations')
-        .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null, closed_at: new Date().toISOString() })
+        .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null, closed_at: new Date().toISOString(), ...(onlyConclude ? { close_restart_bot: true } : {}) })
         .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-      await sendSurveyIfEnabled(institutionId, remoteJid)
+      if (!onlyConclude) await sendSurveyIfEnabled(institutionId, remoteJid)
       currentNodeId = 'end'; break
     }
     break
@@ -2798,7 +2833,8 @@ async function processFlow(
   remoteJid:          string,
   text:               string,
   isNewConversation:  boolean,
-  interactiveChoiceId = ''
+  interactiveChoiceId = '',
+  isFile = false
 ): Promise<void> {
   try {
     // a) Blacklist check
@@ -2893,13 +2929,13 @@ async function processFlow(
       const botVars = (convState?.bot_variables as Record<string, string>) || {}
       const hasMenuPending = !!interactiveChoiceId && Object.keys(botVars).some(k => k.startsWith('__menu_sent_'))
       if (hasMenuPending) {
-        await processCustomFlow(institutionId, remoteJid, text, flow, false, interactiveChoiceId)
+        await processCustomFlow(institutionId, remoteJid, text, flow, false, interactiveChoiceId, isFile)
         return
       }
 
       // Bot already running — continue flow from current node
       if (convState?.bot_active === true) {
-        await processCustomFlow(institutionId, remoteJid, text, flow, false, interactiveChoiceId)
+        await processCustomFlow(institutionId, remoteJid, text, flow, false, interactiveChoiceId, isFile)
         return
       }
 
@@ -2928,7 +2964,7 @@ async function processFlow(
             bot_active: true, bot_current_node: null, bot_variables: {},
           }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
           if (botErr) console.error('❌ bot activation error:', botErr.message)
-          await processCustomFlow(institutionId, remoteJid, text, flow, true, interactiveChoiceId)
+          await processCustomFlow(institutionId, remoteJid, text, flow, true, interactiveChoiceId, isFile)
         } else {
           console.log('[flow] conversa reaberta com histórico, robô não ativado')
         }
@@ -4483,8 +4519,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // boas-vindas/menu do zero, só reabrir silenciosamente.
         // "Somente concluir" (close_restart_bot): o atendente encerrou de propósito sem pesquisa,
         // então a próxima mensagem do cliente já inicia o robô, sem a reabertura silenciosa.
+        // Prazo configurável por escola (Configurações do WhatsApp). Sem valor = 2 horas; 0 = nunca reabre em silêncio.
+        let reopenWindowMs = REOPEN_RECENT_WINDOW_MS
+        if (isNewConversation && existingConv?.closed_at) {
+          const { data: rwf } = await supabase.from('whatsapp_flows').select('reopen_window_hours').eq('institution_id', institutionId).maybeSingle()
+          const rwh = (rwf as any)?.reopen_window_hours
+          if (rwh !== null && rwh !== undefined && Number.isFinite(Number(rwh)) && Number(rwh) >= 0) reopenWindowMs = Number(rwh) * 60 * 60 * 1000
+        }
         const isRecentReopen = isNewConversation && !!existingConv?.closed_at && existingConv?.close_restart_bot !== true &&
-          (Date.now() - new Date(existingConv.closed_at as unknown as string).getTime()) < REOPEN_RECENT_WINDOW_MS
+          (Date.now() - new Date(existingConv.closed_at as unknown as string).getTime()) < reopenWindowMs
 
         console.log('[WEBHOOK UPSERT]', {
           remoteJid,
@@ -4770,7 +4813,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.log('[flow] reabertura recente pós-encerramento — bot_enabled=false, nenhuma mensagem automática enviada')
           }
         } else {
-          await processFlow(institutionId, remoteJid, effectiveText, isNewConversation, interactiveChoiceId)
+          await processFlow(institutionId, remoteJid, effectiveText, isNewConversation, interactiveChoiceId, ['image', 'document', 'audio', 'video', 'sticker'].includes(msgType))
         }
       }
 

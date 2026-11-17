@@ -142,6 +142,11 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
   const [botTimeoutAssigneeId, setBotTimeoutAssigneeId] = useState('')
   const [botTimeoutAssigneeType, setBotTimeoutAssigneeType] = useState<'user' | 'group'>('user')
   const [staleHours, setStaleHours] = useState(24)
+  // Robô: "não entendi" e prazo para reabrir conversa encerrada
+  const [invalidTries, setInvalidTries] = useState(2)
+  const [invalidText, setInvalidText] = useState('')
+  const [invalidEscMsg, setInvalidEscMsg] = useState('')
+  const [reopenHours, setReopenHours] = useState(2)
   const [timeoutMinutes, setTimeoutMinutes] = useState(15)
   const [timeoutGroupId, setTimeoutGroupId] = useState('')
   const [timeoutAssigneeId, setTimeoutAssigneeId] = useState('')
@@ -246,6 +251,11 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
         if (f.bot_timeout_assignee_id) setBotTimeoutAssigneeId(f.bot_timeout_assignee_id)
         if (f.bot_timeout_assignee_type) setBotTimeoutAssigneeType(f.bot_timeout_assignee_type)
         if (f.stale_conversation_hours) setStaleHours(f.stale_conversation_hours)
+        { const ff = f as any
+          if (ff.invalid_max_tries !== null && ff.invalid_max_tries !== undefined) setInvalidTries(Number(ff.invalid_max_tries))
+          if (ff.invalid_text) setInvalidText(ff.invalid_text)
+          if (ff.invalid_escalate_message) setInvalidEscMsg(ff.invalid_escalate_message)
+          if (ff.reopen_window_hours !== null && ff.reopen_window_hours !== undefined) setReopenHours(Number(ff.reopen_window_hours)) }
         setSurveyOn(!!f.satisfaction_survey_enabled)
         if (f.satisfaction_message) setSurveyMsg(f.satisfaction_message)
       }
@@ -780,6 +790,38 @@ export default function WhatsAppSettings({ institutionId, role, section, onSecti
             ...(botTimeoutMessage.trim() ? { timeout_message: botTimeoutMessage } : {}), // vazio: mantém a mensagem padrão antiga, sem desligar a transferência
             bot_timeout_assignee_id: botTimeoutAssigneeId || null, bot_timeout_assignee_type: botTimeoutAssigneeType, // sempre explícito: "Fila geral" não herda o destino de fora do horário
           })} />
+      </Card>
+
+      <Card>
+        <Title Icon={Bot} title="Quando o robô não entende" help="Se a pessoa responde algo que não está no menu, o robô repete as opções. Depois do número de tentativas abaixo, ele chama a equipe. Cada menu do robô pode ter o seu próprio ajuste." />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <label style={{ ...label, margin: 0 }}>Chamar a equipe na tentativa</label>
+          <input type="number" min={0} max={10} value={invalidTries} onChange={e => setInvalidTries(Math.max(0, Math.min(10, parseInt(e.target.value) || 0)))}
+            style={{ ...input, width: 80, textAlign: 'center' }} />
+          <span style={{ fontSize: 13, color: BRAND.muted }}>{invalidTries === 0 ? '0 = o robô repete o menu sem parar' : `na ${invalidTries}ª resposta que não entender`}</span>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={label}>Texto ao repetir o menu</label>
+          {textarea(invalidText, setInvalidText, 2, 'Não entendi sua resposta 😊 Por favor escolha uma das opções abaixo:')}
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={label}>Texto ao chamar a equipe</label>
+          {textarea(invalidEscMsg, setInvalidEscMsg, 2, 'Vou chamar alguém da equipe para te ajudar. É só aguardar um instante. 💚')}
+        </div>
+        <SaveButton text="Salvar" saving={savingKey === 'bot-invalid'} saved={savedKey === 'bot-invalid'}
+          onClick={() => saveFlow('bot-invalid', { invalid_max_tries: invalidTries, invalid_text: invalidText.trim() || null, invalid_escalate_message: invalidEscMsg.trim() || null })} />
+      </Card>
+
+      <Card>
+        <Title Icon={Hourglass} title="Conversa encerrada que volta a falar" help="Se a família escrever de novo logo depois de a conversa ser encerrada, o robô só reabre em silêncio, sem repetir o menu. Passado este prazo, ele recomeça do início." />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <label style={{ ...label, margin: 0 }}>Reabrir em silêncio por até</label>
+          <select value={reopenHours} onChange={e => setReopenHours(parseInt(e.target.value))} style={{ ...input, width: 180 }}>
+            {[0, 1, 2, 4, 8, 12, 24, 48, 72].filter((h, i, a) => a.indexOf(h) === i).concat([0, 1, 2, 4, 8, 12, 24, 48, 72].includes(reopenHours) ? [] : [reopenHours]).map(h => <option key={h} value={h}>{h === 0 ? 'Nunca (sempre recomeça)' : `${h} ${h === 1 ? 'hora' : 'horas'}`}</option>)}
+          </select>
+        </div>
+        <SaveButton text="Salvar" saving={savingKey === 'bot-reopen'} saved={savedKey === 'bot-reopen'}
+          onClick={() => saveFlow('bot-reopen', { reopen_window_hours: reopenHours })} />
       </Card>
 
       <Card>
