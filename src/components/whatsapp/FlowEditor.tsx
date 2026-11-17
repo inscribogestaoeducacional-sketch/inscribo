@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { stageLabel } from '../../lib/stageLabels'
+import { graphToSteps, validate as validateFlow } from './robot/flowModel'
 
 // Mesmo bucket/padrão de src/lib/whatsappTemplate.ts (uploadTemplateHeaderMedia),
 // que já funciona para mídia de header de template — os nós de mídia do fluxo
@@ -939,6 +940,30 @@ function migrateEdge(e: any): FlowEdge {
 // pra institutions e rejeitaria qualquer pseudo-ID.
 type FlowEditorOwnerType = 'institution' | 'group' | 'platform'
 
+// Organiza o fluxo em colunas: o que vem em sequência fica na mesma coluna, e cada caminho
+// (opção de menu, Sim/Não) abre uma coluna nova à direita. Usa a altura real de cada bloco.
+function organizeLayout(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
+  const byId = new Map(nodes.map(n => [n.id, n]))
+  const pos = new Map<string, { x: number; y: number }>()
+  let cursor = 40
+  const visit = (id: string, depth: number) => {
+    const n = byId.get(id)
+    if (!n || pos.has(id)) return
+    pos.set(id, { x: 40 + depth * (NW + 70), y: cursor })
+    cursor += nodeH(n) + 40
+    const outs = edges.filter(e => e.fromNodeId === id)
+    const isBranch = (e: FlowEdge) => e.fromPortId !== 'out'
+    outs.filter(e => !isBranch(e)).forEach(e => visit(e.toNodeId, depth))
+    outs.filter(isBranch).forEach(e => visit(e.toNodeId, depth + 1))
+  }
+  const start = nodes.find(n => n.type === 'start')
+  if (start) visit(start.id, 0)
+  nodes.forEach(n => { if (!pos.has(n.id)) visit(n.id, 0) })
+  return nodes.map(n => ({ ...n, position: pos.get(n.id) || n.position }))
+}
+const nodesOverlap = (nodes: FlowNode[]) => nodes.some((a, i) => nodes.some((b, j) => j > i
+  && Math.abs(a.position.x - b.position.x) < NW && a.position.y < b.position.y + nodeH(b) && b.position.y < a.position.y + nodeH(a)))
+
 export default function FlowEditor({
   institutionId,
   ownerType = 'institution',
@@ -970,6 +995,16 @@ export default function FlowEditor({
   const [draftBanner, setDraftBanner] = useState(false)
   const [draftData, setDraftData]     = useState<{ nodes: FlowNode[]; edges: FlowEdge[] } | null>(null)
   const dirtyRef = useRef(false)
+  // Rascunho (só escolas): o robô "No ar" e o "Rascunho" ficam guardados à parte; a tela mostra um por vez.
+  type Graph = { nodes: FlowNode[]; edges: FlowEdge[] }
+  const [mode, setMode]                 = useState<'live' | 'draft'>('live')
+  const [liveGraph, setLiveGraph]       = useState<Graph | null>(null)
+  const [draftGraph, setDraftGraph]     = useState<Graph | null>(null)
+  const [draftAt, setDraftAt]           = useState<string | null>(null)
+  const [backupAt, setBackupAt]         = useState<string | null>(null)
+  const [publishing, setPublishing]     = useState(false)
+  const [flowMsg, setFlowMsg]           = useState<{ ok: boolean; text: string } | null>(null)
+  const hasDraftTabs = ownerType === 'institution'
 
   const canvasRef = useRef<HTMLDivElement>(null)
   // Celular: o editor foi feito para mouse. Este "tradutor" transforma o arrasto do dedo em
@@ -1048,6 +1083,19 @@ export default function FlowEditor({
           ? supabase.from('whatsapp_tags').select('id, name, color').eq('institution_id', institutionId).order('name')
           : Promise.resolve({ data: [] as { id: string; name: string; color: string }[] }),
       ])
+      if (ownerType === 'institution') {
+        const { data: ex } = await supabase.from('whatsapp_flows')
+          .select('bot_flow_draft, bot_flow_draft_updated_at, bot_flow_backup_at' as any)
+          .eq(ownerColumn, institutionId).maybeSingle()
+        const exr = ex as any
+        if (exr?.bot_flow_draft?.nodes?.length) {
+          const dn: FlowNode[] = exr.bot_flow_draft.nodes.map((n: any) => ({ ...n, width: NW, height: nodeH(n) }))
+          const de = (exr.bot_flow_draft.edges || []).map(migrateEdge)
+          setDraftGraph({ nodes: nodesOverlap(dn) ? organizeLayout(dn, de) : dn, edges: de })
+        }
+        setDraftAt(exr?.bot_flow_draft_updated_at || null)
+        setBackupAt(exr?.bot_flow_backup_at || null)
+      }
       if (us.data) setUsers(us.data)
       if (grp.data) setGroups(grp.data as { id: string; name: string; emoji: string }[])
       if (tg.data) setAvailableTags(tg.data as { id: string; name: string; color: string }[])
@@ -1063,6 +1111,7 @@ export default function FlowEditor({
         nodesToFit = loadedNodes
         setNodes(loadedNodes)
         setEdges((bf.edges || []).map(migrateEdge))
+        setLiveGraph({ nodes: loadedNodes, edges: (bf.edges || []).map(migrateEdge) })
       } else {
         const s: FlowNode = { id: 'start-1', type: 'start',  position: { x: 200, y: 80 },  data: {}, width: NW, height: 82 }
         const m: FlowNode = { id: 'msg-1',   type: 'message', position: { x: 200, y: 220 }, data: { text: 'Olá! Bem-vindo. Como posso ajudar?' }, width: NW, height: 136 }
@@ -1124,11 +1173,11 @@ export default function FlowEditor({
 
   // ── Draft auto-save to localStorage ──────────────────────────────────────
   useEffect(() => {
-    if (!dirtyRef.current) return
+    if (!dirtyRef.current || mode === 'draft') return
     try {
       localStorage.setItem(`flow_draft_${institutionId}`, JSON.stringify({ nodes, edges, savedAt: Date.now() }))
     } catch {}
-  }, [nodes, edges, institutionId])
+  }, [nodes, edges, institutionId, mode])
 
   // ── Node drag ─────────────────────────────────────────────────────────────
   const startDragNode = (e: React.MouseEvent, nodeId: string) => {
@@ -1256,6 +1305,15 @@ export default function FlowEditor({
     }
     setSaving(true)
     const botFlow = { nodes, edges }
+    if (mode === 'draft') {
+      const now = new Date().toISOString()
+      const { error } = await supabase.from('whatsapp_flows').update({ bot_flow_draft: botFlow, bot_flow_draft_updated_at: now } as any).eq(ownerColumn, institutionId)
+      setSaving(false)
+      if (error) { setFlowMsg({ ok: false, text: `Não foi possível salvar o rascunho: ${error.message}` }); return }
+      setDraftGraph({ nodes, edges }); setDraftAt(now); dirtyRef.current = false
+      setSaved(true); setTimeout(() => setSaved(false), 2500)
+      return
+    }
     console.log('[FlowEditor] salvando para institution_id:', institutionId, 'nodes:', nodes.length, 'edges:', edges.length)
     console.log('[SAVE] nodes:', JSON.stringify(nodes.map(n => ({ type: n.type, data: n.data })), null, 2))
 
@@ -1292,6 +1350,7 @@ export default function FlowEditor({
     } else {
       console.log('[FlowEditor] salvo com sucesso')
       setSaved(true)
+      setLiveGraph({ nodes, edges })
       try { localStorage.removeItem(`flow_draft_${institutionId}`) } catch {}
       setDraftBanner(false)
       dirtyRef.current = false
@@ -1300,7 +1359,74 @@ export default function FlowEditor({
     setSaving(false)
   }
 
+  // ── Rascunho: trocar de aba, criar, publicar e voltar ───────────────────
+  const showGraph = (g: Graph) => {
+    setNodes(g.nodes); setEdges(g.edges); setSelected(null); setConnecting(null)
+    // robô grande: começa legível no início do fluxo (o "Ajustar" mostra tudo)
+    setTimeout(() => {
+      if (g.nodes.length <= 40) return fitList(g.nodes)
+      const minX = Math.min(...g.nodes.map(n => n.position.x)), minY = Math.min(...g.nodes.map(n => n.position.y))
+      setZoom(0.6); setPan({ x: 40 - minX * 0.6, y: 40 - minY * 0.6 })
+    }, 60)
+  }
+  const switchMode = (m: 'live' | 'draft') => {
+    if (m === mode) return
+    if (dirtyRef.current && !window.confirm('Há mudanças não salvas. Trocar de aba e perder essas mudanças?')) return
+    dirtyRef.current = false; setFlowMsg(null); setMode(m)
+    const g = m === 'live' ? liveGraph : draftGraph
+    if (g) showGraph(g)
+  }
+  const createDraftFromLive = () => {
+    const g = liveGraph || { nodes, edges }
+    setDraftGraph(g); dirtyRef.current = true; showGraph(g)
+  }
+  const publishDraft = async () => {
+    setFlowMsg(null)
+    if (dirtyRef.current) { setFlowMsg({ ok: false, text: 'Salve o rascunho antes de publicar.' }); return }
+    if (!draftGraph?.nodes?.length) { setFlowMsg({ ok: false, text: 'O rascunho está vazio.' }); return }
+    const bad = validateFlow(graphToSteps(draftGraph as any))
+    if (bad.length) { setFlowMsg({ ok: false, text: `Ainda há ${bad.length} ponto(s) para ajustar no rascunho: ${bad.slice(0, 3).map(b => b.text).join(' · ')}` }); return }
+    if (!window.confirm('Publicar o rascunho? O robô que está no ar será trocado agora. Uma cópia dele fica guardada e dá para voltar.')) return
+    setPublishing(true)
+    const { data: cur } = await supabase.from('whatsapp_flows').select('bot_flow').eq(ownerColumn, institutionId).maybeSingle()
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('whatsapp_flows')
+      .update({ bot_flow_backup: (cur as any)?.bot_flow ?? null, bot_flow_backup_at: now, bot_flow: draftGraph } as any)
+      .eq(ownerColumn, institutionId)
+    setPublishing(false)
+    if (error) { setFlowMsg({ ok: false, text: `Não foi possível publicar: ${error.message}` }); return }
+    setLiveGraph(draftGraph); setBackupAt(now); setMode('live'); showGraph(draftGraph)
+    setFlowMsg({ ok: true, text: 'Rascunho publicado. O robô novo já está no ar; a cópia do anterior ficou guardada.' })
+  }
+  const restoreBackup = async () => {
+    setFlowMsg(null)
+    if (dirtyRef.current) { setFlowMsg({ ok: false, text: 'Salve ou descarte as mudanças antes de voltar.' }); return }
+    if (!window.confirm('Voltar para o robô anterior? O que está no ar agora vira a cópia guardada.')) return
+    setPublishing(true)
+    const { data: cur } = await supabase.from('whatsapp_flows').select('bot_flow, bot_flow_backup' as any).eq(ownerColumn, institutionId).maybeSingle()
+    const c = cur as any
+    if (!c?.bot_flow_backup?.nodes?.length) { setPublishing(false); setFlowMsg({ ok: false, text: 'Não há cópia guardada.' }); return }
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('whatsapp_flows').update({ bot_flow: c.bot_flow_backup, bot_flow_backup: c.bot_flow, bot_flow_backup_at: now } as any).eq(ownerColumn, institutionId)
+    setPublishing(false)
+    if (error) { setFlowMsg({ ok: false, text: `Não foi possível voltar: ${error.message}` }); return }
+    const g: Graph = { nodes: c.bot_flow_backup.nodes.map((n: any) => ({ ...n, width: NW, height: nodeH(n) })), edges: (c.bot_flow_backup.edges || []).map(migrateEdge) }
+    setLiveGraph(g); setBackupAt(now); showGraph(g)
+    setFlowMsg({ ok: true, text: 'Robô anterior de volta no ar.' })
+  }
+
   // ── Fit screen ────────────────────────────────────────────────────────────
+  const fitList = (list: FlowNode[]) => {
+    const el = canvasRef.current
+    if (!list.length || !el) return
+    const xs = list.map(n => n.position.x), ys = list.map(n => n.position.y)
+    const minX = Math.min(...xs), maxX = Math.max(...xs) + NW
+    const minY = Math.min(...ys), maxY = Math.max(...ys) + 160
+    const cw = el.clientWidth - 80, ch = el.clientHeight - 80
+    const nz = Math.min(1.5, Math.max(0.25, Math.min(cw / (maxX - minX + 1), ch / (maxY - minY + 1))))
+    setZoom(nz)
+    setPan({ x: (cw - (maxX - minX) * nz) / 2 - minX * nz + 40, y: (ch - (maxY - minY) * nz) / 2 - minY * nz + 40 })
+  }
   const fitScreen = () => {
     if (!nodes.length || !canvasRef.current) return
     const xs   = nodes.map(n => n.position.x)
@@ -1348,7 +1474,7 @@ export default function FlowEditor({
             ← Voltar
           </button>
           <span style={{ fontSize: 14, fontWeight: 700, color: '#1a2b4a', whiteSpace: 'nowrap' }}>{isMobile ? 'Robô' : 'Editor de Fluxo'}</span>
-          <span style={{
+          {mode === 'live' && <span style={{
             fontSize: 11, borderRadius: 99,
             background: isActive ? '#dcfce7' : '#f1f5f9',
             color: isActive ? '#16a34a' : '#64748b',
@@ -1356,7 +1482,7 @@ export default function FlowEditor({
             cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', padding: isMobile ? '8px 12px' : '3px 10px',
           }} onClick={() => setIsActive(a => !a)}>
             {isActive ? '🤖 Robô ativo' : '👤 Robô inativo'}
-          </span>
+          </span>}
           <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>
             {nodes.length} blocos · {edges.length} conexões
           </span>
@@ -1367,15 +1493,60 @@ export default function FlowEditor({
           )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {hasDraftTabs && mode === 'draft' && (
+            <button onClick={() => { setNodes(prev => organizeLayout(prev, edges)); dirtyRef.current = true; setTimeout(() => setFlowMsg(null), 0) }} title="Arruma os blocos em colunas, sem um em cima do outro" style={{ ...btnBase, background: '#f8fafc', color: '#475569', whiteSpace: 'nowrap', minHeight: isMobile ? 40 : undefined }}>▦ Organizar</button>
+          )}
           <button onClick={fitScreen} style={{ ...btnBase, background: '#f8fafc', color: '#475569', whiteSpace: 'nowrap', minHeight: isMobile ? 40 : undefined }}>⊡ Ajustar</button>
           <button onClick={handleSave} disabled={saving} style={{
             ...btnBase, whiteSpace: 'nowrap', minHeight: isMobile ? 40 : undefined, background: saved ? '#16a34a' : '#0d9488',
             color: 'white', border: 'none', opacity: saving ? 0.7 : 1,
           }}>
-            {saved ? '✓ Salvo!' : saving ? 'Salvando...' : '↑ Salvar fluxo'}
+            {saved ? '✓ Salvo!' : saving ? 'Salvando...' : mode === 'draft' ? '↑ Salvar rascunho' : '↑ Salvar fluxo'}
           </button>
         </div>
       </div>
+
+      {/* ── Abas: No ar | Rascunho ── */}
+      {hasDraftTabs && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: isMobile ? '8px 10px' : '8px 16px', background: mode === 'draft' ? '#fffbeb' : '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+          {(['live', 'draft'] as const).map(m => {
+            const on = mode === m
+            return (
+              <button key={m} type="button" onClick={() => switchMode(m)} aria-pressed={on}
+                style={{ fontSize: 12.5, fontWeight: 700, padding: isMobile ? '9px 16px' : '6px 14px', borderRadius: 99, cursor: 'pointer', border: `1px solid ${on ? '#0d9488' : '#e2e8f0'}`, background: on ? '#0d9488' : '#fff', color: on ? '#fff' : '#64748b' }}>
+                {m === 'live' ? 'No ar' : 'Rascunho'}
+              </button>
+            )
+          })}
+          {mode === 'draft' && (
+            <span style={{ fontSize: 11.5, color: '#92400e' }}>
+              Não afeta o robô que está no ar{draftAt ? ` · salvo em ${new Date(draftAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
+            </span>
+          )}
+          {mode === 'draft' && draftGraph && (
+            <button type="button" onClick={publishDraft} disabled={publishing}
+              style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 700, color: '#fff', background: '#16a34a', border: 'none', borderRadius: 8, padding: isMobile ? '9px 14px' : '7px 14px', cursor: 'pointer', opacity: publishing ? 0.7 : 1 }}>
+              {publishing ? 'Publicando...' : '✓ Publicar rascunho'}
+            </button>
+          )}
+          {mode === 'live' && backupAt && (
+            <button type="button" onClick={restoreBackup} disabled={publishing}
+              style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: '#475569', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: isMobile ? '9px 12px' : '6px 12px', cursor: 'pointer' }}>
+              ↺ Voltar ao robô anterior
+            </button>
+          )}
+        </div>
+      )}
+      {flowMsg && (
+        <div role={flowMsg.ok ? 'status' : 'alert'} style={{ padding: '8px 16px', fontSize: 12.5, flexShrink: 0, background: flowMsg.ok ? '#f0fdf4' : '#fef2f2', color: flowMsg.ok ? '#166534' : '#b91c1c', borderBottom: `1px solid ${flowMsg.ok ? '#bbf7d0' : '#fecaca'}` }}>{flowMsg.text}</div>
+      )}
+      {hasDraftTabs && mode === 'draft' && !draftGraph && (
+        <div style={{ margin: 16, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, fontSize: 14, color: '#1a2b4a' }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Ainda não há rascunho</div>
+          <div style={{ color: '#64748b', marginBottom: 12, fontSize: 13 }}>O rascunho é uma cópia para você mexer sem afetar o robô que está no ar.</div>
+          <button type="button" onClick={createDraftFromLive} style={{ fontSize: 13, fontWeight: 700, color: '#fff', background: '#0d9488', border: 'none', borderRadius: 8, padding: '9px 16px', cursor: 'pointer' }}>Criar rascunho a partir do robô atual</button>
+        </div>
+      )}
 
       {/* ── Draft recovery banner ── */}
       {draftBanner && draftData && (
