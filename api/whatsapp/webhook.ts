@@ -2764,6 +2764,10 @@ async function processCustomFlow(
               await supabase.from('whatsapp_conversations')
                 .update({ tags: [...tags, tag] })
                 .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+              await supabase.from('whatsapp_conversation_events').insert({
+                institution_id: institutionId, remote_jid: remoteJid, event_type: 'tag',
+                description: `Robô adicionou a etiqueta "${tag}"`,
+              })
             }
           }
         } else if (action.actionType === 'remove_conversation_tag') {
@@ -2776,6 +2780,10 @@ async function processCustomFlow(
               await supabase.from('whatsapp_conversations')
                 .update({ tags: tags.filter((t: string) => t !== tag) })
                 .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+              await supabase.from('whatsapp_conversation_events').insert({
+                institution_id: institutionId, remote_jid: remoteJid, event_type: 'tag',
+                description: `Robô removeu a etiqueta "${tag}"`,
+              })
             }
           }
         }
