@@ -2393,6 +2393,17 @@ async function processCustomFlow(
         return curMins >= lsh * 60 + lsm && curMins <= leh * 60 + lem
       }
 
+      // Nota interna opcional: aparece só para os atendentes, nunca vai ao cliente.
+      const transferReason = String(node.data?.reason || '').trim()
+      if (transferReason) {
+        await supabase.from('whatsapp_conversation_events').insert({
+          institution_id: institutionId,
+          remote_jid:     remoteJid,
+          event_type:     'transfer',
+          description:    `Motivo da transferência: ${interp(transferReason)}`,
+        })
+      }
+
       if (!withinHours && !node.data?.keepDestinationOffHours) {
         console.log('[flow] transfer bloqueado — fora do horário:', curDay, `${nowTz.getHours()}:${String(nowTz.getMinutes()).padStart(2,'0')}`)
         // Resolve um responsável de fallback: grupo (round-robin, mesmo critério
