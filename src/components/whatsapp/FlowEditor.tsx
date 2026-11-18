@@ -131,7 +131,7 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
       h += Math.max(0, conds.length - 1) * 28  // E/OU badges
       return h
     }
-    case 'transfer':   return node.data.transferType === 'group' ? 246 : node.data.transferType === 'general' ? 166 : 206
+    case 'transfer':   return (node.data.transferType === 'group' ? 246 : node.data.transferType === 'general' ? 166 : 206) + 34
     case 'wait':       return 82
     case 'media':      return 160
     case 'distribute': return 82
@@ -610,6 +610,10 @@ function NodeBody({
             <input type="checkbox" checked={!!d.keepDestinationOffHours} onChange={e => onChange({ ...d, keepDestinationOffHours: e.target.checked })} />
             Manter este destino fora do horário
           </label>
+          <input style={{ ...inputSt, marginTop: 6 }}
+            value={d.reason || ''} placeholder="Motivo da transferência (nota interna, opcional)"
+            onChange={e => onChange({ ...d, reason: e.target.value })}
+            onMouseDown={stop} />
         </div>
       )
     }

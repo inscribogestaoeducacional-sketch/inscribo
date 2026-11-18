@@ -2205,7 +2205,7 @@ async function processCustomFlow(
       }
       if (maxTries > 0 && tries >= maxTries) {
         const msg = esc.message || (flow as any).invalid_escalate_message || 'Vou chamar alguém da equipe para te ajudar. É só aguardar um instante. 💚'
-        const tNode: any = { id: '__esc_t', type: 'transfer', data: { transferType: esc.assignee_id ? 'attendant' : 'general', assignee_id: esc.assignee_id, assignee_name: esc.assignee_name, message: msg } }
+        const tNode: any = { id: '__esc_t', type: 'transfer', data: { transferType: esc.assignee_id ? 'attendant' : 'general', assignee_id: esc.assignee_id, assignee_name: esc.assignee_name, message: msg, reason: `Robô não entendeu a resposta após ${tries} tentativa(s) no menu "${String(current.data?.menuText || current.data?.text || '').split('\n')[0].slice(0, 60)}"` } }
         bf.nodes.push(tNode)
         let first: any = tNode
         if (esc.tag) {
@@ -2393,6 +2393,17 @@ async function processCustomFlow(
         return curMins >= lsh * 60 + lsm && curMins <= leh * 60 + lem
       }
 
+      // Nota interna opcional: aparece só para os atendentes, nunca vai ao cliente.
+      const transferReason = String(node.data?.reason || '').trim()
+      if (transferReason) {
+        await supabase.from('whatsapp_conversation_events').insert({
+          institution_id: institutionId,
+          remote_jid:     remoteJid,
+          event_type:     'transfer',
+          description:    `Motivo da transferência: ${interp(transferReason)}`,
+        })
+      }
+
       if (!withinHours && !node.data?.keepDestinationOffHours) {
         console.log('[flow] transfer bloqueado — fora do horário:', curDay, `${nowTz.getHours()}:${String(nowTz.getMinutes()).padStart(2,'0')}`)
         // Resolve um responsável de fallback: grupo (round-robin, mesmo critério
@@ -2455,6 +2466,7 @@ async function processCustomFlow(
         currentNodeId = 'end'; break
       }
 
+      let destLabel = ''   // destino real, para o histórico da conversa
       if (transferType === 'group' && groupId) {
         // Round-robin distribution across group members, skipping those on
         // lunch or marcados "Ausente" (users.is_available=false, toggle no
@@ -2488,6 +2500,7 @@ async function processCustomFlow(
             // status='open' sem dono — mesmo limbo já corrigido pro gate de
             // horário (invisível pra atendente sem "ver todas", bot para de
             // reagir). 'waiting' garante que apareça na fila geral.
+            destLabel = 'fila geral (ninguém disponível no grupo)'
             console.log('[flow] nenhum membro disponível no grupo (almoço ou ausente):', group.name)
             // No modo individual, só avisa de almoço se alguém que está em horário está almoçando.
             const someoneOnLunch = !ownHoursOn || (members || []).some((m: any) => attendantInOwnHours(m, curDay, curMins) && isOnLunch(m))
@@ -2503,6 +2516,7 @@ async function processCustomFlow(
             }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
             await supabase.from('whatsapp_groups')
               .update({ last_assigned_index: newIndex }).eq('id', groupId)
+            destLabel = assignee.full_name
             console.log('[flow] grupo round-robin:', group.name, '→', assignee.full_name, `(índice ${newIndex})`)
           }
         } else {
@@ -2515,6 +2529,7 @@ async function processCustomFlow(
         // Fila geral: nenhuma tentativa de atribuição — mesmo estado seguro já
         // usado quando ninguém está disponível (bot desligado, sem dono, visível
         // na fila "Aguardando atendimento" pra qualquer atendente da escola).
+        destLabel = 'fila geral'
         if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
         await supabase.from('whatsapp_conversations').update({
           assigned_user_id: null, assigned_user_name: null,
@@ -2534,6 +2549,7 @@ async function processCustomFlow(
           } else {
             if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
           }
+          destLabel = assigneeName || 'atendente'
           await supabase.from('whatsapp_conversations').update({
             assigned_user_id: assigneeId, assigned_user_name: assigneeName,
             bot_active: false, status: 'open',
@@ -2544,6 +2560,14 @@ async function processCustomFlow(
             .update({ bot_active: false })
             .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
         }
+      }
+      if (destLabel) {
+        await supabase.from('whatsapp_conversation_events').insert({
+          institution_id: institutionId,
+          remote_jid:     remoteJid,
+          event_type:     'transfer',
+          description:    `Robô transferiu para ${destLabel}`,
+        })
       }
       currentNodeId = 'end'; break
     }
