@@ -2083,6 +2083,17 @@ async function handleSmbMessageEchoes(institutionId: string, value: any): Promis
   }
 }
 
+// Texto sem acento, minúsculo e sem espaços nas pontas — para comparar palavras digitadas.
+const normText = (s: string) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+// A palavra (ou frase) aparece inteira no texto? Aceita plural simples (-s/-es). "prova" não casa com "comprovante".
+const hasWord = (text: string, word: string): boolean => {
+  const clean = (x: string) => ' ' + normText(x).replace(/[^a-z0-9]+/g, ' ').trim() + ' '
+  const w = clean(word).trim()
+  if (!w) return false
+  const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^| )${esc}(s|es)?( |$)`).test(clean(text).trim())
+}
+
 // ── Custom flow state-machine processor ─────────────────────────────────────
 async function processCustomFlow(
   institutionId:      string,
@@ -2162,6 +2173,16 @@ async function processCustomFlow(
       if (!isNaN(choice)) {
         optIdx = options.findIndex((o: any, i: number) => (o.number ?? i + 1) === choice)
       }
+    }
+
+    // Palavras digitadas: se o texto bate com as palavras de UMA só opção (ou com o nome dela), vale como escolha.
+    if (optIdx < 0 && text.trim()) {
+      const t = normText(text)
+      const hits = options.map((o: any, i: number) => {
+        const kws = String(o.keywords || '').split(/[,\n;]/).map((x: string) => x.trim()).filter(Boolean)
+        return (normText(o.text) === t || kws.some((k: string) => hasWord(text, k))) ? i : -1
+      }).filter((i: number) => i >= 0)
+      if (hits.length === 1) optIdx = hits[0]
     }
 
     // Resposta que o menu não entendeu: arquivo vira aviso simpático (não conta como erro);
@@ -2551,7 +2572,7 @@ async function processCustomFlow(
             r = cur >= lsh * 60 + lsm && cur <= leh * 60 + lem
           }
         } else if (cond.conditionType === 'keyword') {
-          r = text.toLowerCase().includes((cond.keyword || '').toLowerCase())
+          r = !!normText(cond.keyword) && normText(text).includes(normText(cond.keyword))
         } else if (cond.conditionType === 'first_message') {
           r = isNewConversation
         } else if (cond.conditionType === 'has_tag') {

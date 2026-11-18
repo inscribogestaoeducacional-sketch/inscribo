@@ -116,7 +116,7 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
       return 140
     }
     case 'question':   return 162
-    case 'menu':       return 110 + (node.data.options?.length || 1) * 38
+    case 'menu':       return 110 + (node.data.options?.length || 1) * 62
     case 'condition': {
       const conds: any[] = node.data?.conditions?.length
         ? node.data.conditions
@@ -420,7 +420,8 @@ function NodeBody({
             onMouseDown={stop} />
           <div style={{ maxHeight: 160, overflowY: 'auto' }}>
             {(d.options || []).map((opt: any, i: number) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, paddingBottom: 5 }}>
+              <div key={i} style={{ paddingBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, paddingBottom: 3 }}>
                 <span style={{
                   background: '#f59e0b', color: 'white', borderRadius: '50%',
                   width: 18, height: 18, fontSize: 10, display: 'flex',
@@ -451,6 +452,15 @@ function NodeBody({
                 <button onMouseDown={stop}
                   onClick={() => onChange({ ...d, options: (d.options || []).filter((_: any, j: number) => j !== i) })}
                   style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 15, padding: 0 }}>×</button>
+              </div>
+              <input style={{ ...inputSt, fontSize: 10, padding: '3px 6px', marginLeft: 23, width: 'calc(100% - 23px)', boxSizing: 'border-box' }}
+                value={opt.keywords || ''} placeholder="Palavras digitadas que levam aqui (separe por vírgula)"
+                onChange={e => {
+                  const opts = [...(d.options || [])]
+                  opts[i] = { ...opts[i], keywords: e.target.value }
+                  onChange({ ...d, options: opts })
+                }}
+                onMouseDown={stop} />
               </div>
             ))}
           </div>
