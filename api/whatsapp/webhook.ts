@@ -4607,14 +4607,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // [FIX P3 / P2] Query BEFORE re-open block so we can preserve assignee when needed.
         const { data: lastOut } = await supabase
           .from('whatsapp_messages')
-          .select('message_type, message_id')   // message_id: casamento de resposta de Transmissão pela janela
+          .select('message_type, message_id, timestamp')   // message_id: casamento de resposta de Transmissão pela janela
           .eq('institution_id', institutionId)
           .eq('remote_jid', remoteJid)
           .eq('from_me', true)
           .order('timestamp', { ascending: false })
           .limit(1)
           .maybeSingle()
-        const lastWasTemplate = lastOut?.message_type === 'template'
+        // A regra "resposta a template aguarda o atendente" só vale por 24h. Depois disso o
+        // robô volta a atender; sem prazo, o cliente ficava sem resposta para sempre.
+        const lastTemplateAgeMs = lastOut?.timestamp ? Date.now() - new Date(lastOut.timestamp as string).getTime() : 0
+        const lastWasTemplate = lastOut?.message_type === 'template' && lastTemplateAgeMs < 24 * 60 * 60 * 1000
         console.log('[WEBHOOK] lastOut:', lastOut?.message_type, '| lastWasTemplate:', lastWasTemplate)
 
         // ── Re-open: reset bot and clear assignee — UNLESS last outbound was a template ──
