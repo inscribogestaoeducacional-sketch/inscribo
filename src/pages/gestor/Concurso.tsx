@@ -25,6 +25,25 @@ const btn = (primary = false): React.CSSProperties => ({
   display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center', padding: '9px 14px', borderRadius: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5,
   border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink,
 })
+// Mensagem real de uma Edge Function (o supabase-js só dá "non-2xx status code" quando a função responde erro).
+async function fnMessage(error: any, data: any, fallback: string): Promise<string> {
+  if (data?.error) return data.error
+  try { const j = await error?.context?.json?.(); if (j?.error) return j.error } catch { /* resposta sem JSON */ }
+  return error?.message || fallback
+}
+// Apaga questões (coordenação). Bloqueia se alguma já está num caderno de prova montado daquela série.
+async function removeQuestions(contestId: string, qs: Question[]): Promise<string | null> {
+  if (!qs.length) return null
+  const grades = Array.from(new Set(qs.filter(q => q.in_exam).map(q => q.grade)))
+  if (grades.length) {
+    const { count } = await db.from('contest_exam_versions').select('id', { count: 'exact', head: true }).eq('contest_id', contestId).in('grade', grades)
+    if ((count ?? 0) > 0) return 'Há questão que já está num caderno de prova montado. Desmonte a prova daquela série antes de apagar.'
+  }
+  const { data, error } = await db.from('contest_questions').delete().in('id', qs.map(q => q.id)).select('id')
+  if (error) return error.message
+  if ((data?.length ?? 0) !== qs.length) return 'Não foi possível apagar todas as questões.'
+  return null
+}
 const STAGES = [
   { id: 'prep', label: 'Preparar', tabs: [['config', '1 · Dados básicos'], ['pub', '2 · Inscrição e edital'], ['fmt', '3 · Formato da prova'], ['prof', '4 · Professores e cotas'], ['quest', '5 · Questões'], ['prova', '6 · Fechar a prova']] },
   { id: 'insc', label: 'Inscrições', tabs: [['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails']] },
@@ -141,7 +160,7 @@ export default function Concurso() {
           {tab === 'corr' && <ConcursoCorrecao contest={contest} subjects={subjects} questions={questions} cands={cands} />}
           {tab === 'res' && <ConcursoResultados key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prof' && <Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}
-          {tab === 'quest' && <Review contest={contest} subjects={subjects} teachers={teachers} questions={questions} onChanged={loadContest} />}
+          {tab === 'quest' && <Review contest={contest} subjects={subjects} teachers={teachers} questions={questions} flash={flash} onChanged={loadContest} />}
         </>
       )}
     </div>
@@ -582,6 +601,26 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
   const [busy, setBusy] = useState(false)
   const [q, setQ] = useState({ teacher_id: '', subject_id: '', grade: '', quantity: 10, due_date: '' })
   const [essayT, setEssayT] = useState<string[]>([])
+  const [openQ, setOpenQ] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
+  const [alsoQ, setAlsoQ] = useState(false)
+  const [working, setWorking] = useState(false)
+  const delQuestions = async (qs: Question[], what: string) => {
+    if (!qs.length || !confirm(`Apagar ${what}? Não dá para desfazer.`)) return
+    setWorking(true)
+    const e = await removeQuestions(contest.id, qs)
+    setWorking(false)
+    flash(e ? e : qs.length === 1 ? 'Questão apagada.' : `${qs.length} questões apagadas.`)
+    if (!e) onChanged()
+  }
+  const delTeacher = async (t: Teacher) => {
+    setWorking(true)
+    const { data, error } = await supabase.functions.invoke('contest-teacher-remove', { body: { institution_id: instId, teacher_id: t.id, delete_questions: alsoQ } })
+    setWorking(false)
+    if (error || data?.error) return flash(await fnMessage(error, data, 'Não foi possível apagar o professor.'))
+    flash(`Professor apagado${data?.questions_deleted ? ` e ${data.questions_deleted} questões apagadas` : ''}.${data?.account_deleted === false ? ' O login dele foi mantido.' : ''}`)
+    setRemoving(null); setAlsoQ(false); onChanged()
+  }
   useEffect(() => { db.from('contest_essay_teachers').select('teacher_id').eq('contest_id', contest.id).then(({ data }: any) => setEssayT((data ?? []).map((x: any) => x.teacher_id))) }, [contest.id])
   const toggleEssay = async (t: Teacher, on: boolean) => {
     const { error } = on
@@ -595,7 +634,7 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
     if (!form.full_name.trim() || !form.email.trim()) return flash('Informe nome e e-mail do professor.')
     setBusy(true)
     const { data, error } = await supabase.functions.invoke('contest-teacher-invite', { body: { institution_id: instId, ...form } })
-    if (error || data?.error) { flash(data?.error || error?.message || 'Não foi possível cadastrar.'); setBusy(false); return }
+    if (error || data?.error) { flash(await fnMessage(error, data, 'Não foi possível cadastrar.')); setBusy(false); return }
     await supabase.auth.resetPasswordForEmail(form.email.trim().toLowerCase(), { redirectTo: `${window.location.origin}/reset-password` })
     flash('Professor cadastrado. Enviamos um e-mail para ele criar a senha.')
     setForm({ full_name: '', email: '', phone: '' }); setBusy(false); onChanged()
@@ -656,7 +695,47 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
                     <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: t.nda_accepted_at ? '#D1FAE5' : '#FEF3C7', color: t.nda_accepted_at ? '#047857' : '#B45309' }}>{t.nda_accepted_at ? `Termo aceito em ${fmtDate(t.nda_accepted_at)}` : 'Termo pendente'}</span></div>
                   <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, fontWeight: 700, color: BRAND.ink }}><input type="checkbox" checked={essayT.includes(t.id)} onChange={e => toggleEssay(t, e.target.checked)} /> Professor de redação</label>
                   <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={() => resend(t)}><Mail size={14} /> Reenviar convite</button>
+                  <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={() => setOpenQ(openQ === t.id ? null : t.id)}>Questões ({questions.filter(y => y.author_teacher_id === t.id).length})</button>
+                  <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5, color: '#DC2626', border: '1px solid #FECACA' }} onClick={() => { setRemoving(removing === t.id ? null : t.id); setAlsoQ(false) }}><Trash2 size={14} /> Apagar professor</button>
                 </div>
+                {removing === t.id && (() => {
+                  const tq = questions.filter(y => y.author_teacher_id === t.id)
+                  return (
+                    <div role="alertdialog" style={{ marginTop: 8, border: '1px solid #FECACA', background: '#FEF2F2', borderRadius: 12, padding: 12 }}>
+                      <div style={{ fontWeight: 800, color: '#B91C1C', fontSize: 14 }}>Apagar {t.full_name}?</div>
+                      <div style={{ fontSize: 13, color: BRAND.text, margin: '4px 0 8px' }}>O cadastro, as cotas e o acesso dele são removidos. Isso não dá para desfazer.</div>
+                      <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: BRAND.ink, fontWeight: 700 }}>
+                        <input type="checkbox" checked={alsoQ} onChange={e => setAlsoQ(e.target.checked)} style={{ marginTop: 3 }} />
+                        <span>Apagar também as {tq.length} questões que ele escreveu{tq.some(y => y.status === 'approved') ? ` (${tq.filter(y => y.status === 'approved').length} já aprovadas)` : ''}. Se eu não marcar, elas ficam na prova sem autor.</span>
+                      </label>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <button style={{ ...btn(), background: '#DC2626', color: '#fff', border: 'none' }} disabled={working} onClick={() => delTeacher(t)}>{working ? 'Apagando…' : 'Apagar professor'}</button>
+                        <button style={btn()} disabled={working} onClick={() => setRemoving(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  )
+                })()}
+                {openQ === t.id && (() => {
+                  const tq = questions.filter(y => y.author_teacher_id === t.id)
+                  return (
+                    <div style={{ marginTop: 8, border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: '4px 12px', background: '#F8FAFC' }}>
+                      {tq.length === 0 && <div style={{ fontSize: 13, color: BRAND.faint, padding: '8px 0' }}>Este professor ainda não escreveu questões neste concurso.</div>}
+                      {tq.map((y, i) => {
+                        const st = Q_STATUS[y.status]
+                        return (
+                          <div key={y.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', borderTop: i ? `1px solid ${BRAND.line}` : 0 }}>
+                            <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: BRAND.text, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              <b>{subjects.find(s => s.id === y.subject_id)?.name} · {y.grade}:</b> {y.statement || 'Sem enunciado'}
+                            </div>
+                            <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: st.bg, color: st.fg, whiteSpace: 'nowrap' }}>{st.label}</span>
+                            <button aria-label="Apagar questão" disabled={working} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.danger }} onClick={() => delQuestions([y], 'esta questão')}><Trash2 size={15} /></button>
+                          </div>
+                        )
+                      })}
+                      {tq.length > 1 && <div style={{ padding: '8px 0', borderTop: `1px solid ${BRAND.line}` }}><button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5, color: '#DC2626', border: '1px solid #FECACA' }} disabled={working} onClick={() => delQuestions(tq, `as ${tq.length} questões de ${t.full_name}`)}><Trash2 size={14} /> Apagar todas as questões dele</button></div>}
+                    </div>
+                  )
+                })()}
                 {mine.length === 0 && <div style={{ fontSize: 12.5, color: BRAND.faint }}>Sem cotas neste concurso.</div>}
                 {mine.map(x => {
                   const sent = questions.filter(y => y.quota_id === x.id && y.status !== 'draft').length
@@ -677,9 +756,15 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
   )
 }
 
-function Review({ contest, subjects, teachers, questions, onChanged }: { contest: Contest; subjects: Subject[]; teachers: Teacher[]; questions: Question[]; onChanged: () => void }) {
-  const [filter, setFilter] = useState<'sent' | 'returned' | 'approved' | 'all'>('sent')
-  const list = questions.filter(x => x.status !== 'draft' && (filter === 'all' || x.status === filter))
+function Review({ contest, subjects, teachers, questions, flash, onChanged }: { contest: Contest; subjects: Subject[]; teachers: Teacher[]; questions: Question[]; flash: (m: string) => void; onChanged: () => void }) {
+  const [filter, setFilter] = useState<'sent' | 'returned' | 'approved' | 'draft' | 'all'>('sent')
+  const list = questions.filter(x => filter === 'all' || x.status === filter)
+  const del = async (x: Question) => {
+    if (!confirm(x.status === 'approved' ? 'Esta questão já está aprovada. Apagar mesmo assim? Não dá para desfazer.' : 'Apagar esta questão? Não dá para desfazer.')) return
+    const e = await removeQuestions(contest.id, [x])
+    flash(e ?? 'Questão apagada.')
+    if (!e) onChanged()
+  }
   const act = async (x: Question, status: 'approved' | 'returned') => {
     let note: string | null = null
     if (status === 'returned') { note = prompt('O que o professor precisa ajustar?'); if (!note) return }
@@ -689,9 +774,9 @@ function Review({ contest, subjects, teachers, questions, onChanged }: { contest
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {([['sent', 'Para revisar'], ['returned', 'Devolvidas'], ['approved', 'Aprovadas'], ['all', 'Todas']] as const).map(([k, l]) => (
+        {([['sent', 'Para revisar'], ['returned', 'Devolvidas'], ['approved', 'Aprovadas'], ['draft', 'Rascunhos'], ['all', 'Todas']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)} style={{ padding: '6px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${filter === k ? BRAND.primary : BRAND.line}`, background: filter === k ? BRAND.soft : '#fff', color: filter === k ? BRAND.primaryDark : BRAND.muted }}>
-            {l} ({questions.filter(x => x.status !== 'draft' && (k === 'all' || x.status === k)).length})
+            {l} ({questions.filter(x => k === 'all' || x.status === k).length})
           </button>
         ))}
       </div>
@@ -715,12 +800,11 @@ function Review({ contest, subjects, teachers, questions, onChanged }: { contest
             </ol>
             {x.comment && <div style={{ marginTop: 8, fontSize: 12.5, color: BRAND.muted }}><b>Comentário do professor:</b> {x.comment}</div>}
             {x.review_note && x.status === 'returned' && <div style={{ marginTop: 6, fontSize: 12.5, color: '#92400E' }}><b>Pedido de ajuste:</b> {x.review_note}</div>}
-            {x.status === 'sent' && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button style={btn(true)} onClick={() => act(x, 'approved')}><Check size={15} /> Aprovar</button>
-                <button style={btn()} onClick={() => act(x, 'returned')}><Undo2 size={15} /> Devolver com ajuste</button>
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              {x.status === 'sent' && <button style={btn(true)} onClick={() => act(x, 'approved')}><Check size={15} /> Aprovar</button>}
+              {x.status === 'sent' && <button style={btn()} onClick={() => act(x, 'returned')}><Undo2 size={15} /> Devolver com ajuste</button>}
+              <button style={{ ...btn(), color: '#DC2626', border: '1px solid #FECACA', marginLeft: 'auto' }} onClick={() => del(x)}><Trash2 size={15} /> Apagar questão</button>
+            </div>
           </div>
         )
       })}

@@ -8,9 +8,10 @@ import { ContestImg, uploadContestImage } from './media'
 const input: React.CSSProperties = { width: '100%', border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: '9px 11px', fontSize: 14, fontFamily: 'inherit', color: BRAND.ink, background: '#fff', boxSizing: 'border-box' }
 const label: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: BRAND.muted, marginBottom: 5, display: 'block' }
 
-export default function QuestionEditor({ contest, institutionId, question, quota, teacherId, onClose, onSaved }: {
+export default function QuestionEditor({ contest, institutionId, question, quota, teacherId, readOnly = false, onClose, onSaved }: {
   contest: Contest; institutionId: string; question: Question | null
   quota: { id: string; subject_id: string; grade: string }; teacherId: string
+  readOnly?: boolean
   onClose: () => void; onSaved: () => void
 }) {
   const n = contest.alternatives_count
@@ -32,7 +33,8 @@ export default function QuestionEditor({ contest, institutionId, question, quota
     try { onPath(await uploadContestImage(file, institutionId, contest.id)) } catch (e: any) { setErr(e?.message || 'Não foi possível enviar a imagem') }
   }
 
-  const save = async (send: boolean) => {
+  const save = async (mode: 'draft' | 'send' | 'keep') => {
+    const send = mode !== 'draft'
     setErr('')
     if (send) {
       if (!statement.trim()) return setErr('Escreva o enunciado antes de enviar.')
@@ -58,7 +60,7 @@ export default function QuestionEditor({ contest, institutionId, question, quota
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 80, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '24px 12px' }}>
       <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 680, padding: 20, boxShadow: '0 30px 60px -20px rgba(0,0,0,.4)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: BRAND.ink }}>{question ? 'Editar questão' : 'Nova questão'} <span style={{ color: BRAND.muted, fontWeight: 600, fontSize: 13 }}>· {quota.grade}</span></div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: BRAND.ink }}>{readOnly ? 'Questão aprovada' : question ? 'Editar questão' : 'Nova questão'} <span style={{ color: BRAND.muted, fontWeight: 600, fontSize: 13 }}>· {quota.grade}</span></div>
           <button onClick={onClose} aria-label="Fechar" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.muted }}><X size={20} /></button>
         </div>
         {question?.status === 'returned' && question.review_note && (
@@ -66,6 +68,17 @@ export default function QuestionEditor({ contest, institutionId, question, quota
             <b>A coordenação pediu ajuste:</b> {question.review_note}
           </div>
         )}
+        {readOnly && (
+          <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#065F46', borderRadius: 10, padding: '9px 12px', fontSize: 13, marginBottom: 12 }}>
+            Esta questão já foi aprovada pela coordenação e não pode mais ser alterada. Se precisar mudar algo, fale com a coordenação.
+          </div>
+        )}
+        {question?.status === 'sent' && !readOnly && (
+          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1E40AF', borderRadius: 10, padding: '9px 12px', fontSize: 13, marginBottom: 12 }}>
+            Esta questão já foi enviada e ainda não foi aprovada. Você pode ajustar: ela continua enviada e a coordenação revê a versão nova.
+          </div>
+        )}
+        <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <label style={label}>Enunciado</label>
         <textarea value={statement} onChange={e => setStatement(e.target.value)} rows={6} style={{ ...input, resize: 'vertical' }} placeholder="Texto de apoio e pergunta" />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, margin: '8px 0 14px', alignItems: 'flex-start' }}>
@@ -116,12 +129,21 @@ export default function QuestionEditor({ contest, institutionId, question, quota
             <textarea value={comment} onChange={e => setComment(e.target.value)} rows={2} style={{ ...input, resize: 'vertical' }} /></div>
         </div>
 
+        </fieldset>
         {err && <div style={{ color: '#B91C1C', fontSize: 13, marginTop: 12 }}>{err}</div>}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16, flexWrap: 'wrap' }}>
-          <button onClick={() => save(false)} disabled={busy} style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${BRAND.line}`, background: '#fff', color: BRAND.ink, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Salvar rascunho</button>
-          <button onClick={() => save(true)} disabled={busy} style={{ padding: '10px 18px', borderRadius: 12, border: 0, background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-            {busy && <Loader2 size={15} className="animate-spin" />} Enviar para a coordenação
-          </button>
+          {readOnly ? (
+            <button onClick={onClose} style={{ padding: '10px 18px', borderRadius: 12, border: `1px solid ${BRAND.line}`, background: '#fff', color: BRAND.ink, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Fechar</button>
+          ) : question?.status === 'sent' ? (
+            <button onClick={() => save('keep')} disabled={busy} style={{ padding: '10px 18px', borderRadius: 12, border: 0, background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+              {busy && <Loader2 size={15} className="animate-spin" />} Salvar alterações
+            </button>
+          ) : (<>
+            <button onClick={() => save('draft')} disabled={busy} style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${BRAND.line}`, background: '#fff', color: BRAND.ink, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Salvar rascunho</button>
+            <button onClick={() => save('send')} disabled={busy} style={{ padding: '10px 18px', borderRadius: 12, border: 0, background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+              {busy && <Loader2 size={15} className="animate-spin" />} Enviar para a coordenação
+            </button>
+          </>)}
         </div>
       </div>
     </div>
