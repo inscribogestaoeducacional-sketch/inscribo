@@ -362,9 +362,24 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
   const roleSeesAllByDefault = (u: typeof user) =>
     u?.role === 'admin' || u?.role === 'manager' || u?.user_type === 'admin_geral'
   const [assignFilter, setAssignFilter] = useState<string>(() => roleSeesAllByDefault(user) ? 'all' : 'mine')
+  // Filtros (Status, Atendente, Lida/Não lida, Unidade) ficam salvos por usuário neste aparelho: ao atualizar a
+  // página ou voltar depois, a tela abre do jeito que a pessoa deixou. Sem nada salvo, vale o padrão do perfil.
+  const filtersKey = user?.id ? `aion-wa-filtros:${user.id}` : null
+  const filtersReadyRef = useRef(false)
   useEffect(() => {
-    setAssignFilter(roleSeesAllByDefault(user) ? 'all' : 'mine')
-  }, [user?.role, user?.user_type, user?.institution_id])
+    filtersReadyRef.current = false
+    let saved: any = null
+    try { saved = filtersKey ? JSON.parse(localStorage.getItem(filtersKey) || 'null') : null } catch { saved = null }
+    setStatusFilter(['abertos', 'concluido', 'ambos'].includes(saved?.status) ? saved.status : 'abertos')
+    setReadFilter(['all', 'read', 'unread'].includes(saved?.read) ? saved.read : 'all')
+    setAssignFilter(typeof saved?.assign === 'string' && saved.assign ? saved.assign : (roleSeesAllByDefault(user) ? 'all' : 'mine'))
+    if (typeof saved?.unit === 'string' && saved.unit) setUnitFilter(saved.unit)
+    filtersReadyRef.current = true
+  }, [filtersKey, user?.role, user?.user_type, user?.institution_id])
+  useEffect(() => {
+    if (!filtersKey || !filtersReadyRef.current) return
+    try { localStorage.setItem(filtersKey, JSON.stringify({ status: statusFilter, read: readFilter, assign: assignFilter, unit: unitFilter })) } catch { /* sem armazenamento: segue sem salvar */ }
+  }, [filtersKey, statusFilter, readFilter, assignFilter, unitFilter])
   const [canSeeAllConversations, setCanSeeAllConversations] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
   const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
@@ -1259,6 +1274,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
       lastSyncRef.current = startedAt
       if (isFull) lastFullSyncRef.current = startedAt
       applyConversationRows(convs, !isFull ? true : false)
+      // Conversa aberta com mensagem nova que o Realtime não entregou: busca as mensagens dela.
+      const openJid = activeIdRef.current
+      const openRow = openJid ? convs.find((c: any) => normalizeJid(c.remote_jid) === openJid) : null
+      if (openJid && openRow) reloadConversationMessages(openJid)
     } finally { syncingRef.current = false }
   }
   const applyConversationRows = (convs: any[], addNew: boolean) => {
@@ -1271,7 +1290,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
       const merged = prev.map(existing => {
       const conv = convByJid.get(existing.id)
       if (!conv) return existing
-      const hasLocalMessages = existing.messages.length > 0
       return {
         ...existing,
         name: cleanName(conv.contact_name) || existing.name,
@@ -1294,8 +1312,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
         // lastMessage/lastTime só vêm do banco se a conversa ainda não tem
         // mensagens carregadas localmente — com mensagens carregadas, o
         // próprio array (mantido via Realtime) já é a fonte mais confiável.
-        lastMessage: hasLocalMessages ? existing.lastMessage : (conv.last_message || existing.lastMessage),
-        lastTime: hasLocalMessages ? existing.lastTime : (conv.last_message_at ? new Date(conv.last_message_at) : existing.lastTime),
+        // Vale o mais novo entre o que a tela já tem e o que o banco diz — se o Realtime perdeu uma mensagem,
+        // a sincronização corrige a prévia e o horário (e com isso a posição na lista).
+        ...((conv.last_message_at && new Date(conv.last_message_at).getTime() > existing.lastTime.getTime())
+          ? { lastMessage: conv.last_message || existing.lastMessage, lastTime: new Date(conv.last_message_at) }
+          : {}),
       }
       })
       return fresh.length ? [...fresh, ...merged] : merged
@@ -2301,7 +2322,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
   const filteredUnclassifiedConvs: Conversation[] = []
   let hiddenByFilterCount = 0
   const staleIds = new Set(staleOpenConvs.map(x => x.id))
-  for (const c of conversations) {
+  // Sempre da mais recente para a mais antiga, qualquer que seja o caminho que atualizou a conversa
+  // (Realtime, sincronização, envio): quem acabou de falar sobe para o topo da sua seção.
+  const orderedConversations = useMemo(
+    () => [...conversations].sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime()),
+    [conversations]
+  )
+  for (const c of orderedConversations) {
     if (reviewStale) {
       if (!staleIds.has(c.id)) continue
       ;(c.assigned_user_id === user?.id ? filteredMyConvs : filteredOtherConvs).push(c)
