@@ -16,6 +16,10 @@ import { loadTemplates, type TemplateRow } from './TemplatesPanel'
 import { Badge, Btn, ErrorBox, Modal, hintStyle, inputStyle, labelStyle, toggleIn } from './ui'
 import SendPlanBuilder, { DEFAULT_PLAN_FORM, type PlanForm } from './SendPlanBuilder'
 import { weekdaysToDb, type Plan } from '../../lib/broadcastPlan'
+import {
+  MultiSelect, LeadFiltersBlock, SegmentsBar, EMPTY_LEADS, leadsToFilter, leadsFromFilter,
+  type LeadFilters, type LeadOptions, type Segment,
+} from './AudienceFilters'
 
 type VarSource = { source: 'contact.first_name' | 'contact.name' | 'fixed' | 'import'; value?: string; key?: string; fallback?: string }
 interface ActionForm { tag: string; skipBot: boolean; userIds: string[]; groupIds: string[] }
@@ -53,7 +57,7 @@ const RELATIONS = [
 interface AudienceRowView {
   contact_id: string | null; phone: string; phone_key: string; name: string | null
   source: 'filter' | 'import' | 'manual'; excluded_reason: string | null
-  reason: { all?: boolean; tags?: string[]; type?: string; grade?: string; trigger_id?: string; prev?: boolean } | null
+  reason: { all?: boolean; tags?: string[]; type?: string; grade?: string; trigger_id?: string; prev?: boolean; lead?: boolean } | null
 }
 interface AudiencePage {
   counts: { candidates: number; eligible: number; manual: number; deselected: number; excluded: Record<string, number> }
@@ -79,6 +83,10 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
   const [grades, setGrades] = useState<string[]>([])
   const [relations, setRelations] = useState<string[]>(initialRelations ?? [])
   const [triggerIds, setTriggerIds] = useState<string[]>([])
+  const [leadsF, setLeadsF] = useState<LeadFilters>({ ...EMPTY_LEADS })
+  const [leadOpts, setLeadOpts] = useState<LeadOptions | null>(null)
+  const [segments, setSegments] = useState<Segment[]>([])
+  const [segError, setSegError] = useState<string | null>(null)
   const [prevCampaign, setPrevCampaign] = useState<{ id: string; only: 'sent' | 'replied' | 'clicked' } | null>(null)
   const [importRows, setImportRows] = useState<ImportRow[]>([])
   const [importCols, setImportCols] = useState<string[]>([])
@@ -144,6 +152,11 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
     })()
   }, [institutionId])
 
+  useEffect(() => {
+    broadcastAction<LeadOptions>('lead_options', { institution_id: institutionId }).then(setLeadOpts).catch(e => console.error('[Transmissoes] lead_options:', e))
+    broadcastAction<{ segments: Segment[] }>('segments_list', { institution_id: institutionId }).then(r => setSegments(r.segments)).catch(e => console.error('[Transmissoes] segments:', e))
+  }, [institutionId])
+
   const tpl = templates.find(t => t.id === templateId) || null
   const bodyVars = useMemo(() => tpl ? [...new Set([...tpl.body_text.matchAll(/\{\{(\d+)\}\}/g)].map(m => m[1]))].sort((a, b) => Number(a) - Number(b)) : [], [tpl])
   const headerVar = !!tpl && /\{\{1\}\}/.test(tpl.header_config?.text || '')
@@ -176,8 +189,29 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
     if (relations.length) f.relations = relations
     if (triggerIds.length) f.capture_trigger_ids = triggerIds
     if (prevCampaign) f.previous_campaign = prevCampaign
+    const lf = leadsToFilter(leadsF)
+    if (lf) f.leads = lf
     return f
-  }, [allContacts, tags, types, grades, relations, triggerIds, prevCampaign])
+  }, [allContacts, tags, types, grades, relations, triggerIds, prevCampaign, leadsF])
+
+  function applySegment(s: Segment) {
+    const f = s.filter || {}
+    setAllContacts(!!f.all); setTags(f.tags || []); setTypes(f.contact_types || []); setGrades(f.grades || [])
+    setRelations(f.relations || []); setTriggerIds(f.capture_trigger_ids || []); setPrevCampaign(f.previous_campaign || null)
+    setLeadsF(leadsFromFilter(f.leads)); setIncludeIds([]); setExcludeKeys([]); setManualSig(''); setPreview(null); setSegError(null)
+  }
+  async function saveSegment(segName: string) {
+    try {
+      const r = await broadcastAction<{ segment: Segment }>('segment_save', { institution_id: institutionId, name: segName, filter })
+      setSegments(s => [...s, r.segment].sort((a, b) => a.name.localeCompare(b.name))); setSegError(null)
+    } catch (e: any) { setSegError(e.message); throw e }
+  }
+  async function deleteSegment(s: Segment) {
+    try {
+      await broadcastAction('segment_delete', { institution_id: institutionId, id: s.id })
+      setSegments(list => list.filter(x => x.id !== s.id)); setSegError(null)
+    } catch (e: any) { setSegError(e.message) }
+  }
 
   const manual = useMemo(() => ({ include_contact_ids: includeIds, exclude_phone_keys: excludeKeys }), [includeIds, excludeKeys])
   const manualCount = includeIds.length + excludeKeys.length
@@ -413,11 +447,14 @@ export default function CampaignWizard({ institutionId, onClose, onCreated, init
               <input type="checkbox" checked={allContacts} onChange={e => { setAllContacts(e.target.checked); setPreview(null) }} />
               <strong>Todos os contatos da escola</strong> <span style={{ color: '#94a3b8' }}>(os filtros abaixo restringem)</span>
             </label>
-            <Chips label="Etiquetas (tem alguma)" options={lk.tags.map(t => ({ id: t, label: t }))} value={tags} onChange={v => { setTags(v); setPreview(null) }} />
+            <SegmentsBar segments={segments} onApply={applySegment} onSave={saveSegment} onDelete={deleteSegment}
+              canSave={Object.keys(filter).length > 0} error={segError} />
+            <MultiSelect label="Etiquetas (tem alguma)" options={lk.tags.map(t => ({ id: t, label: t }))} value={tags} onChange={v => { setTags(v); setPreview(null) }} searchable />
+            <LeadFiltersBlock value={leadsF} onChange={v => { setLeadsF(v); setPreview(null) }} options={leadOpts} />
             <Chips label="Clientes (relação com a escola)" options={RELATIONS} value={relations} onChange={v => { setRelations(v); setPreview(null) }} />
             <Chips label="Tipo de contato" options={CONTACT_TYPES} value={types} onChange={v => { setTypes(v); setPreview(null) }} />
-            {lk.grades.length > 0 && <Chips label="Turma" options={lk.grades.map(g => ({ id: g, label: g }))} value={grades} onChange={v => { setGrades(v); setPreview(null) }} />}
-            {lk.triggers.length > 0 && <Chips label="Veio da Captação (gatilho)" options={lk.triggers.map(t => ({ id: t.id, label: t.name }))} value={triggerIds} onChange={v => { setTriggerIds(v); setPreview(null) }} />}
+            {lk.grades.length > 0 && <MultiSelect label="Turma (do contato)" options={lk.grades.map(g => ({ id: g, label: g }))} value={grades} onChange={v => { setGrades(v); setPreview(null) }} searchable />}
+            {lk.triggers.length > 0 && <MultiSelect label="Veio da Captação (gatilho)" options={lk.triggers.map(t => ({ id: t.id, label: t.name }))} value={triggerIds} onChange={v => { setTriggerIds(v); setPreview(null) }} />}
             {lk.campaigns.length > 0 && (
               <div>
                 <label style={labelStyle}>Campanha anterior</label>
@@ -629,6 +666,7 @@ function AudienceList({ aud, loading, error, hasAudience, lk, q, onQ, page, onPa
       x.grade && `turma ${x.grade}`,
       x.trigger_id && triggerName(x.trigger_id),
       x.prev && 'campanha anterior',
+      x.lead && 'lead',
     ].filter(Boolean)
     return `Filtro${parts.length ? `: ${parts.join(' · ')}` : ''}`
   }

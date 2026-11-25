@@ -26,6 +26,12 @@ const corsHeaders = {
 // feitos à mão na lista. O navegador nunca manda telefones: a audiência é
 // sempre recalculada aqui (broadcast_resolve_audience), com dedup e as mesmas
 // exclusões (opt-out, blacklist, número inválido) valendo pra quem entra à mão.
+//   lead_options { institution_id } → opções de cada filtro de Lead (etapa, concurso, origem,
+//              série, responsável, turno, ano, escola de origem, indicação), cada uma com a
+//              contagem de leads. filter.leads = { statuses, custom_stage_ids, contests, sources,
+//              grades, assigned, shifts, years, origin_schools, referrals, created_from, created_to }
+//   segments_list { institution_id }   segment_save { institution_id, name, filter }
+//   segment_delete { institution_id, id } → segmentos salvos (filtros nomeados, da escola toda)
 //   price    { campaign_id } → congela o preço, usa crédito, libera se não
 //              houver o que cobrar (broadcast_price_campaign, atômica no banco)
 //   pause    { campaign_id }   resume { campaign_id }   cancel { campaign_id }
@@ -71,12 +77,16 @@ serve(async (req) => {
     switch (body?.action) {
       case 'preview': return json(200, await actionPreview(sb, userId, body))
       case 'audience_page': return json(200, await actionAudiencePage(sb, userId, body))
+      case 'lead_options':   return json(200, await actionLeadOptions(sb, userId, body))
+      case 'segments_list':  return json(200, await actionSegmentsList(sb, userId, body))
+      case 'segment_save':   return json(200, await actionSegmentSave(sb, userId, body))
+      case 'segment_delete': return json(200, await actionSegmentDelete(sb, userId, body))
       case 'create':  return json(200, await actionCreate(sb, userId, body))
       case 'price':   return json(200, await actionPrice(sb, userId, body))
       case 'pause':   return json(200, await actionPause(sb, userId, body))
       case 'resume':  return json(200, await actionResume(sb, userId, body))
       case 'cancel':  return json(200, await actionCancel(sb, userId, body))
-      default: throw new HttpError(400, 'action deve ser preview, audience_page, create, price, pause, resume ou cancel')
+      default: throw new HttpError(400, 'action deve ser preview, audience_page, lead_options, segments_list, segment_save, segment_delete, create, price, pause, resume ou cancel')
     }
   } catch (err) {
     if (err instanceof HttpError) return json(err.status, { error: err.message, ...(err.details ? { details: err.details } : {}) })
@@ -239,8 +249,38 @@ interface AudienceRow { contact_id: string | null; phone: string; name: string |
 
 interface ManualAdjust { include_contact_ids: string[]; exclude_phone_keys: string[] }
 
+const LEAD_LIST_KEYS = ['statuses', 'custom_stage_ids', 'contests', 'sources', 'grades', 'assigned', 'shifts', 'years', 'origin_schools', 'referrals'] as const
+const MAX_SEGMENTS = 100
+
+// filter.leads vai direto pra função SQL (que faz ::uuid): valida o formato aqui pra erro de digitação virar 400, não 500.
+function checkFilter(raw: unknown): Record<string, unknown> {
+  const f: Record<string, unknown> = raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {}
+  const rl = f.leads
+  if (rl == null) { delete f.leads; return f }
+  if (typeof rl !== 'object' || Array.isArray(rl)) throw new HttpError(400, 'filter.leads inválido')
+  const src = rl as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const k of LEAD_LIST_KEYS) {
+    const v = src[k]
+    if (v == null) continue
+    if (!Array.isArray(v) || v.length > 500 || v.some(x => typeof x !== 'string' || x.length > 200)) throw new HttpError(400, `filter.leads.${k} inválido`)
+    if (k === 'custom_stage_ids' && v.some(x => !UUID_RE.test(x))) throw new HttpError(400, 'filter.leads.custom_stage_ids inválido')
+    if (k === 'assigned' && v.some(x => x !== 'none' && !UUID_RE.test(x))) throw new HttpError(400, 'filter.leads.assigned inválido')
+    if (v.length) out[k] = [...new Set(v as string[])]
+  }
+  for (const k of ['created_from', 'created_to'] as const) {
+    const v = src[k]
+    if (v == null || v === '') continue
+    if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new HttpError(400, `filter.leads.${k} deve ser AAAA-MM-DD`)
+    out[k] = v
+  }
+  if (Object.keys(out).length) f.leads = out; else delete f.leads
+  return f
+}
+
 async function resolveAudience(sb: Supa, institutionId: string, filter: unknown, importRows: unknown, category: string, manual: ManualAdjust): Promise<AudienceRow[]> {
   const rows: AudienceRow[] = []
+  filter = checkFilter(filter)
   for (let from = 0; ; from += RPC_PAGE) {
     // order: cada página é uma nova execução da função — sem ordem total as
     // páginas podiam repetir/pular linhas (phone é único depois do dedup).
@@ -366,7 +406,7 @@ async function actionAudiencePage(sb: Supa, userId: string, body: any) {
 
   const { data, error } = await sb.rpc('broadcast_audience_page', {
     p_institution_id: body.institution_id,
-    p_filter:         body.filter && typeof body.filter === 'object' ? body.filter : {},
+    p_filter:         checkFilter(body.filter),
     p_import:         importRows,
     p_category:       tpl.category,
     p_manual:         manual,
@@ -382,6 +422,56 @@ async function actionAudiencePage(sb: Supa, userId: string, body: any) {
     over_limit: eligible > MAX_RECIPIENTS, max: MAX_RECIPIENTS,
     estimate: eligible > 0 ? await estimate(sb, body.institution_id, tpl.category, Math.min(eligible, MAX_RECIPIENTS)) : null,
   }
+}
+
+// ── Filtros de Lead e segmentos salvos ─────────────────────────────────────
+
+async function actionLeadOptions(sb: Supa, userId: string, body: any) {
+  await requireManage(sb, userId, body.institution_id)
+  const { data, error } = await sb.rpc('broadcast_lead_filter_options', { p_institution_id: body.institution_id })
+  if (error) throw new Error(`opções de lead: ${error.message}`)
+  return data
+}
+
+async function actionSegmentsList(sb: Supa, userId: string, body: any) {
+  await requireManage(sb, userId, body.institution_id)
+  const { data, error } = await sb.from('broadcast_segments')
+    .select('id, name, filter, created_by, created_at')
+    .eq('institution_id', body.institution_id).order('name', { ascending: true }).limit(MAX_SEGMENTS)
+  if (error) throw new Error(`segmentos: ${error.message}`)
+  return { segments: data || [] }
+}
+
+async function actionSegmentSave(sb: Supa, userId: string, body: any) {
+  await requireManage(sb, userId, body.institution_id)
+  const name = String(body.name ?? '').trim()
+  if (!name || name.length > 80) throw new HttpError(400, 'Nome do segmento obrigatório (até 80 caracteres)')
+  if (!body.filter || typeof body.filter !== 'object' || Array.isArray(body.filter)) throw new HttpError(400, 'Escolha ao menos um filtro para salvar')
+  // Só critérios de público: lista importada e ajustes manuais não entram no segmento.
+  const f = checkFilter(body.filter)
+  const keep: Record<string, unknown> = {}
+  for (const k of ['all', 'tags', 'contact_types', 'grades', 'relations', 'capture_trigger_ids', 'previous_campaign', 'leads']) {
+    if (f[k] !== undefined) keep[k] = f[k]
+  }
+  if (JSON.stringify(keep).length > 20_000) throw new HttpError(400, 'Segmento grande demais')
+  const { count } = await sb.from('broadcast_segments').select('id', { count: 'exact', head: true }).eq('institution_id', body.institution_id)
+  if ((count || 0) >= MAX_SEGMENTS) throw new HttpError(409, `Limite de ${MAX_SEGMENTS} segmentos salvos`)
+  const { data, error } = await sb.from('broadcast_segments')
+    .insert({ institution_id: body.institution_id, name, filter: keep, created_by: userId })
+    .select('id, name, filter, created_by, created_at').single()
+  if (error) {
+    if ((error as any).code === '23505') throw new HttpError(409, 'Já existe um segmento com esse nome')
+    throw new Error(`segmento: ${error.message}`)
+  }
+  return { segment: data }
+}
+
+async function actionSegmentDelete(sb: Supa, userId: string, body: any) {
+  await requireManage(sb, userId, body.institution_id)
+  if (typeof body.id !== 'string' || !UUID_RE.test(body.id)) throw new HttpError(400, 'id inválido')
+  const { error } = await sb.from('broadcast_segments').delete().eq('id', body.id).eq('institution_id', body.institution_id)
+  if (error) throw new Error(`segmento: ${error.message}`)
+  return { ok: true }
 }
 
 async function actionCreate(sb: Supa, userId: string, body: any) {
@@ -427,7 +517,7 @@ async function actionCreate(sb: Supa, userId: string, body: any) {
     template_name:              tpl.def.name,
     template_language:          tpl.def.language || 'pt_BR',
     variable_mapping:           mapping,
-    audience_filter:            { ...(body.filter && typeof body.filter === 'object' ? body.filter : {}), imported_rows: importRows.length },
+    audience_filter:            { ...checkFilter(body.filter), imported_rows: importRows.length },
     audience_manual:            manual,
     has_imported_list:          importRows.length > 0,
     import_opt_in_confirmed_by: importRows.length > 0 ? userId : null,
