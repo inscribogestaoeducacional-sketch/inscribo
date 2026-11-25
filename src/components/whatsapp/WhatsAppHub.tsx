@@ -1241,15 +1241,34 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
   // descartava mensagens e outro estado já carregado via Realtime pra CADA
   // conversa, fazendo a lista "piscar" (sumir e voltar) e o thread da
   // conversa ativa esvaziar momentaneamente até o lazy-load recarregar.
-  // Só atualiza conversas que já existem localmente — conversas novas
-  // continuam chegando via Realtime (addMessageToConversations), que já
-  // cobre esse caso.
-  const syncConversationsList = async () => {
-    if (!effectiveInstitutionId) return
-    let convs: any[]
-    convs = await DatabaseService.getWhatsappConversations(effectiveInstitutionId)
+  // `full`: baixa a lista inteira (rede de segurança rara: mudança de dono/status sem mensagem nova).
+  // Sem `full`: baixa só as conversas com mensagem desde a última sincronização — leve, roda a cada minuto,
+  // e também traz conversas novas (resposta de transmissão etc.) caso o Realtime tenha perdido o evento.
+  const lastSyncRef = useRef<number>(Date.now())
+  const lastFullSyncRef = useRef<number>(Date.now())
+  const syncingRef = useRef(false)
+  const syncConversationsList = async (full = false) => {
+    if (!effectiveInstitutionId || syncingRef.current) return
+    syncingRef.current = true
+    try {
+      const startedAt = Date.now()
+      let convs: any[] | null = null
+      if (!full) convs = await DatabaseService.getWhatsappConversationsSince(effectiveInstitutionId, new Date(lastSyncRef.current - 3 * 60000).toISOString())
+      const isFull = convs === null
+      if (convs === null) convs = await DatabaseService.getWhatsappConversations(effectiveInstitutionId)
+      lastSyncRef.current = startedAt
+      if (isFull) lastFullSyncRef.current = startedAt
+      applyConversationRows(convs, !isFull ? true : false)
+    } finally { syncingRef.current = false }
+  }
+  const applyConversationRows = (convs: any[], addNew: boolean) => {
     const convByJid = new Map(convs.map((c: any) => [normalizeJid(c.remote_jid), c]))
-    setConversations(prev => prev.map(existing => {
+    setConversations(prev => {
+      const known = new Set(prev.map(c => c.id))
+      const fresh = addNew
+        ? convs.filter((c: any) => c.remote_jid && !String(c.remote_jid).endsWith('@g.us') && !known.has(normalizeJid(c.remote_jid))).map((c: any) => conversationFromRow(c as WhatsappConversation))
+        : []
+      const merged = prev.map(existing => {
       const conv = convByJid.get(existing.id)
       if (!conv) return existing
       const hasLocalMessages = existing.messages.length > 0
@@ -1278,7 +1297,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
         lastMessage: hasLocalMessages ? existing.lastMessage : (conv.last_message || existing.lastMessage),
         lastTime: hasLocalMessages ? existing.lastTime : (conv.last_message_at ? new Date(conv.last_message_at) : existing.lastTime),
       }
-    }))
+      })
+      return fresh.length ? [...fresh, ...merged] : merged
+    })
   }
 
   // Load on mount + check connected + realtime
@@ -1411,12 +1432,38 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
     const msgFilter = `institution_id=eq.${effectiveInstitutionId}`
     const channelSuffix = effectiveInstitutionId
 
+    // Prévia/horário da conversa na lista (antes era um segundo canal assinando o mesmo INSERT — dobrava o
+    // trabalho do Realtime no banco; agora roda no mesmo canal wamsg-*).
+    const onMessageInsertPreview = (payload: any) => {
+        const msgJid = payload.new?.remote_jid || ''
+        // Histórico antigo não mexe na prévia nem no horário da conversa —
+        // addMessageToConversations (canal irmão) já cuida disso.
+        if (payload.new?.is_history_sync === true) return
+        // Não recarrega mais aqui — o canal irmão (wamsg-*, listener de INSERT
+        // logo acima) já usa addMessageToConversations(msg) pra inserir a
+        // mensagem certa direto do payload do Realtime, sem round-trip ao
+        // banco. O loadMessages() que existia aqui buscava até 10.000 linhas
+        // de TODA a instituição a cada mensagem nova — era redundante com o
+        // canal irmão e o maior consumidor de I/O do banco (ver comentário em
+        // loadMessages() acima).
+        setConversations(prev => prev.map(c =>
+          c.id === normalizeJid(msgJid)
+            ? {
+                ...c,
+                lastMessage: payload.new?.content || '',
+                lastTime: new Date(payload.new?.timestamp || Date.now())
+              }
+            : c
+        ))
+    }
+
     const msgChannel = supabase
       .channel(`wamsg-${channelSuffix}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'whatsapp_messages',
         filter: msgFilter
       }, (payload) => {
+        onMessageInsertPreview(payload)
         const msg    = payload.new as WhatsappMessage
         const msgJid = msg.remote_jid || ''
         if (CLOSING_IDS.has(msgJid) || CLOSING_IDS.has(normalizeJid(msgJid))) {
@@ -1454,33 +1501,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
     const convFilter = `institution_id=eq.${effectiveInstitutionId}`
     const convChannel = supabase
       .channel(`waconv-${channelSuffix}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'whatsapp_messages',
-        filter: msgFilter
-      }, (payload: any) => {
-        const msgJid = payload.new?.remote_jid || ''
-        // Histórico antigo não mexe na prévia nem no horário da conversa —
-        // addMessageToConversations (canal irmão) já cuida disso.
-        if (payload.new?.is_history_sync === true) return
-        // Não recarrega mais aqui — o canal irmão (wamsg-*, listener de INSERT
-        // logo acima) já usa addMessageToConversations(msg) pra inserir a
-        // mensagem certa direto do payload do Realtime, sem round-trip ao
-        // banco. O loadMessages() que existia aqui buscava até 10.000 linhas
-        // de TODA a instituição a cada mensagem nova — era redundante com o
-        // canal irmão e o maior consumidor de I/O do banco (ver comentário em
-        // loadMessages() acima).
-        setConversations(prev => prev.map(c =>
-          c.id === normalizeJid(msgJid)
-            ? {
-                ...c,
-                lastMessage: payload.new?.content || '',
-                lastTime: new Date(payload.new?.timestamp || Date.now())
-              }
-            : c
-        ))
-      })
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
@@ -1574,12 +1594,25 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
         .subscribe()
     }
 
-    const interval = setInterval(syncConversationsList, 60000)
+    // A cada 60s: só o que mudou (e só com a aba visível). A cada 10 min, ou ao voltar pra aba depois de
+    // um tempo parada, uma carga completa pra pegar mudanças de dono/status que não geram mensagem.
+    lastSyncRef.current = Date.now(); lastFullSyncRef.current = Date.now()
+    const tick = () => {
+      if (document.hidden) return
+      syncConversationsList(Date.now() - lastFullSyncRef.current > 10 * 60000)
+    }
+    const interval = setInterval(tick, 60000)
+    const onVisible = () => {
+      if (document.hidden) return
+      syncConversationsList(Date.now() - lastSyncRef.current > 3 * 60000)
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       supabase.removeChannel(msgChannel)
       supabase.removeChannel(convChannel)
       if (leadsChannel) supabase.removeChannel(leadsChannel)
       clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [effectiveInstitutionId])
 

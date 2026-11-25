@@ -913,6 +913,21 @@ export class DatabaseService {
     }
   }
 
+  // Só as conversas que tiveram mensagem desde `sinceIso` — o reforço periódico da tela usa isto em vez de
+  // baixar a lista inteira (1.700+ linhas) a cada minuto. Devolve null se estourar o limite (aí a tela faz a carga completa).
+  static async getWhatsappConversationsSince(institutionId: string, sinceIso: string): Promise<WhatsappConversation[] | null> {
+    const LIMIT = 500
+    const { data, error } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .gte('last_message_at', sinceIso)
+      .order('last_message_at', { ascending: false })
+      .limit(LIMIT)
+    if (error) { console.error('Error loading recent whatsapp conversations:', error); return [] }
+    return (data || []).length >= LIMIT ? null : (data || []) as WhatsappConversation[]
+  }
+
   // Cria a conversa já atribuída a quem iniciou — INSERT, nunca upsert: se a
   // linha já existir (em qualquer dono), não mexe nela. Antes "Nova
   // conversa"/link do Kanban usavam upsertConversationStatus, que sobrescrevia
