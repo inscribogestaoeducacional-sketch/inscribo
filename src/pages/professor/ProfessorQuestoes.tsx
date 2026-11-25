@@ -1,6 +1,6 @@
 // Portal do professor (Concurso de Bolsas): vê as cotas que recebeu, escreve e envia questões.
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, LogOut, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Loader2, LogOut, Plus, Pencil, Trash2, Eye } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { BRAND } from '../../lib/brand'
 import { db, fmtDate, Q_STATUS, type Contest, type Question, type Quota, type Subject } from '../../lib/concurso'
@@ -19,7 +19,8 @@ export default function ProfessorQuestoes() {
   const [quotas, setQuotas] = useState<Quota[]>([])
   const [questions, setQuestions] = useState<Question[]>([])
   const [essayContests, setEssayContests] = useState<string[]>([])
-  const [editor, setEditor] = useState<{ quota: Quota; question: Question | null } | null>(null)
+  const [editor, setEditor] = useState<{ quota: Quota; question: Question | null; readOnly?: boolean } | null>(null)
+  const [err, setErr] = useState('')
 
   const load = useCallback(async () => {
     const { data: t } = await db.from('contest_teachers').select('id, full_name, institution_id, nda_accepted_at').eq('user_id', user?.id).eq('active', true).maybeSingle()
@@ -40,10 +41,33 @@ export default function ProfessorQuestoes() {
   useEffect(() => { load() }, [load])
 
   const remove = async (q: Question) => {
-    if (!confirm('Apagar esta questão?')) return
-    await db.from('contest_questions').delete().eq('id', q.id)
+    setErr('')
+    const msg = q.status === 'sent' ? 'Esta questão já foi enviada para a coordenação e ainda não foi aprovada. Apagar mesmo assim?' : 'Apagar esta questão?'
+    if (!confirm(msg)) return
+    const { data, error } = await db.from('contest_questions').delete().eq('id', q.id).select('id')
+    if (error || !data?.length) { setErr('Não foi possível apagar esta questão. Se ela já foi aprovada, peça à coordenação.'); return }
     load()
   }
+  // Questão aprovada só abre para leitura; as demais o professor edita e apaga.
+  const open = (q: Question, quota: Quota | null) => {
+    const base = quota ?? { id: q.quota_id ?? '', contest_id: q.contest_id, teacher_id: teacher?.id ?? '', subject_id: q.subject_id, grade: q.grade, quantity: 0, due_date: null }
+    setEditor({ quota: base, question: q, readOnly: q.status === 'approved' || !quota })
+  }
+  const row = (x: Question, i: number, quota: Quota | null) => {
+    const st = Q_STATUS[x.status]
+    const editable = x.status !== 'approved'
+    return (
+      <div key={x.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 0', borderTop: i ? `1px solid ${BRAND.line}` : 0 }}>
+        <button onClick={() => open(x, quota)} aria-label="Abrir questão" style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'transparent', cursor: 'pointer', padding: 0, fontFamily: 'inherit', fontSize: 13.5, color: BRAND.text, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {x.statement || 'Sem enunciado'}
+        </button>
+        <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: st.bg, color: st.fg, whiteSpace: 'nowrap' }}>{st.label}</span>
+        <button aria-label="Ver questão" onClick={() => open(x, quota)} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.muted }}>{editable && quota ? <Pencil size={16} /> : <Eye size={16} />}</button>
+        {editable && <button aria-label="Apagar" onClick={() => remove(x)} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.danger }}><Trash2 size={16} /></button>}
+      </div>
+    )
+  }
+  const orphans = questions.filter(x => !quotas.some(q => q.id === x.quota_id))
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}><Loader2 className="animate-spin" /></div>
   if (teacher && !teacher.nda_accepted_at) return <NdaTerm name={teacher.full_name} onAccepted={() => { setLoading(true); load() }} />
@@ -63,6 +87,7 @@ export default function ProfessorQuestoes() {
       </header>
 
       <main style={{ maxWidth: 820, margin: '0 auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {err && <div role="alert" style={{ ...card, borderColor: '#FECACA', color: '#B91C1C', fontWeight: 700, fontSize: 13.5 }}>{err}</div>}
         {!teacher && <div style={card}>Seu acesso ainda não está ativo. Fale com a coordenação da escola.</div>}
         {teacher && quotas.length === 0 && essayContests.length === 0 && <div style={card}>Você ainda não recebeu nenhuma tarefa. Quando a coordenação definir quantas questões você deve escrever, elas aparecem aqui.</div>}
 
@@ -91,34 +116,28 @@ export default function ProfessorQuestoes() {
                       </button>
                     </div>
                     <div style={{ height: 6, borderRadius: 99, background: '#EEF2F7', margin: '12px 0' }}><div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: BRAND.primary }} /></div>
-                    {list.map((x, i) => {
-                      const st = Q_STATUS[x.status]
-                      return (
-                        <div key={x.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', borderTop: i ? `1px solid ${BRAND.line}` : 0 }}>
-                          <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: BRAND.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.statement || 'Sem enunciado'}</div>
-                          <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: st.bg, color: st.fg }}>{st.label}</span>
-                          {(x.status === 'draft' || x.status === 'returned') && (
-                            <button aria-label="Editar" onClick={() => setEditor({ quota: q, question: x })} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.muted }}><Pencil size={16} /></button>
-                          )}
-                          {x.status === 'draft' && (
-                            <button aria-label="Apagar" onClick={() => remove(x)} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.danger }}><Trash2 size={16} /></button>
-                          )}
-                        </div>
-                      )
-                    })}
+                    {list.length === 0 && <div style={{ fontSize: 13, color: BRAND.faint }}>Você ainda não escreveu nenhuma questão desta tarefa.</div>}
+                    {list.map((x, i) => row(x, i, q))}
                   </div>
                 )
               })}
             </section>
           )
         })}
+        {orphans.length > 0 && (
+          <section style={card}>
+            <div style={{ fontWeight: 800, color: BRAND.ink }}>Outras questões suas</div>
+            <div style={{ fontSize: 12.5, color: BRAND.muted, marginBottom: 6 }}>Questões que não estão em nenhuma tarefa atual (por exemplo, a coordenação mudou a tarefa). Você pode ler e apagar.</div>
+            {orphans.map((x, i) => row(x, i, null))}
+          </section>
+        )}
       </main>
 
       {editor && teacher && (
         <QuestionEditor
           contest={contests.find(c => c.id === editor.quota.contest_id)!}
           institutionId={teacher.institution_id} teacherId={teacher.id}
-          quota={editor.quota} question={editor.question}
+          quota={editor.quota} question={editor.question} readOnly={editor.readOnly}
           onClose={() => setEditor(null)} onSaved={() => { setEditor(null); load() }}
         />
       )}
