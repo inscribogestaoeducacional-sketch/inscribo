@@ -913,6 +913,20 @@ export class DatabaseService {
     }
   }
 
+  // Um pedaço da lista (do mais recente para o mais antigo): a tela do WhatsApp abre com as primeiras
+  // conversas e busca o resto em segundo plano, em vez de esperar a lista inteira.
+  static async getWhatsappConversationsPage(institutionId: string, from: number, count: number): Promise<WhatsappConversation[]> {
+    const { data, error } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, from + count - 1)
+    if (error) { console.error('Error loading whatsapp conversations page:', error); return [] }
+    return (data || []) as WhatsappConversation[]
+  }
+
   // Só as conversas que tiveram mensagem desde `sinceIso` — o reforço periódico da tela usa isto em vez de
   // baixar a lista inteira (1.700+ linhas) a cada minuto. Devolve null se estourar o limite (aí a tela faz a carga completa).
   static async getWhatsappConversationsSince(institutionId: string, sinceIso: string): Promise<WhatsappConversation[] | null> {

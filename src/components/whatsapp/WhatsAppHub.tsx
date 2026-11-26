@@ -1240,13 +1240,36 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
       // via fetchConversationMessages/getConversationMessages — escopado por
       // remote_jid, nunca a instituição inteira).
       msgs = []
-      convs = await DatabaseService.getWhatsappConversations(effectiveInstitutionId)
+      // Abre rápido: primeiro as conversas mais recentes (a tela já aparece e dá pra atender); o resto da
+      // lista chega em segundo plano e é encaixado sem mexer em quem já está na tela.
+      const FIRST_PAGE = 300
+      convs = await DatabaseService.getWhatsappConversationsPage(effectiveInstitutionId, 0, FIRST_PAGE)
     const convMap = new Map(convs.map((c: any) => [c.remote_jid, c]))
     const built = buildConversations(msgs, convMap)
-    const timestamps = msgs.map(m => new Date(m.timestamp).getTime()).filter(Boolean)
     setConversations(built)
+    if (convs.length >= FIRST_PAGE) {
+      const token = ++restLoadTokenRef.current
+      const instId = effectiveInstitutionId
+      ;(async () => {
+        for (let from = FIRST_PAGE; ; from += 1000) {
+          const rows = await DatabaseService.getWhatsappConversationsPage(instId, from, 1000)
+          if (restLoadTokenRef.current !== token) return
+          if (rows.length) {
+            setConversations(prev => {
+              const known = new Set(prev.map(c => c.id))
+              const older = rows
+                .filter(r => r.remote_jid && (r.last_message || r.last_message_at) && !known.has(normalizeJid(r.remote_jid)))
+                .map(r => conversationFromRow(r))
+              return older.length ? [...prev, ...older] : prev
+            })
+          }
+          if (rows.length < 1000) return
+        }
+      })()
+    }
     return built
   }
+  const restLoadTokenRef = useRef(0)
 
   // Sincroniza a lista de conversas com whatsapp_conversations periodicamente
   // (rede de segurança pro caso do Realtime perder algum evento — mesmo
