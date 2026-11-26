@@ -1817,11 +1817,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
   // anteriores" — busca só timestamp < beforeTimestamp (a mensagem mais
   // antiga já carregada). Sem esse parâmetro, comportamento igual a antes
   // (últimas MESSAGE_PAGE_SIZE mensagens).
-  const fetchConversationMessages = async (jid: string, beforeTimestamp?: string): Promise<Message[]> => {
+  const fetchConversationMessages = async (jid: string, beforeTimestamp?: string, strict = false): Promise<Message[]> => {
     const institutionIdForLoad = effectiveInstitutionId
     if (!institutionIdForLoad) return []
 
-    const rows: WhatsappMessage[] = await DatabaseService.getConversationMessages(institutionIdForLoad!, jid, MESSAGE_PAGE_SIZE, beforeTimestamp)
+    const rows: WhatsappMessage[] = await DatabaseService.getConversationMessages(institutionIdForLoad!, jid, MESSAGE_PAGE_SIZE, beforeTimestamp, strict)
 
     if (rows.length === 0) return []
 
@@ -1970,11 +1970,23 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
   // histórico uma vez por sessão e junta com o que já está na tela (sem duplicar).
   const historyLoadedRef = useRef<Set<string>>(new Set())
   useEffect(() => { historyLoadedRef.current = new Set() }, [effectiveInstitutionId])
+  // Estado visível da abertura: 'loading' mostra "Carregando mensagens…"; 'failed' mostra "Tentar de novo".
+  const [historyState, setHistoryState] = useState<Record<string, 'loading' | 'failed'>>({})
+  const setHist = (jid: string, v: 'loading' | 'failed' | null) =>
+    setHistoryState(prev => { const n = { ...prev }; if (v) n[jid] = v; else delete n[jid]; return n })
   const loadHistoryFor = async (jid: string) => {
     if (historyLoadedRef.current.has(jid)) return
     historyLoadedRef.current.add(jid)
+    setHist(jid, 'loading')
     try {
-      const fetched = await fetchConversationMessages(jid)
+      // Banco ocupado: tenta até 3 vezes (1,5 s e 3 s de espera) antes de avisar a pessoa.
+      let fetched: Message[] | null = null
+      for (let attempt = 0; attempt < 3 && fetched === null; attempt++) {
+        try { fetched = await fetchConversationMessages(jid, undefined, true) }
+        catch { if (attempt < 2) await new Promise(r => setTimeout(r, 1500 * (attempt + 1))) }
+      }
+      if (fetched === null) { historyLoadedRef.current.delete(jid); setHist(jid, 'failed'); return }
+      setHist(jid, null)
       if (fetched.length === 0) { historyLoadedRef.current.delete(jid); return }
       setConversations(prev => prev.map(c => {
         if (c.id !== jid) return c
@@ -1987,7 +1999,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
         return { ...c, messages: merged }
       }))
       if (fetched.length < MESSAGE_PAGE_SIZE) setExhaustedOlder(prev => new Set(prev).add(jid))
-    } catch { historyLoadedRef.current.delete(jid) }
+    } catch { historyLoadedRef.current.delete(jid); setHist(jid, 'failed') }
   }
   useEffect(() => {
     if (!activeId) return
@@ -4647,6 +4659,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 0 14px', fontSize: 12, color: '#64748B' }}>
                 <div className="animate-spin" style={{ width: 13, height: 13, border: '2px solid #94A3B8', borderTopColor: 'transparent', borderRadius: '50%' }} />
                 Carregando mensagens anteriores...
+              </div>
+            )}
+            {activeId && historyState[activeId] === 'loading' && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 0 14px', fontSize: 12, color: '#64748B' }}>
+                <div className="animate-spin" style={{ width: 13, height: 13, border: '2px solid #94A3B8', borderTopColor: 'transparent', borderRadius: '50%' }} />
+                Carregando mensagens...
+              </div>
+            )}
+            {activeId && historyState[activeId] === 'failed' && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '8px 0 14px', fontSize: 12, color: '#B45309' }}>
+                O sistema está lento e as mensagens não carregaram.
+                <button onClick={() => loadHistoryFor(activeId)} style={{ border: '1px solid #05907B', color: '#05907B', background: '#fff', borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Tentar de novo</button>
               </div>
             )}
             {activeId && loadingOlderId !== activeId && exhaustedOlder.has(activeId) && !!activeConv?.messages.length && (
