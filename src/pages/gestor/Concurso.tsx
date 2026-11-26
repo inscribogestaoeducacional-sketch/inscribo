@@ -605,6 +605,9 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
   const [removing, setRemoving] = useState<string | null>(null)
   const [alsoQ, setAlsoQ] = useState(false)
   const [working, setWorking] = useState(false)
+  const [showForm, setShowForm] = useState<'prof' | 'quota' | null>(null)
+  const [tf, setTf] = useState<'all' | 'falta' | 'termo' | 'atraso' | 'redacao'>('all')
+  const [openT, setOpenT] = useState<string | null>(null)
   const delQuestions = async (qs: Question[], what: string) => {
     if (!qs.length || !confirm(`Apagar ${what}? Não dá para desfazer.`)) return
     setWorking(true)
@@ -652,6 +655,11 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button style={btn(showForm === 'prof')} onClick={() => setShowForm(showForm === 'prof' ? null : 'prof')}><Plus size={15} /> Cadastrar professor</button>
+        <button style={btn(showForm === 'quota')} onClick={() => setShowForm(showForm === 'quota' ? null : 'quota')}><Plus size={15} /> Nova cota</button>
+      </div>
+      {showForm === 'prof' && (
       <div style={card}>
         <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Cadastrar professor</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
@@ -662,9 +670,11 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
         <div style={{ fontSize: 12.5, color: BRAND.muted, margin: '8px 0 10px' }}>O professor recebe um e-mail para criar a própria senha. Ele só vê as questões dele.</div>
         <button style={btn(true)} onClick={invite} disabled={busy}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Cadastrar e enviar convite</button>
       </div>
+      )}
 
       <div style={card}>
-        <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Cotas de questões</div>
+        {showForm === 'quota' && (<div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: `1px solid ${BRAND.line}` }}>
+        <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Nova cota de questões</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
           <select style={input} value={q.teacher_id} onChange={e => setQ({ ...q, teacher_id: e.target.value })}><option value="">Professor</option>{teachers.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}</select>
           <select style={input} value={q.grade} onChange={e => { const g = e.target.value; const ok = subjects.find(s => s.id === q.subject_id && subjectHasGrade(s, g, contest.grades)); setQ({ ...q, grade: g, subject_id: ok ? q.subject_id : '' }) }}><option value="">Série</option>{(contest.grades.length ? contest.grades : GRADES).map(g => <option key={g}>{g}</option>)}</select>
@@ -672,7 +682,7 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
           <input style={input} type="number" min={1} value={q.quantity} onChange={e => setQ({ ...q, quantity: Number(e.target.value) })} aria-label="Quantidade" />
           <input style={input} type="date" value={q.due_date} onChange={e => setQ({ ...q, due_date: e.target.value })} aria-label="Entregar até" />
         </div>
-        <div style={{ marginTop: 10 }}><button style={btn(true)} onClick={addQuota}><Plus size={15} /> Adicionar cota</button></div>
+        <div style={{ marginTop: 10 }}><button style={btn(true)} onClick={addQuota}><Plus size={15} /> Adicionar cota</button></div></div>)}
 
         {quotas.length > 0 && (
           <div style={{ marginTop: 14, border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: '10px 12px', background: '#F8FAFC' }}>
@@ -685,18 +695,65 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
           </div>
         )}
 
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}>
-          {teachers.map(t => {
+        {(() => {
+          const today = new Date(); today.setHours(0, 0, 0, 0)
+          const info = (t: Teacher) => {
             const mine = quotas.filter(x => x.teacher_id === t.id)
-            return (
+            const need = mine.reduce((n, x) => n + x.quantity, 0)
+            const sentN = mine.reduce((n, x) => n + Math.min(x.quantity, questions.filter(y => y.quota_id === x.id && y.status !== 'draft').length), 0)
+            const tq = questions.filter(y => y.author_teacher_id === t.id)
+            const late = mine.some(x => x.due_date && new Date(x.due_date + 'T23:59:59') < new Date() && questions.filter(y => y.quota_id === x.id && y.status !== 'draft').length < x.quantity)
+            return { mine, need, sentN, late, appr: tq.filter(y => y.status === 'approved').length, ret: tq.filter(y => y.status === 'returned').length, rev: tq.filter(y => y.status === 'sent').length, tq }
+          }
+          const all = teachers.map(t => ({ t, i: info(t) }))
+          const missing = all.filter(x => x.i.need > x.i.sentN)
+          const filters: [typeof tf, string, number][] = [
+            ['all', 'Todos', all.length],
+            ['falta', 'Faltam questões', missing.length],
+            ['atraso', 'Prazo vencido', all.filter(x => x.i.late).length],
+            ['termo', 'Sem termo aceito', all.filter(x => !x.t.nda_accepted_at).length],
+            ['redacao', 'Redação', all.filter(x => essayT.includes(x.t.id)).length],
+          ]
+          const shown = all.filter(x => tf === 'all' || (tf === 'falta' && x.i.need > x.i.sentN) || (tf === 'atraso' && x.i.late) || (tf === 'termo' && !x.t.nda_accepted_at) || (tf === 'redacao' && essayT.includes(x.t.id)))
+            .sort((a, b) => Number(b.i.late) - Number(a.i.late) || (b.i.need - b.i.sentN) - (a.i.need - a.i.sentN))
+          const totNeed = all.reduce((n, x) => n + x.i.need, 0), totSent = all.reduce((n, x) => n + x.i.sentN, 0)
+          return (
+            <>
+              <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 4 }}>Andamento dos professores</div>
+              <div style={{ fontSize: 13.5, color: BRAND.text, marginBottom: 10 }}><b>{totSent}</b> de <b>{totNeed}</b> questões entregues · faltam <b>{Math.max(0, totNeed - totSent)}</b> · {missing.length} professor(es) com entrega pendente</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {filters.map(([k, l, n]) => (
+                  <button key={k} onClick={() => setTf(k)} style={{ padding: '6px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${tf === k ? BRAND.primary : BRAND.line}`, background: tf === k ? BRAND.soft : '#fff', color: tf === k ? BRAND.primaryDark : BRAND.text }}>{l} ({n})</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {shown.length === 0 && <div style={{ fontSize: 13.5, color: BRAND.muted, padding: '8px 0' }}>Nenhum professor neste filtro.</div>}
+                {shown.map(({ t, i }) => {
+                  const mine = i.mine
+                  const pct = i.need ? Math.round(i.sentN / i.need * 100) : 0
+                  const open = openT === t.id
+                  return (
               <div key={t.id} style={{ padding: '10px 0', borderTop: `1px solid ${BRAND.line}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div><b style={{ color: BRAND.ink }}>{t.full_name}</b> <span style={{ color: BRAND.muted, fontSize: 12.5 }}>{t.email}</span>
-                    <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: t.nda_accepted_at ? '#D1FAE5' : '#FEF3C7', color: t.nda_accepted_at ? '#047857' : '#B45309' }}>{t.nda_accepted_at ? `Termo aceito em ${fmtDate(t.nda_accepted_at)}` : 'Termo pendente'}</span></div>
+                <div onClick={() => setOpenT(open ? null : t.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', cursor: 'pointer' }}>
+                  <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                    <b style={{ color: BRAND.ink }}>{t.full_name}</b>
+                    <div style={{ color: BRAND.muted, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.email}</div>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: t.nda_accepted_at ? '#D1FAE5' : '#FEF3C7', color: t.nda_accepted_at ? '#047857' : '#B45309', whiteSpace: 'nowrap' }}>{t.nda_accepted_at ? 'Termo aceito' : 'Termo pendente'}</span>
+                  <div style={{ flex: '1 1 170px', minWidth: 150 }}>
+                    <div style={{ fontSize: 12.5, color: BRAND.text, fontWeight: 700 }}>{i.need ? `${i.sentN}/${i.need} entregues` : 'Sem cota'}{i.late && <span style={{ color: '#DC2626', marginLeft: 6 }}>prazo vencido</span>}</div>
+                    <div style={{ height: 6, borderRadius: 99, background: BRAND.line, marginTop: 4, overflow: 'hidden' }}><div style={{ width: `${pct}%`, height: '100%', background: i.late ? '#DC2626' : BRAND.primary }} /></div>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: BRAND.muted, whiteSpace: 'nowrap' }}>{i.appr} aprov. · {i.rev} p/ revisar{i.ret ? ` · ${i.ret} devolv.` : ''}</div>
+                  <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={e => { e.stopPropagation(); setOpenT(open ? null : t.id) }}>{open ? 'Fechar' : 'Detalhes'}</button>
+                </div>
+                {open && (<div style={{ marginTop: 10, paddingLeft: 10, borderLeft: `3px solid ${BRAND.line}` }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, fontWeight: 700, color: BRAND.ink }}><input type="checkbox" checked={essayT.includes(t.id)} onChange={e => toggleEssay(t, e.target.checked)} /> Professor de redação</label>
                   <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={() => resend(t)}><Mail size={14} /> Reenviar convite</button>
-                  <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={() => setOpenQ(openQ === t.id ? null : t.id)}>Questões ({questions.filter(y => y.author_teacher_id === t.id).length})</button>
+                  <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={() => setOpenQ(openQ === t.id ? null : t.id)}>Questões ({i.tq.length})</button>
                   <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5, color: '#DC2626', border: '1px solid #FECACA' }} onClick={() => { setRemoving(removing === t.id ? null : t.id); setAlsoQ(false) }}><Trash2 size={14} /> Apagar professor</button>
+                  {t.nda_accepted_at && <span style={{ fontSize: 12, color: BRAND.muted }}>Termo aceito em {fmtDate(t.nda_accepted_at)}</span>}
                 </div>
                 {removing === t.id && (() => {
                   const tq = questions.filter(y => y.author_teacher_id === t.id)
@@ -746,19 +803,41 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
                     </div>
                   )
                 })}
+                </div>)}
               </div>
-            )
-          })}
-          {teachers.length === 0 && <div style={{ fontSize: 13.5, color: BRAND.muted }}>Nenhum professor cadastrado ainda.</div>}
-        </div>
+                  )
+                })}
+                {teachers.length === 0 && <div style={{ fontSize: 13.5, color: BRAND.muted }}>Nenhum professor cadastrado ainda.</div>}
+              </div>
+            </>
+          )
+        })()}
       </div>
     </div>
   )
 }
 
+const SEGMENTS: [string, string, (g: string) => boolean][] = [
+  ['inf', 'Infantil', g => g.startsWith('Infantil')],
+  ['f1', 'Fund. I', g => /^[1-5]º ano$/.test(g)],
+  ['f2', 'Fund. II', g => /^[6-9]º ano$/.test(g)],
+  ['em', 'Médio', g => g.includes('EM')],
+]
+
 function Review({ contest, subjects, teachers, questions, flash, onChanged }: { contest: Contest; subjects: Subject[]; teachers: Teacher[]; questions: Question[]; flash: (m: string) => void; onChanged: () => void }) {
   const [filter, setFilter] = useState<'sent' | 'returned' | 'approved' | 'draft' | 'all'>('sent')
-  const list = questions.filter(x => filter === 'all' || x.status === filter)
+  const [seg, setSeg] = useState('')
+  const [grade, setGrade] = useState('')
+  const [subj, setSubj] = useState('')
+  const [teacher, setTeacher] = useState('')
+  const [open, setOpen] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const segFn = SEGMENTS.find(x => x[0] === seg)?.[2]
+  const base = questions.filter(x => (!segFn || segFn(x.grade)) && (!grade || x.grade === grade) && (!subj || x.subject_id === subj) && (!teacher || x.author_teacher_id === teacher))
+  const list = base.filter(x => filter === 'all' || x.status === filter)
+  const active = [seg, grade, subj, teacher].filter(Boolean).length
+  const grades = GRADES.filter(g => (contest.grades.length === 0 || contest.grades.includes(g)) && (!segFn || segFn(g)))
+  const sel: React.CSSProperties = { ...input, width: 'auto', minWidth: 130, padding: '7px 10px', fontSize: 13 }
   const del = async (x: Question) => {
     if (!confirm(x.status === 'approved' ? 'Esta questão já está aprovada. Apagar mesmo assim? Não dá para desfazer.' : 'Apagar esta questão? Não dá para desfazer.')) return
     const e = await removeQuestions(contest.id, [x])
@@ -771,40 +850,67 @@ function Review({ contest, subjects, teachers, questions, flash, onChanged }: { 
     await db.from('contest_questions').update({ status, review_note: note, updated_at: new Date().toISOString() }).eq('id', x.id)
     onChanged()
   }
+  const toApprove = list.filter(x => x.status === 'sent')
+  const approveAll = async () => {
+    if (!toApprove.length || !confirm(`Aprovar ${toApprove.length} questão(ões) que estão na lista agora${active ? ' (com os filtros aplicados)' : ''}? Confira antes: elas passam a valer para a prova.`)) return
+    setBusy(true)
+    const { error } = await db.from('contest_questions').update({ status: 'approved', review_note: null, updated_at: new Date().toISOString() }).in('id', toApprove.map(x => x.id))
+    setBusy(false)
+    flash(error ? 'Não foi possível aprovar: ' + error.message : `${toApprove.length} questões aprovadas.`)
+    onChanged()
+  }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {([['sent', 'Para revisar'], ['returned', 'Devolvidas'], ['approved', 'Aprovadas'], ['draft', 'Rascunhos'], ['all', 'Todas']] as const).map(([k, l]) => (
-          <button key={k} onClick={() => setFilter(k)} style={{ padding: '6px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${filter === k ? BRAND.primary : BRAND.line}`, background: filter === k ? BRAND.soft : '#fff', color: filter === k ? BRAND.primaryDark : BRAND.muted }}>
-            {l} ({questions.filter(x => k === 'all' || x.status === k).length})
-          </button>
-        ))}
+      <div style={card}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <select style={sel} value={seg} onChange={e => { setSeg(e.target.value); setGrade('') }} aria-label="Segmento"><option value="">Todos os segmentos</option>{SEGMENTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+          <select style={sel} value={grade} onChange={e => setGrade(e.target.value)} aria-label="Série"><option value="">Todas as séries</option>{grades.map(g => <option key={g} value={g}>{g}</option>)}</select>
+          <select style={sel} value={subj} onChange={e => setSubj(e.target.value)} aria-label="Disciplina"><option value="">Todas as disciplinas</option>{Array.from(new Map(subjects.map(s => [s.name, s])).values()).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+          <select style={sel} value={teacher} onChange={e => setTeacher(e.target.value)} aria-label="Professor"><option value="">Todos os professores</option>{teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}</select>
+          {active > 0 && <button style={{ ...btn(), padding: '7px 10px', fontSize: 12.5 }} onClick={() => { setSeg(''); setGrade(''); setSubj(''); setTeacher('') }}>Limpar filtros ({active})</button>}
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+          {([['sent', 'Para revisar'], ['returned', 'Devolvidas'], ['approved', 'Aprovadas'], ['draft', 'Rascunhos'], ['all', 'Todas']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setFilter(k)} style={{ padding: '6px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${filter === k ? BRAND.primary : BRAND.line}`, background: filter === k ? BRAND.soft : '#fff', color: filter === k ? BRAND.primaryDark : BRAND.text }}>
+              {l} ({base.filter(x => k === 'all' || x.status === k).length})
+            </button>
+          ))}
+          {toApprove.length > 0 && <button style={{ ...btn(true), padding: '6px 12px', fontSize: 13, marginLeft: 'auto' }} disabled={busy} onClick={approveAll}><Check size={15} /> Aprovar as {toApprove.length} da lista</button>}
+        </div>
       </div>
       {list.length === 0 && <div style={card}>Nenhuma questão nesta lista.</div>}
       {list.map(x => {
         const st = Q_STATUS[x.status]
+        const isOpen = open === x.id
         return (
-          <div key={x.id} style={card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-              <div style={{ fontSize: 12.5, color: BRAND.muted }}>{subjects.find(s => s.id === x.subject_id)?.name} · {x.grade} · {teachers.find(t => t.id === x.author_teacher_id)?.full_name ?? '—'}</div>
+          <div key={x.id} style={{ ...card, padding: 0, overflow: 'hidden' }}>
+            <div onClick={() => setOpen(isOpen ? null : x.id)} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, color: BRAND.muted }}>{subjects.find(s => s.id === x.subject_id)?.name} · {x.grade} · {teachers.find(t => t.id === x.author_teacher_id)?.full_name ?? '—'}</div>
+                <div style={{ fontSize: 14, color: BRAND.ink, marginTop: 2, ...(isOpen ? { whiteSpace: 'pre-wrap' } : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }) }}>{x.statement || 'Sem enunciado'}</div>
+              </div>
               <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: st.bg, color: st.fg }}>{st.label}</span>
+              {x.status === 'sent' && <button style={{ ...btn(true), padding: '6px 10px', fontSize: 12.5 }} onClick={e => { e.stopPropagation(); act(x, 'approved') }}><Check size={14} /> Aprovar</button>}
+              {x.status === 'sent' && <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={e => { e.stopPropagation(); act(x, 'returned') }}><Undo2 size={14} /> Devolver</button>}
+              <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={e => { e.stopPropagation(); setOpen(isOpen ? null : x.id) }}>{isOpen ? 'Fechar' : 'Ver'}</button>
             </div>
-            <div style={{ whiteSpace: 'pre-wrap', fontSize: 14.5, color: BRAND.ink }}>{x.statement}</div>
-            {x.statement_images.map(p => <div key={p} style={{ marginTop: 8 }}><ContestImg path={p} /></div>)}
-            <ol type="A" style={{ margin: '10px 0 0', paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {x.alternatives.slice(0, contest.alternatives_count).map((a, i) => (
-                <li key={i} style={{ fontSize: 14, padding: '5px 9px', borderRadius: 8, background: x.correct_index === i ? '#D1FAE5' : 'transparent', color: BRAND.text }}>
-                  <b>{LETTERS[i]})</b> {a.text} {a.image && <ContestImg path={a.image} style={{ maxHeight: 80, display: 'block', marginTop: 4 }} />}
-                </li>
-              ))}
-            </ol>
-            {x.comment && <div style={{ marginTop: 8, fontSize: 12.5, color: BRAND.muted }}><b>Comentário do professor:</b> {x.comment}</div>}
-            {x.review_note && x.status === 'returned' && <div style={{ marginTop: 6, fontSize: 12.5, color: '#92400E' }}><b>Pedido de ajuste:</b> {x.review_note}</div>}
-            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-              {x.status === 'sent' && <button style={btn(true)} onClick={() => act(x, 'approved')}><Check size={15} /> Aprovar</button>}
-              {x.status === 'sent' && <button style={btn()} onClick={() => act(x, 'returned')}><Undo2 size={15} /> Devolver com ajuste</button>}
-              <button style={{ ...btn(), color: '#DC2626', border: '1px solid #FECACA', marginLeft: 'auto' }} onClick={() => del(x)}><Trash2 size={15} /> Apagar questão</button>
-            </div>
+            {isOpen && (
+              <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${BRAND.line}` }}>
+                {x.statement_images.map(p => <div key={p} style={{ marginTop: 8 }}><ContestImg path={p} /></div>)}
+                <ol type="A" style={{ margin: '10px 0 0', paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {x.alternatives.slice(0, contest.alternatives_count).map((a, i) => (
+                    <li key={i} style={{ fontSize: 14, padding: '5px 9px', borderRadius: 8, background: x.correct_index === i ? '#D1FAE5' : 'transparent', color: BRAND.text }}>
+                      <b>{LETTERS[i]})</b> {a.text} {a.image && <ContestImg path={a.image} style={{ maxHeight: 80, display: 'block', marginTop: 4 }} />}
+                    </li>
+                  ))}
+                </ol>
+                {x.comment && <div style={{ marginTop: 8, fontSize: 12.5, color: BRAND.muted }}><b>Comentário do professor:</b> {x.comment}</div>}
+                {x.review_note && x.status === 'returned' && <div style={{ marginTop: 6, fontSize: 12.5, color: '#92400E' }}><b>Pedido de ajuste:</b> {x.review_note}</div>}
+                <div style={{ display: 'flex', marginTop: 12 }}>
+                  <button style={{ ...btn(), color: '#DC2626', border: '1px solid #FECACA', marginLeft: 'auto' }} onClick={() => del(x)}><Trash2 size={15} /> Apagar questão</button>
+                </div>
+              </div>
+            )}
           </div>
         )
       })}
