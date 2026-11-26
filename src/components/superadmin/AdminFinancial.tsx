@@ -1343,7 +1343,7 @@ export default function AdminFinancial() {
       supabase.from('platform_settings').select('key, value').in('key', ['overdue_warning1_days', 'overdue_warning2_days', 'overdue_warning3_days', 'overdue_suspend_days']),
       supabase.from('platform_costs').select('*').order('name'),
       // As abas antigas são da Áion Edu e só contam dinheiro já movimentado (pago).
-      supabase.from('financial_entries').select('*, institutions(name)').eq('company_id', EDU_COMPANY_ID).neq('status', 'pendente').order('entry_date', { ascending: false }),
+      supabase.from('financial_entries').select('*, institutions(name)').eq('company_id', EDU_COMPANY_ID).neq('status', 'pendente').neq('source', 'asaas').order('entry_date', { ascending: false }),
       supabase.from('consultant_commissions').select('*, institutions(name)').order('created_at', { ascending: false }),
       supabase.from('users').select('id, full_name').eq('user_type', 'consultant').order('full_name'),
       supabase.from('payment_invoices').select('*, payments(amount, description, payment_type, paid_at, due_date), institutions(name, email, financial_email)').order('created_at', { ascending: false }),
