@@ -240,8 +240,17 @@ function purgeLegacyCache() {
 function AppContent() {
   const { user, initializing } = useAuth()
   const [ready, setReady] = useState(false)
-  // Abertura com a animação da logo: toca inteira a cada abertura do app (~3,6 s), mesmo que a página carregue antes.
-  const [introDone, setIntroDone] = useState(false)
+  // Animação da logo: só na primeira abertura do app instalado (celular) em cada sessão.
+  // Atualizar a página, trocar de tela ou abrir o site não tocam a animação.
+  const [playIntro] = useState(() => {
+    try {
+      const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true
+      if (!standalone || sessionStorage.getItem('aion-intro-done')) return false
+      sessionStorage.setItem('aion-intro-done', '1')
+      return true
+    } catch { return false }
+  })
+  const [introDone, setIntroDone] = useState(!playIntro)
   useEffect(() => {
     if (introDone) return
     const t = setTimeout(() => setIntroDone(true), 3600)
@@ -313,9 +322,9 @@ function AppContent() {
   const skipLoader = isPublicPath && !standalone && !hasStoredSession
 
   if (!skipLoader && (initializing || !ready || !introDone)) {
-    return (
-      <BrandLoader fullscreen label="Carregando" />
-    )
+    // Sem animação: só a animação de abertura do app instalado usa a logo em tela cheia.
+    if (playIntro) return <BrandLoader fullscreen label="Carregando" />
+    return <div role="status" aria-label="Carregando" style={{ minHeight: '100dvh', background: '#F4F7FA' }} />
   }
 
   if (!user) {
@@ -418,7 +427,7 @@ function AppContent() {
   }
   // ── BLOQUEIO POR STATUS ───────────────────────────────────────────────────
   if (user.user_type === 'school_user') {
-    if (checkingStatus) return <BrandLoader fullscreen label="Verificando acesso" />
+    if (checkingStatus) return <div role="status" aria-label="Verificando acesso" style={{ minHeight: "100dvh", background: "#F4F7FA" }} />
     if (schoolStatus === 'pending_contract') return <PendingScreen type="contract" />
     if (schoolStatus === 'pending_payment') return <PendingScreen type="payment" />
     if (schoolStatus === 'suspended') return <PendingScreen type="suspended" />
