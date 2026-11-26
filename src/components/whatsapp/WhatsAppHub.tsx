@@ -1255,7 +1255,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
     setHistoryLoading(false)
   }
 
-  const loadMessages = async () => {
+  // Evita pedir a lista de conversas duas vezes ao mesmo tempo (a abertura disparava o mesmo GET em duplicidade).
+  const loadMessagesInflightRef = useRef<{ inst: string; p: Promise<any> } | null>(null)
+  const loadMessages = (): Promise<any> => {
+    if (!effectiveInstitutionId) return Promise.resolve(undefined)
+    const cur = loadMessagesInflightRef.current
+    if (cur && cur.inst === effectiveInstitutionId) return cur.p
+    const p = loadMessagesImpl().finally(() => { if (loadMessagesInflightRef.current?.p === p) loadMessagesInflightRef.current = null })
+    loadMessagesInflightRef.current = { inst: effectiveInstitutionId, p }
+    return p
+  }
+  const loadMessagesImpl = async () => {
     if (!effectiveInstitutionId) return
     let msgs: any[]
     let convs: any[]
