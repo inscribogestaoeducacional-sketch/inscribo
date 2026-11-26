@@ -868,7 +868,8 @@ export class DatabaseService {
   // (últimas `limit` mensagens). Usa `timestamp`, não `created_at` — é a
   // coluna usada em toda ordenação/exibição de mensagem já no resto do
   // sistema (ver .order('timestamp', ...) logo abaixo e em getWhatsappMessages).
-  static async getConversationMessages(institutionId: string, remoteJid: string, limit = 100, before?: string): Promise<WhatsappMessage[]> {
+  // strict=true: em vez de devolver [] quando a consulta falha (timeout), lança o erro — quem chama decide tentar de novo.
+  static async getConversationMessages(institutionId: string, remoteJid: string, limit = 100, before?: string, strict = false): Promise<WhatsappMessage[]> {
     // Match both raw phone ("551199...") and normalized ("551199...@s.whatsapp.net") formats
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const normalized = remoteJid.includes('@') ? remoteJid : `${remoteJid}@s.whatsapp.net`
@@ -884,6 +885,7 @@ export class DatabaseService {
 
     if (error) {
       console.error('Error loading conversation messages:', error)
+      if (strict) throw error
       return []
     }
     return (data || []) as unknown as WhatsappMessage[]

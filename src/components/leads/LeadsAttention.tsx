@@ -17,7 +17,8 @@ export function useLeadWaiting(institutionId: string | null | undefined) {
     if (error) { console.error('[lead_waiting]', error); return }
     setMap(new Map(((data ?? []) as Waiting[]).filter(w => w.side).map(w => [w.lead_id, w])))
   }, [institutionId])
-  useEffect(() => { refresh(); const t = setInterval(refresh, 120000); return () => clearInterval(t) }, [refresh])
+  // 5 min (antes 2) e só com a aba visível: a função é pesada no banco e cada usuário com Leads aberto a repetia.
+  useEffect(() => { refresh(); const t = setInterval(() => { if (!document.hidden) refresh() }, 300000); return () => clearInterval(t) }, [refresh])
   return { waiting: map, refresh }
 }
 
