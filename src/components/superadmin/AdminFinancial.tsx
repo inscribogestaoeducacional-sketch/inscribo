@@ -9,6 +9,7 @@ import { getAuthHeaders } from '../../lib/authHeaders'
 import { buildSendComponents } from '../../lib/whatsappTemplate'
 import { COLLECTION_TEMPLATES, collectionTemplateAsGraphLike, type CollectionTemplateKey } from '../../lib/collectionTemplates'
 import SuperAdminLayout from './SuperAdminLayout'
+import FinanceiroGeral, { EDU_COMPANY_ID } from './FinanceiroGeral'
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -73,7 +74,7 @@ function costEffectiveDate(c: any): Date | null {
   return null
 }
 
-type Tab = 'overview' | 'revenue' | 'costs' | 'commissions' | 'overdue' | 'invoices'
+type Tab = 'overview' | 'revenue' | 'costs' | 'commissions' | 'overdue' | 'invoices' | 'geral'
 
 const STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
   pending:   { l: 'Pendente',  c: '#6b7280', bg: '#f3f4f6' },
@@ -1284,7 +1285,7 @@ export default function AdminFinancial() {
   const [invoices,     setInvoices]     = useState<any[]>([])
   const [settings,     setSettings]     = useState<Record<string, string>>({})
   const [loading,      setLoading]      = useState(true)
-  const [tab,          setTab]          = useState<Tab>('overview')
+  const [tab,          setTab]          = useState<Tab>('geral')
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
   const [showNewCharge, setShowNewCharge] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null)
@@ -1341,7 +1342,8 @@ export default function AdminFinancial() {
       // Só as chaves que esta tela usa (nenhum segredo).
       supabase.from('platform_settings').select('key, value').in('key', ['overdue_warning1_days', 'overdue_warning2_days', 'overdue_warning3_days', 'overdue_suspend_days']),
       supabase.from('platform_costs').select('*').order('name'),
-      supabase.from('financial_entries').select('*, institutions(name)').order('entry_date', { ascending: false }),
+      // As abas antigas são da Áion Edu e só contam dinheiro já movimentado (pago).
+      supabase.from('financial_entries').select('*, institutions(name)').eq('company_id', EDU_COMPANY_ID).neq('status', 'pendente').neq('source', 'asaas').order('entry_date', { ascending: false }),
       supabase.from('consultant_commissions').select('*, institutions(name)').order('created_at', { ascending: false }),
       supabase.from('users').select('id, full_name').eq('user_type', 'consultant').order('full_name'),
       supabase.from('payment_invoices').select('*, payments(amount, description, payment_type, paid_at, due_date), institutions(name, email, financial_email)').order('created_at', { ascending: false }),
@@ -1637,7 +1639,8 @@ export default function AdminFinancial() {
         {/* Tabs */}
         <div className="aion-hscroll flex border-b border-gray-200 overflow-x-auto">
           {[
-            { id: 'overview'    as Tab, label: 'Visão Geral' },
+            { id: 'geral'       as Tab, label: 'Financeiro geral' },
+            { id: 'overview'    as Tab, label: 'Visão Geral (Edu)' },
             { id: 'revenue'     as Tab, label: `Receitas (${revenueRows.length})` },
             { id: 'costs'       as Tab, label: `Custos (${costRows.length})` },
             { id: 'commissions' as Tab, label: `Comissões (${commissionsInPeriod.length})` },
@@ -1652,6 +1655,17 @@ export default function AdminFinancial() {
             </button>
           ))}
         </div>
+
+        {/* ══════════════════════════ TAB: Financeiro geral ══════════════════════════ */}
+        {tab === 'geral' && (
+          <FinanceiroGeral
+            periodStart={toDateInput(period.start)}
+            periodEnd={toDateInput(period.end)}
+            periodLabel={periodLabel}
+            userId={user?.id}
+            showToast={showToast}
+          />
+        )}
 
         {/* ══════════════════════════ TAB: Visão Geral ══════════════════════════ */}
         {tab === 'overview' && (
