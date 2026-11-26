@@ -942,10 +942,11 @@ export class DatabaseService {
   }
 
   // As concluídas, em páginas — só quando a pessoa abre o filtro "Concluídas" ou pesquisa.
-  static async getWhatsappClosedPage(institutionId: string, from: number, count: number): Promise<WhatsappConversation[]> {
+  // Devolve null quando a consulta falha (timeout/erro) — quem chama NÃO pode tratar como "acabou".
+  static async getWhatsappClosedPage(institutionId: string, from: number, count: number): Promise<WhatsappConversation[] | null> {
     const { data, error } = await supabase.from('whatsapp_conversations').select('*').eq('institution_id', institutionId).eq('status', 'closed')
       .order('last_message_at', { ascending: false, nullsFirst: false }).order('id', { ascending: true }).range(from, from + count - 1)
-    if (error) { console.error('Error loading closed conversations page:', error); return [] }
+    if (error) { console.error('Error loading closed conversations page:', error); return null }
     return (data || []) as WhatsappConversation[]
   }
 
