@@ -324,7 +324,14 @@ function AppContent() {
   if (!skipLoader && (initializing || !ready || !introDone)) {
     // Sem animação: só a animação de abertura do app instalado usa a logo em tela cheia.
     if (playIntro) return <BrandLoader fullscreen label="Carregando" />
-    return <div role="status" aria-label="Carregando" style={{ minHeight: '100dvh', background: '#F4F7FA' }} />
+    return (
+      <div role="status" aria-label="Carregando" style={{ minHeight: '100dvh', background: '#F4F7FA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* só aparece se a abertura demorar mais de 1 s, para a tela nunca parecer travada */}
+        <span style={{ display: 'block', animation: 'ldFadeUp .4s ease 1s both' }}>
+          <span aria-hidden className="animate-spin" style={{ display: 'block', width: 26, height: 26, borderRadius: '50%', border: '3px solid #D5E8E4', borderTopColor: '#05907B' }} />
+        </span>
+      </div>
+    )
   }
 
   if (!user) {
