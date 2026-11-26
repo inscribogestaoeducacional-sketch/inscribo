@@ -1283,33 +1283,47 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
       // Abre rápido: primeiro as conversas mais recentes (a tela já aparece e dá pra atender); o resto da
       // lista chega em segundo plano e é encaixado sem mexer em quem já está na tela.
       const FIRST_PAGE = 300
-      convs = await DatabaseService.getWhatsappConversationsPage(effectiveInstitutionId, 0, FIRST_PAGE)
+      convs = await DatabaseService.getWhatsappConversationsActive(effectiveInstitutionId)
     const convMap = new Map(convs.map((c: any) => [c.remote_jid, c]))
     const built = buildConversations(msgs, convMap)
-    setConversations(built)
-    if (convs.length >= FIRST_PAGE) {
-      const token = ++restLoadTokenRef.current
-      const instId = effectiveInstitutionId
-      ;(async () => {
-        for (let from = FIRST_PAGE; ; from += 1000) {
-          const rows = await DatabaseService.getWhatsappConversationsPage(instId, from, 1000)
-          if (restLoadTokenRef.current !== token) return
-          if (rows.length) {
-            setConversations(prev => {
-              const known = new Set(prev.map(c => c.id))
-              const older = rows
-                .filter(r => r.remote_jid && (r.last_message || r.last_message_at) && !known.has(normalizeJid(r.remote_jid)))
-                .map(r => conversationFromRow(r))
-              return older.length ? [...prev, ...older] : prev
-            })
-          }
-          if (rows.length < 1000) return
-        }
-      })()
-    }
+    // Mescla em vez de trocar a lista: uma recarga nunca faz conversa já na tela sumir.
+    setConversations(prev => {
+      if (!prev.length) return built
+      const ids = new Set(built.map(c => c.id))
+      return [...built, ...prev.filter(c => !ids.has(c.id))]
+    })
     return built
   }
   const restLoadTokenRef = useRef(0)
+  // Conversas concluídas antigas: só entram na tela quando a pessoa abre o filtro "Concluídas"/"Ambos" ou pesquisa.
+  const closedLoadedRef = useRef(false)
+  const closedLoadingRef = useRef(false)
+  useEffect(() => { closedLoadedRef.current = false; closedLoadingRef.current = false }, [effectiveInstitutionId])
+  const loadAllClosed = async () => {
+    if (!effectiveInstitutionId || closedLoadedRef.current || closedLoadingRef.current) return
+    closedLoadingRef.current = true
+    const instId = effectiveInstitutionId
+    try {
+      for (let from = 0; ; from += 1000) {
+        const rows = await DatabaseService.getWhatsappClosedPage(instId, from, 1000)
+        if (instId !== effectiveInstitutionId) return
+        if (rows.length) {
+          setConversations(prev => {
+            const known = new Set(prev.map(c => c.id))
+            const older = rows
+              .filter(r => r.remote_jid && (r.last_message || r.last_message_at) && !known.has(normalizeJid(r.remote_jid)))
+              .map(r => conversationFromRow(r))
+            return older.length ? [...prev, ...older] : prev
+          })
+        }
+        if (rows.length < 1000) break
+      }
+      closedLoadedRef.current = true
+    } finally { closedLoadingRef.current = false }
+  }
+  useEffect(() => {
+    if (statusFilter !== 'abertos' || search.trim().length >= 2) loadAllClosed()
+  }, [statusFilter, search, effectiveInstitutionId])
 
   // Sincroniza a lista de conversas com whatsapp_conversations periodicamente
   // (rede de segurança pro caso do Realtime perder algum evento — mesmo
@@ -1333,7 +1347,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
       let convs: any[] | null = null
       if (!full) convs = await DatabaseService.getWhatsappConversationsSince(effectiveInstitutionId, new Date(lastSyncRef.current - 3 * 60000).toISOString())
       const isFull = convs === null
-      if (convs === null) convs = await DatabaseService.getWhatsappConversations(effectiveInstitutionId)
+      if (convs === null) convs = closedLoadedRef.current ? await DatabaseService.getWhatsappConversations(effectiveInstitutionId) : await DatabaseService.getWhatsappConversationsActive(effectiveInstitutionId)
       lastSyncRef.current = startedAt
       if (isFull) lastFullSyncRef.current = startedAt
       applyConversationRows(convs, !isFull ? true : false)

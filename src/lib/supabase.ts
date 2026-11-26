@@ -927,6 +927,28 @@ export class DatabaseService {
     return (data || []) as WhatsappConversation[]
   }
 
+  // Abertura enxuta: todas as conversas em atendimento (abertas, na fila, resolvidas) + as últimas concluídas.
+  // As concluídas antigas (a grande maioria) só são buscadas quando alguém pede (filtro "Concluídas" ou busca).
+  static async getWhatsappConversationsActive(institutionId: string, recentClosed = 100): Promise<WhatsappConversation[]> {
+    const [a, b] = await Promise.all([
+      supabase.from('whatsapp_conversations').select('*').eq('institution_id', institutionId).neq('status', 'closed')
+        .order('last_message_at', { ascending: false, nullsFirst: false }).order('id', { ascending: true }).limit(1000),
+      supabase.from('whatsapp_conversations').select('*').eq('institution_id', institutionId).eq('status', 'closed')
+        .order('last_message_at', { ascending: false, nullsFirst: false }).order('id', { ascending: true }).limit(recentClosed),
+    ])
+    if (a.error) { console.error('Error loading active whatsapp conversations:', a.error); return [] }
+    if (b.error) console.error('Error loading recent closed conversations:', b.error)
+    return [...(a.data || []), ...(b.data || [])] as WhatsappConversation[]
+  }
+
+  // As concluídas, em páginas — só quando a pessoa abre o filtro "Concluídas" ou pesquisa.
+  static async getWhatsappClosedPage(institutionId: string, from: number, count: number): Promise<WhatsappConversation[]> {
+    const { data, error } = await supabase.from('whatsapp_conversations').select('*').eq('institution_id', institutionId).eq('status', 'closed')
+      .order('last_message_at', { ascending: false, nullsFirst: false }).order('id', { ascending: true }).range(from, from + count - 1)
+    if (error) { console.error('Error loading closed conversations page:', error); return [] }
+    return (data || []) as WhatsappConversation[]
+  }
+
   // Só as conversas que tiveram mensagem desde `sinceIso` — o reforço periódico da tela usa isto em vez de
   // baixar a lista inteira (1.700+ linhas) a cada minuto. Devolve null se estourar o limite (aí a tela faz a carga completa).
   static async getWhatsappConversationsSince(institutionId: string, sinceIso: string): Promise<WhatsappConversation[] | null> {
