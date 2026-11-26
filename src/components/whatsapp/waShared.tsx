@@ -86,6 +86,7 @@ export interface Conversation {
   capture_trigger_id?: string | null
   capture_bot_skipped?: boolean
   capture_referral?: Record<string, any> | null
+  broadcast_campaign_id?: string | null
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────

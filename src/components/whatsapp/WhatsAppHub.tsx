@@ -47,7 +47,8 @@ import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users, Download, Calendar,
-  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2, Megaphone, Bot
+  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2, Megaphone, Bot,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -61,10 +62,11 @@ import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
 import { useLeadUnits, matchesUnitFilter, UNIT_FILTER_ALL, UNIT_FILTER_NONE } from '../../lib/leadUnits'
+import { ConversationFiltersPanel, EMPTY_ADV, advCount, advFromSaved, needsLeadInfo, matchesAdv, type AdvFilters, type LeadInfo, type FilterOptions } from './ConversationFilters'
 import { getAuthHeaders } from '../../lib/authHeaders'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { statusConfig } from '../leads/leadFormShared'
-import { leadCustomStage, leadStageName } from '../../lib/stageLabels'
+import { leadCustomStage, leadStageName, STAGE_KEYS, stageLabel, getCustomStages } from '../../lib/stageLabels'
 import { CAPTURE_CHANNELS, type CaptureChannel } from '../../lib/captureTriggers'
 import LeadVisitsPanel from '../visits/LeadVisitsPanel'
 import { advanceLeadTo } from '../../lib/visitOutcome'
@@ -204,6 +206,7 @@ function conversationFromRow(conv: WhatsappConversation): Conversation {
     capture_trigger_id: (conv as any).capture_trigger_id ?? null,
     capture_bot_skipped: (conv as any).capture_bot_skipped ?? false,
     capture_referral: (conv as any).capture_referral ?? null,
+    broadcast_campaign_id: (conv as any).broadcast_campaign_id ?? null,
     messages: [],
   }
 }
@@ -364,6 +367,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
   const [assignFilter, setAssignFilter] = useState<string>(() => roleSeesAllByDefault(user) ? 'all' : 'mine')
   // Filtros (Status, Atendente, Lida/Não lida, Unidade) ficam salvos por usuário neste aparelho: ao atualizar a
   // página ou voltar depois, a tela abre do jeito que a pessoa deixou. Sem nada salvo, vale o padrão do perfil.
+  const [adv, setAdv] = useState<AdvFilters>(EMPTY_ADV)
+  const [showFilters, setShowFilters] = useState(false)
+  // Dados do lead de cada conversa (etapa, série, origem) — só são buscados quando um filtro precisa deles.
+  const [leadInfo, setLeadInfo] = useState<Record<string, LeadInfo>>({})
+  const [leadInfoLoading, setLeadInfoLoading] = useState(false)
+  const leadInfoAtRef = useRef(0)
   const filtersKey = user?.id ? `aion-wa-filtros:${user.id}` : null
   const filtersReadyRef = useRef(false)
   useEffect(() => {
@@ -374,12 +383,32 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
     setReadFilter(['all', 'read', 'unread'].includes(saved?.read) ? saved.read : 'all')
     setAssignFilter(typeof saved?.assign === 'string' && saved.assign ? saved.assign : (roleSeesAllByDefault(user) ? 'all' : 'mine'))
     if (typeof saved?.unit === 'string' && saved.unit) setUnitFilter(saved.unit)
+    setAdv(advFromSaved(saved?.adv))
     filtersReadyRef.current = true
   }, [filtersKey, user?.role, user?.user_type, user?.institution_id])
   useEffect(() => {
+    if (!effectiveInstitutionId || (!showFilters && !needsLeadInfo(adv))) return
+    if (Date.now() - leadInfoAtRef.current < 5 * 60000) return
+    leadInfoAtRef.current = Date.now()
+    let cancelled = false
+    setLeadInfoLoading(true)
+    ;(async () => {
+      const map: Record<string, LeadInfo> = {}
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.from('leads').select('id, status, custom_stage_id, grade_interest, source')
+          .eq('institution_id', effectiveInstitutionId).order('id').range(from, from + 999)
+        if (error) { console.warn('[Hub] dados dos leads indisponíveis para os filtros:', error.message); leadInfoAtRef.current = 0; break }
+        for (const r of (data || []) as any[]) map[r.id] = { status: r.status ?? null, custom_stage_id: r.custom_stage_id ?? null, grade: r.grade_interest ?? null, source: r.source ?? null }
+        if (!data || data.length < 1000) break
+      }
+      if (!cancelled) { setLeadInfo(map); setLeadInfoLoading(false) }
+    })()
+    return () => { cancelled = true; setLeadInfoLoading(false) }
+  }, [showFilters, adv.stages.length, adv.grades.length, adv.sources.length, effectiveInstitutionId])
+  useEffect(() => {
     if (!filtersKey || !filtersReadyRef.current) return
-    try { localStorage.setItem(filtersKey, JSON.stringify({ status: statusFilter, read: readFilter, assign: assignFilter, unit: unitFilter })) } catch { /* sem armazenamento: segue sem salvar */ }
-  }, [filtersKey, statusFilter, readFilter, assignFilter, unitFilter])
+    try { localStorage.setItem(filtersKey, JSON.stringify({ status: statusFilter, read: readFilter, assign: assignFilter, unit: unitFilter, adv })) } catch { /* sem armazenamento: segue sem salvar */ }
+  }, [filtersKey, statusFilter, readFilter, assignFilter, unitFilter, adv])
   const [canSeeAllConversations, setCanSeeAllConversations] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
   const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
@@ -1081,6 +1110,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
               messages: newMessages,
               lastMessage: newMsg.content,
               lastTime: new Date(newMsg.timestamp),
+              last_customer_message_at: newMsg.from_me ? c.last_customer_message_at : new Date(newMsg.timestamp).toISOString(),
               unreadCount: c.unreadCount + (newMsg.from_me ? 0 : 1),
               status: c.status === 'closed' ? 'waiting' as ConvStatus : c.status,
             }
@@ -2319,6 +2349,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
       if ((c.unreadCount || 0) === 0) return false
       if (!isPrivilegedRole && c.assigned_user_id !== user?.id) return false
     }
+    if (!matchesAdv(c, adv, { leadInfo, visitsToday })) return false
     return true
   }
 
@@ -2361,7 +2392,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
     if (isUnclassified(c)) { filteredUnclassifiedConvs.push(c); continue }
     if (isQueued(c)) { filteredWaitingConvs.push(c); continue }
     if (!matchesStatusFilter(c)) continue
-    if (hiddenByAssignFilter(c)) { hiddenByFilterCount++; continue }
+    if (!adv.assignees.length && hiddenByAssignFilter(c)) { hiddenByFilterCount++; continue }
     if (c.assigned_user_id === user?.id) filteredMyConvs.push(c)
     else if (isConvStale(c)) filteredStaleConvs.push(c)
     else filteredOtherConvs.push(c)
@@ -2372,6 +2403,28 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
   const attendantOptions = users
     .filter(u => (u as any).active !== false)
     .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'pt-BR'))
+
+  const filterOptions: FilterOptions = useMemo(() => {
+    const humanize = (v: string) => v.replace(/[_-]+/g, ' ').replace(/^./, ch => ch.toUpperCase())
+    const countBy = (vals: (string | null | undefined)[]) => {
+      const m = new Map<string, number>()
+      for (const v of vals) if (v) m.set(v, (m.get(v) || 0) + 1)
+      return [...m.entries()].sort((a, b) => b[1] - a[1])
+    }
+    const infos = Object.values(leadInfo)
+    return {
+      attendants: [{ id: 'none', label: 'Sem atendente' }, ...attendantOptions.map(u => ({ id: u.id, label: u.full_name || u.id }))],
+      tags: hubTags.map(t => ({ id: t.name, label: t.name })),
+      types: [{ id: 'lead', label: 'Nova família' }, { id: 'client', label: 'Cliente' }, { id: 'supplier', label: 'Fornecedor' }, { id: 'other', label: 'Outro' }],
+      stages: [
+        ...STAGE_KEYS.map(k => ({ id: k, label: stageLabel(k) })),
+        ...getCustomStages().map(c => ({ id: `x:${c.id}`, label: c.label })),
+      ],
+      grades: countBy(infos.map(i => i.grade)).map(([v, n]) => ({ id: v, label: v, count: n })),
+      sources: countBy(infos.map(i => i.source)).map(([v, n]) => ({ id: v, label: humanize(v), count: n })),
+      triggers: Object.entries(captureTriggerMap).map(([id, t]) => ({ id, label: t.name })),
+    }
+  }, [leadInfo, hubTags, captureTriggerMap, attendantOptions.length])
 
   useEffect(() => {
     if (!effectiveInstitutionId) return
@@ -4131,7 +4184,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
         />
 
         {/* ── Col 1: Conversation List ──────────────────────────────────────────── */}
-        <div style={{ width: isMobile ? '100%' : 320, flexShrink: 0, display: isMobile && mobilePanel === 'chat' ? 'none' : 'flex', flexDirection: 'column', background: '#FFFFFF', borderRight: '1px solid #D1FAE5', overflow: 'hidden' }}>
+        <div style={{ width: isMobile ? '100%' : 320, flexShrink: 0, display: isMobile && mobilePanel === 'chat' ? 'none' : 'flex', flexDirection: 'column', background: '#FFFFFF', borderRight: '1px solid #D1FAE5', overflow: 'hidden', position: 'relative' }}>
 
           {/* Header: faixa em degradê com os 4 contadores clicáveis (levam direto à seção) */}
           <div style={{ flexShrink: 0, position: 'relative', overflow: 'hidden', background: 'var(--aion-grad)', color: '#fff', padding: `12px ${GUTTER}px 12px` }}>
@@ -4240,6 +4293,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
                   )}
                 </button>
               ))}
+              <button type="button" onClick={() => setShowFilters(true)} aria-label="Abrir filtros" style={{
+                marginLeft: 'auto', padding: '3px 10px', borderRadius: 9999, fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 600,
+                background: advCount(adv) ? '#05907B' : '#F0FDFB', color: advCount(adv) ? '#fff' : '#00695F', display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+                <SlidersHorizontal size={13} />
+                Filtros{advCount(adv) > 0 ? ` (${advCount(adv)})` : ''}
+              </button>
             </div>
           </div>
 
@@ -4322,6 +4382,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
               </div>
             )}
           </div>
+          {showFilters && (
+            <ConversationFiltersPanel
+              adv={adv} onChange={setAdv} onClose={() => setShowFilters(false)}
+              resultCount={filteredWaitingConvs.length + filteredMyConvs.length + filteredStaleConvs.length + filteredOtherConvs.length + filteredUnclassifiedConvs.length}
+              options={filterOptions} loadingLeads={leadInfoLoading} canPickAttendant={canSeeAll}
+            />
+          )}
         </div>
 
         {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
