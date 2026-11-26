@@ -1304,9 +1304,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
     closedLoadingRef.current = true
     const instId = effectiveInstitutionId
     try {
-      for (let from = 0; ; from += 1000) {
-        const rows = await DatabaseService.getWhatsappClosedPage(instId, from, 1000)
+      const PAGE = 300
+      let failures = 0
+      for (let from = 0; ; ) {
+        const rows = await DatabaseService.getWhatsappClosedPage(instId, from, PAGE)
         if (instId !== effectiveInstitutionId) return
+        if (rows === null) {
+          // falhou (banco ocupado): tenta de novo a mesma página; desiste sem marcar como carregado
+          if (++failures >= 4) return
+          await new Promise(r => setTimeout(r, 1500 * failures))
+          continue
+        }
+        failures = 0
         if (rows.length) {
           setConversations(prev => {
             const known = new Set(prev.map(c => c.id))
@@ -1316,7 +1325,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
             return older.length ? [...prev, ...older] : prev
           })
         }
-        if (rows.length < 1000) break
+        if (rows.length < PAGE) break
+        from += PAGE
       }
       closedLoadedRef.current = true
     } finally { closedLoadingRef.current = false }
