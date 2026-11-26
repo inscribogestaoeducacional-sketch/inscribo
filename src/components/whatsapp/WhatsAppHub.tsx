@@ -1930,25 +1930,34 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
     return true
   }
 
-  // Lazy-load messages for conversations that had none after the initial bulk fetch
+  // Carrega o histórico da conversa ao abri-la. Antes só carregava se a conversa estivesse com 0 mensagens;
+  // mas uma conversa que recebeu 1 mensagem em tempo real (ou veio de uma sincronização) já tinha 1 mensagem
+  // na tela e nunca buscava o resto — a pessoa abria e via só a última. Agora toda conversa abre buscando o
+  // histórico uma vez por sessão e junta com o que já está na tela (sem duplicar).
+  const historyLoadedRef = useRef<Set<string>>(new Set())
+  useEffect(() => { historyLoadedRef.current = new Set() }, [effectiveInstitutionId])
+  const loadHistoryFor = async (jid: string) => {
+    if (historyLoadedRef.current.has(jid)) return
+    historyLoadedRef.current.add(jid)
+    try {
+      const fetched = await fetchConversationMessages(jid)
+      if (fetched.length === 0) { historyLoadedRef.current.delete(jid); return }
+      setConversations(prev => prev.map(c => {
+        if (c.id !== jid) return c
+        const seen = new Set<string>()
+        const merged = [...fetched, ...c.messages].filter(m => {
+          const k = m.message_id || m.id
+          if (seen.has(k) || seen.has(m.id)) return false
+          seen.add(k); seen.add(m.id); return true
+        }).sort((a, b) => a.ts.getTime() - b.ts.getTime())
+        return { ...c, messages: merged }
+      }))
+      if (fetched.length < MESSAGE_PAGE_SIZE) setExhaustedOlder(prev => new Set(prev).add(jid))
+    } catch { historyLoadedRef.current.delete(jid) }
+  }
   useEffect(() => {
     if (!activeId) return
-    const conv = conversations.find(c => c.id === activeId)
-    if (!conv || conv.messages.length > 0) return
-
-    fetchConversationMessages(activeId).then(messages => {
-      if (messages.length === 0) return
-      setConversations(prev => prev.map(c =>
-        c.id === activeId && c.messages.length === 0
-          ? { ...c, messages }
-          : c
-      ))
-      // Veio menos que uma página inteira — já é o início da conversa, evita
-      // um round-trip extra só pra descobrir isso no primeiro scroll ao topo.
-      if (messages.length < MESSAGE_PAGE_SIZE) {
-        setExhaustedOlder(prev => new Set(prev).add(activeId))
-      }
-    }).catch(() => {})
+    loadHistoryFor(activeId)
   }, [activeId])
 
   // Load history when switching to history tab (conv events + CRM events)
