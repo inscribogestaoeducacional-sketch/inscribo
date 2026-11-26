@@ -4724,7 +4724,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
                 ))}
               </div>
             ))}
-            {activeConv?.messages.length === 0 && (
+            {activeConv?.messages.length === 0 && !!activeId && historyState[activeId] !== 'loading' && historyState[activeId] !== 'failed' && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '64px 0' }}>
                 <div style={{ width: 56, height: 56, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
                   <MessageCircle style={{ width: 26, height: 26, color: '#05907B' }} />
