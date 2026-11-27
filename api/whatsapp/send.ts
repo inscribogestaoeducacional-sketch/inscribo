@@ -395,19 +395,29 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
 
     console.log('send.ts - payload:', JSON.stringify(payload))
 
-    const metaRes = await fetch(`${GRAPH_URL}/${phoneNumberId}/messages`, {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type':  'application/json',
-      },
-      body:   JSON.stringify(payload),
-      signal: AbortSignal.timeout(META_FETCH_TIMEOUT_MS),
-    })
+    // A Meta às vezes devolve erros passageiros (131000 "Something went wrong", 131016 serviço
+    // indisponível, 1/2 instabilidade). Tenta de novo até 3 vezes em poucos segundos antes de
+    // devolver o erro, para o atendente não precisar reenviar e a mensagem não sumir.
+    const TRANSIENT = new Set([1, 2, 131000, 131016])
+    let metaRes!: Response
+    let metaData: any
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      metaRes = await fetch(`${GRAPH_URL}/${phoneNumberId}/messages`, {
+        method:  'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type':  'application/json',
+        },
+        body:   JSON.stringify(payload),
+        signal: AbortSignal.timeout(META_FETCH_TIMEOUT_MS),
+      })
+      console.log('send.ts - meta response:', metaRes.status, 'tentativa', attempt)
+      metaData = await metaRes.json().catch(() => ({}))
+      if (metaRes.ok || !TRANSIENT.has(metaData?.error?.code) || attempt === 3) break
+      console.warn('send.ts - erro passageiro da Meta, tentando de novo:', metaData?.error?.code, metaData?.error?.fbtrace_id)
+      await new Promise(r => setTimeout(r, 800 * attempt))
+    }
 
-    console.log('send.ts - meta response:', metaRes.status)
-
-    const metaData = await metaRes.json()
     if (!metaRes.ok) {
       console.error('❌ Meta API error:', metaData)
       // 100/33: o número saiu da conta ou a Áion perdeu o acesso a ele. Marca como caído na hora
@@ -420,6 +430,9 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
           }).then(() => undefined, () => undefined)
         }
         return res.status(503).json({ error: 'O WhatsApp desta escola perdeu a conexão com a Meta e não está enviando. Avise o gestor ou a equipe Áion.', code: 'wa_disconnected' })
+      }
+      if (TRANSIENT.has(metaData.error?.code)) {
+        return res.status(502).json({ error: 'A Meta (WhatsApp) está instável e recusou o envio mesmo após novas tentativas. Tente de novo em instantes.', code: 'meta_transient' })
       }
       return res.status(500).json({ error: metaData.error?.message || 'Erro ao enviar mensagem' })
     }
