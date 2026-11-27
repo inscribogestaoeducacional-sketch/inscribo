@@ -53,8 +53,9 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
     const v = keyOf(c, version); if (!v) return false
     const g = gradeAnswers(answers, v.answer_key, subjectsOf.get(`${c.grade}|${version}`) ?? [])
     const row = { institution_id: contest.institution_id, contest_id: contest.id, candidate_id: c.id, version, answers, flags, score: g.score, total: g.total, by_subject: g.by, status, source, ...(scanPath ? { scan_path: scanPath } : {}), updated_at: new Date().toISOString() }
-    const { error } = await db.from('contest_results').upsert(row, { onConflict: 'contest_id,candidate_id' })
-    return !error
+    const { data, error } = await db.from('contest_results').upsert(row, { onConflict: 'contest_id,candidate_id' }).select('score,total').maybeSingle()
+    if (error) return null
+    return { score: (data?.score ?? g.score) as number, total: (data?.total ?? g.total) as number }
   }
 
   // Lê uma página (cartão ou folha de redação) sem salvar nada: devolve o que entendeu.
@@ -96,7 +97,8 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
       if (blob) { path = `${contest.institution_id}/${contest.id}/${c.number}.jpg`; const up = await db.storage.from('contest-scans').upload(path, blob, { upsert: true, contentType: 'image/jpeg' }); if (up.error) path = null }
     }
     const status = rr.flags.length ? 'review' : 'ok'
-    if (await save(c, version, rr.answers, rr.flags, status, 'scan', path)) return { kind: status, flags: rr.flags.length }
+    const saved = await save(c, version, rr.answers, rr.flags, status, 'scan', path)
+    if (saved) return { kind: status, flags: rr.flags.length, hits: saved.score, total: saved.total }
     return { kind: 'fail', msg: `não consegui salvar o resultado de ${candName(c)}` }
   }
 
@@ -193,7 +195,7 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
           exam={keyOf(editing, resOf(editing.id)?.version ?? versionFor(editing.number, contest.versions_count))}
           subjects={subjects} subjectOf={subjectsOf.get(`${editing.grade}|${resOf(editing.id)?.version ?? versionFor(editing.number, contest.versions_count)}`) ?? []}
           onClose={() => setEditing(null)}
-          onSave={async (answers, version) => { const r = resOf(editing.id); const ok = await save(editing, version, answers, [], r && r.source === 'scan' ? 'ok' : 'manual', r?.source ?? 'manual', r?.scan_path ?? null); if (ok) { setEditing(null); load() } return ok }}
+          onSave={async (answers, version) => { const r = resOf(editing.id); const ok = await save(editing, version, answers, [], r && r.source === 'scan' ? 'ok' : 'manual', r?.source ?? 'manual', r?.scan_path ?? null); if (ok) { setEditing(null); load() } return !!ok }}
         />
       )}
     </div>
