@@ -212,15 +212,17 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
 
 
 // O que o pai enxerga na página de resultado. Cada item só aparece depois da etapa em que é liberado; aqui você escolhe se ele aparece ou não.
-type VisKey = 'questions' | 'objective' | 'annulment' | 'essay' | 'final' | 'position' | 'scholarship'
+type VisKey = 'questions' | 'objective' | 'annulment' | 'card_scan' | 'essay' | 'essay_scan' | 'final' | 'position' | 'scholarship'
 const VIS_GROUPS: { etapa: string; items: [VisKey, string, string][] }[] = [
   { etapa: 'Etapa 1 · gabarito', items: [
     ['objective', 'Acertos e nota da prova objetiva', 'Ex.: 31/40 · 77,5 de 100'],
     ['questions', 'Questões e espelho do gabarito', 'Enunciado, o que o aluno marcou e o gabarito de cada questão'],
+    ['card_scan', 'Foto do cartão-resposta do aluno', 'O pai vê a folha que o aluno entregou, para conferir as marcações'],
     ['annulment', 'Avisar quando a questão foi anulada', 'Desligado: ponto para todos aparece como acerto e a questão tirada da prova some da lista'],
   ] },
   { etapa: 'Etapa 2 · notas', items: [
     ['essay', 'Nota da redação', 'Só nas séries que têm redação'],
+    ['essay_scan', 'Foto da redação do aluno', 'O pai vê a folha escaneada da redação'],
     ['final', 'Nota final', 'Objetiva + redação'],
   ] },
   { etapa: 'Etapa 3 · decisão', items: [
