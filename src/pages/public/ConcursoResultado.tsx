@@ -23,6 +23,7 @@ export default function ConcursoResultado() {
   const [res, setRes] = useState<Res | null>(null)
   const [view, setView] = useState<'questoes' | 'espelho'>('questoes')
   const [media, setMedia] = useState<Record<string, string>>({})
+  const [scans, setScans] = useState<{ card: string | null; essay: string | null }>({ card: null, essay: null })
   useEffect(() => { (supabase as any).rpc('contest_public_get', { p_slug: slug }).then(({ data }: any) => setInfo(data ?? null)) }, [slug])
 
   const color = info?.primary_color || '#05907B'
@@ -33,8 +34,9 @@ export default function ConcursoResultado() {
     setBusy(true)
     const { data } = await (supabase as any).rpc('contest_public_result', { p_slug: slug, p_number: Number(number), p_birth: `${m[3]}-${m[2]}-${m[1]}` })
     setBusy(false); setRes(data ?? { ok: false, error: 'Não foi possível consultar agora. Tente de novo.' })
-    if (data?.ok && data.questions?.some((q: Q) => q.images?.length)) {
-      ;(supabase as any).functions.invoke('contest-result-media', { body: { slug, number: Number(number), birth: `${m[3]}-${m[2]}-${m[1]}` } }).then(({ data: md }: any) => setMedia(md?.urls ?? {})).catch(() => {})
+    if (data?.ok) {
+      setScans({ card: null, essay: null })
+      ;(supabase as any).functions.invoke('contest-result-media', { body: { slug, number: Number(number), birth: `${m[3]}-${m[2]}-${m[1]}` } }).then(({ data: md }: any) => { setMedia(md?.urls ?? {}); setScans({ card: md?.card ?? null, essay: md?.essay ?? null }) }).catch(() => {})
     }
   }
   const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #D5DCE6', borderRadius: 12, padding: '12px 13px', fontSize: 16, fontFamily: 'inherit', color: '#1A2B4A', background: '#fff' }
@@ -135,6 +137,12 @@ export default function ConcursoResultado() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+            {(scans.card || scans.essay) && (
+              <div style={{ marginTop: 16, display: 'grid', gap: 14 }}>
+                {scans.card && <div><div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>Seu cartão-resposta</div><div style={{ fontSize: 12.5, color: '#64748B', marginBottom: 6 }}>Foto da folha que o aluno entregou. Toque para ampliar.</div><a href={scans.card} target="_blank" rel="noreferrer"><img src={scans.card} alt="Cartão-resposta do aluno" style={{ width: '100%', borderRadius: 12, border: '1px solid #E2E8F0' }} /></a></div>}
+                {scans.essay && <div><div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>Sua redação</div><div style={{ fontSize: 12.5, color: '#64748B', marginBottom: 6 }}>Foto da folha de redação do aluno. Toque para ampliar.</div><a href={scans.essay} target="_blank" rel="noreferrer"><img src={scans.essay} alt="Redação do aluno" style={{ width: '100%', borderRadius: 12, border: '1px solid #E2E8F0' }} /></a></div>}
               </div>
             )}
             <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 14 }}>Dúvidas sobre o resultado e a matrícula: fale com a secretaria da escola.</div>
