@@ -20,7 +20,7 @@ function Marks() {
 
 // Um caderno completo (capa, questões, rascunho e redação) de uma série e versão. Mede as páginas por conta própria
 // para fechar frente e verso, então pode ser repetido por aluno no lote por sala.
-function CadernoDoc({ contest, school, subjects, ver, questions, grade }: { contest: Contest; school: { name: string; logo_url: string | null; primary_color: string | null } | null; subjects: Subject[]; ver: ExamVersionRow; questions: Record<string, Question>; grade: string }) {
+function CadernoDoc({ contest, school, subjects, ver, questions, grade, student }: { contest: Contest; school: { name: string; logo_url: string | null; primary_color: string | null } | null; subjects: Subject[]; ver: ExamVersionRow; questions: Record<string, Question>; grade: string; student?: { name: string; number: number; room: string } }) {
   const essay = essayFor(contest, grade)
   const N = ver.items.length
   const subjName = (id: string) => subjects.find(s => s.id === id)?.name ?? ''
@@ -97,6 +97,15 @@ function CadernoDoc({ contest, school, subjects, ver, questions, grade }: { cont
                 <div style={{ background: '#fff', color: '#000', borderRadius: 10, padding: '4mm 7mm', textAlign: 'center' }}><div style={{ fontSize: 10, fontWeight: 700 }}>VERSÃO</div><div style={{ fontSize: 44, fontWeight: 800, lineHeight: 1 }}>{ver.version}</div></div>
               </div>
               <div style={{ padding: '10mm 16mm' }}>
+                <div style={{ border: `1.5px solid ${accent}`, borderRadius: 6, padding: '4mm 5mm', marginBottom: '7mm', fontSize: '11pt' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}><b>Aluno:</b>{student?.name ? <span style={{ fontWeight: 800, fontSize: '13pt' }}>{student.name}</span> : <span style={{ flex: 1, borderBottom: '1px solid #000', height: '6mm' }} />}</div>
+                  <div style={{ display: 'flex', gap: '8mm', marginTop: '3mm', alignItems: 'baseline', flexWrap: 'wrap' }}>
+                    <span><b>Inscrição nº:</b> {student ? <b style={{ fontSize: '13pt' }}>{student.number}</b> : '________'}</span>
+                    <span><b>Sala:</b> {student?.room ? <b style={{ fontSize: '13pt' }}>{student.room}</b> : '________'}</span>
+                    <span><b>Série:</b> {grade}</span>
+                    <span><b>Versão:</b> {ver.version}</span>
+                  </div>
+                </div>
                 <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: .5 }}>CADERNO DE QUESTÕES</div>
                 <div style={{ height: 3, width: 60, background: accent, margin: '3mm 0 6mm' }} />
                 <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 3 }}>LEIA COM ATENÇÃO</div>
@@ -164,6 +173,7 @@ export default function ConcursoImprimir() {
   const [questions, setQuestions] = useState<Record<string, Question>>({})
   const [cands, setCands] = useState<Candidate[]>([])
   const [qrs, setQrs] = useState<Record<string, string>>({})
+  const [roomNames, setRoomNames] = useState<Record<string, string>>({})
   const [printing, setPrinting] = useState(false)
   useEffect(() => { (async () => {
     const { data: c } = await db.from('contests').select('*').eq('id', contestId).maybeSingle()
@@ -179,6 +189,7 @@ export default function ConcursoImprimir() {
     if (roomParam) {
       const { data: rs } = await db.from('contest_rooms').select('*').eq('contest_id', contestId).order('position').order('created_at')
       const order = new Map<string, number>((rs ?? []).map((r: any, i: number) => [r.id, i]))
+      setRoomNames(Object.fromEntries((rs ?? []).map((r: any) => [r.id, r.name])))
       let list: Candidate[] = (cd.data ?? []).filter((x: any) => roomParam === 'serie' ? x.grade === grade : roomParam === 'all' ? order.has(x.room_id) : x.room_id === roomParam)
       if (q.get('only') !== 'avulsas') list = list.filter((x: any) => !x.avulso) // lote normal não repete as avulsas
       if (kind === 'redacao') list = list.filter(x => essayFor(c, x.grade).enabled)
@@ -256,7 +267,7 @@ export default function ConcursoImprimir() {
       {kind === 'caderno' && roomParam && cands.map((c, i) => {
         const v2 = versions.find(v => v.grade === c.grade && v.version === versionFor(c.number, contest.versions_count))
         if (!v2) return null
-        return <div key={c.id} style={i ? { breakBefore: 'page' } : undefined}><CadernoDoc contest={contest} school={school} subjects={subjects} ver={v2} questions={questions} grade={c.grade} /></div>
+        return <div key={c.id} style={i ? { breakBefore: 'page' } : undefined}><CadernoDoc contest={contest} school={school} subjects={subjects} ver={v2} questions={questions} grade={c.grade} student={{ name: (c as any).student_name?.trim() || '', number: c.number, room: roomNames[(c as any).room_id] || '' }} /></div>
       })}
 
       {kind === 'cartoes' && cands.map(c => {
