@@ -1,8 +1,8 @@
 // Aba "Correção": sobe o PDF dos cartões escaneados, lê, corrige, e leva os casos duvidosos para conferência.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, FileUp, Loader2, Keyboard, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Camera, FileUp, Loader2, Keyboard, CheckCircle2, AlertTriangle, FileText } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
-import { db, GRADES, LETTERS, type Candidate, type Contest, type Question, type Subject, candName } from '../../lib/concurso'
+import { db, GRADES, LETTERS, essayFor, type Essay, type Candidate, type Contest, type Question, type Subject, candName } from '../../lib/concurso'
 import { gradeAnswers, readCard, readCardFree, type Flag } from '../../lib/omr'
 import CorrecaoCamera, { type Outcome, type Parsed } from './CorrecaoCamera'
 import { pdfPages } from '../../lib/pdfPages'
@@ -26,18 +26,21 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [log, setLog] = useState<string[]>([])
-  const [filter, setFilter] = useState<'all' | 'review' | 'ok' | 'missing'>('all')
+  const [filter, setFilter] = useState<'all' | 'review' | 'ok' | 'missing' | 'noessay' | 'togradeessay'>('all')
+  const [essays, setEssays] = useState<Essay[]>([])
+  const [viewEssay, setViewEssay] = useState<Candidate | null>(null)
   const [grade, setGrade] = useState('')
   const [editing, setEditing] = useState<Candidate | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [camOpen, setCamOpen] = useState(false)
 
   const load = useCallback(async () => {
-    const [v, r] = await Promise.all([
+    const [v, r, e] = await Promise.all([
       db.from('contest_exam_versions').select('*').eq('contest_id', contest.id),
       db.from('contest_results').select('*').eq('contest_id', contest.id),
+      db.from('contest_essays').select('*').eq('contest_id', contest.id),
     ])
-    setVersions(v.data ?? []); setResults(r.data ?? [])
+    setVersions(v.data ?? []); setResults(r.data ?? []); setEssays(e.data ?? [])
   }, [contest.id])
   useEffect(() => { load() }, [load])
 
@@ -123,11 +126,18 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
   }
 
   const resOf = (id: string) => results.find(r => r.candidate_id === id)
+  const essayOf = (id: string) => essays.find(e => e.candidate_id === id)
+  const hasEssayFor = (c: Candidate) => contest.has_essay && essayFor(contest, c.grade).enabled
+  const essayDone = (e?: Essay) => !!e && (e.total != null || e.annulled)
   const rows = cands.filter(c => (!grade || c.grade === grade) && (() => {
     const r = resOf(c.id)
+    if (filter === 'noessay') return hasEssayFor(c) && !essayOf(c.id)
+    if (filter === 'togradeessay') return hasEssayFor(c) && !!essayOf(c.id) && !essayDone(essayOf(c.id))
     return filter === 'all' || (filter === 'missing' && !r) || (filter === 'review' && r?.status === 'review') || (filter === 'ok' && r && r.status !== 'review')
   })())
   const counts = { total: cands.length, read: results.filter(r => r.status !== 'review').length, review: results.filter(r => r.status === 'review').length, missing: cands.filter(c => !resOf(c.id)).length }
+  const withEssay = cands.filter(hasEssayFor)
+  const eCounts = { total: withEssay.length, got: withEssay.filter(c => essayOf(c.id)).length, graded: withEssay.filter(c => essayDone(essayOf(c.id))).length }
   const hasExam = versions.length > 0
 
   return (
@@ -156,8 +166,21 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
         ))}
       </div>
 
+      {eCounts.total > 0 && (
+        <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontWeight: 800, color: BRAND.ink }}>Redações</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+            {([['Recebidas', `${eCounts.got} de ${eCounts.total}`, BRAND.ink], ['Faltam chegar', eCounts.total - eCounts.got, eCounts.total - eCounts.got ? '#B45309' : BRAND.success], ['Faltam corrigir', eCounts.got - eCounts.graded, eCounts.got - eCounts.graded ? '#B45309' : BRAND.success]] as const).map(([l, v, c]) => (
+              <div key={l}><div style={{ fontSize: 12, fontWeight: 700, color: BRAND.muted }}>{l}</div><div style={{ fontSize: 20, fontWeight: 800, color: c }}>{v}</div></div>
+            ))}
+          </div>
+          <div style={{ height: 8, borderRadius: 99, background: '#F1F5F9', overflow: 'hidden' }}><div style={{ width: `${(eCounts.graded / eCounts.total) * 100}%`, height: '100%', background: BRAND.success }} /></div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted }}>{eCounts.graded} corrigidas pelos professores. Toque em "Redação" no aluno para ver a folha escaneada.</div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {([['all', 'Todos'], ['review', 'Para conferir'], ['ok', 'Corrigidos'], ['missing', 'Sem cartão']] as const).map(([k, l]) => (
+        {([['all', 'Todos'], ['review', 'Para conferir'], ['ok', 'Corrigidos'], ['missing', 'Sem cartão'], ...(eCounts.total > 0 ? [['noessay', 'Sem redação'], ['togradeessay', 'Redação a corrigir']] : [])] as [typeof filter, string][]).map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)} style={{ padding: '6px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${filter === k ? BRAND.primary : BRAND.line}`, background: filter === k ? BRAND.soft : '#fff', color: filter === k ? BRAND.primaryDark : BRAND.muted }}>{l}</button>
         ))}
         <select value={grade} onChange={e => setGrade(e.target.value)} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: '6px 10px', fontSize: 13, fontFamily: 'inherit' }}>
@@ -183,10 +206,17 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
               ) : (
                 <button style={{ ...btn(), padding: '6px 10px', fontSize: 12.5 }} onClick={() => setEditing(c)}><Keyboard size={14} /> Digitar respostas</button>
               )}
+              {hasEssayFor(c) && (() => {
+                const e = essayOf(c.id)
+                const st = !e ? { t: 'Redação não recebida', fg: '#B91C1C', bg: '#FEE2E2' } : e.annulled ? { t: 'Redação zerada', fg: '#475569', bg: '#E2E8F0' } : e.total != null ? { t: `Redação ${e.total}/${e.max_total}`, fg: '#047857', bg: '#D1FAE5' } : { t: 'Redação: falta corrigir', fg: '#B45309', bg: '#FEF3C7' }
+                return <button disabled={!e} onClick={() => setViewEssay(c)} style={{ display: 'inline-flex', gap: 5, alignItems: 'center', fontSize: 12, fontWeight: 700, color: st.fg, background: st.bg, padding: '5px 10px', borderRadius: 99, border: 0, fontFamily: 'inherit', cursor: e ? 'pointer' : 'default' }}><FileText size={13} /> {st.t}</button>
+              })()}
             </div>
           )
         })}
       </div>
+
+      {viewEssay && <EssayView cand={viewEssay} essay={essayOf(viewEssay.id)!} onClose={() => setViewEssay(null)} />}
 
       {editing && (
         <Conference
@@ -245,6 +275,36 @@ function Conference({ cand, contest, result, version, exam, subjects, subjectOf,
           <button style={btn(true)} disabled={saving} onClick={async () => { setSaving(true); await onSave(answers, version); setSaving(false) }}>{saving && <Loader2 size={15} className="animate-spin" />} Confirmar e salvar</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+
+// Folha de redação escaneada de um aluno, para a coordenação conferir (o professor corrige às cegas, em outra tela).
+function EssayView({ cand, essay, onClose }: { cand: Candidate; essay: Essay; onClose: () => void }) {
+  const [img, setImg] = useState<string | null>(null)
+  const [zoom, setZoom] = useState(1)
+  useEffect(() => {
+    let alive = true
+    if (essay.scan_path) db.storage.from('contest-scans').createSignedUrl(essay.scan_path, 3600).then(({ data }: any) => { if (alive) setImg(data?.signedUrl ?? null) })
+    return () => { alive = false }
+  }, [essay.scan_path])
+  const done = essay.total != null || essay.annulled
+  return (
+    <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: '#fff', zIndex: 80, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${BRAND.line}` }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 800, color: BRAND.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Redação de {candName(cand)}</div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted }}>Inscrição {cand.number} · {cand.grade} · {essay.annulled ? 'zerada' : done ? `nota ${essay.total}/${essay.max_total}` : 'ainda não corrigida'}</div>
+        </div>
+        <button style={btn()} onClick={() => setZoom(z => Math.max(.6, z - .25))} aria-label="Diminuir">−</button>
+        <button style={btn()} onClick={() => setZoom(z => Math.min(3, z + .25))} aria-label="Aumentar">+</button>
+        <button style={btn(true)} onClick={onClose}>Fechar</button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#E5E7EB', textAlign: 'center' }}>
+        {img ? <img src={img} alt="Folha de redação" style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} /> : <div style={{ padding: 40 }}><Loader2 className="animate-spin" /></div>}
+      </div>
+      {essay.note && <div style={{ padding: 12, borderTop: `1px solid ${BRAND.line}`, fontSize: 13.5, color: BRAND.ink }}><b>Observação do professor:</b> {essay.note}</div>}
     </div>
   )
 }
