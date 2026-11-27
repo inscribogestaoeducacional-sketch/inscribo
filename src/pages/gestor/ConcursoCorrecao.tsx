@@ -1,9 +1,10 @@
 // Aba "Correção": sobe o PDF dos cartões escaneados, lê, corrige, e leva os casos duvidosos para conferência.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, FileUp, Loader2, Keyboard, CheckCircle2, AlertTriangle, FileText } from 'lucide-react'
+import { Camera, FileUp, Loader2, Keyboard, CheckCircle2, AlertTriangle, FileText, Eye } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
 import { db, GRADES, LETTERS, essayFor, type Essay, type Candidate, type Contest, type Question, type Subject, candName } from '../../lib/concurso'
 import { gradeAnswers, readCard, readCardFree, type Flag } from '../../lib/omr'
+import { ContestImg } from '../../components/concurso/media'
 import CorrecaoCamera, { type Outcome, type Parsed } from './CorrecaoCamera'
 import { pdfPages } from '../../lib/pdfPages'
 import { versionFor, type ExamVersionRow } from '../../lib/concursoProva'
@@ -229,7 +230,7 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
           cand={editing} contest={contest} result={resOf(editing.id) ?? null}
           version={resOf(editing.id)?.version ?? versionFor(editing.number, contest.versions_count)}
           exam={keyOf(editing, resOf(editing.id)?.version ?? versionFor(editing.number, contest.versions_count))}
-          subjects={subjects} subjectOf={subjectsOf.get(`${editing.grade}|${resOf(editing.id)?.version ?? versionFor(editing.number, contest.versions_count)}`) ?? []}
+          subjects={subjects} questions={questions} subjectOf={subjectsOf.get(`${editing.grade}|${resOf(editing.id)?.version ?? versionFor(editing.number, contest.versions_count)}`) ?? []}
           onClose={() => setEditing(null)}
           onSave={async (answers, version, pending) => { const r = resOf(editing.id); const ok = await save(editing, version, answers, pending, pending.length ? 'review' : r && r.source === 'scan' ? 'ok' : 'manual', r?.source ?? 'manual', r?.scan_path ?? null); if (ok) { setEditing(null); load() } return !!ok }}
         />
@@ -238,8 +239,8 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
   )
 }
 
-function Conference({ cand, contest, result, version, exam, subjects, subjectOf, onClose, onSave }: {
-  cand: Candidate; contest: Contest; result: Result | null; version: string; exam?: ExamVersionRow; subjects: Subject[]; subjectOf: string[]; onClose: () => void; onSave: (a: (string | null)[], v: string, pending: Flag[]) => Promise<boolean>
+function Conference({ cand, contest, result, version, exam, subjects, questions, subjectOf, onClose, onSave }: {
+  cand: Candidate; contest: Contest; result: Result | null; version: string; exam?: ExamVersionRow; subjects: Subject[]; questions: Question[]; subjectOf: string[]; onClose: () => void; onSave: (a: (string | null)[], v: string, pending: Flag[]) => Promise<boolean>
 }) {
   const n = exam?.items.length ?? 0
   const [answers, setAnswers] = useState<(string | null)[]>(() => Array.from({ length: n }, (_, i) => result?.answers?.[i] ?? null))
@@ -249,6 +250,7 @@ function Conference({ cand, contest, result, version, exam, subjects, subjectOf,
   const flagList = result?.flags ?? []
   const [decided, setDecided] = useState<Set<number>>(new Set()) // questões marcadas que eu já resolvi (letra escolhida ou anulada)
   const pending = flagList.filter(f => !decided.has(f.q))
+  const [viewQ, setViewQ] = useState<number | null>(null) // questão aberta para leitura
   const pick = (i: number, L: string | null) => { setAnswers(cur => cur.map((x, j) => j === i ? L : x)); if (flagged.has(i)) setDecided(d => new Set(d).add(i)) }
   useEffect(() => {
     let alive = true
@@ -277,6 +279,7 @@ function Conference({ cand, contest, result, version, exam, subjects, subjectOf,
                     <b style={{ color: BRAND.ink }}>Questão {f.q + 1}</b>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: '#B45309' }}>{f.kind === 'double' ? 'o aluno marcou mais de uma alternativa' : 'marca fraca, o sistema não teve certeza'}</span>
                     <span style={{ flex: 1 }} />
+                    <button onClick={() => setViewQ(f.q)} style={{ ...btn(), padding: '5px 10px', fontSize: 12.5 }}><Eye size={14} /> Ver questão</button>
                     <span style={{ fontSize: 12, fontWeight: 800, color: done ? '#047857' : '#B45309' }}>{done ? (cur ? `Decidida: ${cur}` : 'Anulada (em branco)') : 'Falta decidir'}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -302,10 +305,44 @@ function Conference({ cand, contest, result, version, exam, subjects, subjectOf,
                   <button key={L} onClick={() => pick(i, a === L && !fl ? null : L)} style={{ width: 30, height: 30, borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, border: `1px solid ${a === L ? BRAND.primary : BRAND.line}`, background: a === L ? BRAND.primary : '#fff', color: a === L ? '#fff' : BRAND.ink }}>{L}</button>
                 ))}
                 {fl && <span style={{ fontSize: 11, color: '#B45309', fontWeight: 700 }}>{fl === 'double' ? 'duas' : 'fraca'}</span>}
+                <button onClick={() => setViewQ(i)} aria-label={`Ver questão ${i + 1}`} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.muted, padding: 4, display: 'inline-flex' }}><Eye size={16} /></button>
               </div>
             )
           })}
         </div>
+        {viewQ != null && (() => {
+          const it = exam.items[viewQ]; const q = questions.find(x => x.id === it?.question_id)
+          const right = exam.answer_key[viewQ]
+          return (
+            <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', zIndex: 90, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => setViewQ(null)}>
+              <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '18px 18px 0 0', width: '100%', maxWidth: 720, maxHeight: '86vh', overflowY: 'auto', padding: 16, boxSizing: 'border-box' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <b style={{ flex: 1, color: BRAND.ink, fontSize: 16 }}>Questão {viewQ + 1} <span style={{ color: BRAND.muted, fontWeight: 600, fontSize: 13 }}>· {subjects.find(x => x.id === subjectOf[viewQ])?.name ?? ''}</span></b>
+                  <button style={btn(true)} onClick={() => setViewQ(null)}>Fechar</button>
+                </div>
+                {!q ? <div style={{ color: BRAND.muted }}>Não encontrei o texto desta questão.</div> : (
+                  <>
+                    <div style={{ whiteSpace: 'pre-wrap', fontSize: 15, color: BRAND.ink, lineHeight: 1.5 }}>{q.statement}</div>
+                    {q.statement_images?.length > 0 && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>{q.statement_images.map(pth => <ContestImg key={pth} path={pth} />)}</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+                      {it.alt_order.map((orig, pos) => {
+                        const L = LETTERS[pos], isRight = L === right, mine = answers[viewQ] === L
+                        return (
+                          <div key={pos} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 10, border: `1px solid ${isRight ? '#6EE7B7' : BRAND.line}`, background: isRight ? '#ECFDF5' : '#fff' }}>
+                            <b style={{ width: 22, color: isRight ? '#047857' : BRAND.ink }}>{L}</b>
+                            <span style={{ flex: 1, fontSize: 14.5, color: BRAND.ink }}>{q.alternatives[orig]?.text}</span>
+                            {isRight && <span style={{ fontSize: 12, fontWeight: 800, color: '#047857' }}>Gabarito</span>}
+                            {mine && <span style={{ fontSize: 12, fontWeight: 800, color: BRAND.primaryDark }}>Marcada</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })()}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
           <button style={btn()} onClick={onClose}>Cancelar</button>
           <button style={btn(true)} disabled={saving} onClick={async () => { setSaving(true); await onSave(answers, version, pending); setSaving(false) }}>{saving && <Loader2 size={15} className="animate-spin" />} {pending.length ? `Salvar e deixar ${pending.length} para a coordenação` : 'Confirmar e salvar'}</button>
