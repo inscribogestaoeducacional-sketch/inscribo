@@ -18,6 +18,6 @@ export function ContestImg({ path, style }: { path: string; style?: React.CSSPro
     db.storage.from('contest-media').createSignedUrl(path, 3600).then(({ data }: any) => { if (alive) setUrl(data?.signedUrl ?? null) })
     return () => { alive = false }
   }, [path])
-  if (!url) return <div style={{ height: 80, borderRadius: 10, background: '#F1F5F9', ...style }} />
+  if (!url) return <div data-img-loading="1" style={{ height: 80, borderRadius: 10, background: '#F1F5F9', ...style }} />
   return <img src={url} alt="" style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 10, border: '1px solid #E3E8F0', ...style }} />
 }

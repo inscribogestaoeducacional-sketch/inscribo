@@ -18,30 +18,58 @@ function Marks() {
   </>
 }
 
+// Medida de páginas das questões, UMA por versão da prova (todos os cadernos da mesma série/versão têm o mesmo tamanho).
+// Só vale depois que todas as imagens carregaram e o valor se repetiu: medir antes disso erra a paridade e desalinha o frente e verso.
+const qpCache = new Map<string, number>()
+const qpLeader = new Map<string, string>()
+const qpKeys = new Set<string>()
+const qpListeners = new Set<() => void>()
+const qpNotify = () => qpListeners.forEach(f => f())
+export const cadernoPendentes = () => Array.from(qpKeys).filter(k => !qpCache.has(k)).length
+
 // Um caderno completo (capa, questões, rascunho e redação) de uma série e versão. Mede as páginas por conta própria
 // para fechar frente e verso, então pode ser repetido por aluno no lote por sala.
 function CadernoDoc({ contest, school, subjects, ver, questions, grade, student }: { contest: Contest; school: { name: string; logo_url: string | null; primary_color: string | null } | null; subjects: Subject[]; ver: ExamVersionRow; questions: Record<string, Question>; grade: string; student?: { name: string; number: number; room: string } }) {
   const essay = essayFor(contest, grade)
   const N = ver.items.length
   const subjName = (id: string) => subjects.find(s => s.id === id)?.name ?? ''
-  const [qpages, setQpages] = useState(0)
+  const key = ver.id
+  const [qpages, setQpages] = useState<number | null>(qpCache.get(key) ?? null)
   const measureRef = useRef<HTMLDivElement>(null)
+  const me = useRef(Math.random().toString(36).slice(2))
+  const [leader, setLeader] = useState(false)
+  useEffect(() => {
+    // quem monta primeiro faz a medição daquela versão; os demais só leem o resultado
+    qpKeys.add(key)
+    if (!qpLeader.has(key)) qpLeader.set(key, me.current)
+    setLeader(qpLeader.get(key) === me.current)
+    return () => { if (qpLeader.get(key) === me.current && !qpCache.has(key)) qpLeader.delete(key) }
+  }, [key])
   useEffect(() => {
     let alive = true
+    const sync = () => { const v = qpCache.get(key); if (alive && v !== undefined) setQpages(v) }
+    qpListeners.add(sync); sync()
+    let last = -1, stable = 0
     const measure = () => {
-      const box = measureRef.current?.querySelector('.cols') as HTMLElement | null
-      if (!box || !alive) return
+      if (!alive || !leader || qpCache.has(key)) return
+      const wrap = measureRef.current
+      const box = wrap?.querySelector('.cols') as HTMLElement | null
+      if (!wrap || !box) return
+      // espera todas as imagens da medição carregarem
+      const _im = Array.from(wrap.querySelectorAll('img'))
+      if (wrap.querySelector('[data-img-loading]') || !_im.every(i => i.complete && i.naturalWidth > 0)) { stable = 0; return }
       const mm = 96 / 25.4
       box.style.height = `${269 * mm}px`; box.style.columnFill = 'auto'
       const colW = (186 - 9) / 2 * mm, gap = 9 * mm
       const cols = Math.max(1, Math.round((box.scrollWidth + gap) / (colW + gap)))
-      setQpages(Math.ceil(cols / 2))
+      const pages = Math.ceil(cols / 2)
+      if (pages === last) stable++; else { last = pages; stable = 0 }
+      if (stable >= 2) { qpCache.set(key, pages); qpNotify() }
     }
     measure()
-    const t = setInterval(measure, 700)
-    const stop = setTimeout(() => clearInterval(t), 8000)
-    return () => { alive = false; clearInterval(t); clearTimeout(stop) }
-  }, [ver])
+    const t = setInterval(measure, 500)
+    return () => { alive = false; qpListeners.delete(sync); clearInterval(t) }
+  }, [key, leader])
         const accent = contest.print_color || school?.primary_color || '#1A2B4A'
         const ranges: { id: string; name: string; from: number; to: number }[] = []
         ver.items.forEach((it, i) => {
@@ -123,12 +151,12 @@ function CadernoDoc({ contest, school, subjects, ver, questions, grade, student 
               </div>
             </div>
 
-            <div ref={measureRef} aria-hidden style={{ position: 'absolute', left: '-9999px', top: 0, visibility: 'hidden', width: '186mm' }} className="measure">{renderCols()}</div>
+            {leader && !qpCache.has(key) && <div ref={measureRef} aria-hidden style={{ position: 'absolute', left: '-9999px', top: 0, visibility: 'hidden', width: '186mm' }} className="measure">{renderCols()}</div>}
             <div className="sheet flow">
               {renderCols()}
             </div>
 
-            {(qpages % 2 === 0) && (
+            {qpages !== null && qpages % 2 === 0 && (
               <div className="sheet flow" style={{ breakBefore: 'page', breakAfter: essay.enabled ? 'page' : 'auto', height: '269mm', overflow: 'hidden' }}>
                 <div style={{ background: accent, color: '#fff', padding: '3mm 5mm', fontWeight: 800, fontSize: 14, borderRadius: 3, display: 'flex', justifyContent: 'space-between' }}><span>{essay.enabled ? 'RASCUNHO PARA CÁLCULOS' : 'RASCUNHO'}</span><span style={{ fontWeight: 600, opacity: .9, fontSize: 11 }}>não será corrigido</span></div>
                 <div style={{ marginTop: '4mm', height: '240mm', backgroundImage: 'linear-gradient(#bbb 0.3mm, transparent 0.3mm)', backgroundSize: '100% 8mm' }} />
@@ -224,12 +252,17 @@ export default function ConcursoImprimir() {
   const doPrint = async () => {
     setPrinting(true)
     const t0 = Date.now()
-    while (Date.now() - t0 < 12000) {
+    // espera imagens E a medição de páginas de todos os cadernos; se não fechar, NÃO imprime (imprimir errado desalinha o frente e verso)
+    while (Date.now() - t0 < 120000) {
       const imgs = Array.from(document.images)
-      if (imgs.every(i => i.complete)) break
+      if (imgs.every(i => i.complete) && !document.querySelector('[data-img-loading]') && cadernoPendentes() === 0) break
       await new Promise(r => setTimeout(r, 250))
     }
-    setPrinting(false); window.print()
+    const ok = Array.from(document.images).every(i => i.complete) && !document.querySelector('[data-img-loading]') && cadernoPendentes() === 0
+    setPrinting(false)
+    if (!ok) { alert('As imagens ou a contagem de páginas ainda não terminaram de carregar. Aguarde um pouco e clique em Imprimir de novo. Não imprima antes disso: o frente e verso sairia desalinhado.'); return }
+    await new Promise(r => setTimeout(r, 400))
+    window.print()
   }
 
   if (state === 'loading') return <div style={{ padding: 40, fontFamily: 'system-ui' }}>Carregando…</div>
