@@ -512,7 +512,21 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
       </>)}
 
       {part === 'pub' && (<>
-        <div><label style={lab}>Endereço da página</label>
+        <div style={sec}>
+          <div style={secT}>Link da inscrição</div>
+          {contest.public_slug && (
+            <div style={{ background: '#fff', border: `1px solid ${BRAND.softLine}`, borderRadius: 12, padding: '10px 12px' }}>
+              <div style={{ fontSize: 12.5, color: BRAND.muted }}>Divulgue este link para as famílias</div>
+              <div style={{ fontWeight: 800, fontSize: 14.5, color: BRAND.ink, overflowWrap: 'anywhere', margin: '2px 0 8px' }}>{window.location.origin.replace(/^https?:\/\//, '')}/bolsas/{contest.public_slug}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button style={{ ...btn(true), padding: '8px 14px', fontSize: 13 }} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/bolsas/${contest.public_slug}`)}>Copiar link</button>
+                <a style={{ ...btn(), padding: '8px 14px', fontSize: 13, textDecoration: 'none' }} href={`/bolsas/${contest.public_slug}`} target="_blank" rel="noreferrer">Abrir a página</a>
+              </div>
+            </div>
+          )}
+          <details open={!contest.public_slug} style={{ margin: 0 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 13.5, fontWeight: 800, color: BRAND.muted, marginBottom: 8 }}>{contest.public_slug ? 'Mudar o endereço' : 'Definir o endereço'}</summary>
+        <div>
           {(() => {
             const cur = f.public_slug || slugBase
             const suffix = slugBase && cur.startsWith(slugBase) ? cur.slice(slugBase.length).replace(/^-/, '') : ''
@@ -527,34 +541,40 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
             </>)
           })()}
         </div>
-        {contest.public_slug && (
-          <div style={{ fontSize: 13, color: BRAND.muted }}>Link para divulgar: <b style={{ color: BRAND.ink }}>{window.location.origin}/bolsas/{contest.public_slug}</b> {' '}
-            <button style={{ ...btn(), padding: '4px 10px', fontSize: 12.5 }} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/bolsas/${contest.public_slug}`)}>Copiar</button>
-            <div style={{ marginTop: 4 }}>Para aparecer na Vitrine, adicione um botão de matrícula (modo link) com este endereço.</div></div>
-        )}
-        <EditalUpload contest={contest} lab={lab} onChanged={onChanged} />
-        <div>
-          <label style={lab}>Perguntas da inscrição (texto e se é obrigatória)</label>
+          </details>
+          {contest.public_slug && <div style={{ fontSize: 12.5, color: BRAND.muted }}>Para aparecer na Vitrine, adicione um botão de matrícula (modo link) com este endereço.</div>}
+        </div>
+        <div style={sec}>
+          <div style={secT}>Edital</div>
+          <EditalUpload contest={contest} lab={{ display: 'none' }} onChanged={onChanged} />
+        </div>
+        <div style={sec}>
+          <div style={secT}>Perguntas da inscrição</div>
+          <div style={{ fontSize: 13, color: BRAND.muted, marginTop: -6 }}>Mude o texto de cada pergunta e escolha o que a família precisa responder.</div>
           {FORM_FIELDS.map(d => {
             const c = fieldCfg(f.form_config, d.key)
             const setC = (patch: Record<string, unknown>) => setF({ ...f, form_config: { ...(f.form_config ?? {}), fields: { ...(f.form_config?.fields ?? {}), [d.key]: { ...(f.form_config?.fields?.[d.key] ?? {}), ...patch } } } })
             return (
-              <div key={d.key} style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', alignItems: 'center', marginBottom: 12 }}>
+              <div key={d.key} style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: '10px 12px', display: 'flex', flexWrap: 'wrap', gap: '8px 16px', alignItems: 'center' }}>
                 <input style={{ ...input, flex: '1 1 100%', opacity: c.enabled ? 1 : .5 }} value={f.form_config?.fields?.[d.key]?.label ?? d.label} onChange={e => setC({ label: e.target.value })} aria-label={`Texto da pergunta: ${d.label}`} />
-                <label style={{ fontSize: 12.5, display: 'flex', gap: 4, alignItems: 'center', opacity: d.locked ? .5 : 1 }}><input type="checkbox" disabled={d.locked || !c.enabled} checked={c.required} onChange={e => setC({ required: e.target.checked })} />Obrigatória</label>
-                <label style={{ fontSize: 12.5, display: 'flex', gap: 4, alignItems: 'center', opacity: d.locked ? .5 : 1 }}><input type="checkbox" disabled={d.locked} checked={c.enabled} onChange={e => setC({ enabled: e.target.checked })} />Mostrar</label>
+                {d.locked
+                  ? <span style={{ fontSize: 12.5, fontWeight: 700, color: BRAND.muted }}>Sempre aparece e é obrigatória</span>
+                  : <>
+                    <label style={{ fontSize: 13, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={c.enabled} onChange={e => setC({ enabled: e.target.checked })} />Mostrar</label>
+                    <label style={{ fontSize: 13, display: 'flex', gap: 6, alignItems: 'center', opacity: c.enabled ? 1 : .5 }}><input type="checkbox" disabled={!c.enabled} checked={c.required} onChange={e => setC({ required: e.target.checked })} />Obrigatória</label>
+                  </>}
               </div>
             )
           })}
-          <div style={{ fontSize: 12.5, color: BRAND.muted }}>Nome do aluno, série, responsável e WhatsApp são sempre obrigatórios (só o texto muda). Perguntas extras ficam logo abaixo.</div>
         </div>
-        <div>
-          <label style={lab}>Perguntas extras na inscrição</label>
+        <div style={sec}>
+          <div style={secT}>Perguntas extras</div>
+          {(f.extra_fields ?? []).length === 0 && <div style={{ fontSize: 13, color: BRAND.muted, marginTop: -6 }}>Nenhuma pergunta extra. Use para pedir algo além do básico, como "Como conheceu o colégio?".</div>}
           {(f.extra_fields ?? []).map((x: ExtraField, i: number) => (
-            <div key={x.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(160px,2fr) 110px minmax(120px,2fr) auto auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-              <input style={input} placeholder="Pergunta" value={x.label} onChange={e => setF({ ...f, extra_fields: f.extra_fields.map((y: ExtraField, j: number) => j === i ? { ...y, label: e.target.value } : y) })} />
-              <select style={input} value={x.type} onChange={e => setF({ ...f, extra_fields: f.extra_fields.map((y: ExtraField, j: number) => j === i ? { ...y, type: e.target.value as 'text' | 'select' } : y) })}><option value="text">Texto</option><option value="select">Escolha</option></select>
-              <input style={{ ...input, opacity: x.type === 'select' ? 1 : .4 }} disabled={x.type !== 'select'} placeholder="Opções separadas por vírgula" value={(x.options ?? []).join(', ')} onChange={e => setF({ ...f, extra_fields: f.extra_fields.map((y: ExtraField, j: number) => j === i ? { ...y, options: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } : y) })} />
+            <div key={x.id} style={{ background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 12, padding: '10px 12px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <input style={{ ...input, flex: '1 1 100%' }} placeholder="Pergunta" value={x.label} onChange={e => setF({ ...f, extra_fields: f.extra_fields.map((y: ExtraField, j: number) => j === i ? { ...y, label: e.target.value } : y) })} />
+              <select style={{ ...input, flex: '0 0 110px' }} value={x.type} onChange={e => setF({ ...f, extra_fields: f.extra_fields.map((y: ExtraField, j: number) => j === i ? { ...y, type: e.target.value as 'text' | 'select' } : y) })}><option value="text">Texto</option><option value="select">Escolha</option></select>
+              <input style={{ ...input, flex: '1 1 160px', opacity: x.type === 'select' ? 1 : .4 }} disabled={x.type !== 'select'} placeholder="Opções separadas por vírgula" value={(x.options ?? []).join(', ')} onChange={e => setF({ ...f, extra_fields: f.extra_fields.map((y: ExtraField, j: number) => j === i ? { ...y, options: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } : y) })} />
               <label style={{ fontSize: 12.5, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={!!x.required} onChange={e => setF({ ...f, extra_fields: f.extra_fields.map((y: ExtraField, j: number) => j === i ? { ...y, required: e.target.checked } : y) })} />Obrigatória</label>
               <button aria-label="Remover pergunta" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.danger }} onClick={() => setF({ ...f, extra_fields: f.extra_fields.filter((_: ExtraField, j: number) => j !== i) })}><Trash2 size={15} /></button>
             </div>
