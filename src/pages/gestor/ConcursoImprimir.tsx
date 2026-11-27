@@ -249,6 +249,7 @@ export default function ConcursoImprimir() {
         * { box-sizing: border-box; }
         .bar { position: sticky; top: 0; background: #1A2B4A; color: #fff; padding: 10px 16px; display: flex; gap: 12px; align-items: center; font-size: 14px; z-index: 5 }
         .bar button { padding: 8px 16px; border-radius: 10px; border: 0; background: #05907B; color: #fff; font-weight: 700; cursor: pointer }
+        *, *::before, *::after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         .sheet { background: #fff; width: 210mm; margin: 12px auto; position: relative; }
         .full { height: 297mm; page-break-after: always; overflow: hidden; }
         .flow { padding: 12mm 12mm 16mm; }
@@ -317,13 +318,12 @@ export default function ConcursoImprimir() {
             {school?.logo_url && <img src={school.logo_url} alt="" style={{ height: '14mm', maxWidth: '40mm', objectFit: 'contain', marginBottom: '2mm' }} />}
             <div style={{ fontWeight: 800, fontSize: 18 }}>FOLHA DE REDAÇÃO</div>
             <div style={{ fontSize: 11, margin: '2mm 0' }}>{contest.name} · {c.grade}</div>
-            <div style={{ fontSize: 12 }}>Inscrição nº <b style={{ fontSize: 22 }}>{c.number}</b></div>
-            <div style={{ fontSize: 12, marginTop: 1 }}>Sala: {roomLabel(c) ? <b style={{ fontSize: 14 }}>{roomLabel(c)}</b> : '__________'}</div>
-            <div style={{ fontSize: 10, marginTop: 3 }}>Não escreva seu nome, não assine e não faça marcas que o identifiquem.</div>
+            <div style={{ fontSize: 12, display: 'flex', alignItems: 'baseline', gap: '8mm' }}><span>Inscrição nº <b style={{ fontSize: 20 }}>{c.number}</b></span><span>Sala: {roomLabel(c) ? <b style={{ fontSize: 16 }}>{roomLabel(c)}</b> : '__________'}</span></div>
+            <div style={{ fontSize: 9.5, marginTop: '2mm' }}>Não escreva seu nome, não assine e não faça marcas que o identifiquem.</div>
           </div>
           {qrs[c.id] && <img src={qrs[c.id]} alt="" style={{ position: 'absolute', right: '20mm', top: '16mm', width: '30mm', height: '30mm' }} />}
-          {Array.from({ length: 30 }, (_, i) => (
-            <div key={i} style={{ position: 'absolute', left: '20mm', right: '20mm', top: `${58 + i * 7.3}mm`, borderBottom: '0.3mm solid #444', height: 0 }}>
+          {Array.from({ length: 29 }, (_, i) => (
+            <div key={i} style={{ position: 'absolute', left: '20mm', right: '20mm', top: `${68 + i * 7}mm`, borderBottom: '0.3mm solid #444', height: 0 }}>
               <span style={{ position: 'absolute', left: '-8mm', top: '-3mm', fontSize: 7, color: '#555' }}>{i + 1}</span>
             </div>
           ))}
