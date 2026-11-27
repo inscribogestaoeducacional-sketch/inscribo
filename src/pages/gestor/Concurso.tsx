@@ -48,9 +48,12 @@ async function removeQuestions(contestId: string, qs: Question[]): Promise<strin
 }
 const STAGES = [
   { id: 'trilha', label: 'Visão geral', tabs: [['trilha', 'Trilha do concurso']] },
-  { id: 'prep', label: 'Preparar', tabs: [['config', '1 · Dados básicos'], ['pub', '2 · Inscrição e edital'], ['fmt', '3 · Formato da prova'], ['prof', '4 · Professores e cotas'], ['quest', '5 · Questões'], ['prova', '6 · Fechar a prova']] },
+  { id: 'dados', label: 'Dados e edital', tabs: [['config', 'Dados básicos'], ['pub', 'Inscrição e edital'], ['fmt', 'Formato da prova']] },
+  { id: 'quest', label: 'Questões', tabs: [['prof', 'Professores e cotas'], ['quest', 'Questões']] },
+  { id: 'prova', label: 'Fechar a prova', tabs: [['prova', 'Fechar a prova']] },
   { id: 'insc', label: 'Inscrições', tabs: [['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails']] },
-  { id: 'corr', label: 'Aplicar e corrigir', tabs: [['salas', 'Salas e impressão'], ['corr', 'Correção']] },
+  { id: 'salas', label: 'Salas e impressão', tabs: [['salas', 'Salas e impressão']] },
+  { id: 'corr', label: 'Aplicar e corrigir', tabs: [['corr', 'Correção']] },
   { id: 'res', label: 'Resultados', tabs: [['res', 'Ranking e divulgação']] },
 ] as const
 type Tab = 'trilha' | 'salas' | 'config' | 'fmt' | 'pub' | 'prof' | 'quest' | 'prova' | 'painel' | 'insc' | 'mail' | 'corr' | 'res'
@@ -99,9 +102,13 @@ export default function Concurso() {
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}><Loader2 className="animate-spin" /></div>
 
   const stageOf = STAGES.find(st => (st.tabs as readonly (readonly [string, string])[]).some(t => t[0] === tab)) ?? STAGES[0]
+  const phases = STAGES.filter(st => st.id !== 'trilha')
+  const phaseIdx = phases.findIndex(st => st.id === stageOf.id)
+  const phaseNo = phaseIdx + 1, phaseTotal = phases.length
+  const prevPhase = phaseIdx > 0 ? phases[phaseIdx - 1] : null
+  const nextPhase = phaseIdx >= 0 && phaseIdx < phases.length - 1 ? phases[phaseIdx + 1] : null
   const approved = questions.filter(q => q.status === 'approved').length
   const days = contest?.exam_date ? Math.ceil((new Date(contest.exam_date.split('T')[0] + 'T12:00:00').getTime() - Date.now()) / 86400000) : null
-  const stageHint = (id: string) => id === 'trilha' ? 'O processo todo, passo a passo' : id === 'prep' ? `${approved} de ${questions.length} questões aprovadas` : id === 'insc' ? `${cands.length} inscritos` : id === 'corr' ? 'Salas, cartões e redações' : contest ? CONTEST_STATUS[contest.status] : ''
   const stat = (label: string, value: React.ReactNode) => (
     <div style={{ ...card, flex: '1 1 0', minWidth: 0, padding: '8px 10px' }}>
       <div style={{ fontSize: 11.5, fontWeight: 700, color: BRAND.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
@@ -126,25 +133,24 @@ export default function Concurso() {
         <NewContest instId={instId} onCreated={async id => { await loadAll(); setSel(id) }} />
       ) : (
         <>
-          <StatusBar contest={contest} flash={flash} onChanged={() => { loadAll(); loadContest() }} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            {stat('Inscritos', cands.length)}
-            {stat('Questões ok', `${approved}/${questions.length}`)}
-            {stat('Dias p/ prova', days === null ? '—' : days < 0 ? 'Já passou' : days === 0 ? 'Hoje' : days)}
-          </div>
-          {tab !== 'trilha' && (
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
-              <button onClick={() => setTab('trilha')} style={{ flex: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, borderRadius: 99, padding: '7px 13px', border: `1px solid ${BRAND.softLine}`, background: BRAND.softer, color: BRAND.primaryDark, whiteSpace: 'nowrap' }}>← Trilha</button>
-              {STAGES.filter(st => st.id !== 'trilha').map((st, i) => {
-                const on = st.id === stageOf.id
-                return (
-                  <button key={st.id} onClick={() => setTab(st.tabs[0][0] as Tab)} style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, borderRadius: 99, padding: '6px 13px 6px 7px', whiteSpace: 'nowrap', border: `1.5px solid ${on ? BRAND.primary : BRAND.line}`, background: on ? BRAND.soft : '#fff', color: BRAND.ink }}>
-                    <span style={{ width: 20, height: 20, borderRadius: 99, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, background: on ? BRAND.primary : BRAND.line, color: on ? '#fff' : BRAND.muted }}>{i + 1}</span>{st.label}
-                  </button>
-                )
-              })}
+          {tab === 'trilha' && <StatusBar contest={contest} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}
+          {tab === 'trilha' && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              {stat('Inscritos', cands.length)}
+              {stat('Questões ok', `${approved}/${questions.length}`)}
+              {stat('Dias p/ prova', days === null ? '—' : days < 0 ? 'Já passou' : days === 0 ? 'Hoje' : days)}
             </div>
           )}
+          {tab !== 'trilha' && (
+            <div style={{ ...card, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => setTab('trilha')} aria-label="Voltar para a trilha" style={{ flex: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, borderRadius: 99, padding: '7px 12px', border: `1px solid ${BRAND.softLine}`, background: BRAND.softer, color: BRAND.primaryDark }}>← Trilha</button>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: BRAND.primary }}>Fase {phaseNo} de {phaseTotal}</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: BRAND.ink, lineHeight: 1.2 }}>{stageOf.label}</div>
+              </div>
+            </div>
+          )}
+          {tab !== 'trilha' && stageOf.id === 'insc' && <StatusBar contest={contest} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}
           {stageOf.tabs.length > 1 && (
             <div style={{ display: 'flex', gap: 6, background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 4, overflowX: 'auto', alignSelf: 'flex-start', maxWidth: '100%' }}>
               {stageOf.tabs.map(([k, l]) => (
@@ -164,6 +170,12 @@ export default function Concurso() {
           {tab === 'res' && <ConcursoResultados key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'prof' && <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}><RedacaoStatus contest={contest} cands={cands} /><Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} /></div>}
           {tab === 'quest' && <Review contest={contest} subjects={subjects} teachers={teachers} questions={questions} flash={flash} onChanged={loadContest} />}
+          {tab !== 'trilha' && (
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', paddingBottom: 90 }}>
+              <button onClick={() => setTab((prevPhase ? prevPhase.tabs[0][0] : 'trilha') as Tab)} style={{ ...btn(), padding: '12px 16px' }}>← {prevPhase ? prevPhase.label : 'Trilha'}</button>
+              <button onClick={() => setTab((nextPhase ? nextPhase.tabs[0][0] : 'trilha') as Tab)} style={{ ...btn(true), padding: '12px 18px' }}>{nextPhase ? `Continuar: ${nextPhase.label} →` : 'Concluir →'}</button>
+            </div>
+          )}
         </>
       )}
     </div>
