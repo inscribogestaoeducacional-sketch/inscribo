@@ -174,6 +174,7 @@ export default function ConcursoImprimir() {
   const [cands, setCands] = useState<Candidate[]>([])
   const [qrs, setQrs] = useState<Record<string, string>>({})
   const [roomNames, setRoomNames] = useState<Record<string, string>>({})
+  const roomLabel = (c: any) => roomNames[c.room_id] || ''
   const [printing, setPrinting] = useState(false)
   useEffect(() => { (async () => {
     const { data: c } = await db.from('contests').select('*').eq('id', contestId).maybeSingle()
@@ -284,6 +285,7 @@ export default function ConcursoImprimir() {
               <div style={{ fontSize: 11 }}>{contest.name} · {c.grade}</div>
               <div style={{ fontWeight: 800, fontSize: 18, margin: '3mm 0 2mm' }}>CARTÃO-RESPOSTA</div>
               <div style={{ fontSize: 11 }}>Inscrição nº <b style={{ fontSize: 15 }}>{c.number}</b> &nbsp;·&nbsp; Versão <b style={{ fontSize: 15 }}>{ver2}</b></div>
+              <div style={{ fontSize: 12, marginTop: 2 }}>Sala: {roomLabel(c) ? <b style={{ fontSize: 15 }}>{roomLabel(c)}</b> : '__________'}</div>
               <div style={{ fontSize: 12, marginTop: 2 }}>{c.student_name ? <b>{c.student_name}</b> : <span>Nome: ______________________________________</span>}</div>
               </div>
             </div>
@@ -316,6 +318,7 @@ export default function ConcursoImprimir() {
             <div style={{ fontWeight: 800, fontSize: 18 }}>FOLHA DE REDAÇÃO</div>
             <div style={{ fontSize: 11, margin: '2mm 0' }}>{contest.name} · {c.grade}</div>
             <div style={{ fontSize: 12 }}>Inscrição nº <b style={{ fontSize: 22 }}>{c.number}</b></div>
+            <div style={{ fontSize: 12, marginTop: 1 }}>Sala: {roomLabel(c) ? <b style={{ fontSize: 14 }}>{roomLabel(c)}</b> : '__________'}</div>
             <div style={{ fontSize: 10, marginTop: 3 }}>Não escreva seu nome, não assine e não faça marcas que o identifiquem.</div>
           </div>
           {qrs[c.id] && <img src={qrs[c.id]} alt="" style={{ position: 'absolute', right: '20mm', top: '16mm', width: '30mm', height: '30mm' }} />}
@@ -342,6 +345,7 @@ export default function ConcursoImprimir() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 17, fontWeight: 800 }}>{c.student_name}</div>
                 <div style={{ fontSize: 11.5, marginTop: 2 }}>{c.grade} · Versão da prova {versionFor(c.number, contest.versions_count)}{date && ` · Prova em ${date}`}</div>
+                <div style={{ fontSize: 13, marginTop: 3 }}>Sala: {roomLabel(c) ? <b style={{ fontSize: 16 }}>{roomLabel(c)}</b> : '__________'}</div>
               </div>
               <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, fontWeight: 700 }}>INSCRIÇÃO Nº</div><div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1 }}>{c.number}</div></div>
             </div>

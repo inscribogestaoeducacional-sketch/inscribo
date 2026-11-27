@@ -85,6 +85,33 @@ export default function ConcursoSalas({ contest, cands, onChanged, onGoProva, on
     setBusy(false); onChanged()
   }
 
+  // Mistura aleatória: espalha cada série por todas as salas, para os colegas de turma não ficarem juntos.
+  const mixAll = async () => {
+    if (!rooms.length) return flash('Crie as salas primeiro.')
+    if (!confirm('Isso embaralha TODOS os inscritos e espalha cada série por todas as salas, sem agrupar por turma. A distribuição atual será substituída. Continuar?')) return
+    setBusy(true)
+    const people = cands.filter(c => !c.avulso)
+    for (let i = people.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [people[i], people[j]] = [people[j], people[i]] }
+    const used: Record<string, number> = Object.fromEntries(rooms.map(r => [r.id, 0]))
+    const same: Record<string, Record<string, number>> = Object.fromEntries(rooms.map(r => [r.id, {}]))
+    const plan: Record<string, string[]> = {}; let left = 0
+    for (const c of people) {
+      const ok = rooms.filter(r => (!r.grade || r.grade === c.grade) && used[r.id] < r.capacity)
+      if (!ok.length) { left++; continue }
+      ok.sort((a, b) => (same[a.id][c.grade] ?? 0) - (same[b.id][c.grade] ?? 0) || used[a.id] / a.capacity - used[b.id] / b.capacity)
+      const r = ok[0]; used[r.id]++; same[r.id][c.grade] = (same[r.id][c.grade] ?? 0) + 1; (plan[r.id] ||= []).push(c.id)
+    }
+    try {
+      await db.from('contest_candidates').update({ room_id: null }).eq('contest_id', contest.id)
+      for (const [rid, ids] of Object.entries(plan)) {
+        const { error } = await db.from('contest_candidates').update({ room_id: rid }).in('id', ids)
+        if (error) throw error
+      }
+      flash(left ? `Misturado. ${left} aluno(s) ficaram sem sala: faltam lugares.` : `Misturado: ${people.length} alunos espalhados em ${rooms.length} sala(s).`)
+    } catch (e: any) { flash('Erro: ' + (e?.message || 'não foi possível misturar')) }
+    setBusy(false); onChanged()
+  }
+
   // ---------- impressões ----------
   const openDoc = (title: string, body: string, landscape = false) => {
     const w = window.open('', '_blank'); if (!w) return flash('Libere pop-ups para imprimir.')
@@ -150,6 +177,7 @@ export default function ConcursoSalas({ contest, cands, onChanged, onGoProva, on
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, alignItems: 'center' }}>
           <button style={btn()} disabled={busy || !rooms.length} onClick={() => distribute(false)}>{busy && <Loader2 size={15} className="animate-spin" />} Distribuir quem está sem sala</button>
           <button style={btn()} disabled={busy || !rooms.length} onClick={() => distribute(true)}>Refazer a distribuição de todos</button>
+          <button style={btn()} disabled={busy || !rooms.length} onClick={mixAll}>Misturar alunos entre as salas (aleatório)</button>
           <span style={{ fontSize: 13, color: BRAND.muted }}>{cands.length - noRoom.length} de {cands.length} em sala{absent ? ` · ${absent} faltaram` : ''}</span>
         </div>
       </div>
