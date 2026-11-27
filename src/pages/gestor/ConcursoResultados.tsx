@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { Loader2 } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
-import { db, essayFor, finalScore, GRADES, type Candidate, type Contest, type Decision, type Essay } from '../../lib/concurso'
+import { db, essayFor, finalScore, GRADES, type Candidate, type Contest, type Decision, type Essay, candName } from '../../lib/concurso'
 
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 16 }
 const sel: React.CSSProperties = { border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: '7px 9px', fontSize: 13.5, fontFamily: 'inherit', color: BRAND.ink, background: '#fff' }
@@ -96,7 +96,7 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
       const list = rows.filter(r => r.c.grade === g && r.pos != null)
       if (!list.length) return ''
       const hasE = essayFor(contest, g).enabled
-      return `<h2>${esc(g)}</h2><table><thead><tr><th>Pos.</th><th>Insc.</th><th style="text-align:left">Aluno</th><th>Objetiva</th>${hasE ? '<th>Redação</th>' : ''}<th>Nota final</th><th>Decisão</th></tr></thead><tbody>${list.map(r => `<tr><td>${r.pos}º</td><td>${r.c.number}</td><td style="text-align:left">${esc(r.c.student_name)}</td><td>${r.obj ?? '-'}</td>${hasE ? `<td>${r.essay ?? '-'}</td>` : ''}<td><b>${r.final}</b></td><td>${esc(decLabel(r.dec))}</td></tr>`).join('')}</tbody></table>`
+      return `<h2>${esc(g)}</h2><table><thead><tr><th>Pos.</th><th>Insc.</th><th style="text-align:left">Aluno</th><th>Objetiva</th>${hasE ? '<th>Redação</th>' : ''}<th>Nota final</th><th>Decisão</th></tr></thead><tbody>${list.map(r => `<tr><td>${r.pos}º</td><td>${r.c.number}</td><td style="text-align:left">${esc(candName(r.c))}</td><td>${r.obj ?? '-'}</td>${hasE ? `<td>${r.essay ?? '-'}</td>` : ''}<td><b>${r.final}</b></td><td>${esc(decLabel(r.dec))}</td></tr>`).join('')}</tbody></table>`
     }).join('')
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ranking — ${esc(contest.name)}</title><style>@page{size:A4;margin:14mm}body{font-family:Arial,sans-serif;color:#000;font-size:11pt}h1{font-size:16pt;margin:0}h2{font-size:13pt;margin:16px 0 6px;border-bottom:2px solid ${esc(contest.print_color || BRAND.primary)};padding-bottom:3px}table{width:100%;border-collapse:collapse;font-size:10pt;break-inside:auto}th,td{border:1px solid #999;padding:3px 6px;text-align:center}th{background:#eee}tr{break-inside:avoid}.sub{color:#444;font-size:10pt;margin:2px 0 8px}</style></head><body><h1>${esc(school?.name ?? '')} — ${esc(contest.name)}</h1><div class="sub">Ranking por série · uso da coordenação${published ? '' : ' · resultado ainda não divulgado'}</div>${body || '<p>Sem notas lançadas.</p>'}<script>setTimeout(()=>window.print(),400)</script></body></html>`)
     w.document.close()
@@ -172,7 +172,7 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
           <div key={r.c.id} style={{ display: 'flex', gap: 10, padding: '10px 14px', alignItems: 'center', borderTop: i ? `1px solid ${BRAND.line}` : 0, flexWrap: 'wrap' }}>
             <div style={{ width: 40, fontWeight: 800, color: BRAND.primaryDark }}>{r.pos != null ? `${r.pos}º` : '—'}</div>
             <div style={{ flex: 1, minWidth: 170 }}>
-              <div style={{ fontWeight: 700, color: BRAND.ink, fontSize: 14.5 }}>{r.c.student_name}</div>
+              <div style={{ fontWeight: 700, color: BRAND.ink, fontSize: 14.5 }}>{candName(r.c)}</div>
               <div style={{ fontSize: 12.5, color: BRAND.muted }}>{r.c.number} · {r.c.grade}</div>
             </div>
             <div style={{ fontSize: 12.5, color: BRAND.muted, minWidth: 130 }}>{r.c.present === false && <b style={{ color: '#B91C1C' }}>Faltou · </b>}Objetiva {r.obj ?? '-'}{r.hasEssay ? ` · Redação ${r.essay ?? 'pendente'}` : ''}</div>

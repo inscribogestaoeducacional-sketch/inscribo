@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Plus, Trash2, Printer } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
-import { db, GRADES, fmtDate, type Candidate, type Contest, type Room } from '../../lib/concurso'
+import { db, GRADES, fmtDate, type Candidate, type Contest, type Room, candName } from '../../lib/concurso'
 import { versionFor } from '../../lib/concursoProva'
 
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 16 }
 const input: React.CSSProperties = { border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: '9px 11px', fontSize: 14, fontFamily: 'inherit', color: BRAND.ink, background: '#fff', boxSizing: 'border-box' }
 const btn = (primary = false): React.CSSProperties => ({ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center', padding: '9px 14px', borderRadius: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, border: primary ? 0 : `1px solid ${BRAND.line}`, background: primary ? `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.primaryDark})` : '#fff', color: primary ? '#fff' : BRAND.ink })
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
-const byName = (a: Candidate, b: Candidate) => a.student_name.localeCompare(b.student_name, 'pt-BR')
+const byName = (a: Candidate, b: Candidate) => candName(a).localeCompare(candName(b), 'pt-BR')
 const byNumber = (a: Candidate, b: Candidate) => a.number - b.number
 
 export default function ConcursoSalas({ contest, cands, onChanged, onGoProva, onGoFormato }: { contest: Contest; cands: Candidate[]; onChanged: () => void; onGoProva?: () => void; onGoFormato?: () => void }) {
@@ -99,7 +99,7 @@ export default function ConcursoSalas({ contest, cands, onChanged, onGoProva, on
   const printPatio = () => {
     const parts = grades.map(g => {
       const list = cands.filter(c => c.grade === g).sort(byName); if (!list.length) return ''
-      return `<div class="pg"><h2>${esc(g)}</h2><table><thead><tr><th>Aluno</th><th class="c">Inscrição</th><th>Sala</th></tr></thead><tbody>${list.map(c => `<tr><td>${esc(c.student_name)}</td><td class="c">${c.number}</td><td><b>${esc(roomOf(c)?.name ?? 'a definir')}</b></td></tr>`).join('')}</tbody></table></div>`
+      return `<div class="pg"><h2>${esc(g)}</h2><table><thead><tr><th>Aluno</th><th class="c">Inscrição</th><th>Sala</th></tr></thead><tbody>${list.map(c => `<tr><td>${esc(candName(c))}</td><td class="c">${c.number}</td><td><b>${esc(roomOf(c)?.name ?? 'a definir')}</b></td></tr>`).join('')}</tbody></table></div>`
     }).join('')
     openDoc('Lista de pátio', head('Em qual sala eu fico?') + (parts || '<p>Nenhum inscrito.</p>'))
   }
@@ -114,7 +114,7 @@ export default function ConcursoSalas({ contest, cands, onChanged, onGoProva, on
     if (!rooms.length) return flash('Crie as salas primeiro.')
     openDoc('Listas de assinatura', rooms.map(r => {
       const l = inRoom(r).sort(byName); if (!l.length) return ''
-      return `<div class="pg">${head('Lista de presença e assinatura', r.name)}<table><thead><tr><th class="c" style="width:14mm">Nº</th><th>Aluno</th><th class="c" style="width:16mm">Versão</th><th style="width:62mm">Assinatura</th></tr></thead><tbody>${l.map(c => `<tr><td class="c">${c.number}</td><td>${esc(c.student_name)}<div style="font-size:8.5pt;color:#444">${esc(c.grade)}</div></td><td class="c">${versionFor(c.number, contest.versions_count)}</td><td style="height:10mm"></td></tr>`).join('')}</tbody></table><div style="margin-top:8mm;font-size:10.5pt">Fiscal: ______________________________ &nbsp; Presentes: ______ &nbsp; Ausentes: ______</div></div>`
+      return `<div class="pg">${head('Lista de presença e assinatura', r.name)}<table><thead><tr><th class="c" style="width:14mm">Nº</th><th>Aluno</th><th class="c" style="width:16mm">Versão</th><th style="width:62mm">Assinatura</th></tr></thead><tbody>${l.map(c => `<tr><td class="c">${c.number}</td><td>${esc(candName(c))}<div style="font-size:8.5pt;color:#444">${esc(c.grade)}</div></td><td class="c">${versionFor(c.number, contest.versions_count)}</td><td style="height:10mm"></td></tr>`).join('')}</tbody></table><div style="margin-top:8mm;font-size:10.5pt">Fiscal: ______________________________ &nbsp; Presentes: ______ &nbsp; Ausentes: ______</div></div>`
     }).join('') || '<p>Nenhum aluno em sala.</p>')
   }
   const printPacote = () => {
@@ -196,7 +196,7 @@ export default function ConcursoSalas({ contest, cands, onChanged, onGoProva, on
             {l.map((c, i) => (
               <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '7px 0', borderTop: i ? `1px solid ${BRAND.line}` : `1px solid ${BRAND.line}`, flexWrap: 'wrap', marginTop: i ? 0 : 10 }}>
                 <span style={{ width: 44, fontWeight: 800, color: BRAND.primaryDark, fontSize: 13.5 }}>{c.number}</span>
-                <span style={{ flex: 1, minWidth: 150, fontSize: 14, color: BRAND.ink }}>{c.student_name} <span style={{ color: BRAND.muted, fontSize: 12.5 }}>· {c.grade} · versão {versionFor(c.number, contest.versions_count)}</span></span>
+                <span style={{ flex: 1, minWidth: 150, fontSize: 14, color: BRAND.ink }}>{candName(c)} <span style={{ color: BRAND.muted, fontSize: 12.5 }}>· {c.grade} · versão {versionFor(c.number, contest.versions_count)}</span></span>
                 <select style={{ ...input, padding: '5px 8px', fontSize: 13 }} value={c.present == null ? '' : c.present ? '1' : '0'} onChange={e => setPresent(c, e.target.value)} aria-label={`Presença de ${c.student_name}`}>
                   <option value="">Presença</option><option value="1">Presente</option><option value="0">Faltou</option>
                 </select>
@@ -215,7 +215,7 @@ export default function ConcursoSalas({ contest, cands, onChanged, onGoProva, on
           {noRoom.sort(byNumber).map((c, i) => (
             <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '7px 0', borderTop: `1px solid ${BRAND.line}`, marginTop: i ? 0 : 10, flexWrap: 'wrap' }}>
               <span style={{ width: 44, fontWeight: 800, color: BRAND.primaryDark, fontSize: 13.5 }}>{c.number}</span>
-              <span style={{ flex: 1, minWidth: 150, fontSize: 14 }}>{c.student_name} <span style={{ color: BRAND.muted, fontSize: 12.5 }}>· {c.grade}</span></span>
+              <span style={{ flex: 1, minWidth: 150, fontSize: 14 }}>{candName(c)} <span style={{ color: BRAND.muted, fontSize: 12.5 }}>· {c.grade}</span></span>
               <select style={{ ...input, padding: '5px 8px', fontSize: 13 }} value="" onChange={e => move(c, e.target.value)} aria-label={`Colocar ${c.student_name} em uma sala`}>
                 <option value="">Escolher sala…</option>{rooms.filter(x => !x.grade || x.grade === c.grade).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>

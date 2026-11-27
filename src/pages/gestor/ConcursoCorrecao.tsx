@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileUp, Loader2, Keyboard, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
-import { db, GRADES, LETTERS, type Candidate, type Contest, type Question, type Subject } from '../../lib/concurso'
+import { db, GRADES, LETTERS, type Candidate, type Contest, type Question, type Subject, candName } from '../../lib/concurso'
 import { gradeAnswers, readCard, type Flag } from '../../lib/omr'
 import { pdfPages } from '../../lib/pdfPages'
 import { versionFor, type ExamVersionRow } from '../../lib/concursoProva'
@@ -145,7 +145,7 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
           return (
             <div key={c.id} style={{ display: 'flex', gap: 10, padding: '10px 14px', alignItems: 'center', borderTop: i ? `1px solid ${BRAND.line}` : 0, flexWrap: 'wrap' }}>
               <div style={{ width: 48, fontWeight: 800, color: BRAND.primaryDark }}>{c.number}</div>
-              <div style={{ flex: 1, minWidth: 160 }}><div style={{ fontWeight: 700, color: BRAND.ink, fontSize: 14.5 }}>{c.student_name}</div><div style={{ fontSize: 12.5, color: BRAND.muted }}>{c.grade}</div></div>
+              <div style={{ flex: 1, minWidth: 160 }}><div style={{ fontWeight: 700, color: BRAND.ink, fontSize: 14.5 }}>{candName(c)}</div><div style={{ fontSize: 12.5, color: BRAND.muted }}>{c.grade}</div></div>
               {r ? (
                 <>
                   <div style={{ fontWeight: 800, color: BRAND.ink, minWidth: 64 }}>{r.score}/{r.total}</div>
@@ -194,7 +194,7 @@ function Conference({ cand, contest, result, version, exam, subjects, subjectOf,
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 80, overflowY: 'auto', padding: '20px 10px' }}>
       <div style={{ background: '#fff', borderRadius: 18, maxWidth: 860, margin: '0 auto', padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div><div style={{ fontWeight: 800, fontSize: 17, color: BRAND.ink }}>{cand.student_name}</div><div style={{ fontSize: 13, color: BRAND.muted }}>Inscrição {cand.number} · {cand.grade} · versão {version}</div></div>
+          <div><div style={{ fontWeight: 800, fontSize: 17, color: BRAND.ink }}>{candName(cand)}</div><div style={{ fontSize: 13, color: BRAND.muted }}>Inscrição {cand.number} · {cand.grade} · versão {version}</div></div>
           <div style={{ fontSize: 22, fontWeight: 800, color: BRAND.primaryDark }}>{g.score}/{g.total}</div>
         </div>
         {img && <img src={img} alt="Cartão escaneado" style={{ width: '100%', maxHeight: 420, objectFit: 'contain', objectPosition: 'top', border: `1px solid ${BRAND.line}`, borderRadius: 10, marginTop: 12, background: '#f8fafc' }} />}

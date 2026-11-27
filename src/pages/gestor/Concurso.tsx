@@ -8,6 +8,7 @@ import { BRAND } from '../../lib/brand'
 import ConcursoProva from './ConcursoProva'
 import ConcursoCorrecao from './ConcursoCorrecao'
 import { EditInscricao, Painel } from './ConcursoInscritos'
+import { ProvasAvulsas } from './ConcursoAvulsas'
 import ConcursoEmails from './ConcursoEmails'
 import EssayRubric from '../../components/concurso/EssayRubric'
 import TakeHomeConfig from '../../components/concurso/TakeHomeConfig'
@@ -948,6 +949,7 @@ function Candidates({ contest, cands, onChanged }: { contest: Contest; cands: Ca
           <div key={g} style={card}><div style={{ fontSize: 12.5, color: BRAND.muted, fontWeight: 700 }}>{g}</div><div style={{ fontSize: 26, fontWeight: 800, color: BRAND.ink }}>{cands.filter(c => c.grade === g).length}</div></div>
         ))}
       </div>
+      <ProvasAvulsas contest={contest} cands={cands} onChanged={onChanged} onEdit={setEditing} />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input style={{ ...input, flex: 1, minWidth: 160 }} placeholder="Buscar por nome ou número" value={q} onChange={e => setQ(e.target.value)} />
         <select style={{ ...input, width: 'auto' }} value={grade} onChange={e => setGrade(e.target.value)}><option value="">Todas as séries</option>{(contest.grades.length ? contest.grades : GRADES).map(g => <option key={g}>{g}</option>)}</select>
@@ -958,7 +960,7 @@ function Candidates({ contest, cands, onChanged }: { contest: Contest; cands: Ca
         {list.map((c, i) => (
           <div key={c.id} style={{ display: 'flex', gap: 12, padding: '11px 14px', alignItems: 'center', borderTop: i ? `1px solid ${BRAND.line}` : 0 }}>
             <div style={{ width: 52, fontWeight: 800, color: BRAND.primaryDark }}>{c.number}</div>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, color: BRAND.ink, fontSize: 14.5 }}>{c.student_name}</div><div style={{ fontSize: 12.5, color: BRAND.muted }}>{c.grade} · {c.responsible_name} · {c.phone}</div></div>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, color: BRAND.ink, fontSize: 14.5 }}>{c.student_name?.trim() || 'Prova avulsa · aguardando cadastro'}{c.avulso && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 800, background: BRAND.soft, color: BRAND.primaryDark, borderRadius: 99, padding: '2px 8px' }}>Avulsa</span>}</div><div style={{ fontSize: 12.5, color: BRAND.muted }}>{c.grade}{c.responsible_name ? ` · ${c.responsible_name}` : ''}{c.phone ? ` · ${c.phone}` : ''}</div></div>
             <button style={btn()} onClick={() => setEditing(c)}>Editar</button>
           </div>
         ))}

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, Loader2, Lock, Printer, Unlock } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
 import { db, essayFor, GRADES, type Candidate, type Contest, type Question, type Quota, type Subject } from '../../lib/concurso'
+import { RedacaoStatus } from './ConcursoAvulsas'
 import { buildVersions, versionFor, type ExamVersionRow } from '../../lib/concursoProva'
 
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 16 }
@@ -32,7 +33,7 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
   const inExam = ordered.filter(q => q.in_exam)
   const gradeVersions = versions.filter(v => v.grade === grade).sort((a, b) => a.version.localeCompare(b.version))
   const locked = gradeVersions.length > 0
-  const gradeCands = cands.filter(c => c.grade === grade)
+  const gradeCands = cands.filter(c => c.grade === grade && !c.avulso)
 
   const move = async (q: Question, dir: -1 | 1) => {
     const list = ordered.filter(x => x.subject_id === q.subject_id)
@@ -88,6 +89,8 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
           : <button style={btn(true)} onClick={lock} disabled={busy}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Lock size={15} />} Fechar prova e gerar versões</button>}
       </div>
       {err && <div style={{ color: '#B91C1C', fontSize: 13.5 }}>{err}</div>}
+
+      <RedacaoStatus contest={contest} cands={cands} />
 
       <div style={card}>
         <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 8 }}>Questões por disciplina</div>

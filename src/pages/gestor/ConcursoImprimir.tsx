@@ -175,18 +175,21 @@ export default function ConcursoImprimir() {
       roomParam ? db.from('contest_candidates').select('*').eq('contest_id', contestId).order('number') : db.from('contest_candidates').select('*').eq('contest_id', contestId).eq('grade', grade).order('number'),
     ])
     const vers: ExamVersionRow[] = v.data ?? []
-    if (!vers.length) return setState('error')
+    if (!vers.length && kind !== 'ficha') return setState('error')
     if (roomParam) {
       const { data: rs } = await db.from('contest_rooms').select('*').eq('contest_id', contestId).order('position').order('created_at')
       const order = new Map<string, number>((rs ?? []).map((r: any, i: number) => [r.id, i]))
       let list: Candidate[] = (cd.data ?? []).filter((x: any) => roomParam === 'serie' ? x.grade === grade : roomParam === 'all' ? order.has(x.room_id) : x.room_id === roomParam)
+      if (q.get('only') !== 'avulsas') list = list.filter((x: any) => !x.avulso) // lote normal não repete as avulsas
       if (kind === 'redacao') list = list.filter(x => essayFor(c, x.grade).enabled)
       if (kind === 'cartoes' || kind === 'caderno') list = list.filter(x => vers.some(v => v.grade === x.grade))
       list.sort((a: any, b: any) => roomParam === 'serie' ? a.number - b.number : (order.get(a.room_id) ?? 0) - (order.get(b.room_id) ?? 0) || a.number - b.number)
       cd.data = list
     }
+    // Provas avulsas: imprime só os números reservados (sem inscrição prévia).
+    if (q.get('only') === 'avulsas') cd.data = (cd.data ?? []).filter((x: any) => x.avulso)
     const ids = Array.from(new Set(vers.flatMap(x => x.items.map(it => it.question_id))))
-    const { data: qs } = await db.from('contest_questions').select('*').in('id', ids)
+    const { data: qs } = ids.length ? await db.from('contest_questions').select('*').in('id', ids) : { data: [] as Question[] }
     setContest(c); setSchool(i.data); setSubjects(s.data ?? []); setVersions(vers); setCands(cd.data ?? [])
     setQuestions(Object.fromEntries((qs ?? []).map((x: Question) => [x.id, x])))
     if (kind === 'cartoes' || kind === 'redacao') {
@@ -221,9 +224,9 @@ export default function ConcursoImprimir() {
   if (state === 'error' || !contest) return <div style={{ padding: 40, fontFamily: 'system-ui' }}>Não foi possível abrir. Entre na sua conta e confira se a prova desta série foi fechada.</div>
 
   const essay = essayFor(contest, grade)
-  const margin = kind === 'cartoes' || kind === 'redacao' || kind === 'folha' ? '0' : '12mm 12mm 16mm'
+  const margin = kind === 'cartoes' || kind === 'redacao' || kind === 'folha' || kind === 'ficha' ? '0' : '12mm 12mm 16mm'
   const ver = versions.find(v => v.version === version) ?? versions[0]
-  const N = versions[0].items.length
+  const N = versions[0]?.items.length ?? 0
   const subjName = (id: string) => subjects.find(s => s.id === id)?.name ?? ''
 
   return (
@@ -246,7 +249,7 @@ export default function ConcursoImprimir() {
         .cover { height: 262mm; page-break-after: always; overflow: hidden; }
         @media print { body, .root { background: #fff !important; min-height: 0 !important } body { background: #fff } .bar { display: none } .sheet { margin: 0; width: auto; box-shadow: none } .full { width: 210mm } .flow { padding: 0; min-height: 0 } .cover { width: auto } }
       `}</style>
-      <div className="bar"><b>{kind === 'caderno' ? (roomParam ? 'Cadernos, um por aluno' : `Caderno · versão ${ver.version}`) : kind === 'cartoes' ? 'Cartões-resposta' : kind === 'redacao' ? 'Folhas de redação' : kind === 'folha' ? 'Folhas do aluno' : 'Gabarito'} · {roomParam === 'serie' ? `${grade} (um por aluno)` : roomParam ? (roomParam === 'all' ? 'todas as salas' : 'sala selecionada') : grade}</b>
+      <div className="bar"><b>{kind === 'caderno' ? (roomParam ? 'Cadernos, um por aluno' : `Caderno · versão ${ver.version}`) : kind === 'cartoes' ? 'Cartões-resposta' : kind === 'redacao' ? 'Folhas de redação' : kind === 'folha' ? 'Folhas do aluno' : kind === 'ficha' ? 'Fichas de inscrição (provas avulsas)' : 'Gabarito'} · {roomParam === 'serie' ? `${grade} (um por aluno)` : roomParam ? (roomParam === 'all' ? 'todas as salas' : 'sala selecionada') : grade}</b>
         <button onClick={doPrint} disabled={printing}>{printing ? 'Carregando imagens…' : 'Imprimir / Salvar PDF'}</button><span style={{ opacity: .8 }}>Em "Mais configurações", desligue "Cabeçalhos e rodapés". {kind === 'caderno' ? 'Imprima em frente e verso (virar pela borda longa).' : kind === 'cartoes' || kind === 'redacao' ? 'Imprima só na frente (a leitura é de um lado só).' : ''}</span></div>
 
       {kind === 'caderno' && !roomParam && <CadernoDoc contest={contest} school={school} subjects={subjects} ver={ver} questions={questions} grade={grade} />}
@@ -270,7 +273,7 @@ export default function ConcursoImprimir() {
               <div style={{ fontSize: 11 }}>{contest.name} · {c.grade}</div>
               <div style={{ fontWeight: 800, fontSize: 18, margin: '3mm 0 2mm' }}>CARTÃO-RESPOSTA</div>
               <div style={{ fontSize: 11 }}>Inscrição nº <b style={{ fontSize: 15 }}>{c.number}</b> &nbsp;·&nbsp; Versão <b style={{ fontSize: 15 }}>{ver2}</b></div>
-              <div style={{ fontSize: 12, marginTop: 2 }}><b>{c.student_name}</b></div>
+              <div style={{ fontSize: 12, marginTop: 2 }}>{c.student_name ? <b>{c.student_name}</b> : <span>Nome: ______________________________________</span>}</div>
               </div>
             </div>
             {qrs[c.id] && <img src={qrs[c.id]} alt="" style={{ position: 'absolute', right: '20mm', top: '16mm', width: '32mm', height: '32mm' }} />}
@@ -347,6 +350,34 @@ export default function ConcursoImprimir() {
           </div>
         ))
       })()}
+
+      {kind === 'ficha' && cands.map(c => {
+        const accent = contest.print_color || school?.primary_color || '#1A2B4A'
+        const line = (label: string, w = '100%') => (
+          <div style={{ width: w }}><div style={{ fontSize: 10, fontWeight: 700, color: '#333' }}>{label}</div><div style={{ borderBottom: '0.4mm solid #000', height: '9mm' }} /></div>
+        )
+        return (
+          <div key={c.id} className="sheet full" style={{ padding: '14mm 18mm', display: 'flex', flexDirection: 'column', gap: '5mm' }}>
+            <div style={{ background: accent, color: '#fff', borderRadius: 10, padding: '7mm 9mm', display: 'flex', alignItems: 'center', gap: '6mm' }}>
+              {school?.logo_url && <div style={{ background: '#fff', borderRadius: 8, padding: 6 }}><img src={school.logo_url} alt="" style={{ height: '15mm', maxWidth: '38mm', objectFit: 'contain', display: 'block' }} /></div>}
+              <div style={{ flex: 1 }}><div style={{ fontSize: 12, opacity: .9 }}>{school?.name}</div><div style={{ fontSize: 19, fontWeight: 800 }}>{contest.name}</div><div style={{ fontSize: 12 }}>Ficha de inscrição · prova avulsa</div></div>
+              <div style={{ background: '#fff', color: '#000', borderRadius: 10, padding: '3mm 6mm', textAlign: 'center' }}><div style={{ fontSize: 9.5, fontWeight: 700 }}>INSCRIÇÃO Nº</div><div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1 }}>{c.number}</div></div>
+            </div>
+            <div style={{ fontSize: 12 }}>Série da prova: <b>{c.grade}</b>{contest.exam_date ? ` · Prova em ${fmtDate(contest.exam_date)}` : ''}</div>
+            <div style={{ fontSize: 11, color: '#333' }}>Preencha com letra legível. Entregue esta ficha à coordenação junto com o cartão-resposta de mesmo número.</div>
+            {line('Nome completo do aluno')}
+            <div style={{ display: 'flex', gap: '6mm' }}>{line('Data de nascimento', '45%')}{line('CPF do aluno (opcional)', '55%')}</div>
+            {line('Nome do responsável')}
+            <div style={{ display: 'flex', gap: '6mm' }}>{line('WhatsApp do responsável (com DDD)', '50%')}{line('E-mail (opcional)', '50%')}</div>
+            {line('Escola em que estuda hoje')}
+            {contest.extra_fields.map(x => <div key={x.id}>{line(x.label)}</div>)}
+            <div style={{ marginTop: '4mm', fontSize: 10.5, lineHeight: 1.45, border: '1px solid #000', borderRadius: 6, padding: '3mm 4mm' }}>
+              Autorizo a escola a usar os dados desta ficha para a organização do concurso, a divulgação do resultado e o contato com a família, conforme a Lei Geral de Proteção de Dados (LGPD).
+            </div>
+            <div style={{ marginTop: 'auto', display: 'flex', gap: '8mm' }}>{line('Assinatura do responsável', '60%')}{line('Data', '40%')}</div>
+          </div>
+        )
+      })}
 
       {kind === 'gabarito' && (
         <div className="sheet flow">
