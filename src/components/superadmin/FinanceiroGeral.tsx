@@ -12,6 +12,9 @@ import {
   CheckCircle2, X, Settings2, Search, Repeat, Layers, Zap, AlertTriangle,
 } from 'lucide-react'
 import FinanceiroConfig from './FinanceiroConfig'
+import FinanceiroRelatorios from './FinanceiroRelatorios'
+import FinanceiroInvestimentos from './FinanceiroInvestimentos'
+import FinanceiroAsaas from './FinanceiroAsaas'
 import {
   EDU_COMPANY_ID, Company, Account, Category, Recurrence, Entry,
   PAYMENT_METHODS, FREQUENCIES, GROUPS, FOLHA_TIPO,
@@ -325,7 +328,7 @@ function EntryModal({ entry, companies, accounts, categories, defaultCompanyId, 
 }
 
 // ─── Aba ──────────────────────────────────────────────────────────────────
-export default function FinanceiroGeral({ periodStart, periodEnd, periodLabel, userId, showToast }: {
+function FinanceiroVisao({ periodStart, periodEnd, periodLabel, userId, showToast }: {
   periodStart: string; periodEnd: string; periodLabel: string; userId?: string
   showToast: (m: string, ok?: boolean) => void
 }) {
@@ -754,6 +757,42 @@ export default function FinanceiroGeral({ periodStart, periodEnd, periodLabel, u
         <FinanceiroConfig companies={companies} accounts={accounts} categories={categories} recurrences={recurrences}
           initialTab={config} onClose={() => setConfig(null)} onSaved={load} showToast={showToast} />
       )}
+    </div>
+  )
+}
+
+// ─── Casca com as abas do Financeiro geral ─────────────────────────────────
+
+type Props = { periodStart: string; periodEnd: string; periodLabel: string; userId: string; showToast: (m: string, ok?: boolean) => void }
+type SubTab = 'visao' | 'relatorios' | 'investimentos' | 'asaas'
+
+export default function FinanceiroGeral(props: Props) {
+  const [tab, setTab] = useState<SubTab>('visao')
+  const [pending, setPending] = useState(0)
+  const refreshPending = async () => {
+    const { count } = await supabase.from('fin_asaas_charges').select('id', { count: 'exact', head: true }).is('company_id', null).eq('ignored', false)
+    setPending(count || 0)
+  }
+  useEffect(() => { refreshPending() }, [])
+  const tabs: { id: SubTab; label: string }[] = [
+    { id: 'visao', label: 'Resumo' }, { id: 'relatorios', label: 'Relatórios' },
+    { id: 'investimentos', label: 'Investimentos' }, { id: 'asaas', label: 'Asaas' },
+  ]
+  return (
+    <div className="space-y-5 pb-24 lg:pb-0">
+      <div className="flex gap-0 sm:gap-1 overflow-x-auto border-b border-gray-200" style={{ flexWrap: "nowrap" }} role="tablist">
+        {tabs.map(t => (
+          <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
+            className={`px-2 sm:px-4 py-2.5 text-[13px] sm:text-sm font-semibold whitespace-nowrap shrink-0 border-b-2 -mb-px transition-colors ${tab === t.id ? 'border-cyan-500 text-cyan-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
+            {t.label}
+            {t.id === 'asaas' && pending > 0 && <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-white text-[11px]">{pending}</span>}
+          </button>
+        ))}
+      </div>
+      {tab === 'visao' && <FinanceiroVisao {...props} />}
+      {tab === 'relatorios' && <FinanceiroRelatorios {...props} />}
+      {tab === 'investimentos' && <FinanceiroInvestimentos {...props} />}
+      {tab === 'asaas' && <FinanceiroAsaas {...props} onChanged={refreshPending} />}
     </div>
   )
 }
