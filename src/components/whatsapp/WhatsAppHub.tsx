@@ -2176,6 +2176,50 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, }: Whats
     }
   }, [activeId, activeLastMsgId])
 
+  // Ao abrir uma conversa, "gruda" no fim: o histórico, as imagens e os áudios terminam de
+  // carregar depois da primeira rolagem e empurravam a conversa para o topo. Enquanto o
+  // atendente não rolar com a mão (roda, toque, teclado) ou por 6 s, qualquer mudança de
+  // altura da lista leva de volta ao fim.
+  useEffect(() => {
+    if (!activeId) return
+    let pinned = true
+    let raf = 0
+    const toBottom = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => { if (pinned) scrollMessagesToBottom(false) })
+    }
+    const release = () => { pinned = false }
+    let el: HTMLDivElement | null = null
+    let mo: MutationObserver | null = null
+    const attach = () => {
+      el = messagesScrollRef.current
+      if (!el) { raf = requestAnimationFrame(attach); return }
+      mo = new MutationObserver(toBottom)
+      mo.observe(el, { childList: true, subtree: true })
+      el.addEventListener('load', toBottom, true)
+      el.addEventListener('loadedmetadata', toBottom, true)
+      el.addEventListener('wheel', release, { passive: true })
+      el.addEventListener('touchmove', release, { passive: true })
+      el.addEventListener('keydown', release)
+      toBottom()
+    }
+    attach()
+    const timer = setTimeout(release, 6000)
+    return () => {
+      pinned = false
+      clearTimeout(timer)
+      cancelAnimationFrame(raf)
+      mo?.disconnect()
+      if (el) {
+        el.removeEventListener('load', toBottom, true)
+        el.removeEventListener('loadedmetadata', toBottom, true)
+        el.removeEventListener('wheel', release)
+        el.removeEventListener('touchmove', release)
+        el.removeEventListener('keydown', release)
+      }
+    }
+  }, [activeId])
+
   // Auto-hide send error
   useEffect(() => {
     if (!sendError) return
