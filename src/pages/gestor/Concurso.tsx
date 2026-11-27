@@ -8,7 +8,7 @@ import { BRAND } from '../../lib/brand'
 import ConcursoProva from './ConcursoProva'
 import ConcursoCorrecao from './ConcursoCorrecao'
 import { EditInscricao, Painel } from './ConcursoInscritos'
-import { ProvasAvulsas } from './ConcursoAvulsas'
+import { ProvasAvulsas, RedacaoStatus } from './ConcursoAvulsas'
 import ConcursoEmails from './ConcursoEmails'
 import EssayRubric from '../../components/concurso/EssayRubric'
 import TakeHomeConfig from '../../components/concurso/TakeHomeConfig'
@@ -160,7 +160,7 @@ export default function Concurso() {
           {tab === 'salas' && <ConcursoSalas key={contest.id} contest={contest} cands={cands} onChanged={loadContest} onGoProva={() => setTab('prova')} onGoFormato={() => { setTab('fmt'); setTimeout(() => document.getElementById('instrucoes-capa')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300) }} />}
           {tab === 'corr' && <ConcursoCorrecao contest={contest} subjects={subjects} questions={questions} cands={cands} />}
           {tab === 'res' && <ConcursoResultados key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
-          {tab === 'prof' && <Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} />}
+          {tab === 'prof' && <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}><RedacaoStatus contest={contest} cands={cands} /><Professors instId={instId} contest={contest} subjects={subjects} teachers={teachers} quotas={quotas} questions={questions} flash={flash} onChanged={() => { loadAll(); loadContest() }} /></div>}
           {tab === 'quest' && <Review contest={contest} subjects={subjects} teachers={teachers} questions={questions} flash={flash} onChanged={loadContest} />}
         </>
       )}
