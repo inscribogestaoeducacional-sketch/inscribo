@@ -175,7 +175,13 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
             ))}
           </div>
           <div style={{ height: 8, borderRadius: 99, background: '#F1F5F9', overflow: 'hidden' }}><div style={{ width: `${(eCounts.graded / eCounts.total) * 100}%`, height: '100%', background: BRAND.success }} /></div>
-          <div style={{ fontSize: 12.5, color: BRAND.muted }}>{eCounts.graded} corrigidas pelos professores. Toque em "Redação" no aluno para ver a folha escaneada.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {(contest.grades.length ? contest.grades : GRADES).filter(g => essayFor(contest, g).enabled && cands.some(c => c.grade === g)).map(g => {
+              const l = cands.filter(c => c.grade === g), got = l.filter(c => essayOf(c.id)).length, gr = l.filter(c => essayDone(essayOf(c.id))).length
+              return <div key={g} style={{ display: 'flex', gap: 8, fontSize: 13.5, flexWrap: 'wrap' }}><b style={{ minWidth: 92, color: BRAND.ink }}>{g}</b><span style={{ color: got === l.length ? '#047857' : '#B45309', fontWeight: 700 }}>{got} de {l.length} recebidas</span><span style={{ color: BRAND.muted }}>· {gr} corrigidas</span></div>
+            })}
+          </div>
+          <div style={{ fontSize: 12.5, color: BRAND.muted }}>Só as séries com redação entram na conta. Toque em "Redação" no aluno para ver a folha escaneada.</div>
         </div>
       )}
 
