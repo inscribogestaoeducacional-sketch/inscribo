@@ -231,7 +231,7 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
           exam={keyOf(editing, resOf(editing.id)?.version ?? versionFor(editing.number, contest.versions_count))}
           subjects={subjects} subjectOf={subjectsOf.get(`${editing.grade}|${resOf(editing.id)?.version ?? versionFor(editing.number, contest.versions_count)}`) ?? []}
           onClose={() => setEditing(null)}
-          onSave={async (answers, version) => { const r = resOf(editing.id); const ok = await save(editing, version, answers, [], r && r.source === 'scan' ? 'ok' : 'manual', r?.source ?? 'manual', r?.scan_path ?? null); if (ok) { setEditing(null); load() } return !!ok }}
+          onSave={async (answers, version, pending) => { const r = resOf(editing.id); const ok = await save(editing, version, answers, pending, pending.length ? 'review' : r && r.source === 'scan' ? 'ok' : 'manual', r?.source ?? 'manual', r?.scan_path ?? null); if (ok) { setEditing(null); load() } return !!ok }}
         />
       )}
     </div>
@@ -239,13 +239,17 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
 }
 
 function Conference({ cand, contest, result, version, exam, subjects, subjectOf, onClose, onSave }: {
-  cand: Candidate; contest: Contest; result: Result | null; version: string; exam?: ExamVersionRow; subjects: Subject[]; subjectOf: string[]; onClose: () => void; onSave: (a: (string | null)[], v: string) => Promise<boolean>
+  cand: Candidate; contest: Contest; result: Result | null; version: string; exam?: ExamVersionRow; subjects: Subject[]; subjectOf: string[]; onClose: () => void; onSave: (a: (string | null)[], v: string, pending: Flag[]) => Promise<boolean>
 }) {
   const n = exam?.items.length ?? 0
   const [answers, setAnswers] = useState<(string | null)[]>(() => Array.from({ length: n }, (_, i) => result?.answers?.[i] ?? null))
   const [img, setImg] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const flagged = new Map((result?.flags ?? []).map(f => [f.q, f.kind]))
+  const flagList = result?.flags ?? []
+  const [decided, setDecided] = useState<Set<number>>(new Set()) // questões marcadas que eu já resolvi (letra escolhida ou anulada)
+  const pending = flagList.filter(f => !decided.has(f.q))
+  const pick = (i: number, L: string | null) => { setAnswers(cur => cur.map((x, j) => j === i ? L : x)); if (flagged.has(i)) setDecided(d => new Set(d).add(i)) }
   useEffect(() => {
     let alive = true
     if (result?.scan_path) db.storage.from('contest-scans').createSignedUrl(result.scan_path, 3600).then(({ data }: any) => { if (alive) setImg(data?.signedUrl ?? null) })
@@ -261,6 +265,32 @@ function Conference({ cand, contest, result, version, exam, subjects, subjectOf,
           <div style={{ fontSize: 22, fontWeight: 800, color: BRAND.primaryDark }}>{g.score}/{g.total}</div>
         </div>
         {img && <img src={img} alt="Cartão escaneado" style={{ width: '100%', maxHeight: 420, objectFit: 'contain', objectPosition: 'top', border: `1px solid ${BRAND.line}`, borderRadius: 10, marginTop: 12, background: '#f8fafc' }} />}
+        {flagList.length > 0 && (
+          <div style={{ marginTop: 12, border: '1px solid #FCD34D', background: '#FFFBEB', borderRadius: 14, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontWeight: 800, color: '#92400E' }}>{pending.length ? `${pending.length} ${pending.length === 1 ? 'questão para decidir' : 'questões para decidir'}` : 'Tudo decidido'}</div>
+            <div style={{ fontSize: 12.5, color: '#92400E' }}>Escolha a letra, ou anule a questão (fica em branco, sem ponto). O que você não decidir fica pendente para a coordenação resolver depois.</div>
+            {flagList.map(f => {
+              const done = decided.has(f.q), cur = answers[f.q]
+              return (
+                <div key={f.q} style={{ background: '#fff', borderRadius: 12, padding: 10, border: `1px solid ${done ? '#A7F3D0' : '#FDE68A'}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <b style={{ color: BRAND.ink }}>Questão {f.q + 1}</b>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: '#B45309' }}>{f.kind === 'double' ? 'o aluno marcou mais de uma alternativa' : 'marca fraca, o sistema não teve certeza'}</span>
+                    <span style={{ flex: 1 }} />
+                    <span style={{ fontSize: 12, fontWeight: 800, color: done ? '#047857' : '#B45309' }}>{done ? (cur ? `Decidida: ${cur}` : 'Anulada (em branco)') : 'Falta decidir'}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {LETTERS.slice(0, contest.alternatives_count).map(L => (
+                      <button key={L} onClick={() => pick(f.q, L)} style={{ width: 40, height: 40, borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, border: `1px solid ${done && cur === L ? BRAND.primary : BRAND.line}`, background: done && cur === L ? BRAND.primary : '#fff', color: done && cur === L ? '#fff' : BRAND.ink }}>{L}</button>
+                    ))}
+                    <button onClick={() => pick(f.q, null)} style={{ ...btn(), padding: '8px 12px', fontSize: 13, border: `1px solid ${done && !cur ? '#B91C1C' : BRAND.line}`, color: '#B91C1C' }}>Anular</button>
+                    {done && <button onClick={() => { setDecided(d => { const n = new Set(d); n.delete(f.q); return n }); setAnswers(c => c.map((x, j) => j === f.q ? (result?.answers?.[f.q] ?? null) : x)) }} style={{ ...btn(), padding: '8px 12px', fontSize: 13 }}>Desfazer</button>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
         <div style={{ fontSize: 12.5, color: BRAND.muted, margin: '12px 0 6px' }}>Toque na letra certa de cada questão. Em amarelo, as que o sistema não teve certeza.</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 6 }}>
           {answers.map((a, i) => {
@@ -269,7 +299,7 @@ function Conference({ cand, contest, result, version, exam, subjects, subjectOf,
               <div key={i} title={subjects.find(s => s.id === sid)?.name} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', borderRadius: 8, background: fl ? '#FEF3C7' : 'transparent' }}>
                 <div style={{ width: 26, fontSize: 12.5, fontWeight: 800, color: BRAND.muted, textAlign: 'right' }}>{i + 1}</div>
                 {LETTERS.slice(0, contest.alternatives_count).map(L => (
-                  <button key={L} onClick={() => setAnswers(cur => cur.map((x, j) => j === i ? (x === L ? null : L) : x))} style={{ width: 30, height: 30, borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, border: `1px solid ${a === L ? BRAND.primary : BRAND.line}`, background: a === L ? BRAND.primary : '#fff', color: a === L ? '#fff' : BRAND.ink }}>{L}</button>
+                  <button key={L} onClick={() => pick(i, a === L && !fl ? null : L)} style={{ width: 30, height: 30, borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 12.5, border: `1px solid ${a === L ? BRAND.primary : BRAND.line}`, background: a === L ? BRAND.primary : '#fff', color: a === L ? '#fff' : BRAND.ink }}>{L}</button>
                 ))}
                 {fl && <span style={{ fontSize: 11, color: '#B45309', fontWeight: 700 }}>{fl === 'double' ? 'duas' : 'fraca'}</span>}
               </div>
@@ -278,7 +308,7 @@ function Conference({ cand, contest, result, version, exam, subjects, subjectOf,
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
           <button style={btn()} onClick={onClose}>Cancelar</button>
-          <button style={btn(true)} disabled={saving} onClick={async () => { setSaving(true); await onSave(answers, version); setSaving(false) }}>{saving && <Loader2 size={15} className="animate-spin" />} Confirmar e salvar</button>
+          <button style={btn(true)} disabled={saving} onClick={async () => { setSaving(true); await onSave(answers, version, pending); setSaving(false) }}>{saving && <Loader2 size={15} className="animate-spin" />} {pending.length ? `Salvar e deixar ${pending.length} para a coordenação` : 'Confirmar e salvar'}</button>
         </div>
       </div>
     </div>
