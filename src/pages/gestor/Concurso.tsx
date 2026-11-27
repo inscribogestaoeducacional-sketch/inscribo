@@ -546,7 +546,7 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
         </div>
         <div style={sec}>
           <div style={secT}>Edital</div>
-          <EditalUpload contest={contest} lab={lab} onChanged={onChanged} />
+          <EditalUpload contest={contest} lab={{ display: 'none' }} onChanged={onChanged} />
         </div>
         <div style={sec}>
           <div style={secT}>Perguntas da inscrição</div>
