@@ -57,7 +57,7 @@ export default function EssayTeacher({ contest, onChanged }: { contest: Contest;
   const [essays, setEssays] = useState<Essay[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
   const [showDone, setShowDone] = useState(false)
-  const grades = Object.keys(contest.essay_by_grade ?? {}).filter(g => essayFor(contest, g).enabled)
+  const grades = (contest.grades ?? []).filter(g => essayFor(contest, g).enabled)
 
   const load = useCallback(async () => {
     const { data } = await db.from('contest_essays').select('*').eq('contest_id', contest.id).order('created_at')
