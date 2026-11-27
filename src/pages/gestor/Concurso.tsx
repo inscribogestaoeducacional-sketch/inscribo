@@ -646,6 +646,12 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
     await supabase.auth.resetPasswordForEmail(t.email, { redirectTo: `${window.location.origin}/reset-password` })
     flash(`E-mail de criar senha reenviado para ${t.email}.`)
   }
+  const setQuotaDue = async (ids: string[], value: string) => {
+    const { error } = await db.from('contest_quotas').update({ due_date: value || null }).in('id', ids)
+    if (error) return flash('Não foi possível mudar o prazo: ' + error.message)
+    flash(value ? `Prazo alterado para ${fmtDate(value)}.` : 'Prazo removido.')
+    onChanged()
+  }
   const addQuota = async () => {
     if (!q.teacher_id || !q.subject_id || !q.grade || q.quantity < 1) return flash('Escolha professor, série, disciplina e quantidade.')
     const { error } = await db.from('contest_quotas').insert({ institution_id: instId, contest_id: contest.id, teacher_id: q.teacher_id, subject_id: q.subject_id, grade: q.grade, quantity: q.quantity, due_date: q.due_date || null })
@@ -794,11 +800,17 @@ function Professors({ instId, contest, subjects, teachers, quotas, questions, fl
                   )
                 })()}
                 {mine.length === 0 && <div style={{ fontSize: 12.5, color: BRAND.faint }}>Sem cotas neste concurso.</div>}
+                {mine.length > 1 && <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: BRAND.muted, marginTop: 8 }}>Dar o mesmo prazo para as {mine.length} cotas
+                  <input type="date" aria-label="Mesmo prazo para todas as cotas" style={{ ...input, width: 'auto', padding: '5px 8px', fontSize: 13 }} key={mine.map(x => x.due_date).join()} defaultValue="" onChange={e => { if (e.target.value) setQuotaDue(mine.map(x => x.id), e.target.value) }} />
+                </label>}
                 {mine.map(x => {
                   const sent = questions.filter(y => y.quota_id === x.id && y.status !== 'draft').length
                   return (
-                    <div key={x.id} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13.5, marginTop: 6, color: BRAND.text }}>
-                      <span style={{ flex: 1 }}>{subjects.find(s => s.id === x.subject_id)?.name} · {x.grade} · <b>{sent}/{x.quantity}</b>{x.due_date ? ` · até ${fmtDate(x.due_date)}` : ''}</span>
+                    <div key={x.id} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 13.5, marginTop: 6, color: BRAND.text }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>{subjects.find(s => s.id === x.subject_id)?.name} · {x.grade} · <b>{sent}/{x.quantity}</b></span>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: BRAND.muted }}>Entregar até
+                        <input key={x.id + (x.due_date || "")} type="date" aria-label="Prazo de entrega desta cota" style={{ ...input, width: 'auto', padding: '5px 8px', fontSize: 13 }} defaultValue={x.due_date || ''} onChange={e => setQuotaDue([x.id], e.target.value)} />
+                      </label>
                       <button aria-label="Remover cota" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: BRAND.danger }} onClick={async () => { if (confirm('Remover esta cota?')) { await db.from('contest_quotas').delete().eq('id', x.id); onChanged() } }}><Trash2 size={15} /></button>
                     </div>
                   )
