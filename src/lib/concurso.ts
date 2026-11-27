@@ -21,7 +21,7 @@ export type Contest = { id: string; institution_id: string; name: string; year: 
 export type Essay = { id: string; candidate_id: string; scan_path: string | null; scores: Record<string, number>; total: number | null; max_total: number | null; annulled: boolean; note: string | null }
 export type Decision = { id: string; candidate_id: string; scholarship_pct: number | null; status: 'pending' | 'granted' | 'waitlist' | 'denied'; note: string | null }
 export type ExtraField = { id: string; label: string; type: 'text' | 'select'; options?: string[]; required?: boolean }
-export type Candidate = { id: string; contest_id: string; lead_id: string | null; number: number; student_name: string; grade: string; responsible_name: string; phone: string; email: string | null; origin_school: string | null; answers: Record<string, string>; created_at: string; version: string | null; birth_date: string | null; student_cpf: string | null; room_id?: string | null; present?: boolean | null }
+export type Candidate = { id: string; contest_id: string; lead_id: string | null; number: number; student_name: string; grade: string; responsible_name: string; phone: string; email: string | null; origin_school: string | null; answers: Record<string, string>; created_at: string; version: string | null; birth_date: string | null; student_cpf: string | null; room_id?: string | null; present?: boolean | null; avulso?: boolean }
 export type Room = { id: string; institution_id: string; contest_id: string; name: string; capacity: number; grade: string | null; position: number }
 export const slugify = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
 export type Subject = { id: string; contest_id: string; name: string; position: number; grades?: string[] | null }
@@ -139,3 +139,6 @@ export const NDA_PARAGRAPHS = [
   'Ao aceitar este termo, eu me comprometo a: (1) não compartilhar, copiar, fotografar nem divulgar nenhuma questão, alternativa, gabarito ou proposta de redação, por qualquer meio, inclusive aplicativos de mensagem e redes sociais; (2) não usar as questões que escrevi ou corrigi em aulas, listas, simulados ou materiais antes da aplicação da prova; (3) não revelar a candidatos, famílias ou colegas qualquer informação sobre o conteúdo da prova; (4) manter em sigilo a correção das redações e as notas que eu atribuir; (5) usar o acesso somente para a minha função e não repassar meu login e minha senha.',
   'Estou ciente de que meu aceite fica registrado com data e hora, e de que o descumprimento deste termo pode gerar as medidas cabíveis previstas em contrato e na lei.',
 ]
+
+// Nome para mostrar nas listas: prova avulsa ainda sem cadastro aparece como "Prova avulsa nº 2001".
+export const candName = (c: { student_name: string; number: number; avulso?: boolean }) => c.student_name?.trim() || `Prova avulsa nº ${c.number}`
