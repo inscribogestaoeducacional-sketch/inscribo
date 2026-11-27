@@ -160,7 +160,7 @@ export default function Concurso() {
           )}
           {tab === 'trilha' && <ConcursoTrilha contest={contest} cands={cands} questions={questions} onGo={t => setTab(t as Tab)} />}
           {(tab === 'config' || tab === 'fmt' || tab === 'pub') && <Config key={contest.id} part={tab} contest={contest} subjects={subjects} quotas={quotas} onChanged={() => { loadAll(); loadContest() }} />}
-          {tab === 'config' && <DeleteContest contest={contest} inscritos={cands.length} questoes={questions.length} onDeleted={async () => { setSel(null); await loadAll() }} />}
+          {tab === 'config' && <details style={{ ...card, padding: '12px 16px' }}><summary style={{ cursor: 'pointer', fontSize: 13.5, fontWeight: 800, color: BRAND.muted }}>Mais opções</summary><div style={{ marginTop: 12 }}><DeleteContest contest={contest} inscritos={cands.length} questoes={questions.length} onDeleted={async () => { setSel(null); await loadAll() }} /></div></details>}
           {tab === 'painel' && <Painel contest={contest} cands={cands} />}
           {tab === 'insc' && <Candidates contest={contest} cands={cands} onChanged={loadContest} />}
           {tab === 'mail' && <ConcursoEmails key={contest.id} contest={contest} cands={cands} onChanged={() => { loadAll(); loadContest() }} />}
@@ -357,6 +357,8 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
   }
   const lab: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: BRAND.muted, display: 'block', marginBottom: 5 }
   const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }
+  const sec: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 12, padding: 14, border: `1px solid ${BRAND.line}`, borderRadius: 14, background: BRAND.softer }
+  const secT: React.CSSProperties = { fontSize: 14, fontWeight: 800, color: BRAND.ink }
   const missing: string[] = []
   if (part === 'config') { if (!f.exam_date) missing.push('data da prova'); if (!f.location) missing.push('local'); if (!f.registration_deadline) missing.push('"Inscrições até"'); if (!f.grades.length) missing.push('séries') }
   if (part === 'fmt') { if (!subjects.length) missing.push('disciplinas') }
@@ -366,9 +368,8 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
   return (
     <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
-        <div style={{ fontWeight: 800, fontSize: 17, color: BRAND.ink }}>{info.title}</div>
-        <div style={{ fontSize: 13.5, color: BRAND.muted, marginTop: 2 }}>{info.sub}</div>
-        <div style={{ fontSize: 13, fontWeight: 700, marginTop: 6, color: missing.length ? '#B45309' : '#047857' }}>{missing.length ? `Falta preencher: ${missing.join(', ')}.` : 'Esta parte está completa.'}</div>
+        <div style={{ fontSize: 14, color: BRAND.muted }}>{info.sub}</div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 800, marginTop: 8, padding: '5px 11px', borderRadius: 99, background: missing.length ? '#FEF3C7' : '#DCFCE7', color: missing.length ? '#92400E' : '#15803D' }}>{missing.length ? `Falta: ${missing.join(', ')}` : '✓ Esta parte está completa'}</div>
       </div>
       {restored && (
         <div role="status" style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '10px 12px', fontSize: 13.5, color: '#92400E', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -378,25 +379,47 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
       )}
 
       {part === 'config' && (<>
-        <div style={grid}>
-          <div><label style={lab}>Nome</label><input style={input} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></div>
-          <div><label style={lab}>Ano</label><input type="number" style={input} value={f.year} onChange={e => setF({ ...f, year: Number(e.target.value) })} /></div>
-          <div><label style={lab}>Situação</label>
-            <select style={input} value={f.status} onChange={e => setF({ ...f, status: e.target.value as Contest['status'] })}>{Object.entries(CONTEST_STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-        </div>
-        <div style={grid}>
-          <div><label style={lab}>Data da prova</label><input type="date" style={input} value={examDateToInput(f.exam_date)} onChange={e => setF({ ...f, exam_date: examDateFromInput(e.target.value) })} /></div>
-          <div><label style={lab}>Inscrições até (data e hora)</label><input type="datetime-local" style={input} value={deadlineToInput(f.registration_deadline)} onChange={e => setF({ ...f, registration_deadline: deadlineFromInput(e.target.value) })} /></div>
-          <div><label style={lab}>Local da prova</label><input style={input} value={f.location ?? ''} onChange={e => setF({ ...f, location: e.target.value })} /></div>
-        </div>
-        <div>
-          <label style={lab}>Séries que participam</label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {GRADES.map(g => { const on = f.grades.includes(g); return (
-              <button key={g} onClick={() => setF({ ...f, grades: on ? f.grades.filter(x => x !== g) : [...f.grades, g] })} style={{ padding: '6px 11px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${on ? BRAND.primary : BRAND.line}`, background: on ? BRAND.soft : '#fff', color: on ? BRAND.primaryDark : BRAND.muted }}>{g}</button>
-            ) })}
+        <div style={sec}>
+          <div style={secT}>Identificação</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: 12 }}>
+            <div><label style={lab}>Nome do concurso</label><input style={input} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></div>
+            <div><label style={lab}>Ano</label><input type="number" style={input} value={f.year} onChange={e => setF({ ...f, year: Number(e.target.value) })} /></div>
           </div>
         </div>
+        <div style={sec}>
+          <div style={secT}>Data e local</div>
+          <div style={grid}>
+            <div><label style={lab}>Data da prova</label><input type="date" style={input} value={examDateToInput(f.exam_date)} onChange={e => setF({ ...f, exam_date: examDateFromInput(e.target.value) })} /></div>
+            <div><label style={lab}>Inscrições até (data e hora)</label><input type="datetime-local" style={input} value={deadlineToInput(f.registration_deadline)} onChange={e => setF({ ...f, registration_deadline: deadlineFromInput(e.target.value) })} /></div>
+          </div>
+          <div><label style={lab}>Local da prova</label><input style={input} placeholder="Ex.: Colégio Ágape, Patos/PB" value={f.location ?? ''} onChange={e => setF({ ...f, location: e.target.value })} /></div>
+        </div>
+        <div style={sec}>
+          <div style={secT}>Séries que participam {f.grades.length > 0 && <span style={{ fontWeight: 700, color: BRAND.primary }}>· {f.grades.length} marcada{f.grades.length > 1 ? 's' : ''}</span>}</div>
+          {([['Educação infantil', (g: string) => g.startsWith('Infantil')], ['Ensino fundamental', (g: string) => /ano$/.test(g)], ['Ensino médio', (g: string) => /EM$/.test(g)]] as [string, (g: string) => boolean][]).map(([title, test]) => {
+            const list = GRADES.filter(test); if (!list.length) return null
+            const all = list.every(g => f.grades.includes(g))
+            return (
+              <div key={title}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: BRAND.ink }}>{title}</span>
+                  <button onClick={() => setF({ ...f, grades: all ? f.grades.filter(g => !list.includes(g)) : [...f.grades, ...list.filter(g => !f.grades.includes(g))] })} style={{ border: 0, background: 'none', color: BRAND.primaryDark, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{all ? 'Desmarcar todas' : 'Marcar todas'}</button>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {list.map(g => { const on = f.grades.includes(g); return (
+                    <button key={g} onClick={() => setF({ ...f, grades: on ? f.grades.filter(x => x !== g) : [...f.grades, g] })} style={{ padding: '8px 13px', borderRadius: 99, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${on ? BRAND.primary : BRAND.line}`, background: on ? BRAND.soft : '#fff', color: on ? BRAND.primaryDark : BRAND.muted }}>{on ? '✓ ' : ''}{g}</button>
+                  ) })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <details style={{ ...sec, gap: 0 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 13.5, fontWeight: 800, color: BRAND.muted }}>Opções avançadas</summary>
+          <div style={{ marginTop: 10, maxWidth: 320 }}><label style={lab}>Situação do concurso</label>
+            <select style={input} value={f.status} onChange={e => setF({ ...f, status: e.target.value as Contest['status'] })}>{Object.entries(CONTEST_STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+            <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 6 }}>Normalmente você muda isso pelos botões "Abrir inscrições" e "Encerrar inscrições".</div></div>
+        </details>
       </>)}
 
       {part === 'fmt' && (<>
@@ -540,10 +563,10 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
         </div>
       </>)}
 
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px solid ${BRAND.line}`, paddingTop: 12 }}>
-        <button style={btn(true)} onClick={save}>Salvar</button>
+      <div style={{ position: 'sticky', bottom: 96, zIndex: 5, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', background: '#fff', border: `1px solid ${dirty ? '#FCD34D' : BRAND.line}`, borderRadius: 14, padding: '10px 12px', boxShadow: '0 8px 24px -12px rgba(15,23,42,.35)' }}>
+        <button style={{ ...btn(true), padding: '11px 22px' }} onClick={save}>Salvar</button>
         {saveMsg ? <span role="status" style={{ fontSize: 14, fontWeight: 700, color: saveMsg === 'Salvo!' ? '#047857' : '#B91C1C' }}>{saveMsg}</span>
-          : dirty ? <span style={{ fontSize: 13.5, fontWeight: 700, color: '#B45309' }}>Há alterações ainda não salvas (valem os 3 passos).</span> : null}
+          : dirty ? <span style={{ fontSize: 13.5, fontWeight: 700, color: '#B45309' }}>Alterações ainda não salvas</span> : <span style={{ fontSize: 13.5, color: BRAND.muted }}>Tudo salvo</span>}
       </div>
     </div>
   )
