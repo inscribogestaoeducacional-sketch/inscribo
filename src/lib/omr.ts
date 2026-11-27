@@ -109,6 +109,10 @@ export function readCard(source: ImageData, n: number, altCount: number): ReadRe
 function readOnce(img: ImageData, n: number, altCount: number): ReadResult {
   const gray = toGray(img); const hm = locate(img, gray)
   if (!hm) return { ok: false, error: 'Não encontrei os quadrados pretos dos cantos (folha cortada, escura ou muito torta).', qr: null, answers: [], flags: [], fills: [] }
+  return readWithHm(img, gray, hm, n, altCount)
+}
+
+function readWithHm(img: ImageData, gray: Uint8Array, hm: number[], n: number, altCount: number): ReadResult {
 
   // imagem corrigida (px = mm * PPM)
   const RW = Math.round(210 * PPM), RH = Math.round(297 * PPM)
@@ -121,11 +125,22 @@ function readOnce(img: ImageData, n: number, altCount: number): ReadResult {
     rect[y * RW + x] = gray[i0] * (1 - fx) * (1 - fy) + gray[i0 + 1] * fx * (1 - fy) + gray[i0 + W] * (1 - fx) * fy + gray[i0 + W + 1] * fx * fy
   }
 
-  // QR
-  const qx = Math.round(QR_BOX_MM.x * PPM), qy = Math.round(QR_BOX_MM.y * PPM), qw = Math.round(QR_BOX_MM.w * PPM), qh = Math.round(QR_BOX_MM.h * PPM)
-  const qd = new Uint8ClampedArray(qw * qh * 4)
-  for (let y = 0; y < qh; y++) for (let x = 0; x < qw; x++) { const v = rect[(qy + y) * RW + qx + x]; const j = (y * qw + x) * 4; qd[j] = qd[j + 1] = qd[j + 2] = v; qd[j + 3] = 255 }
-  const code = jsQR(qd, qw, qh, { inversionAttempts: 'dontInvert' })
+  // QR (recorte com margem branca em volta; se falhar, tenta com mais margem e com limiar próprio)
+  let code: ReturnType<typeof jsQR> = null
+  for (const pad of [4, 8, 2]) {
+    const qx = Math.max(0, Math.round((QR_BOX_MM.x - pad) * PPM)), qy = Math.max(0, Math.round((QR_BOX_MM.y - pad) * PPM))
+    const qw = Math.min(RW - qx, Math.round((QR_BOX_MM.w + pad * 2) * PPM)), qh = Math.min(RH - qy, Math.round((QR_BOX_MM.h + pad * 2) * PPM))
+    const qd = new Uint8ClampedArray(qw * qh * 4)
+    for (let y = 0; y < qh; y++) for (let x = 0; x < qw; x++) { const v = rect[(qy + y) * RW + qx + x]; const j = (y * qw + x) * 4; qd[j] = qd[j + 1] = qd[j + 2] = v; qd[j + 3] = 255 }
+    code = jsQR(qd, qw, qh, { inversionAttempts: 'attemptBoth' })
+    if (code?.data) break
+    // binariza com Otsu local e tenta de novo
+    const g = new Uint8ClampedArray(qw * qh); for (let i = 0; i < g.length; i++) g[i] = qd[i * 4]
+    const tq = otsu(g, 1)
+    for (let i = 0; i < g.length; i++) { const v = g[i] < tq ? 0 : 255; qd[i * 4] = qd[i * 4 + 1] = qd[i * 4 + 2] = v }
+    code = jsQR(qd, qw, qh, { inversionAttempts: 'attemptBoth' })
+    if (code?.data) break
+  }
   let qr: ReadResult['qr'] = null
   if (code?.data) { const m = /^aion-cr\|([^|]+)\|(\d+)\|([A-Z])$/.exec(code.data); if (m) qr = { contestId: m[1], number: Number(m[2]), version: m[3] } }
 
@@ -168,4 +183,110 @@ export function gradeAnswers(answers: (string | null)[], key: string[], subjectO
     if (answers[i] && answers[i] === k) { score++; by[s].hits++ }
   })
   return { score, total: key.length, by }
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Leitura por câmera/foto: a folha pode estar em qualquer lugar do quadro, girada e em perspectiva.
+// Acha os 4 quadrados pretos em qualquer posição, e usa o QR code para saber a orientação da folha.
+// (A leitura de PDF escaneado continua usando readCard, sem nenhuma mudança.)
+
+type Blob = { cx: number; cy: number; w: number; h: number; area: number }
+
+function findBlobs(gray: Uint8Array, W: number, H: number): Blob[] {
+  // limiar local (média de uma janela) para aguentar luz irregular
+  const R = Math.max(12, Math.round(Math.min(W, H) / 16))
+  const integ = new Float64Array((W + 1) * (H + 1))
+  for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += gray[y * W + x]; integ[(y + 1) * (W + 1) + x + 1] = integ[y * (W + 1) + x + 1] + row } }
+  const dark = new Uint8Array(W * H)
+  for (let y = 0; y < H; y++) {
+    const y0 = Math.max(0, y - R), y1 = Math.min(H, y + R + 1)
+    for (let x = 0; x < W; x++) {
+      const x0 = Math.max(0, x - R), x1 = Math.min(W, x + R + 1)
+      const sum = integ[y1 * (W + 1) + x1] - integ[y0 * (W + 1) + x1] - integ[y1 * (W + 1) + x0] + integ[y0 * (W + 1) + x0]
+      const mean = sum / ((x1 - x0) * (y1 - y0))
+      const g = gray[y * W + x]
+      if (g < mean * 0.62 && g < 115) dark[y * W + x] = 1
+    }
+  }
+  const out: Blob[] = []; const seen = new Uint8Array(W * H); const stack: number[] = []
+  const maxSide = Math.max(W, H)
+  for (let i = 0; i < W * H; i++) {
+    if (!dark[i] || seen[i]) continue
+    let n = 0, minx = W, maxx = 0, miny = H, maxy = 0
+    stack.push(i); seen[i] = 1
+    while (stack.length) {
+      const k = stack.pop()!; const kx = k % W, ky = (k / W) | 0
+      n++; if (kx < minx) minx = kx; if (kx > maxx) maxx = kx; if (ky < miny) miny = ky; if (ky > maxy) maxy = ky
+      if (kx > 0 && dark[k - 1] && !seen[k - 1]) { seen[k - 1] = 1; stack.push(k - 1) }
+      if (kx < W - 1 && dark[k + 1] && !seen[k + 1]) { seen[k + 1] = 1; stack.push(k + 1) }
+      if (ky > 0 && dark[k - W] && !seen[k - W]) { seen[k - W] = 1; stack.push(k - W) }
+      if (ky < H - 1 && dark[k + W] && !seen[k + W]) { seen[k + W] = 1; stack.push(k + W) }
+    }
+    const bw = maxx - minx + 1, bh = maxy - miny + 1
+    if (Math.max(bw, bh) < 7 || Math.max(bw, bh) > maxSide * 0.12) continue
+    if (Math.abs(bw - bh) / Math.max(bw, bh) > 0.4) continue
+    if (n / (bw * bh) < 0.62) continue
+    out.push({ cx: (minx + maxx) / 2, cy: (miny + maxy) / 2, w: bw, h: bh, area: n })
+  }
+  return out.sort((a, b) => b.area - a.area).slice(0, 14)
+}
+
+// 4 quadrados que formam o retângulo da folha (maior quadrilátero plausível), em ordem horária
+function pickSheetCorners(blobs: Blob[]): [number, number][] | null {
+  let best: { area: number; pts: [number, number][] } | null = null
+  const n = blobs.length
+  for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) for (let c = b + 1; c < n; c++) for (let d = c + 1; d < n; d++) {
+    const q = [blobs[a], blobs[b], blobs[c], blobs[d]]
+    const areas = q.map(z => z.area); if (Math.max(...areas) / Math.min(...areas) > 3.2) continue
+    const mx = (q[0].cx + q[1].cx + q[2].cx + q[3].cx) / 4, my = (q[0].cy + q[1].cy + q[2].cy + q[3].cy) / 4
+    const pts = q.map(z => [z.cx, z.cy] as [number, number]).sort((p1, p2) => Math.atan2(p1[1] - my, p1[0] - mx) - Math.atan2(p2[1] - my, p2[0] - mx))
+    // convexo e com lados coerentes com uma folha A4 (proporção dos quadrados: 186 x 273 mm)
+    let ok = true; let area2 = 0
+    for (let i = 0; i < 4; i++) {
+      const p = pts[i], q1 = pts[(i + 1) % 4], r = pts[(i + 2) % 4]
+      const cross = (q1[0] - p[0]) * (r[1] - q1[1]) - (q1[1] - p[1]) * (r[0] - q1[0])
+      if (cross <= 0) { ok = false; break }
+      area2 += p[0] * q1[1] - q1[0] * p[1]
+    }
+    if (!ok) continue
+    const side = (i: number) => Math.hypot(pts[(i + 1) % 4][0] - pts[i][0], pts[(i + 1) % 4][1] - pts[i][1])
+    const s0 = (side(0) + side(2)) / 2, s1 = (side(1) + side(3)) / 2
+    const ratio = Math.min(s0, s1) / Math.max(s0, s1)
+    if (ratio < 0.5 || ratio > 0.9) continue
+    if (Math.max(side(0), side(2)) / Math.min(side(0), side(2)) > 1.6 || Math.max(side(1), side(3)) / Math.min(side(1), side(3)) > 1.6) continue
+    const area = Math.abs(area2) / 2
+    if (!best || area > best.area) best = { area, pts }
+  }
+  return best ? best.pts : null
+}
+
+const PAGE_CORNERS_CW: [number, number][] = [MARK_CENTERS_MM[0], MARK_CENTERS_MM[1], MARK_CENTERS_MM[3], MARK_CENTERS_MM[2]]
+
+/** Procura a folha em um quadro de câmera (ou foto) onde ela não ocupa a imagem toda. */
+export function findSheet(img: ImageData): { corners: [number, number][] } | null {
+  const full = toGray(img)
+  const s = Math.max(1, Math.ceil(Math.max(img.width, img.height) / 900))
+  const W = Math.floor(img.width / s), H = Math.floor(img.height / s)
+  const small = new Uint8Array(W * H)
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) small[y * W + x] = full[y * s * img.width + x * s]
+  const pts = pickSheetCorners(findBlobs(small, W, H))
+  if (!pts) return null
+  return { corners: pts.map(([x, y]) => [x * s + s / 2, y * s + s / 2] as [number, number]) }
+}
+
+/** Lê o cartão/folha numa foto qualquer. O QR code decide em qual das 4 rotações a folha está. */
+export function readCardFree(source: ImageData, n: number, altCount: number): ReadResult {
+  const found = findSheet(source)
+  if (!found) return { ok: false, error: 'Não achei a folha: mostre a página inteira, com os 4 quadrados pretos dos cantos.', qr: null, answers: [], flags: [], fills: [] }
+  const gray = toGray(source)
+  let fallback: ReadResult | null = null
+  for (let r = 0; r < 4; r++) {
+    const dst = [0, 1, 2, 3].map(i => found.corners[(i + r) % 4])
+    const hm = homography(PAGE_CORNERS_CW, dst); if (!hm) continue
+    const res = readWithHm(source, gray, hm, n, altCount)
+    if (res.ok && res.qr) return res
+    fallback = fallback ?? res
+  }
+  return fallback ? { ...fallback, qr: null, error: 'Folha achada, mas o QR code não foi lido (aproxime ou melhore a luz).' } : { ok: false, error: 'Folha achada, mas não consegui ler.', qr: null, answers: [], flags: [], fills: [] }
 }

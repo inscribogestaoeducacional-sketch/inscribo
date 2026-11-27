@@ -1,9 +1,10 @@
 // Aba "Correção": sobe o PDF dos cartões escaneados, lê, corrige, e leva os casos duvidosos para conferência.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileUp, Loader2, Keyboard, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Camera, FileUp, Loader2, Keyboard, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
 import { db, GRADES, LETTERS, type Candidate, type Contest, type Question, type Subject, candName } from '../../lib/concurso'
-import { gradeAnswers, readCard, type Flag } from '../../lib/omr'
+import { gradeAnswers, readCard, readCardFree, type Flag } from '../../lib/omr'
+import CorrecaoCamera, { type Outcome, type Parsed } from './CorrecaoCamera'
 import { pdfPages } from '../../lib/pdfPages'
 import { versionFor, type ExamVersionRow } from '../../lib/concursoProva'
 
@@ -29,6 +30,7 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
   const [grade, setGrade] = useState('')
   const [editing, setEditing] = useState<Candidate | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [camOpen, setCamOpen] = useState(false)
 
   const load = useCallback(async () => {
     const [v, r] = await Promise.all([
@@ -55,6 +57,49 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
     return !error
   }
 
+  // Lê uma página (cartão ou folha de redação) sem salvar nada: devolve o que entendeu.
+  // `free`: foto/câmera, em que a folha pode estar em qualquer lugar do quadro. Para PDF escaneado vale a leitura de sempre.
+  const readPage = async (image: ImageData, free = false): Promise<Parsed> => {
+    let r = free ? readCardFree(image, 1, contest.alternatives_count) : readCard(image, 1, contest.alternatives_count) // 1ª leitura: só alinhar e ler o QR
+    if ((!r.ok || !r.qr) && !free) { const alt = readCardFree(image, 1, contest.alternatives_count); if (alt.ok && alt.qr) { r = alt; free = true } } // foto enviada da galeria
+    if (!r.ok || !r.qr) return { kind: 'fail', msg: r.error ?? 'QR code não lido' }
+    if (r.qr.contestId !== contest.id) return { kind: 'fail', msg: 'cartão de outro concurso' }
+    const c = cands.find(x => x.number === r.qr!.number)
+    if (!c) return { kind: 'fail', msg: `inscrição ${r.qr.number} não existe` }
+    if (r.qr.version === 'R') return { kind: 'essay', number: c.number, name: candName(c), sig: `R${c.number}`, payload: { c, rect: r.rectified } }
+    const nQ = versions.find(v => v.grade === c.grade)?.items.length ?? 0
+    if (!nQ) return { kind: 'fail', msg: `a prova de ${c.grade} ainda não foi fechada` }
+    const rr = free ? readCardFree(image, nQ, contest.alternatives_count) : readCard(image, nQ, contest.alternatives_count)
+    if (!rr.ok || !rr.qr) return { kind: 'fail', msg: rr.error ?? 'não consegui ler as respostas' }
+    return { kind: 'card', number: c.number, name: candName(c), sig: `C${c.number}:${rr.answers.map(a => a ?? '-').join('')}`, payload: { c, version: r.qr.version, rr } }
+  }
+
+  // Salva o que readPage entendeu.
+  const commitPage = async (p: Parsed): Promise<Outcome> => {
+    if (p.kind === 'fail') return { kind: 'fail', msg: p.msg }
+    const { c } = p.payload
+    if (p.kind === 'essay') {
+      let path: string | null = null
+      if (p.payload.rect) {
+        const blob = await toJpeg(p.payload.rect)
+        if (blob) { path = `${contest.institution_id}/${contest.id}/redacao-${c.number}.jpg`; const up = await db.storage.from('contest-scans').upload(path, blob, { upsert: true, contentType: 'image/jpeg' }); if (up.error) path = null }
+      }
+      if (!path) return { kind: 'fail', msg: `não consegui guardar a redação de ${candName(c)}` }
+      const { error: ee } = await db.from('contest_essays').upsert({ institution_id: contest.institution_id, contest_id: contest.id, candidate_id: c.id, grade: c.grade, scan_path: path }, { onConflict: 'contest_id,candidate_id' })
+      if (ee) return { kind: 'fail', msg: 'erro ao salvar a redação' }
+      return { kind: 'essay' }
+    }
+    const { rr, version } = p.payload
+    let path: string | null = null
+    if (rr.rectified) {
+      const blob = await toJpeg(rr.rectified)
+      if (blob) { path = `${contest.institution_id}/${contest.id}/${c.number}.jpg`; const up = await db.storage.from('contest-scans').upload(path, blob, { upsert: true, contentType: 'image/jpeg' }); if (up.error) path = null }
+    }
+    const status = rr.flags.length ? 'review' : 'ok'
+    if (await save(c, version, rr.answers, rr.flags, status, 'scan', path)) return { kind: status, flags: rr.flags.length }
+    return { kind: 'fail', msg: `não consegui salvar o resultado de ${candName(c)}` }
+  }
+
   const onFiles = async (files: FileList | null) => {
     if (!files?.length) return
     setBusy(true); setLog([]); const lines: string[] = []; let okN = 0, revN = 0, failN = 0, essayN = 0
@@ -63,33 +108,11 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
         for await (const { page, image } of pdfPages(file)) {
           setProgress(`${file.name} · página ${page}`)
           await new Promise(r => setTimeout(r, 0))
-          const r = readCard(image, 1, contest.alternatives_count) // 1ª leitura: só alinhar e ler o QR
-          if (!r.ok || !r.qr) { failN++; lines.push(`${file.name} p.${page}: ${r.error ?? 'QR code não lido'}`); continue }
-          if (r.qr.contestId !== contest.id) { failN++; lines.push(`${file.name} p.${page}: cartão de outro concurso`); continue }
-          const c = cands.find(x => x.number === r.qr!.number)
-          if (!c) { failN++; lines.push(`${file.name} p.${page}: inscrição ${r.qr.number} não existe`); continue }
-          if (r.qr.version === 'R') {
-            // folha de redação: guarda a imagem para correção às cegas
-            let path: string | null = null
-            if (r.rectified) {
-              const blob = await toJpeg(r.rectified)
-              if (blob) { path = `${contest.institution_id}/${contest.id}/redacao-${c.number}.jpg`; const up = await db.storage.from('contest-scans').upload(path, blob, { upsert: true, contentType: 'image/jpeg' }); if (up.error) path = null }
-            }
-            if (!path) { failN++; lines.push(`${file.name} p.${page}: não consegui guardar a redação de ${c.student_name}`); continue }
-            const { error: ee } = await db.from('contest_essays').upsert({ institution_id: contest.institution_id, contest_id: contest.id, candidate_id: c.id, grade: c.grade, scan_path: path }, { onConflict: 'contest_id,candidate_id' })
-            if (ee) { failN++; lines.push(`${file.name} p.${page}: erro ao salvar a redação`); continue }
-            essayN++; continue
-          }
-          const nQ = versions.find(v => v.grade === c.grade)?.items.length ?? 0
-          if (!nQ) { failN++; lines.push(`${file.name} p.${page}: a prova de ${c.grade} ainda não foi fechada`); continue }
-          const rr = readCard(image, nQ, contest.alternatives_count)
-          let path: string | null = null
-          if (rr.rectified) {
-            const blob = await toJpeg(rr.rectified)
-            if (blob) { path = `${contest.institution_id}/${contest.id}/${c.number}.jpg`; const up = await db.storage.from('contest-scans').upload(path, blob, { upsert: true, contentType: 'image/jpeg' }); if (up.error) path = null }
-          }
-          const status = rr.flags.length ? 'review' : 'ok'
-          if (await save(c, r.qr.version, rr.answers, rr.flags, status, 'scan', path)) { status === 'ok' ? okN++ : revN++ } else { failN++; lines.push(`${file.name} p.${page}: não consegui salvar o resultado de ${c.student_name}`) }
+          const out = await commitPage(await readPage(image))
+          if (out.kind === 'fail') { failN++; lines.push(`${file.name} p.${page}: ${out.msg}`) }
+          else if (out.kind === 'essay') essayN++
+          else if (out.kind === 'ok') okN++
+          else revN++
         }
       } catch (e: any) { failN++; lines.push(`${file.name}: ${e?.message || 'erro ao abrir o arquivo'}`) }
     }
@@ -107,12 +130,14 @@ export default function ConcursoCorrecao({ contest, subjects, questions, cands }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {camOpen && <CorrecaoCamera read={img => readPage(img, true)} commit={commitPage} onClose={() => { setCamOpen(false); load() }} />}
       {!hasExam && <div style={{ ...card, background: '#FEF3C7', borderColor: '#FCD34D', color: '#92400E', fontWeight: 700, fontSize: 14 }}>O envio dos cartões só libera depois que você fecha a prova de pelo menos uma série. Vá em Preparar → Montar prova e clique em "Fechar prova e gerar versões". É nesse momento que o gabarito de cada versão é criado.</div>}
       <div style={card}>
-        <div style={{ fontWeight: 800, color: BRAND.ink }}>Subir cartões escaneados</div>
-        <div style={{ fontSize: 13, color: BRAND.muted, margin: '4px 0 12px' }}>Escaneie os cartões em PDF (todas as páginas, em ordem qualquer) e envie. A leitura acontece neste computador; só o resultado é salvo.</div>
+        <div style={{ fontWeight: 800, color: BRAND.ink }}>Ler cartões e redações</div>
+        <div style={{ fontSize: 13, color: BRAND.muted, margin: '4px 0 12px' }}>Use a câmera (celular ou computador): passe a folha na frente e ela é lida e salva sozinha. Ou envie PDF/fotos (todas as páginas, em ordem qualquer). A leitura acontece neste aparelho; só o resultado é salvo.</div>
         <input ref={fileRef} type="file" accept="application/pdf,image/*" multiple hidden onChange={e => onFiles(e.target.files)} />
-        <button style={btn(true)} disabled={busy || !hasExam} onClick={() => fileRef.current?.click()}>{busy ? <Loader2 size={15} className="animate-spin" /> : <FileUp size={15} />} {busy ? `Lendo… ${progress}` : 'Escolher PDF dos cartões'}</button>
+        {typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && <button style={{ ...btn(true), marginRight: 8 }} disabled={busy || !hasExam} onClick={() => setCamOpen(true)}><Camera size={15} /> Escanear com a câmera</button>}
+        <button style={btn()} disabled={busy || !hasExam} onClick={() => fileRef.current?.click()}>{busy ? <Loader2 size={15} className="animate-spin" /> : <FileUp size={15} />} {busy ? `Lendo… ${progress}` : 'Enviar PDF ou fotos'}</button>
         {!hasExam && <span style={{ marginLeft: 10, fontSize: 13, color: '#92400E', fontWeight: 700 }}>Feche a prova primeiro.</span>}
         {log.length > 0 && (
           <div style={{ marginTop: 12, fontSize: 13.5 }}>
