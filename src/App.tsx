@@ -1,6 +1,6 @@
 import { BrandLoader } from './components/ui/BrandLoader'
 import { useStageLabelsVersion } from './lib/stageLabels'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import PageTitle from './components/PageTitle'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -266,21 +266,25 @@ function AppContent() {
       .finally(() => setReady(true))
   }, [])
 
+  // Confere o status da escola só quando entra um usuário/escola diferente. A tela só é trocada
+  // por "Verificando acesso" na PRIMEIRA conferência; renovar o login ou recarregar o perfil
+  // não pode mais derrubar a página aberta (e apagar o que a pessoa estava preenchendo).
+  const statusCheckedForRef = useRef<string | null>(null)
   useEffect(() => {
-    const checkSchoolStatus = async () => {
-      if (user?.user_type === 'school_user' && user?.institution_id) {
-        setCheckingStatus(true)
-        const { data } = await supabase
-          .from('institutions')
-          .select('plan_status')
-          .eq('id', user.institution_id)
-          .single()
-        setSchoolStatus(data?.plan_status || null)
-        setCheckingStatus(false)
-      }
-    }
-    if (user) checkSchoolStatus()
-  }, [user])
+    if (user?.user_type !== 'school_user' || !user?.institution_id) return
+    const key = `${user.id}:${user.institution_id}`
+    if (statusCheckedForRef.current === key) return
+    statusCheckedForRef.current = key
+    setCheckingStatus(true)
+    supabase
+      .from('institutions')
+      .select('plan_status')
+      .eq('id', user.institution_id)
+      .single()
+      .then(({ data }) => { setSchoolStatus(data?.plan_status || null) })
+      .then(() => undefined, () => undefined)
+      .then(() => { setCheckingStatus(false) })
+  }, [user?.id, user?.institution_id, user?.user_type])
 
   const { pathname } = window.location
   if (pathname.startsWith('/survey/')) {

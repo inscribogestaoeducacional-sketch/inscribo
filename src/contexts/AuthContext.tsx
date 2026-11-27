@@ -228,7 +228,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // de gestor de rede também institutions/switch_active_institution)
         // deram tempo de sobra pra uma chamada mais nova assumir.
         if (isStale()) return
-        setUser(appUser)
+        // Se nada mudou (renovação do login a cada hora), mantém o MESMO objeto: trocar a
+        // referência fazia as telas reagirem como se fosse outro usuário e perderem o que
+        // estava sendo digitado.
+        setUser(prev => (prev && JSON.stringify(prev) === JSON.stringify(appUser)) ? prev : appUser)
       }
     } catch (e) {
       console.error('loadUserProfile error:', e)
