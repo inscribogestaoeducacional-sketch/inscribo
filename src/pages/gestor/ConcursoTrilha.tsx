@@ -11,7 +11,7 @@ type Phase = { id: string; title: string; what: string; detail: string; done: bo
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16 }
 
 export default function ConcursoTrilha({ contest, cands, questions, onGo }: { contest: Contest; cands: Candidate[]; questions: Question[]; onGo: Go }) {
-  const [info, setInfo] = useState<{ closed: number; rooms: number; read: number; essays: number } | null>(null)
+  const [info, setInfo] = useState<{ closed: number; rooms: number; read: number; essays: number; essaysIn: number } | null>(null)
   useEffect(() => {
     let alive = true
     ;(async () => {
@@ -19,10 +19,10 @@ export default function ConcursoTrilha({ contest, cands, questions, onGo }: { co
         db.from('contest_exam_versions').select('grade').eq('contest_id', contest.id),
         db.from('contest_rooms').select('id', { count: 'exact', head: true }).eq('contest_id', contest.id),
         db.from('contest_results').select('id', { count: 'exact', head: true }).eq('contest_id', contest.id),
-        db.from('contest_essays').select('id', { count: 'exact', head: true }).eq('contest_id', contest.id).not('total', 'is', null),
+        db.from('contest_essays').select('total,annulled').eq('contest_id', contest.id),
       ])
       if (!alive) return
-      setInfo({ closed: new Set((v.data ?? []).map((x: any) => x.grade)).size, rooms: r.count ?? 0, read: res.count ?? 0, essays: es.count ?? 0 })
+      setInfo({ closed: new Set((v.data ?? []).map((x: any) => x.grade)).size, rooms: r.count ?? 0, read: res.count ?? 0, essaysIn: (es.data ?? []).length, essays: (es.data ?? []).filter((e: any) => e.total != null || e.annulled).length })
     })()
     return () => { alive = false }
   }, [contest.id, cands.length])
@@ -31,7 +31,7 @@ export default function ConcursoTrilha({ contest, cands, questions, onGo }: { co
   const regular = cands.filter(c => !c.avulso)
   const approved = questions.filter(q => q.status === 'approved').length
   const placed = regular.filter(c => c.room_id).length
-  const i = info ?? { closed: 0, rooms: 0, read: 0, essays: 0 }
+  const i = info ?? { closed: 0, rooms: 0, read: 0, essays: 0, essaysIn: 0 }
   const stage = contest.release_stage ?? 0
   const basicsOk = !!(contest.exam_date && grades.length && contest.location && contest.public_slug)
   const closedOk = grades.length > 0 && i.closed >= grades.length
@@ -42,7 +42,7 @@ export default function ConcursoTrilha({ contest, cands, questions, onGo }: { co
     { id: 'prova', title: 'Fechar a prova', what: 'Monta os cadernos e o gabarito de cada série.', detail: closedOk ? 'Todas as séries fechadas' : `${i.closed} de ${grades.length || 0} séries fechadas`, done: closedOk, need: questions.length > 0 && approved === questions.length ? undefined : 'Aprove as questões primeiro.', tab: 'prova', cta: 'Fechar a prova' },
     { id: 'insc', title: 'Inscrições', what: 'Abrir, acompanhar e encerrar as inscrições.', detail: contest.status === 'draft' ? 'Ainda não abertas.' : contest.status === 'open' ? `Abertas · ${cands.length} inscritos` : `Encerradas · ${cands.length} inscritos`, done: contest.status === 'closed' || contest.status === 'published', tab: 'painel', cta: 'Ver inscrições', shortcuts: [['insc', 'Inscritos'], ['mail', 'E-mails']] },
     { id: 'salas', title: 'Salas e impressão', what: 'Distribuir os alunos nas salas e imprimir cadernos, cartões e redações.', detail: regular.length ? `${placed} de ${regular.length} alunos em sala` : 'Sem inscritos ainda.', done: regular.length > 0 && placed === regular.length && i.rooms > 0, need: closedOk ? undefined : 'Feche a prova primeiro.', tab: 'salas', cta: 'Abrir salas' },
-    { id: 'corr', title: 'Aplicar e corrigir', what: 'Ler os cartões-resposta e corrigir as redações.', detail: regular.length ? `${i.read} de ${regular.length} gabaritos lidos · ${i.essays} redações corrigidas` : 'Sem inscritos ainda.', done: regular.length > 0 && i.read >= regular.length, need: closedOk ? undefined : 'Feche a prova primeiro.', tab: 'corr', cta: 'Ler gabaritos' },
+    { id: 'corr', title: 'Aplicar e corrigir', what: 'Ler os cartões-resposta e corrigir as redações.', detail: regular.length ? `${i.read} de ${regular.length} gabaritos lidos` + (contest.has_essay ? ` · redações: ${i.essays} corrigidas de ${i.essaysIn} recebidas` : '') : 'Sem inscritos ainda.', done: regular.length > 0 && i.read >= regular.length, need: closedOk ? undefined : 'Feche a prova primeiro.', tab: 'corr', cta: 'Ler gabaritos' },
     { id: 'res', title: 'Resultados', what: 'Anular questões, liberar o gabarito, a nota e a colocação.', detail: stage === 0 ? 'Nada liberado ainda.' : stage === 1 ? 'Liberado: gabarito e acertos.' : stage === 2 ? 'Liberado: redação e nota final.' : 'Tudo liberado, com colocação.', done: stage >= 3, need: i.read > 0 ? undefined : 'Leia os gabaritos primeiro.', tab: 'res', cta: 'Abrir resultados' },
   ]
   const firstOpen = phases.findIndex(p => !p.done)
