@@ -14,6 +14,7 @@ import EssayRubric from '../../components/concurso/EssayRubric'
 import TakeHomeConfig from '../../components/concurso/TakeHomeConfig'
 import ConcursoResultados from './ConcursoResultados'
 import ConcursoSalas from './ConcursoSalas'
+import ConcursoTrilha from './ConcursoTrilha'
 import { ContestImg } from '../../components/concurso/media'
 import {
   db, DEFAULT_SUBJECTS, deadlineFromInput, deadlineLong, deadlineToInput, essayFor, examDateFromInput, examDateToInput, subjectHasGrade, DEFAULT_COVER, COVER_TOKENS, FORM_FIELDS, fieldCfg, GRADES, LETTERS, CONTEST_STATUS, Q_STATUS, fmtDate,
@@ -46,12 +47,13 @@ async function removeQuestions(contestId: string, qs: Question[]): Promise<strin
   return null
 }
 const STAGES = [
+  { id: 'trilha', label: 'Visão geral', tabs: [['trilha', 'Trilha do concurso']] },
   { id: 'prep', label: 'Preparar', tabs: [['config', '1 · Dados básicos'], ['pub', '2 · Inscrição e edital'], ['fmt', '3 · Formato da prova'], ['prof', '4 · Professores e cotas'], ['quest', '5 · Questões'], ['prova', '6 · Fechar a prova']] },
   { id: 'insc', label: 'Inscrições', tabs: [['painel', 'Painel'], ['insc', 'Inscritos'], ['mail', 'E-mails']] },
   { id: 'corr', label: 'Aplicar e corrigir', tabs: [['salas', 'Salas e impressão'], ['corr', 'Correção']] },
   { id: 'res', label: 'Resultados', tabs: [['res', 'Ranking e divulgação']] },
 ] as const
-type Tab = 'salas' | 'config' | 'fmt' | 'pub' | 'prof' | 'quest' | 'prova' | 'painel' | 'insc' | 'mail' | 'corr' | 'res'
+type Tab = 'trilha' | 'salas' | 'config' | 'fmt' | 'pub' | 'prof' | 'quest' | 'prova' | 'painel' | 'insc' | 'mail' | 'corr' | 'res'
 
 export default function Concurso() {
   const { user } = useAuth()
@@ -59,7 +61,7 @@ export default function Concurso() {
   const [loading, setLoading] = useState(true)
   const [contests, setContests] = useState<Contest[]>([])
   const [sel, setSel] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('config')
+  const [tab, setTab] = useState<Tab>('trilha')
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [quotas, setQuotas] = useState<Quota[]>([])
@@ -99,11 +101,11 @@ export default function Concurso() {
   const stageOf = STAGES.find(st => (st.tabs as readonly (readonly [string, string])[]).some(t => t[0] === tab)) ?? STAGES[0]
   const approved = questions.filter(q => q.status === 'approved').length
   const days = contest?.exam_date ? Math.ceil((new Date(contest.exam_date.split('T')[0] + 'T12:00:00').getTime() - Date.now()) / 86400000) : null
-  const stageHint = (id: string) => id === 'prep' ? `${approved} de ${questions.length} questões aprovadas` : id === 'insc' ? `${cands.length} inscritos` : id === 'corr' ? 'Salas, cartões e redações' : contest ? CONTEST_STATUS[contest.status] : ''
+  const stageHint = (id: string) => id === 'trilha' ? 'O processo todo, passo a passo' : id === 'prep' ? `${approved} de ${questions.length} questões aprovadas` : id === 'insc' ? `${cands.length} inscritos` : id === 'corr' ? 'Salas, cartões e redações' : contest ? CONTEST_STATUS[contest.status] : ''
   const stat = (label: string, value: React.ReactNode) => (
-    <div style={{ ...card, flex: '1 1 100px', padding: '10px 12px' }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: BRAND.muted }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: BRAND.ink, lineHeight: 1.2, marginTop: 2 }}>{value}</div>
+    <div style={{ ...card, flex: '1 1 0', minWidth: 0, padding: '8px 10px' }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: BRAND.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+      <div style={{ fontSize: 19, fontWeight: 800, color: BRAND.ink, lineHeight: 1.2, marginTop: 1 }}>{value}</div>
     </div>
   )
 
@@ -125,25 +127,24 @@ export default function Concurso() {
       ) : (
         <>
           <StatusBar contest={contest} flash={flash} onChanged={() => { loadAll(); loadContest() }} />
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             {stat('Inscritos', cands.length)}
-            {stat('Questões aprovadas', `${approved}/${questions.length}`)}
-            {stat('Dias até a prova', days === null ? '—' : days < 0 ? 'Já passou' : days === 0 ? 'Hoje' : days)}
+            {stat('Questões ok', `${approved}/${questions.length}`)}
+            {stat('Dias p/ prova', days === null ? '—' : days < 0 ? 'Já passou' : days === 0 ? 'Hoje' : days)}
           </div>
-          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
-            {STAGES.map((st, i) => {
-              const on = st.id === stageOf.id
-              return (
-                <button key={st.id} onClick={() => setTab(st.tabs[0][0] as Tab)} style={{ flex: '1 1 0', minWidth: 150, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', borderRadius: 16, padding: '12px 14px', border: `1.5px solid ${on ? BRAND.primary : BRAND.line}`, background: on ? BRAND.soft : '#fff' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 22, height: 22, borderRadius: 99, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, background: on ? BRAND.primary : BRAND.line, color: on ? '#fff' : BRAND.muted }}>{i + 1}</span>
-                    <span style={{ fontWeight: 800, fontSize: 14.5, color: BRAND.ink }}>{st.label}</span>
-                  </div>
-                  <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 4 }}>{stageHint(st.id)}</div>
-                </button>
-              )
-            })}
-          </div>
+          {tab !== 'trilha' && (
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+              <button onClick={() => setTab('trilha')} style={{ flex: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, borderRadius: 99, padding: '7px 13px', border: `1px solid ${BRAND.softLine}`, background: BRAND.softer, color: BRAND.primaryDark, whiteSpace: 'nowrap' }}>← Trilha</button>
+              {STAGES.filter(st => st.id !== 'trilha').map((st, i) => {
+                const on = st.id === stageOf.id
+                return (
+                  <button key={st.id} onClick={() => setTab(st.tabs[0][0] as Tab)} style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, borderRadius: 99, padding: '6px 13px 6px 7px', whiteSpace: 'nowrap', border: `1.5px solid ${on ? BRAND.primary : BRAND.line}`, background: on ? BRAND.soft : '#fff', color: BRAND.ink }}>
+                    <span style={{ width: 20, height: 20, borderRadius: 99, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, background: on ? BRAND.primary : BRAND.line, color: on ? '#fff' : BRAND.muted }}>{i + 1}</span>{st.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           {stageOf.tabs.length > 1 && (
             <div style={{ display: 'flex', gap: 6, background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 4, overflowX: 'auto', alignSelf: 'flex-start', maxWidth: '100%' }}>
               {stageOf.tabs.map(([k, l]) => (
@@ -151,6 +152,7 @@ export default function Concurso() {
               ))}
             </div>
           )}
+          {tab === 'trilha' && <ConcursoTrilha contest={contest} cands={cands} questions={questions} onGo={t => setTab(t as Tab)} />}
           {(tab === 'config' || tab === 'fmt' || tab === 'pub') && <Config key={contest.id} part={tab} contest={contest} subjects={subjects} quotas={quotas} onChanged={() => { loadAll(); loadContest() }} />}
           {tab === 'config' && <DeleteContest contest={contest} inscritos={cands.length} questoes={questions.length} onDeleted={async () => { setSel(null); await loadAll() }} />}
           {tab === 'painel' && <Painel contest={contest} cands={cands} />}
