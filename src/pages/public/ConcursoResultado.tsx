@@ -10,7 +10,7 @@ const ST: Record<string, { t: string; bg: string; fg: string }> = {
 }
 
 type Info = { name: string; year: number; school_name: string; logo_url: string | null; primary_color: string | null }
-type Res = { ok: boolean; error?: string; not_released?: boolean; student_name?: string; grade?: string; number?: number; contest?: string; hits?: number; total?: number; objective?: number | null; essay?: number | null; has_essay?: boolean; final?: number | null; decision?: string | null; scholarship_pct?: number | null; stage?: number; position?: number | null; position_of?: number | null; questions?: Q[] }
+type Res = { ok: boolean; error?: string; not_released?: boolean; student_name?: string; grade?: string; number?: number; contest?: string; hits?: number; total?: number; objective?: number | null; essay?: number | null; has_essay?: boolean; final?: number | null; decision?: string | null; scholarship_pct?: number | null; stage?: number; position?: number | null; position_of?: number | null; questions?: Q[]; corrected?: boolean; vis?: { questions?: boolean; objective?: boolean; essay?: boolean; final?: boolean; position?: boolean; scholarship?: boolean } }
 type Q = { n: number; subject: string | null; mine: string | null; correct: string; status: 'hit' | 'miss' | 'blank' | 'annulled'; mode?: string | null; statement: string; images: string[]; alternatives: string[] }
 const maskDate = (v: string) => { const d = v.replace(/\D/g, '').slice(0, 8); return d.length <= 2 ? d : d.length <= 4 ? `${d.slice(0, 2)}/${d.slice(2)}` : `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` }
 
@@ -43,7 +43,7 @@ export default function ConcursoResultado() {
   if (info === null) return <div style={{ padding: 40, textAlign: 'center', fontFamily: 'system-ui', color: '#475569' }}>Concurso não encontrado.</div>
 
   const stage = res?.stage ?? 3
-  const dec = res?.ok && stage >= 3 ? (res.decision ?? 'pending') : null
+  const dec = res?.ok && stage >= 3 && res.vis?.scholarship !== false ? (res.decision ?? 'pending') : null
   const banner = dec === 'granted' ? { bg: '#D1FAE5', fg: '#047857', t: `Parabéns! Bolsa de ${res!.scholarship_pct}%` }
     : dec === 'waitlist' ? { bg: '#FEF3C7', fg: '#B45309', t: 'Lista de espera' }
     : dec === 'denied' ? { bg: '#F1F5F9', fg: '#475569', t: 'Sem bolsa neste concurso' }
@@ -76,13 +76,21 @@ export default function ConcursoResultado() {
             <div style={{ fontSize: 22, fontWeight: 800, margin: '2px 0 14px' }}>{res.student_name}</div>
             {dec && <div style={{ background: banner.bg, color: banner.fg, borderRadius: 12, padding: '14px 16px', fontWeight: 800, fontSize: 18 }}>{banner.t}</div>}
             {res.position != null && <div style={{ marginTop: 10, border: '1px solid #E2E8F0', borderRadius: 12, padding: '10px 14px', fontWeight: 800 }}>Colocação: {res.position}º lugar <span style={{ fontWeight: 600, color: '#64748B' }}>de {res.position_of} na {res.grade}</span></div>}
-            {res.objective != null ? (
-              <div style={{ display: 'grid', gridTemplateColumns: stage >= 2 ? (res.has_essay ? '1fr 1fr 1fr' : '1fr 1fr') : '1fr', gap: 8, marginTop: 14 }}>
-                <Box t="Prova objetiva" v={`${res.hits}/${res.total}`} s={`${res.objective} de 100`} />
-                {stage >= 2 && res.has_essay && <Box t="Redação" v={res.essay != null ? `${res.essay}` : 'em correção'} s="de 100" />}
-                {stage >= 2 && (res.final != null && !(res.has_essay && res.essay == null) ? <Box t="Nota final" v={`${res.final}`} s="de 100" strong color={color} /> : null)}
-              </div>
-            ) : <div style={{ marginTop: 14, fontSize: 14, color: '#64748B' }}>A prova deste aluno ainda não foi corrigida. Procure a secretaria da escola.</div>}
+            {(() => {
+              const showObj = res.vis?.objective !== false && res.objective != null
+              const showEssay = stage >= 2 && !!res.has_essay
+              const showFinal = stage >= 2 && res.final != null && !(res.has_essay && res.essay == null)
+              const n = (showObj ? 1 : 0) + (showEssay ? 1 : 0) + (showFinal ? 1 : 0)
+              if (res.corrected === false || (res.corrected === undefined && res.objective == null)) return <div style={{ marginTop: 14, fontSize: 14, color: '#64748B' }}>A prova deste aluno ainda não foi corrigida. Procure a secretaria da escola.</div>
+              if (!n) return null
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},1fr)`, gap: 8, marginTop: 14 }}>
+                  {showObj && <Box t="Prova objetiva" v={`${res.hits}/${res.total}`} s={`${res.objective} de 100`} />}
+                  {showEssay && <Box t="Redação" v={res.essay != null ? `${res.essay}` : 'em correção'} s="de 100" />}
+                  {showFinal && <Box t="Nota final" v={`${res.final}`} s="de 100" strong color={color} />}
+                </div>
+              )
+            })()}
             {stage < 3 && <div style={{ marginTop: 12, fontSize: 13, color: '#3730A3', background: '#E0E7FF', borderRadius: 10, padding: '9px 12px' }}>{stage < 2 ? 'A nota da redação, a nota final, a colocação e a bolsa serão liberadas em breve.' : 'A colocação e a decisão da bolsa serão liberadas em breve.'}</div>}
             {!!res.questions?.length && (
               <div style={{ marginTop: 16 }}>

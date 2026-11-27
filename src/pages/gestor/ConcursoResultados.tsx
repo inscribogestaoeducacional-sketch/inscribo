@@ -157,6 +157,8 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
         </div>
       </div>
 
+      <VisibilidadePais contest={contest} onChanged={onChanged} flash={flash} />
+
       <AnulacaoQuestoes contest={contest} onChanged={onChanged} flash={flash} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10 }}>
@@ -204,6 +206,70 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+
+// O que o pai enxerga na página de resultado. Cada item só aparece depois da etapa em que é liberado; aqui você escolhe se ele aparece ou não.
+type VisKey = 'questions' | 'objective' | 'annulment' | 'essay' | 'final' | 'position' | 'scholarship'
+const VIS_GROUPS: { etapa: string; items: [VisKey, string, string][] }[] = [
+  { etapa: 'Etapa 1 · gabarito', items: [
+    ['objective', 'Acertos e nota da prova objetiva', 'Ex.: 31/40 · 77,5 de 100'],
+    ['questions', 'Questões e espelho do gabarito', 'Enunciado, o que o aluno marcou e o gabarito de cada questão'],
+    ['annulment', 'Avisar quando a questão foi anulada', 'Desligado: ponto para todos aparece como acerto e a questão tirada da prova some da lista'],
+  ] },
+  { etapa: 'Etapa 2 · notas', items: [
+    ['essay', 'Nota da redação', 'Só nas séries que têm redação'],
+    ['final', 'Nota final', 'Objetiva + redação'],
+  ] },
+  { etapa: 'Etapa 3 · decisão', items: [
+    ['position', 'Colocação na série', 'Ex.: 3º lugar de 38'],
+    ['scholarship', 'Resultado da bolsa', 'Parabéns, bolsa de X% / lista de espera / sem bolsa'],
+  ] },
+]
+function VisibilidadePais({ contest, onChanged, flash }: { contest: Contest; onChanged: () => void; flash: (m: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const vis = contest.result_visibility ?? {}
+  const on = (k: VisKey) => vis[k] !== false
+  const set = async (k: VisKey, v: boolean) => {
+    setBusy(true)
+    const { error } = await db.from('contests').update({ result_visibility: { ...vis, [k]: v } }).eq('id', contest.id)
+    setBusy(false)
+    if (error) flash('Erro: ' + error.message); else onChanged()
+  }
+  const hidden = (Object.keys(vis) as VisKey[]).filter(k => vis[k] === false).length
+  return (
+    <div style={card}>
+      <button onClick={() => setOpen(o => !o)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', width: '100%', alignItems: 'center', gap: 10 }} aria-expanded={open}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 800, color: BRAND.ink }}>O que o pai vê no resultado</div>
+          <div style={{ fontSize: 13, color: BRAND.muted }}>{hidden ? `${hidden} ${hidden === 1 ? 'item escondido' : 'itens escondidos'}` : 'Tudo aparece, conforme a etapa liberada.'}</div>
+        </div>
+        <span style={{ fontWeight: 800, color: BRAND.primaryDark, fontSize: 13 }}>{open ? 'Fechar' : 'Escolher'}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {VIS_GROUPS.map(g => (
+            <div key={g.etapa}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: BRAND.muted, marginBottom: 6 }}>{g.etapa}</div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {g.items.map(([k, label, hint], i) => (
+                  <label key={k} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: i ? `1px solid ${BRAND.line}` : 0, cursor: 'pointer' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, color: BRAND.ink, fontSize: 14.5 }}>{label}</div>
+                      <div style={{ fontSize: 12.5, color: BRAND.muted }}>{hint}</div>
+                    </div>
+                    <input type="checkbox" role="switch" checked={on(k)} disabled={busy} onChange={e => set(k, e.target.checked)} style={{ width: 22, height: 22, accentColor: BRAND.primary, flex: '0 0 auto' }} />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize: 12.5, color: BRAND.muted }}>Vale na hora. O que está desligado nem sai do servidor para a página do pai.</div>
+        </div>
+      )}
     </div>
   )
 }
