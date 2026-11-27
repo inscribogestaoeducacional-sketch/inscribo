@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { Loader2 } from 'lucide-react'
 import { BRAND } from '../../lib/brand'
+import AnulacaoQuestoes from './ConcursoAnulacao'
 import { db, essayFor, finalScore, GRADES, type Candidate, type Contest, type Decision, type Essay, candName } from '../../lib/concurso'
 
 const card: React.CSSProperties = { background: '#fff', border: `1px solid ${BRAND.line}`, borderRadius: 16, padding: 16 }
@@ -27,7 +28,7 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [bulk, setBulk] = useState<Record<string, number>>({})
-  const [confirmPub, setConfirmPub] = useState(false)
+  const [confirmPub, setConfirmPub] = useState<number | null>(null)
   const link = contest.public_slug ? `${window.location.origin}/bolsas/${contest.public_slug}/resultado` : ''
 
   const load = useCallback(async () => {
@@ -83,10 +84,11 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
     const { error } = await db.from('contest_decisions').upsert(upserts, { onConflict: 'contest_id,candidate_id' })
     setBusy(false); if (error) flash('Erro: ' + error.message); else { flash(`${upserts.length} bolsas aplicadas pela ordem do ranking. Você pode ajustar uma a uma.`); load() }
   }
-  const setStatus = async (status: 'published' | 'closed') => {
-    setBusy(true); setConfirmPub(false)
-    const { error } = await db.from('contests').update({ status }).eq('id', contest.id)
-    setBusy(false); if (error) flash('Erro: ' + error.message); else { flash(status === 'published' ? 'Resultado divulgado. As famílias já podem consultar.' : 'Divulgação retirada.'); onChanged() }
+  const stage = published ? Math.max(1, contest.release_stage ?? 0) : 0
+  const setStage = async (n: number) => {
+    setBusy(true); setConfirmPub(null)
+    const { error } = await db.from('contests').update({ release_stage: n, status: n >= 1 ? 'published' : 'closed' }).eq('id', contest.id)
+    setBusy(false); if (error) flash('Erro: ' + error.message); else { flash(n === 0 ? 'Divulgação retirada. Ninguém vê mais nada.' : `Etapa ${n} liberada. As famílias já podem consultar.`); onChanged() }
   }
 
   const printRanking = () => {
@@ -114,9 +116,9 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
       <div style={card}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ fontWeight: 800, fontSize: 16, color: BRAND.ink, flex: 1 }}>Divulgação do resultado</div>
-          <span style={{ fontSize: 12.5, fontWeight: 800, padding: '4px 10px', borderRadius: 99, background: published ? '#D1FAE5' : '#FEF3C7', color: published ? '#047857' : '#B45309' }}>{published ? 'Divulgado às famílias' : 'Ainda não divulgado'}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 800, padding: '4px 10px', borderRadius: 99, background: stage > 0 ? '#D1FAE5' : '#FEF3C7', color: stage > 0 ? '#047857' : '#B45309' }}>{stage === 0 ? 'Ainda não divulgado' : `Etapa ${stage} liberada`}</span>
         </div>
-        <div style={{ fontSize: 13.5, color: BRAND.muted, margin: '8px 0' }}>Enquanto não divulgar, ninguém vê nota nem resultado, mesmo com o QR code. A família consulta com o número da inscrição e a data de nascimento do aluno.</div>
+        <div style={{ fontSize: 13.5, color: BRAND.muted, margin: '8px 0' }}>Você libera em etapas. Enquanto uma etapa não for liberada, ninguém vê aquele conteúdo, mesmo com o QR code. A família consulta com o número da inscrição e a data de nascimento do aluno.</div>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
           {qr && <img src={qr} alt="QR code do resultado" style={{ width: 110, height: 110, border: `1px solid ${BRAND.line}`, borderRadius: 10 }} />}
           <div style={{ flex: 1, minWidth: 220 }}>
@@ -127,19 +129,34 @@ export default function ConcursoResultados({ contest, cands, onChanged }: { cont
             </div>
           </div>
         </div>
-        <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {!published && !confirmPub && <button style={btn(true)} disabled={busy} onClick={() => setConfirmPub(true)}>Divulgar resultado</button>}
-          {!published && confirmPub && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: BRAND.ink }}>
-                Divulgar agora?{missing > 0 && ` ${missing} sem nota.`}{essayPending > 0 && ` ${essayPending} com redação por corrigir.`}{undecided > 0 && ` ${undecided} sem decisão de bolsa.`}
-              </span>
-              <button style={btn(true)} onClick={() => setStatus('published')}>Sim, divulgar</button><button style={btn()} onClick={() => setConfirmPub(false)}>Cancelar</button>
-            </div>
-          )}
-          {published && <button style={btn()} disabled={busy} onClick={() => setStatus('closed')}>Retirar divulgação</button>}
+        <div style={{ marginTop: 14, display: 'grid', gap: 8 }}>
+          {([
+            [1, 'Gabarito e acertos', 'O aluno vê as questões, o que marcou, a resposta correta e quantas acertou.', missing > 0 ? `${missing} sem nota` : ''],
+            [2, 'Redação e nota final', 'Mostra a nota da redação e a nota final.', essayPending > 0 ? `${essayPending} com redação por corrigir` : ''],
+            [3, 'Colocação e bolsa', 'Mostra a colocação na série e a decisão da bolsa.', undecided > 0 ? `${undecided} sem decisão de bolsa` : ''],
+          ] as [number, string, string, string][]).map(([n, t, d, warn]) => {
+            const on = stage >= n
+            return (
+              <div key={n} style={{ border: `1px solid ${on ? '#A7F3D0' : BRAND.line}`, background: on ? '#F0FDF9' : '#fff', borderRadius: 12, padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: BRAND.ink }}>Etapa {n} · {t} {on && <span style={{ color: '#047857', fontSize: 12.5 }}>· liberada</span>}</div>
+                  <div style={{ fontSize: 12.5, color: BRAND.muted }}>{d}{!on && warn && <b style={{ color: '#B45309' }}> Atenção: {warn}.</b>}</div>
+                </div>
+                {confirmPub === n ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: BRAND.ink }}>Liberar para as famílias agora?</span>
+                    <button style={btn(true)} onClick={() => setStage(n)}>Sim, liberar</button><button style={btn()} onClick={() => setConfirmPub(null)}>Cancelar</button>
+                  </div>
+                ) : stage === n ? <button style={btn()} disabled={busy} onClick={() => setStage(n - 1)}>Retirar</button>
+                  : stage < n ? <button style={btn(true)} disabled={busy} onClick={() => setConfirmPub(n)}>Liberar</button>
+                  : <span style={{ fontSize: 12.5, color: BRAND.muted }}>retire a etapa {stage} antes</span>}
+              </div>
+            )
+          })}
         </div>
       </div>
+
+      <AnulacaoQuestoes contest={contest} onChanged={onChanged} flash={flash} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10 }}>
         {([['Inscritos', cands.length], ['Com nota', rows.filter(r => r.final != null).length], ['Sem nota', missing], ['Redação por corrigir', essayPending], ['Sem decisão', undecided]] as [string, number][]).map(([l, v]) => (
