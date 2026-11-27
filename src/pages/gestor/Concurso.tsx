@@ -253,9 +253,9 @@ export function DeleteContest({ contest, inscritos, questoes, onDeleted }: { con
 
 type CfgPart = 'config' | 'fmt' | 'pub'
 const PART_INFO: Record<CfgPart, { title: string; sub: string }> = {
-  config: { title: 'Passo 1 · Dados básicos', sub: 'Nome, datas, local e séries. É o que aparece para as famílias.' },
-  pub: { title: 'Passo 2 · Inscrição e edital', sub: 'Endereço da página, perguntas do formulário e o edital. Pronto este passo, já dá para divulgar o link.' },
-  fmt: { title: 'Passo 3 · Formato da prova', sub: 'Disciplinas, alternativas, versões, redação e visual do caderno impresso.' },
+  config: { title: 'Dados básicos', sub: 'Nome, datas, local e séries. É o que aparece para as famílias.' },
+  pub: { title: 'Inscrição e edital', sub: 'Endereço da página, perguntas do formulário e o edital. Pronto este passo, já dá para divulgar o link.' },
+  fmt: { title: 'Formato da prova', sub: 'Disciplinas, alternativas, versões, redação e visual do caderno impresso.' },
 }
 
 // Faixa no topo: em que fase está o concurso e o botão certo para a próxima.
@@ -424,7 +424,7 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
         </div>
         <div>
           <label style={lab}>Disciplinas por série</label>
-          {f.grades.length === 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Escolha as séries no Passo 1 para definir as disciplinas de cada uma.</div>}
+          {f.grades.length === 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Escolha as séries em Dados básicos para definir as disciplinas de cada uma.</div>}
           {subjects.length === 0 && f.grades.length > 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Adicione as disciplinas acima. Depois marque quais valem para cada série.</div>}
           {GRADES.filter(g => f.grades.includes(g)).map(g => {
             const mine = subjects.filter(s => subjectHasGrade(s, g, f.grades))
@@ -452,7 +452,7 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}><input type="checkbox" checked={f.has_essay} onChange={e => setF({ ...f, has_essay: e.target.checked })} /> Redação ligada por padrão nas séries (você ajusta série por série abaixo)</label>
         <div>
           <label style={lab}>Redação por série</label>
-          {f.grades.length === 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Escolha as séries no Passo 1 para configurar a redação de cada uma.</div>}
+          {f.grades.length === 0 && <div style={{ fontSize: 13, color: BRAND.muted }}>Escolha as séries em Dados básicos para configurar a redação de cada uma.</div>}
           {GRADES.filter(g => f.grades.includes(g)).map(g => {
             const e = essayFor(f, g)
             const set = (patch: Partial<{ enabled: boolean; prompt: string }>) => setF({ ...f, essay_by_grade: { ...(f.essay_by_grade ?? {}), [g]: { ...(f.essay_by_grade?.[g] ?? {}), enabled: e.enabled, prompt: e.prompt, ...patch } } })
@@ -516,8 +516,8 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
             const c = fieldCfg(f.form_config, d.key)
             const setC = (patch: Record<string, unknown>) => setF({ ...f, form_config: { ...(f.form_config ?? {}), fields: { ...(f.form_config?.fields ?? {}), [d.key]: { ...(f.form_config?.fields?.[d.key] ?? {}), ...patch } } } })
             return (
-              <div key={d.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,3fr) auto auto', gap: 10, alignItems: 'center', marginBottom: 8 }}>
-                <input style={{ ...input, opacity: c.enabled ? 1 : .5 }} value={f.form_config?.fields?.[d.key]?.label ?? d.label} onChange={e => setC({ label: e.target.value })} aria-label={`Texto da pergunta: ${d.label}`} />
+              <div key={d.key} style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', alignItems: 'center', marginBottom: 12 }}>
+                <input style={{ ...input, flex: '1 1 100%', opacity: c.enabled ? 1 : .5 }} value={f.form_config?.fields?.[d.key]?.label ?? d.label} onChange={e => setC({ label: e.target.value })} aria-label={`Texto da pergunta: ${d.label}`} />
                 <label style={{ fontSize: 12.5, display: 'flex', gap: 4, alignItems: 'center', opacity: d.locked ? .5 : 1 }}><input type="checkbox" disabled={d.locked || !c.enabled} checked={c.required} onChange={e => setC({ required: e.target.checked })} />Obrigatória</label>
                 <label style={{ fontSize: 12.5, display: 'flex', gap: 4, alignItems: 'center', opacity: d.locked ? .5 : 1 }}><input type="checkbox" disabled={d.locked} checked={c.enabled} onChange={e => setC({ enabled: e.target.checked })} />Mostrar</label>
               </div>
