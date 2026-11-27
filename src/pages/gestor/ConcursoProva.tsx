@@ -74,10 +74,6 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ background: BRAND.soft, border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: '10px 14px', fontSize: 13.5, color: BRAND.ink, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ flex: '1 1 260px' }}><b>Último passo da preparação.</b> Aqui você escolhe as questões, a ordem e fecha a prova de cada série. A impressão de cadernos e cartões <b>por sala e por aluno</b> fica em "Aplicar e corrigir".</span>
-        {onGoSalas && <button style={btn()} onClick={onGoSalas}>Ir para Salas e impressão</button>}
-      </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={grade} onChange={e => setGrade(e.target.value)} style={{ border: `1px solid ${BRAND.line}`, borderRadius: 10, padding: '9px 11px', fontSize: 14, fontWeight: 700, fontFamily: 'inherit' }}>
           {grades.map(g => <option key={g}>{g}</option>)}
@@ -136,8 +132,9 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
               </table>
             </div>
           </div>
-          <div style={card}>
-            <div style={{ fontWeight: 800, color: BRAND.ink, marginBottom: 10 }}>Impressões</div>
+          <details style={card}>
+            <summary style={{ fontWeight: 800, color: BRAND.ink, cursor: 'pointer' }}>Impressões desta série</summary>
+            <div style={{ height: 10 }} />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {gradeVersions.map(v => <a key={v.id} style={btn()} href={href('caderno', v.version)} target="_blank" rel="noreferrer"><Printer size={15} /> Caderno · versão {v.version}</a>)}
               <a style={btn()} href={`/concurso/imprimir?contest=${contest.id}&grade=${encodeURIComponent(grade)}&kind=caderno&room=serie`} target="_blank" rel="noreferrer"><Printer size={15} /> Cadernos de todos os alunos ({gradeCands.length})</a>
@@ -147,7 +144,7 @@ export default function ConcursoProva({ contest, subjects, quotas, questions, ca
               <a style={btn()} href={href('gabarito')} target="_blank" rel="noreferrer"><Printer size={15} /> Gabarito (coordenação)</a>
             </div>
             <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 10 }}>Na janela que abrir, escolha "Salvar como PDF" ou imprima direto. O caderno é um por versão (imprima uma cópia por aluno); o cartão e a folha de redação já saem identificados.</div>
-          </div>
+          </details>
         </>
       )}
     </div>
