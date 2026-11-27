@@ -423,6 +423,8 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
       </>)}
 
       {part === 'fmt' && (<>
+        <div style={sec}>
+        <div style={secT}>Formato da prova</div>
         <div style={grid}>
           <div><label style={lab}>Alternativas por questão</label>
             <select style={input} value={f.alternatives_count} onChange={e => setF({ ...f, alternatives_count: Number(e.target.value) as 4 | 5 })}><option value={4}>4 (A a D)</option><option value={5}>5 (A a E)</option></select></div>
@@ -430,6 +432,9 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
             <select style={input} value={f.versions_count} onChange={e => setF({ ...f, versions_count: Number(e.target.value) })}>{[1, 2, 3, 4].map(n => <option key={n} value={n}>{n === 1 ? '1 (sem embaralhar)' : `${n} versões`}</option>)}</select></div>
           <div><label style={lab}>Duração da prova (impressa no caderno)</label><input style={input} placeholder="Ex.: 3 horas" value={f.exam_duration ?? ''} onChange={e => setF({ ...f, exam_duration: e.target.value })} /></div>
         </div>
+        </div>
+        <div style={sec}>
+        <div style={secT}>Disciplinas</div>
         <div>
           <label style={lab}>Disciplinas do concurso (lista geral)</label>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -472,6 +477,9 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
           })}
           {saveMsg.startsWith('Já existe cota') && <div role="status" style={{ fontSize: 13.5, fontWeight: 700, color: '#B91C1C' }}>{saveMsg}</div>}
         </div>
+        </div>
+        <div style={sec}>
+        <div style={secT}>Redação</div>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}><input type="checkbox" checked={f.has_essay} onChange={e => setF({ ...f, has_essay: e.target.checked })} /> Redação ligada por padrão nas séries (você ajusta série por série abaixo)</label>
         <div>
           <label style={lab}>Redação por série</label>
@@ -488,8 +496,10 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
           })}
         </div>
         <EssayRubric contest={contest} onChanged={onChanged} />
-        <div style={{ borderTop: `1px solid ${BRAND.line}`, paddingTop: 12 }}><TakeHomeConfig contest={contest} onChanged={onChanged} /></div>
-        <div id="instrucoes-capa">
+        </div>
+        <div style={sec}><TakeHomeConfig contest={contest} onChanged={onChanged} /></div>
+        <div id="instrucoes-capa" style={sec}>
+          <div style={secT}>Capa do caderno</div>
           <label style={lab}>Instruções na capa do caderno ("Leia com atenção")</label>
           <textarea rows={7} style={{ ...input, resize: 'vertical', lineHeight: 1.5 }} value={f.cover_instructions?.trim() ? f.cover_instructions : DEFAULT_COVER} onChange={e => setF({ ...f, cover_instructions: e.target.value })} />
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
@@ -498,7 +508,6 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
             <button style={{ ...btn(), padding: '4px 10px', fontSize: 12.5 }} onClick={() => setF({ ...f, cover_instructions: null })}>Voltar ao texto padrão</button>
           </div>
           <div style={{ fontSize: 12.5, color: BRAND.muted, marginTop: 4 }}>Os trechos entre chaves viram o valor real na impressão. Nas séries com redação, o sistema acrescenta sozinho a instrução da redação. Vale para todos os cadernos, inclusive o lote por sala.</div>
-        </div>
         <div>
           <label style={lab}>Cor da prova impressa (faixas e destaques)</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -508,6 +517,7 @@ function Config({ contest, subjects, quotas, part, onChanged }: { contest: Conte
             <input type="color" value={f.print_color || '#0B6E5F'} onChange={e => setF({ ...f, print_color: e.target.value })} aria-label="Outra cor" style={{ width: 38, height: 32, border: 0, background: 'none', cursor: 'pointer' }} />
             <button style={{ ...btn(), padding: '5px 10px', fontSize: 12.5 }} onClick={() => setF({ ...f, print_color: null })}>Usar a cor da escola</button>
           </div>
+        </div>
         </div>
       </>)}
 
