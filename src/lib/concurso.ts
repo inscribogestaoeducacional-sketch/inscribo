@@ -12,7 +12,7 @@ export const GRADES = [
 export const DEFAULT_SUBJECTS = ['Língua Portuguesa', 'Matemática', 'Ciências', 'História', 'Geografia']
 export const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
-export type Contest = { id: string; institution_id: string; name: string; year: number; status: 'draft' | 'open' | 'closed' | 'published'; exam_date: string | null; grades: string[]; alternatives_count: 4 | 5; versions_count: number; has_essay: boolean
+export type Contest = { id: string; institution_id: string; name: string; year: number; status: 'draft' | 'open' | 'closed' | 'published'; release_stage: number; annulled: { question_id: string; mode: 'point' | 'remove' }[]; exam_date: string | null; grades: string[]; alternatives_count: 4 | 5; versions_count: number; has_essay: boolean
   public_slug: string | null; edital: string | null; location: string | null; registration_deadline: string | null; extra_fields: ExtraField[]; essay_prompt: string | null; exam_duration: string | null; print_color: string | null
   essay_by_grade: Record<string, { enabled: boolean; prompt: string; images?: string[] }>; form_config: { fields?: Record<string, { label?: string; required?: boolean; enabled?: boolean }> }
   email_auto_confirm: boolean; email_confirmation: { subject?: string; body?: string }

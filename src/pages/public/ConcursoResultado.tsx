@@ -3,8 +3,15 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
+const LET = 'ABCDE'
+const ST: Record<string, { t: string; bg: string; fg: string }> = {
+  hit: { t: 'Acertou', bg: '#D1FAE5', fg: '#047857' }, miss: { t: 'Errou', bg: '#FEE2E2', fg: '#B91C1C' },
+  blank: { t: 'Em branco', bg: '#F1F5F9', fg: '#475569' }, annulled: { t: 'Anulada', bg: '#FEF3C7', fg: '#B45309' },
+}
+
 type Info = { name: string; year: number; school_name: string; logo_url: string | null; primary_color: string | null }
-type Res = { ok: boolean; error?: string; not_released?: boolean; student_name?: string; grade?: string; number?: number; contest?: string; hits?: number; total?: number; objective?: number | null; essay?: number | null; has_essay?: boolean; final?: number | null; decision?: string; scholarship_pct?: number | null }
+type Res = { ok: boolean; error?: string; not_released?: boolean; student_name?: string; grade?: string; number?: number; contest?: string; hits?: number; total?: number; objective?: number | null; essay?: number | null; has_essay?: boolean; final?: number | null; decision?: string | null; scholarship_pct?: number | null; stage?: number; position?: number | null; position_of?: number | null; questions?: Q[] }
+type Q = { n: number; subject: string | null; mine: string | null; correct: string; status: 'hit' | 'miss' | 'blank' | 'annulled'; mode?: string | null; statement: string; images: string[]; alternatives: string[] }
 const maskDate = (v: string) => { const d = v.replace(/\D/g, '').slice(0, 8); return d.length <= 2 ? d : d.length <= 4 ? `${d.slice(0, 2)}/${d.slice(2)}` : `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` }
 
 export default function ConcursoResultado() {
@@ -14,6 +21,8 @@ export default function ConcursoResultado() {
   const [birth, setBirth] = useState('')
   const [busy, setBusy] = useState(false)
   const [res, setRes] = useState<Res | null>(null)
+  const [view, setView] = useState<'questoes' | 'espelho'>('questoes')
+  const [media, setMedia] = useState<Record<string, string>>({})
   useEffect(() => { (supabase as any).rpc('contest_public_get', { p_slug: slug }).then(({ data }: any) => setInfo(data ?? null)) }, [slug])
 
   const color = info?.primary_color || '#05907B'
@@ -24,13 +33,17 @@ export default function ConcursoResultado() {
     setBusy(true)
     const { data } = await (supabase as any).rpc('contest_public_result', { p_slug: slug, p_number: Number(number), p_birth: `${m[3]}-${m[2]}-${m[1]}` })
     setBusy(false); setRes(data ?? { ok: false, error: 'Não foi possível consultar agora. Tente de novo.' })
+    if (data?.ok && data.questions?.some((q: Q) => q.images?.length)) {
+      ;(supabase as any).functions.invoke('contest-result-media', { body: { slug, number: Number(number), birth: `${m[3]}-${m[2]}-${m[1]}` } }).then(({ data: md }: any) => setMedia(md?.urls ?? {})).catch(() => {})
+    }
   }
   const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #D5DCE6', borderRadius: 12, padding: '12px 13px', fontSize: 16, fontFamily: 'inherit', color: '#1A2B4A', background: '#fff' }
 
   if (info === undefined) return <div style={{ padding: 60, textAlign: 'center' }}><Loader2 className="animate-spin" /></div>
   if (info === null) return <div style={{ padding: 40, textAlign: 'center', fontFamily: 'system-ui', color: '#475569' }}>Concurso não encontrado.</div>
 
-  const dec = res?.ok ? (res.decision ?? 'pending') : null
+  const stage = res?.stage ?? 3
+  const dec = res?.ok && stage >= 3 ? (res.decision ?? 'pending') : null
   const banner = dec === 'granted' ? { bg: '#D1FAE5', fg: '#047857', t: `Parabéns! Bolsa de ${res!.scholarship_pct}%` }
     : dec === 'waitlist' ? { bg: '#FEF3C7', fg: '#B45309', t: 'Lista de espera' }
     : dec === 'denied' ? { bg: '#F1F5F9', fg: '#475569', t: 'Sem bolsa neste concurso' }
@@ -61,14 +74,61 @@ export default function ConcursoResultado() {
           <section style={{ background: '#fff', borderRadius: 18, padding: 18, boxShadow: '0 8px 30px -14px rgba(15,23,42,.25)' }}>
             <div style={{ fontSize: 13, color: '#64748B' }}>Inscrição nº {res.number} · {res.grade}</div>
             <div style={{ fontSize: 22, fontWeight: 800, margin: '2px 0 14px' }}>{res.student_name}</div>
-            <div style={{ background: banner.bg, color: banner.fg, borderRadius: 12, padding: '14px 16px', fontWeight: 800, fontSize: 18 }}>{banner.t}</div>
-            {res.final != null ? (
-              <div style={{ display: 'grid', gridTemplateColumns: res.has_essay ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8, marginTop: 14 }}>
-                <Box t="Prova objetiva" v={`${res.hits}/${res.total}`} s={`${res.objective}`} />
-                {res.has_essay && <Box t="Redação" v={res.essay != null ? `${res.essay}` : 'em correção'} s="de 100" />}
-                <Box t="Nota final" v={`${res.final}`} s="de 100" strong color={color} />
+            {dec && <div style={{ background: banner.bg, color: banner.fg, borderRadius: 12, padding: '14px 16px', fontWeight: 800, fontSize: 18 }}>{banner.t}</div>}
+            {res.position != null && <div style={{ marginTop: 10, border: '1px solid #E2E8F0', borderRadius: 12, padding: '10px 14px', fontWeight: 800 }}>Colocação: {res.position}º lugar <span style={{ fontWeight: 600, color: '#64748B' }}>de {res.position_of} na {res.grade}</span></div>}
+            {res.objective != null ? (
+              <div style={{ display: 'grid', gridTemplateColumns: stage >= 2 ? (res.has_essay ? '1fr 1fr 1fr' : '1fr 1fr') : '1fr', gap: 8, marginTop: 14 }}>
+                <Box t="Prova objetiva" v={`${res.hits}/${res.total}`} s={`${res.objective} de 100`} />
+                {stage >= 2 && res.has_essay && <Box t="Redação" v={res.essay != null ? `${res.essay}` : 'em correção'} s="de 100" />}
+                {stage >= 2 && (res.final != null && !(res.has_essay && res.essay == null) ? <Box t="Nota final" v={`${res.final}`} s="de 100" strong color={color} /> : null)}
               </div>
             ) : <div style={{ marginTop: 14, fontSize: 14, color: '#64748B' }}>A prova deste aluno ainda não foi corrigida. Procure a secretaria da escola.</div>}
+            {stage < 3 && <div style={{ marginTop: 12, fontSize: 13, color: '#3730A3', background: '#E0E7FF', borderRadius: 10, padding: '9px 12px' }}>{stage < 2 ? 'A nota da redação, a nota final, a colocação e a bolsa serão liberadas em breve.' : 'A colocação e a decisão da bolsa serão liberadas em breve.'}</div>}
+            {!!res.questions?.length && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                  {([['questoes', 'Questões'], ['espelho', 'Espelho do gabarito']] as const).map(([k, t]) => (
+                    <button key={k} onClick={() => setView(k)} style={{ flex: 1, padding: '10px 8px', borderRadius: 10, border: `1px solid ${view === k ? color : '#D5DCE6'}`, background: view === k ? color : '#fff', color: view === k ? '#fff' : '#1A2B4A', fontWeight: 800, fontSize: 14, fontFamily: 'inherit', cursor: 'pointer' }}>{t}</button>
+                  ))}
+                </div>
+                {view === 'espelho' ? (
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 1fr 1.2fr', background: '#F1F5F9', fontSize: 12, fontWeight: 800, color: '#475569', padding: '8px 10px' }}><span>Nº</span><span>Você marcou</span><span>Gabarito</span><span>Resultado</span></div>
+                    {res.questions.map(q => (
+                      <div key={q.n} style={{ display: 'grid', gridTemplateColumns: '44px 1fr 1fr 1.2fr', alignItems: 'center', padding: '7px 10px', borderTop: '1px solid #EEF2F6', fontSize: 14 }}>
+                        <b>{q.n}</b><span>{q.mine ?? '—'}</span><b>{q.correct}</b>
+                        <span style={{ background: ST[q.status].bg, color: ST[q.status].fg, borderRadius: 99, padding: '2px 8px', fontSize: 12.5, fontWeight: 800, justifySelf: 'start' }}>{ST[q.status].t}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {res.questions.map(q => (
+                      <details key={q.n} style={{ border: `1px solid ${ST[q.status].bg}`, borderRadius: 12, padding: '10px 12px' }}>
+                        <summary style={{ cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontWeight: 800, fontSize: 14.5 }}>
+                          <span>Questão {q.n}</span>{q.subject && <span style={{ fontWeight: 600, color: '#64748B', fontSize: 13 }}>{q.subject}</span>}
+                          <span style={{ marginLeft: 'auto', background: ST[q.status].bg, color: ST[q.status].fg, borderRadius: 99, padding: '2px 9px', fontSize: 12.5 }}>{ST[q.status].t}</span>
+                        </summary>
+                        <div style={{ marginTop: 10, fontSize: 15, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{q.statement}</div>
+                        {q.images?.map(pth => media[pth] ? <img key={pth} src={media[pth]} alt="" style={{ display: 'block', maxWidth: '100%', maxHeight: 320, margin: '10px auto', objectFit: 'contain' }} /> : <div key={pth} style={{ height: 60, background: '#F1F5F9', borderRadius: 8, margin: '10px 0' }} />)}
+                        <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+                          {q.alternatives.map((t, i) => {
+                            const L = LET[i], isMine = q.mine === L, isOk = q.correct === L
+                            return (
+                              <div key={i} style={{ display: 'flex', gap: 8, borderRadius: 10, padding: '8px 10px', border: `1px solid ${isOk ? '#34D399' : isMine ? '#F87171' : '#E2E8F0'}`, background: isOk ? '#ECFDF5' : isMine ? '#FEF2F2' : '#fff', fontSize: 14.5 }}>
+                                <b style={{ width: 18 }}>{L}</b><span style={{ flex: 1 }}>{t}</span>
+                                {(isOk || isMine) && <span style={{ fontSize: 12, fontWeight: 800, color: isOk ? '#047857' : '#B91C1C', whiteSpace: 'nowrap' }}>{isOk && isMine ? 'Sua resposta · correta' : isOk ? 'Correta' : 'Sua resposta'}</span>}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {q.status === 'annulled' && <div style={{ marginTop: 8, fontSize: 13, color: '#B45309', fontWeight: 700 }}>{q.mode === 'remove' ? 'Questão anulada e retirada da prova. Não conta na nota.' : 'Questão anulada. Vale ponto para todos os alunos.'}</div>}
+                      </details>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 14 }}>Dúvidas sobre o resultado e a matrícula: fale com a secretaria da escola.</div>
             <button onClick={() => setRes(null)} style={{ marginTop: 12, border: `1px solid ${color}`, color, background: '#fff', borderRadius: 12, padding: '10px 14px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Consultar outra inscrição</button>
           </section>
